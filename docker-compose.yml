@@ -1,0 +1,180 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    container_name: fks_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn fks_project.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=fks_project.settings
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: fks_db
+    restart: always
+    environment:
+      TZ: America/Toronto
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-trading_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: postgres -c shared_preload_libraries=timescaledb
+    networks:
+      - fks-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fks_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      TZ: America/Toronto
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+    networks:
+      - fks-network
+
+  redis:
+    image: redis:7
+    container_name: fks_redis
+    restart: always
+    environment:
+      TZ: America/Toronto
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - fks-network
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    working_dir: /app
+    command: celery -A fks_project worker --loglevel=info --concurrency=4
+    volumes:
+      - ./src:/app
+      - ./logs:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=fks_project.settings
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    working_dir: /app
+    command: celery -A fks_project beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ./src:/app
+      - ./logs:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=fks_project.settings
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+      - celery_worker
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  flower:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    working_dir: /app
+    command: celery -A fks_project flower --port=5555
+    volumes:
+      - ./src:/app
+    ports:
+      - "5555:5555"
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - celery_worker
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+
+networks:
+  fks-network:
+    driver: bridge

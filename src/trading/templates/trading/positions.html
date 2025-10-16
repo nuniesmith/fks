@@ -1,0 +1,415 @@
+{% extends 'trading/base.html' %}
+
+{% block title %}Positions - FKS Trading{% endblock %}
+{% block page_title %}<i class="bi bi-briefcase"></i> Open Positions{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <!-- Summary Stats -->
+        <div class="row">
+            <div class="col-md-3">
+                <div class="stat-card bg-primary">
+                    <div class="stat-value">{{ total_positions }}</div>
+                    <div class="stat-label">Open Positions</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card {% if unrealized_pnl >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                    <div class="stat-value">${{ unrealized_pnl|floatformat:2 }}</div>
+                    <div class="stat-label">Unrealized P&L</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card bg-info">
+                    <div class="stat-value">${{ total_value|floatformat:2 }}</div>
+                    <div class="stat-label">Total Position Value</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card bg-warning">
+                    <div class="stat-value">${{ total_cost|floatformat:2 }}</div>
+                    <div class="stat-label">Total Cost Basis</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-briefcase"></i> Position Management</span>
+                <div>
+                    <button class="btn btn-sm btn-danger" onclick="closeAllPositions()" 
+                            {% if not positions %}disabled{% endif %}>
+                        <i class="bi bi-x-circle-fill"></i> Close All
+                    </button>
+                    <button class="btn btn-sm btn-success" onclick="refreshPrices()">
+                        <i class="bi bi-arrow-repeat"></i> Refresh Prices
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Side</th>
+                                <th>Quantity</th>
+                                <th>Entry Price</th>
+                                <th>Current Price</th>
+                                <th>Current Value</th>
+                                <th>Cost Basis</th>
+                                <th>Unrealized P&L</th>
+                                <th>P&L %</th>
+                                <th>Stop Loss</th>
+                                <th>Take Profit</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="positions-tbody">
+                            {% for position in positions %}
+                            <tr data-symbol="{{ position.symbol }}" data-position-id="{{ position.id }}">
+                                <td>
+                                    <strong>{{ position.symbol }}</strong>
+                                </td>
+                                <td>
+                                    {% if position.side == 'BUY' %}
+                                    <span class="badge bg-success">LONG</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">SHORT</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ position.quantity|floatformat:4 }}</td>
+                                <td>${{ position.entry_price|floatformat:2 }}</td>
+                                <td class="current-price" data-symbol="{{ position.symbol }}">
+                                    ${{ position.current_price|floatformat:2 }}
+                                </td>
+                                <td class="current-value">
+                                    ${{ position.current_value|floatformat:2 }}
+                                </td>
+                                <td>${{ position.cost_basis|floatformat:2 }}</td>
+                                <td class="unrealized-pnl">
+                                    <strong class="{% if position.unrealized_pnl >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        ${{ position.unrealized_pnl|floatformat:2 }}
+                                    </strong>
+                                </td>
+                                <td class="pnl-percentage">
+                                    <strong class="{% if position.pnl_percentage >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ position.pnl_percentage|floatformat:2 }}%
+                                    </strong>
+                                </td>
+                                <td>
+                                    {% if position.stop_loss %}
+                                    <span class="text-danger">${{ position.stop_loss|floatformat:2 }}</span>
+                                    <br>
+                                    <small class="{% if position.current_price <= position.stop_loss %}text-danger fw-bold{% else %}text-muted{% endif %}">
+                                        {% if position.current_price <= position.stop_loss %}
+                                        <i class="bi bi-exclamation-triangle-fill"></i> TRIGGERED
+                                        {% else %}
+                                        -{{ position.sl_distance|floatformat:2 }}%
+                                        {% endif %}
+                                    </small>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if position.take_profit %}
+                                    <span class="text-success">${{ position.take_profit|floatformat:2 }}</span>
+                                    <br>
+                                    <small class="{% if position.current_price >= position.take_profit %}text-success fw-bold{% else %}text-muted{% endif %}">
+                                        {% if position.current_price >= position.take_profit %}
+                                        <i class="bi bi-check-circle-fill"></i> REACHED
+                                        {% else %}
+                                        +{{ position.tp_distance|floatformat:2 }}%
+                                        {% endif %}
+                                    </small>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small>{{ position.duration }}</small>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger" 
+                                            onclick="closePosition({{ position.id }}, '{{ position.symbol }}')">
+                                        <i class="bi bi-x-circle"></i> Close
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="13" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox"></i> No open positions
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if positions %}
+<!-- Risk Analysis -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-shield-exclamation"></i> Risk Analysis
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h5>${{ total_risk|floatformat:2 }}</h5>
+                            <small class="text-muted">Total Risk Exposure</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h5>{{ risk_percentage|floatformat:2 }}%</h5>
+                            <small class="text-muted">Portfolio Risk %</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h5>${{ potential_loss|floatformat:2 }}</h5>
+                            <small class="text-muted">Max Potential Loss</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h5>${{ potential_profit|floatformat:2 }}</h5>
+                            <small class="text-muted">Max Potential Profit</small>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if risk_percentage > 10 %}
+                <div class="alert alert-danger mt-3 mb-0">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <strong>High Risk Warning:</strong> 
+                    Your portfolio risk is {{ risk_percentage|floatformat:2 }}%, which exceeds the recommended 10% threshold.
+                    Consider closing some positions or reducing position sizes.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Position Distribution -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-pie-chart"></i> Position Distribution
+            </div>
+            <div class="card-body">
+                <canvas id="positionChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-bar-chart"></i> P&L by Symbol
+            </div>
+            <div class="card-body">
+                <canvas id="pnlChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh prices every 30 seconds
+    setInterval(refreshPrices, 30000);
+    
+    function refreshPrices() {
+        const symbols = [...document.querySelectorAll('[data-symbol]')].map(el => el.dataset.symbol);
+        const uniqueSymbols = [...new Set(symbols)];
+        
+        if (uniqueSymbols.length === 0) return;
+        
+        fetch('/trading/api/live-prices/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ symbols: uniqueSymbols })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updatePricesInTable(data.prices);
+            }
+        })
+        .catch(error => console.error('Error refreshing prices:', error));
+    }
+    
+    function updatePricesInTable(prices) {
+        document.querySelectorAll('tr[data-position-id]').forEach(row => {
+            const symbol = row.dataset.symbol;
+            const newPrice = prices[symbol];
+            
+            if (newPrice) {
+                const quantity = parseFloat(row.querySelector('td:nth-child(3)').textContent);
+                const entryPrice = parseFloat(row.querySelector('td:nth-child(4)').textContent.replace('$', ''));
+                
+                // Update current price
+                row.querySelector('.current-price').textContent = `$${newPrice.toFixed(2)}`;
+                
+                // Update current value
+                const currentValue = quantity * newPrice;
+                row.querySelector('.current-value').textContent = `$${currentValue.toFixed(2)}`;
+                
+                // Update unrealized P&L
+                const costBasis = quantity * entryPrice;
+                const unrealizedPnl = currentValue - costBasis;
+                const pnlPercentage = (unrealizedPnl / costBasis) * 100;
+                
+                const pnlElement = row.querySelector('.unrealized-pnl strong');
+                pnlElement.textContent = `$${unrealizedPnl.toFixed(2)}`;
+                pnlElement.className = unrealizedPnl >= 0 ? 'text-success' : 'text-danger';
+                
+                const pctElement = row.querySelector('.pnl-percentage strong');
+                pctElement.textContent = `${pnlPercentage.toFixed(2)}%`;
+                pctElement.className = pnlPercentage >= 0 ? 'text-success' : 'text-danger';
+            }
+        });
+    }
+    
+    function closePosition(positionId, symbol) {
+        if (confirm(`Close position for ${symbol}?`)) {
+            fetch(`/trading/api/close-position/${positionId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error closing position: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+        }
+    }
+    
+    function closeAllPositions() {
+        if (confirm('Close ALL open positions? This cannot be undone.')) {
+            fetch('/trading/api/close-all-positions/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Closed ${data.closed_count} position(s)`);
+                    location.reload();
+                } else {
+                    alert('Error closing positions: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error);
+            });
+        }
+    }
+    
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    {% if positions %}
+    // Position Distribution Chart
+    const positionData = {
+        labels: [{% for p in positions %}'{{ p.symbol }}',{% endfor %}],
+        datasets: [{
+            data: [{% for p in positions %}{{ p.current_value }},{% endfor %}],
+            backgroundColor: [
+                '#0d6efd', '#6610f2', '#6f42c1', '#d63384', 
+                '#dc3545', '#fd7e14', '#ffc107', '#198754'
+            ]
+        }]
+    };
+    
+    new Chart(document.getElementById('positionChart'), {
+        type: 'doughnut',
+        data: positionData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right'
+                }
+            }
+        }
+    });
+    
+    // P&L Chart
+    const pnlData = {
+        labels: [{% for p in positions %}'{{ p.symbol }}',{% endfor %}],
+        datasets: [{
+            label: 'Unrealized P&L',
+            data: [{% for p in positions %}{{ p.unrealized_pnl }},{% endfor %}],
+            backgroundColor: [{% for p in positions %}{% if p.unrealized_pnl >= 0 %}'#198754'{% else %}'#dc3545'{% endif %},{% endfor %}]
+        }]
+    };
+    
+    new Chart(document.getElementById('pnlChart'), {
+        type: 'bar',
+        data: pnlData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+    {% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,431 @@
+{% extends 'trading/base.html' %}
+{% load trading_extras %}
+
+{% block title %}Backtest Results - {{ symbol }} - FKS Trading{% endblock %}
+{% block page_title %}<i class="bi bi-bar-chart-line"></i> Backtest Results - {{ symbol }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h4>
+                <span class="badge bg-primary">{{ symbol }}</span>
+                Backtest Analysis
+            </h4>
+            <a href="{% url 'trading:optimization' %}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> Back to Optimization
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Performance Metrics -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-graph-up"></i> Performance Summary
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-md-2">
+                        <div class="stat-card {% if result.total_return > 0 %}bg-success{% else %}bg-danger{% endif %}">
+                            <div class="stat-value">{{ result.total_return|floatformat:2 }}%</div>
+                            <div class="stat-label">Total Return</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card bg-primary">
+                            <div class="stat-value">{{ result.sharpe_ratio|floatformat:2 }}</div>
+                            <div class="stat-label">Sharpe Ratio</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card bg-info">
+                            <div class="stat-value">{{ result.sortino_ratio|floatformat:2 }}</div>
+                            <div class="stat-label">Sortino Ratio</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card bg-warning">
+                            <div class="stat-value">{{ result.calmar_ratio|floatformat:2 }}</div>
+                            <div class="stat-label">Calmar Ratio</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card bg-danger">
+                            <div class="stat-value">{{ result.max_drawdown|floatformat:2 }}%</div>
+                            <div class="stat-label">Max Drawdown</div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="stat-card bg-secondary">
+                            <div class="stat-value">{{ result.num_trades }}</div>
+                            <div class="stat-label">Total Trades</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Equity Curve -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-graph-up-arrow"></i> Equity Curve
+            </div>
+            <div class="card-body">
+                <canvas id="equityChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Trade Statistics -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-calculator"></i> Trade Statistics
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td><strong>Total Trades:</strong></td>
+                            <td class="text-end">{{ result.num_trades }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Winning Trades:</strong></td>
+                            <td class="text-end text-success">{{ result.winning_trades }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Losing Trades:</strong></td>
+                            <td class="text-end text-danger">{{ result.losing_trades }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Win Rate:</strong></td>
+                            <td class="text-end">
+                                <strong class="{% if result.win_rate >= 50 %}text-success{% else %}text-warning{% endif %}">
+                                    {{ result.win_rate|floatformat:2 }}%
+                                </strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Avg Win:</strong></td>
+                            <td class="text-end text-success">${{ result.avg_win|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Avg Loss:</strong></td>
+                            <td class="text-end text-danger">${{ result.avg_loss|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Profit Factor:</strong></td>
+                            <td class="text-end">
+                                <strong class="{% if result.profit_factor > 1 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ result.profit_factor|floatformat:2 }}
+                                </strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Largest Win:</strong></td>
+                            <td class="text-end text-success">${{ result.largest_win|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Largest Loss:</strong></td>
+                            <td class="text-end text-danger">${{ result.largest_loss|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Expectancy:</strong></td>
+                            <td class="text-end">
+                                <strong class="{% if result.expectancy > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    ${{ result.expectancy|floatformat:2 }}
+                                </strong>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Strategy Parameters -->
+    <div class="col-md-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-sliders"></i> Strategy Parameters
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td><strong>RSI Period:</strong></td>
+                            <td class="text-end">{{ params.rsi_period }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>RSI Oversold:</strong></td>
+                            <td class="text-end">{{ params.rsi_oversold }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>RSI Overbought:</strong></td>
+                            <td class="text-end">{{ params.rsi_overbought }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ATR Period:</strong></td>
+                            <td class="text-end">{{ params.atr_period }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ATR Multiplier:</strong></td>
+                            <td class="text-end">{{ params.atr_multiplier|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>SMA Period:</strong></td>
+                            <td class="text-end">{{ params.sma_period }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <hr>
+                
+                <h6>Backtest Configuration</h6>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td><strong>Initial Capital:</strong></td>
+                            <td class="text-end">${{ result.initial_capital|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Final Capital:</strong></td>
+                            <td class="text-end">${{ result.final_capital|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Period:</strong></td>
+                            <td class="text-end">{{ result.start_date|date:"Y-m-d" }} to {{ result.end_date|date:"Y-m-d" }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Data Points:</strong></td>
+                            <td class="text-end">{{ result.num_periods }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Drawdown Analysis -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-arrow-down-circle"></i> Drawdown Analysis
+            </div>
+            <div class="card-body">
+                <canvas id="drawdownChart" height="60"></canvas>
+                
+                <div class="row mt-3">
+                    <div class="col-md-4 text-center">
+                        <h5 class="text-danger">{{ result.max_drawdown|floatformat:2 }}%</h5>
+                        <small class="text-muted">Maximum Drawdown</small>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <h5>{{ result.avg_drawdown|floatformat:2 }}%</h5>
+                        <small class="text-muted">Average Drawdown</small>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <h5>{{ result.recovery_days }}</h5>
+                        <small class="text-muted">Avg Recovery Days</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Monthly Returns -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-calendar3"></i> Monthly Returns
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                {% for month in months %}
+                                <th class="text-center">{{ month }}</th>
+                                {% endfor %}
+                                <th class="text-center"><strong>Total</strong></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for year, returns in monthly_returns.items %}
+                            <tr>
+                                <td><strong>{{ year }}</strong></td>
+                                {% for month in months %}
+                                <td class="text-center">
+                                    {% with ret=returns|get_item:month %}
+                                    {% if ret %}
+                                    <span class="{% if ret > 0 %}text-success{% elif ret < 0 %}text-danger{% endif %}">
+                                        {{ ret|floatformat:1 }}%
+                                    </span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                    {% endwith %}
+                                </td>
+                                {% endfor %}
+                                <td class="text-center">
+                                    <strong class="{% if returns.total > 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ returns.total|floatformat:1 }}%
+                                    </strong>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Trade List -->
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-ul"></i> All Trades
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Entry Date</th>
+                                <th>Exit Date</th>
+                                <th>Side</th>
+                                <th>Entry Price</th>
+                                <th>Exit Price</th>
+                                <th>Quantity</th>
+                                <th>P&L</th>
+                                <th>P&L %</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trade in trades %}
+                            <tr>
+                                <td>{{ forloop.counter }}</td>
+                                <td>{{ trade.entry_date|date:"Y-m-d" }}</td>
+                                <td>{{ trade.exit_date|date:"Y-m-d" }}</td>
+                                <td>
+                                    {% if trade.side == 'BUY' %}
+                                    <span class="badge bg-success">LONG</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">SHORT</span>
+                                    {% endif %}
+                                </td>
+                                <td>${{ trade.entry_price|floatformat:2 }}</td>
+                                <td>${{ trade.exit_price|floatformat:2 }}</td>
+                                <td>{{ trade.quantity|floatformat:4 }}</td>
+                                <td>
+                                    <span class="{% if trade.pnl > 0 %}text-success{% else %}text-danger{% endif %}">
+                                        ${{ trade.pnl|floatformat:2 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="{% if trade.pnl_pct > 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ trade.pnl_pct|floatformat:2 }}%
+                                    </span>
+                                </td>
+                                <td>{{ trade.duration }} days</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Equity Curve Chart
+    const equityData = {
+        labels: {{ equity_dates|safe }},
+        datasets: [{
+            label: 'Portfolio Value',
+            data: {{ equity_values|safe }},
+            borderColor: '#0d6efd',
+            backgroundColor: 'rgba(13, 110, 253, 0.1)',
+            fill: true,
+            tension: 0.1
+        }]
+    };
+    
+    new Chart(document.getElementById('equityChart'), {
+        type: 'line',
+        data: equityData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value.toLocaleString();
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Drawdown Chart
+    const drawdownData = {
+        labels: {{ drawdown_dates|safe }},
+        datasets: [{
+            label: 'Drawdown %',
+            data: {{ drawdown_values|safe }},
+            borderColor: '#dc3545',
+            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+            fill: true,
+            tension: 0.1
+        }]
+    };
+    
+    new Chart(document.getElementById('drawdownChart'), {
+        type: 'line',
+        data: drawdownData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    reverse: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

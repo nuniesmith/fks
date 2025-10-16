@@ -136,14 +136,15 @@ with st.sidebar:
 
 
 # Main Content Tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Live Prices", 
     "📈 Data & Analysis",
     "🎯 Optimization",
     "💡 Signals",
     "📋 Positions",
     "📜 Trade History",
-    "💬 Notifications"
+    "💬 Notifications",
+    "🧠 Intelligence"  # NEW: RAG Intelligence Tab
 ])
 
 # TAB 1: Live Prices
@@ -435,6 +436,232 @@ with tab7:
                 st.error(f'Error: {e}')
     else:
         st.info("Generate a signal first, or provide webhook URL")
+
+
+# TAB 8: Intelligence (RAG)
+with tab8:
+    st.header("🧠 FKS Intelligence - Trading Knowledge Base")
+    st.caption("Ask questions about your trading history, strategies, and get AI-powered insights")
+    
+    # Initialize RAG service
+    try:
+        from services import get_rag_service
+        rag_service = get_rag_service()
+        rag_available = True
+    except Exception as e:
+        st.error(f"⚠️ RAG service unavailable: {e}")
+        st.info("Make sure pgvector is enabled and RAG modules are installed")
+        rag_available = False
+    
+    if rag_available:
+        # Query interface
+        st.subheader("💬 Ask FKS Intelligence")
+        
+        # Pre-defined questions
+        example_questions = [
+            "What strategy works best for BTCUSDT?",
+            "Analyze my recent losing trades",
+            "What are the best entry indicators for SOLUSDT?",
+            "Compare RSI and MACD strategies",
+            "What went wrong with my ETHUSDT trades?",
+            "Predict trend for AVAXUSDT based on history",
+        ]
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            query = st.text_area(
+                "Your Question",
+                height=100,
+                placeholder="e.g., What strategy performs best in volatile markets?",
+                key="intelligence_query"
+            )
+        
+        with col2:
+            st.write("**Quick Questions:**")
+            for i, example in enumerate(example_questions):
+                if st.button(example, key=f"example_{i}"):
+                    st.session_state.intelligence_query = example
+                    st.rerun()
+        
+        # Advanced options
+        with st.expander("⚙️ Advanced Options"):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                top_k = st.slider("Number of sources", 1, 20, 5, 
+                                 help="How many relevant documents to retrieve")
+            
+            with col2:
+                symbol_filter = st.selectbox(
+                    "Filter by symbol",
+                    ["All"] + SYMBOLS,
+                    help="Limit results to specific trading pair"
+                )
+            
+            with col3:
+                doc_type_filter = st.multiselect(
+                    "Document types",
+                    ["trade_outcome", "backtest_result", "strategy_insight", "optimization_result"],
+                    default=[],
+                    help="Filter by document type"
+                )
+        
+        # Query button
+        if st.button("🔍 Ask", type="primary", use_container_width=True):
+            if query:
+                with st.spinner("🤔 Thinking..."):
+                    try:
+                        # Build filters
+                        filters = {}
+                        if symbol_filter != "All":
+                            filters['symbol'] = symbol_filter
+                        if doc_type_filter:
+                            filters['doc_type'] = doc_type_filter
+                        
+                        # Query RAG
+                        result = rag_service.query_with_rag(
+                            query=query,
+                            top_k=top_k,
+                            filters=filters if filters else None,
+                            include_sources=True
+                        )
+                        
+                        # Display answer
+                        st.success("✅ Answer generated!")
+                        
+                        # Answer box
+                        st.markdown("### 📝 Answer")
+                        st.markdown(result['answer'])
+                        
+                        # Metadata
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Sources Used", result['num_sources'])
+                        with col2:
+                            st.metric("Response Time", f"{result['response_time']:.2f}s")
+                        with col3:
+                            st.metric("Model", result['model'])
+                        
+                        # Show sources
+                        if result.get('sources'):
+                            with st.expander(f"📚 View {len(result['sources'])} Sources"):
+                                for i, source in enumerate(result['sources'], 1):
+                                    st.markdown(f"**Source {i}** (Relevance: {source.get('similarity_score', 0):.1%})")
+                                    st.text(source.get('content', '')[:500] + "...")
+                                    
+                                    metadata = source.get('metadata', {})
+                                    if metadata:
+                                        st.caption(f"Symbol: {metadata.get('symbol', 'N/A')} | Type: {metadata.get('doc_type', 'N/A')}")
+                                    st.markdown("---")
+                        
+                        # Save to session
+                        if 'query_history' not in st.session_state:
+                            st.session_state.query_history = []
+                        st.session_state.query_history.append({
+                            'query': query,
+                            'answer': result['answer'],
+                            'timestamp': datetime.now().isoformat()
+                        })
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+                        st.exception(e)
+            else:
+                st.warning("Please enter a question")
+        
+        # Specialized queries
+        st.markdown("---")
+        st.subheader("🎯 Specialized Analysis")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 📊 Strategy Suggestions")
+            strat_symbol = st.selectbox("Select symbol", SYMBOLS, key="strat_symbol")
+            market_cond = st.selectbox(
+                "Market condition",
+                ["trending", "ranging", "volatile", "quiet"],
+                key="market_cond"
+            )
+            
+            if st.button("Get Strategy Suggestion", key="get_strategy"):
+                with st.spinner("Analyzing..."):
+                    try:
+                        result = rag_service.suggest_strategy(
+                            symbol=strat_symbol,
+                            market_condition=market_cond
+                        )
+                        st.success("Strategy Recommendation:")
+                        st.markdown(result['strategy'])
+                        st.caption(f"Based on {result['sources_count']} historical documents")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        
+        with col2:
+            st.markdown("#### 🔮 Trend Prediction")
+            pred_symbol = st.selectbox("Select symbol", SYMBOLS, key="pred_symbol")
+            pred_timeframe = st.selectbox("Timeframe", TIMEFRAMES, key="pred_timeframe")
+            lookback = st.slider("Lookback days", 7, 90, 30, key="pred_lookback")
+            
+            if st.button("Predict Trend", key="predict_trend"):
+                with st.spinner("Predicting..."):
+                    try:
+                        result = rag_service.predict_trend(
+                            symbol=pred_symbol,
+                            timeframe=pred_timeframe,
+                            lookback_days=lookback
+                        )
+                        st.success("Trend Prediction:")
+                        st.markdown(result['prediction'])
+                        st.metric("Confidence", f"{result['confidence']:.1%}")
+                        st.caption(f"Based on {result['sources_count']} sources")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        
+        # Query history
+        if 'query_history' in st.session_state and st.session_state.query_history:
+            st.markdown("---")
+            with st.expander(f"📜 Query History ({len(st.session_state.query_history)} queries)"):
+                for i, item in enumerate(reversed(st.session_state.query_history[-10:]), 1):
+                    st.markdown(f"**{i}. {item['query']}**")
+                    st.caption(f"Time: {item['timestamp'][:19]}")
+                    with st.expander("View answer"):
+                        st.write(item['answer'])
+                    st.markdown("---")
+        
+        # System stats
+        st.markdown("---")
+        st.subheader("📊 Intelligence System Stats")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("📈 Get Analytics", key="get_analytics"):
+                try:
+                    analytics = rag_service.get_query_analytics(days=7)
+                    st.json(analytics)
+                except Exception as e:
+                    st.error(f"Error: {e}")
+        
+        with col2:
+            if st.button("🗄️ Database Stats", key="db_stats"):
+                try:
+                    from database import Session as DBSession, Document, DocumentChunk
+                    session = DBSession()
+                    doc_count = session.query(Document).filter(Document.is_deleted == False).count()
+                    chunk_count = session.query(DocumentChunk).filter(DocumentChunk.is_deleted == False).count()
+                    session.close()
+                    
+                    st.metric("Documents", doc_count)
+                    st.metric("Chunks", chunk_count)
+                except Exception as e:
+                    st.error(f"Error: {e}")
+        
+        with col3:
+            st.caption("**Model Info**")
+            st.text(f"LLM: {'Local' if rag_service.use_local else 'OpenAI'}")
+            st.text(f"Model: {rag_service.local_model if rag_service.use_local else rag_service.openai_model}")
 
 
 # Footer

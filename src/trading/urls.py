@@ -5,6 +5,7 @@ Maps views to URL patterns.
 
 from django.urls import path
 from . import views
+from . import views_intelligence
 
 app_name = 'trading'
 
@@ -31,4 +32,13 @@ urlpatterns = [
     path('api/backtest/', views.api_backtest_results, name='api_backtest_list'),
     path('api/backtest/<int:backtest_id>/', views.api_backtest_results, name='api_backtest_detail'),
     path('api/update-prices/', views.api_update_position_prices, name='api_update_prices'),
+    
+    # Intelligence/RAG API endpoints
+    path('api/intelligence/query/', views_intelligence.query_knowledge_base, name='intelligence_query'),
+    path('api/intelligence/strategy/', views_intelligence.suggest_strategy, name='intelligence_strategy'),
+    path('api/intelligence/trades/<str:symbol>/', views_intelligence.analyze_trades, name='intelligence_trades'),
+    path('api/intelligence/signal/', views_intelligence.explain_signal, name='intelligence_signal'),
+    path('api/intelligence/ingest/', views_intelligence.ingest_data, name='intelligence_ingest'),
+    path('api/intelligence/stats/', views_intelligence.stats, name='intelligence_stats'),
+    path('api/intelligence/health/', views_intelligence.health, name='intelligence_health'),
 ]

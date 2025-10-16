@@ -1,46 +1,40 @@
 # Advanced FKS Trading Platform
 
-A sophisticated **Django-based** fks trading application with PostgreSQL + TimescaleDB, Redis caching, Celery async tasks, real-time updates, and comprehensive backtesting capabilities.
+A sophisticated **Django-based** trading application with PostgreSQL + TimescaleDB, Redis caching, Celery async tasks, real-time updates, comprehensive backtesting, and **AI-powered RAG system with local LLM support**.
 
 ## 🎯 Features
 
-### ✅ Phase 1: Utility Modules (Complete)
+### ✅ Phase 1: Core Trading Platform (Complete)
 - **Data Fetcher** - Binance API integration with CCXT
 - **Signal Generator** - Technical indicators (RSI, MACD, ATR, SMA)
 - **Backtest Engine** - Strategy performance testing
 - **Optimizer** - Optuna-based parameter optimization
 - **Helper Utilities** - Validation and data processing
+- **15 Django Views** - Dashboard, data pull, optimization, signals, trades
+- **9 Responsive Templates** - Bootstrap 5.3.0 design with Chart.js
+- **7 Comprehensive Forms** - Field validation and security
+- **7 Admin Interfaces** - Advanced filtering and bulk actions
+- **11 Celery Tasks** - Background processing and scheduling
+- **Discord Integration** - Automated notifications
 
-### ✅ Phase 2: Views & URL Routing (Complete)
-- **15 Django Views** - Dashboard, data pull, optimization, signals, trades, positions, notifications
-- **RESTful API Endpoints** - AJAX data endpoints for live updates
-- **Professional Architecture** - MVC pattern with Django ORM
+### ✅ Phase 2: RAG System (Complete)
+- **Local LLM Support** - CUDA-accelerated inference with Ollama/llama.cpp
+- **pgvector Integration** - Semantic search with vector similarity
+- **Document Processing** - Chunking service for trading data
+- **Embeddings Service** - Local (sentence-transformers) + OpenAI fallback
+- **Retrieval Service** - Context-aware semantic search
+- **Intelligence Service** - RAG orchestrator for trading insights
+- **Ingestion Pipeline** - Automated data ingestion from signals/backtests/trades
+- **Zero-Cost Inference** - No API fees with local models
 
-### ✅ Phase 3: Templates (Complete)
-- **9 Responsive Templates** - Bootstrap 5.3.0 design
-- **Interactive Charts** - Chart.js visualizations (equity curves, position distribution)
-- **Real-Time Updates** - AJAX live price and position updates
-- **DataTables** - Advanced filtering and sorting
-
-### ✅ Phase 4: Forms (Complete)
-- **7 Comprehensive Forms** - Field validation, cross-field validation, warning system
-- **Auto-Rounding** - Clean user inputs for better UX
-- **CSRF Protection** - Security built-in
-- **Custom Validators** - Discord webhook, risk warnings
-
-### ✅ Phase 5: Admin Interface (Complete)
-- **7 Custom ModelAdmin Classes** - Account, Position, Trade, Balance, Strategy, Signal, Backtest
-- **Colored Badges** - Visual status indicators
-- **Calculated Fields** - P&L %, trade duration, risk amounts
-- **Bulk Actions** - Activate/deactivate, close positions/trades
-- **Advanced Filtering** - Multi-dimensional data exploration
-
-### ✅ Phase 6: Celery Async Tasks (Complete)
-- **11 Background Tasks** - Price fetching, signal generation, position updates, optimization
-- **8 Scheduled Jobs** - Automatic execution (every 5 min, hourly, daily)
-- **Discord Notifications** - Automated alerts and performance reports
-- **Flower Monitoring** - Real-time task monitoring UI
-- **Docker Orchestration** - Easy deployment with docker-compose
+### ✅ Phase 3: Testing & Deployment (Complete)
+- **69+ Test Cases** - Unit, integration, and performance tests
+- **CI/CD Pipeline** - GitHub Actions for automated testing/deployment
+- **GPU Support** - Docker GPU for accelerated inference
+- **Developer Tools** - Makefile with 30+ commands
+- **Health Monitoring** - Comprehensive service health checks
+- **Log Management** - Automatic log rotation and organization
+- **Security Scanning** - Bandit + Safety vulnerability checks
 
 ## 📁 Project Structure
 

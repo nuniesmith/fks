@@ -9,6 +9,60 @@ from django.utils import timezone
 from decimal import Decimal
 
 
+class Asset(models.Model):
+    """Asset model for centralized asset management"""
+    CATEGORY_CHOICES = [
+        ('crypto', 'Cryptocurrency'),
+        ('forex', 'Forex'),
+        ('futures', 'Futures'),
+    ]
+    
+    TYPE_CHOICES = [
+        ('spot', 'Spot'),
+        ('futures', 'Futures'),
+    ]
+    
+    SUBCATEGORY_CHOICES = [
+        ('commodities', 'Commodities'),
+        ('indices', 'Indices'),
+        ('forex', 'Forex'),
+    ]
+    
+    symbol = models.CharField(max_length=50, unique=True, db_index=True)
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    asset_type = models.CharField(max_length=20, choices=TYPE_CHOICES, db_column='type')
+    exchange = models.CharField(max_length=50)
+    subcategory = models.CharField(max_length=20, choices=SUBCATEGORY_CHOICES, null=True, blank=True)
+    base_currency = models.CharField(max_length=10, null=True, blank=True)
+    quote_currency = models.CharField(max_length=10, null=True, blank=True)
+    tick_size = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+    lot_size = models.DecimalField(max_digits=20, decimal_places=10, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'assets'
+        ordering = ['category', 'symbol']
+        indexes = [
+            models.Index(fields=['category', 'asset_type']),
+            models.Index(fields=['exchange']),
+        ]
+    
+    def __str__(self):
+        return f"{self.symbol} ({self.category})"
+    
+    @property
+    def is_spot(self):
+        return self.asset_type == 'spot'
+    
+    @property
+    def is_futures(self):
+        return self.asset_type == 'futures'
+
+
 class Account(models.Model):
     """Trading account model - mapped to existing accounts table"""
     ACCOUNT_TYPE_CHOICES = [

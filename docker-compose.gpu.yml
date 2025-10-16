@@ -1,0 +1,172 @@
+# Docker Compose override for GPU support and production enhancements
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+services:
+  web:
+    volumes:
+      - ./logs/nginx:/var/log/nginx
+      - ./logs/gunicorn:/var/log/gunicorn
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn fks_project.wsgi:application 
+             --bind 0.0.0.0:8000 
+             --workers 4 
+             --timeout 120 
+             --access-logfile /var/log/gunicorn/access.log 
+             --error-logfile /var/log/gunicorn/error.log"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    volumes:
+      - ./logs/postgres:/var/log/postgresql
+    command: >
+      postgres 
+      -c shared_preload_libraries='timescaledb,vector' 
+      -c logging_collector=on 
+      -c log_directory='/var/log/postgresql'
+      -c log_filename='postgresql-%Y-%m-%d.log'
+      -c log_rotation_age=1d
+      -c log_rotation_size=100MB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    volumes:
+      - ./logs/redis:/var/log/redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  celery_worker:
+    volumes:
+      - ./logs/celery:/var/log/celery
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A fks_project inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  celery_beat:
+    volumes:
+      - ./logs/celery:/var/log/celery
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  flower:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # GPU-enabled service for RAG/LLM inference
+  rag_service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.gpu
+    container_name: fks_rag_gpu
+    working_dir: /app
+    command: python -m src.rag.server
+    volumes:
+      - ./src:/app
+      - ./logs:/app/logs
+      - ./logs/rag:/var/log/rag
+      - ~/.ollama:/root/.ollama  # Ollama models cache
+      - ~/.cache/huggingface:/root/.cache/huggingface  # HuggingFace models cache
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - CUDA_VISIBLE_DEVICES=0
+      - USE_LOCAL_LLM=true
+      - OLLAMA_HOST=http://localhost:11434
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/1
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+      - HF_HOME=/root/.cache/huggingface
+    env_file:
+      - .env
+    ports:
+      - "8001:8001"  # RAG API endpoint
+      - "11434:11434"  # Ollama API (if running in container)
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - fks-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

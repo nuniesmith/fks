@@ -716,3 +716,199 @@ def run_backtest_async(self, strategy_id, symbol, start_date, end_date, initial_
     except Exception as e:
         logger.error(f"Error in run_backtest_async: {str(e)}")
         return {'success': False, 'error': str(e)}
+
+
+# =============================================================================
+# RAG/INTELLIGENCE TASKS
+# =============================================================================
+
+@shared_task(bind=True, name='trading.tasks.ingest_completed_trades')
+def ingest_completed_trades(self, days=1):
+    """
+    Ingest completed trades into RAG knowledge base.
+    Runs daily to keep trading insights up to date.
+    
+    Args:
+        days: Number of days to look back for completed trades
+    """
+    logger.info(f"Starting ingest_completed_trades task (last {days} days)")
+    
+    try:
+        from rag.ingestion import create_ingestion_pipeline
+        
+        pipeline = create_ingestion_pipeline(use_local=True)
+        count = pipeline.batch_ingest_recent_trades(days=days)
+        
+        logger.info(f"Successfully ingested {count} completed trades")
+        
+        return {
+            'success': True,
+            'trades_ingested': count,
+            'period_days': days
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in ingest_completed_trades: {str(e)}")
+        return {'success': False, 'error': str(e)}
+
+
+@shared_task(bind=True, name='trading.tasks.ingest_trading_signals')
+def ingest_trading_signals(self, days=1, limit=100):
+    """
+    Ingest recent trading signals into RAG knowledge base.
+    Runs daily to capture signal patterns.
+    
+    Args:
+        days: Number of days to look back for signals
+        limit: Maximum number of signals to ingest
+    """
+    logger.info(f"Starting ingest_trading_signals task (last {days} days, limit {limit})")
+    
+    try:
+        from rag.ingestion import create_ingestion_pipeline
+        
+        pipeline = create_ingestion_pipeline(use_local=True)
+        count = pipeline.batch_ingest_recent_signals(days=days, limit=limit)
+        
+        logger.info(f"Successfully ingested {count} trading signals")
+        
+        return {
+            'success': True,
+            'signals_ingested': count,
+            'period_days': days
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in ingest_trading_signals: {str(e)}")
+        return {'success': False, 'error': str(e)}
+
+
+@shared_task(bind=True, name='trading.tasks.ingest_backtest_results')
+def ingest_backtest_results(self, limit=10):
+    """
+    Ingest recent backtest results into RAG knowledge base.
+    Runs weekly to capture strategy performance insights.
+    
+    Args:
+        limit: Maximum number of backtest results to ingest
+    """
+    logger.info(f"Starting ingest_backtest_results task (limit {limit})")
+    
+    try:
+        from rag.ingestion import create_ingestion_pipeline
+        
+        pipeline = create_ingestion_pipeline(use_local=True)
+        count = pipeline.batch_ingest_recent_backtests(limit=limit)
+        
+        logger.info(f"Successfully ingested {count} backtest results")
+        
+        return {
+            'success': True,
+            'backtests_ingested': count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in ingest_backtest_results: {str(e)}")
+        return {'success': False, 'error': str(e)}
+
+
+@shared_task(bind=True, name='trading.tasks.ingest_all_trading_data')
+def ingest_all_trading_data(self):
+    """
+    Comprehensive ingestion task - ingests all recent trading data.
+    Runs daily to keep entire knowledge base up to date.
+    """
+    logger.info("Starting comprehensive trading data ingestion")
+    
+    results = {
+        'trades': None,
+        'signals': None,
+        'backtests': None
+    }
+    
+    try:
+        # Ingest trades (last 7 days)
+        trade_result = ingest_completed_trades(days=7)
+        results['trades'] = trade_result
+        
+        # Ingest signals (last 7 days, max 100)
+        signal_result = ingest_trading_signals(days=7, limit=100)
+        results['signals'] = signal_result
+        
+        # Ingest backtests (last 20)
+        backtest_result = ingest_backtest_results(limit=20)
+        results['backtests'] = backtest_result
+        
+        total_ingested = (
+            results['trades'].get('trades_ingested', 0) +
+            results['signals'].get('signals_ingested', 0) +
+            results['backtests'].get('backtests_ingested', 0)
+        )
+        
+        logger.info(f"Comprehensive ingestion complete. Total documents: {total_ingested}")
+        
+        # Send notification
+        send_discord_notification.delay(
+            f"📚 RAG Knowledge Base Updated\n"
+            f"Trades: {results['trades'].get('trades_ingested', 0)}\n"
+            f"Signals: {results['signals'].get('signals_ingested', 0)}\n"
+            f"Backtests: {results['backtests'].get('backtests_ingested', 0)}\n"
+            f"Total: {total_ingested} documents"
+        )
+        
+        return {
+            'success': True,
+            'total_ingested': total_ingested,
+            'details': results
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in ingest_all_trading_data: {str(e)}")
+        return {'success': False, 'error': str(e), 'partial_results': results}
+
+
+@shared_task(bind=True, name='trading.tasks.cleanup_old_rag_data')
+def cleanup_old_rag_data(self, days=90):
+    """
+    Clean up old RAG documents to keep knowledge base fresh.
+    Runs weekly to remove outdated trading insights.
+    
+    Args:
+        days: Remove documents older than this many days
+    """
+    logger.info(f"Starting cleanup_old_rag_data task (older than {days} days)")
+    
+    try:
+        from database import Document
+        from datetime import datetime, timedelta
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+        from django.conf import settings
+        
+        # Create database session
+        engine = create_engine(settings.DATABASES['default']['ENGINE'])
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        
+        # Delete old documents
+        deleted = session.query(Document).filter(
+            Document.created_at < cutoff_date
+        ).delete()
+        
+        session.commit()
+        session.close()
+        
+        logger.info(f"Cleaned up {deleted} old RAG documents")
+        
+        return {
+            'success': True,
+            'documents_deleted': deleted,
+            'cutoff_days': days
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in cleanup_old_rag_data: {str(e)}")
+        return {'success': False, 'error': str(e)}
+

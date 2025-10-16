@@ -1,6 +1,7 @@
 """
 FKS Intelligence - Main RAG orchestrator for trading knowledge base.
 Combines document processing, embeddings, retrieval, and LLM generation.
+Supports both OpenAI API and local CUDA-accelerated models.
 """
 
 from typing import List, Dict, Any, Optional
@@ -19,21 +20,60 @@ class FKSIntelligence:
     
     def __init__(self,
                  openai_model: str = "gpt-4o-mini",
-                 embedding_model: str = "text-embedding-3-small"):
+                 embedding_model: str = "all-MiniLM-L6-v2",
+                 use_local: bool = True,
+                 local_llm_model: str = "llama3.2:3b"):
         """
         Initialize FKS Intelligence.
         
         Args:
-            openai_model: OpenAI model for generation
-            embedding_model: OpenAI model for embeddings
+            openai_model: OpenAI model for generation (fallback)
+            embedding_model: Model for embeddings (local or OpenAI)
+            use_local: Use local models instead of OpenAI API
+            local_llm_model: Local LLM model name for Ollama
         """
         self.openai_model = openai_model
-        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        self.use_local = use_local
+        self.local_llm_model = local_llm_model
         
         # Initialize RAG components
         self.processor = DocumentProcessor()
-        self.embeddings = EmbeddingsService(model=embedding_model)
+        self.embeddings = EmbeddingsService(
+            model=embedding_model,
+            use_local=use_local
+        )
         self.retrieval = RetrievalService(embeddings_service=self.embeddings)
+        
+        # Initialize LLM
+        if use_local:
+            self._init_local_llm()
+        else:
+            self._init_openai()
+    
+    def _init_local_llm(self):
+        """Initialize local LLM"""
+        try:
+            from rag.local_llm import create_local_llm
+            
+            self.llm = create_local_llm(
+                model_name=self.local_llm_model,
+                backend="ollama"
+            )
+            print(f"✓ Using local LLM: {self.local_llm_model}")
+            
+        except Exception as e:
+            print(f"⚠ Local LLM not available: {e}")
+            print("  Falling back to OpenAI...")
+            self.use_local = False
+            self._init_openai()
+    
+    def _init_openai(self):
+        """Initialize OpenAI client"""
+        if not OPENAI_API_KEY:
+            raise ValueError("OpenAI API key not set and local LLM not available")
+        
+        self.client = OpenAI(api_key=OPENAI_API_KEY)
+        print(f"✓ Using OpenAI: {self.openai_model}")
     
     def ingest_document(self,
                        content: str,
@@ -305,7 +345,7 @@ class FKSIntelligence:
     
     def _generate_response(self, question: str, context: str) -> str:
         """
-        Generate response using OpenAI with retrieved context.
+        Generate response using local LLM or OpenAI with retrieved context.
         
         Args:
             question: User question
@@ -339,12 +379,31 @@ Question: {question}
 
 Please provide a comprehensive answer based on the context above."""
 
+        if self.use_local:
+            return self._generate_local(user_prompt, system_prompt)
+        else:
+            return self._generate_openai(user_prompt, system_prompt)
+    
+    def _generate_local(self, prompt: str, system_prompt: str) -> str:
+        """Generate response using local LLM"""
+        try:
+            response = self.llm.generate(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                max_tokens=1000
+            )
+            return response
+        except Exception as e:
+            return f"Error generating response: {str(e)}"
+    
+    def _generate_openai(self, prompt: str, system_prompt: str) -> str:
+        """Generate response using OpenAI"""
         try:
             response = self.client.chat.completions.create(
                 model=self.openai_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
                 max_tokens=1000
@@ -386,6 +445,22 @@ Please provide a comprehensive answer based on the context above."""
 
 
 # Convenience function
-def create_intelligence() -> FKSIntelligence:
-    """Create FKS Intelligence instance"""
-    return FKSIntelligence()
+def create_intelligence(use_local: bool = True,
+                       local_llm_model: str = "llama3.2:3b",
+                       embedding_model: str = "all-MiniLM-L6-v2") -> FKSIntelligence:
+    """
+    Create FKS Intelligence instance with local or OpenAI models.
+    
+    Args:
+        use_local: Use local CUDA-accelerated models (default: True)
+        local_llm_model: Ollama model name (e.g., "llama3.2:3b", "mistral:7b")
+        embedding_model: Embedding model name
+        
+    Returns:
+        FKSIntelligence instance
+    """
+    return FKSIntelligence(
+        use_local=use_local,
+        local_llm_model=local_llm_model,
+        embedding_model=embedding_model
+    )

@@ -86,6 +86,56 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=10, minute=0, day_of_week=1),
         'kwargs': {'period': 'weekly'},
     },
+    
+    # RAG/Intelligence tasks
+    # Ingest completed trades daily at 1 AM UTC
+    'ingest-completed-trades-daily': {
+        'task': 'trading.tasks.ingest_completed_trades',
+        'schedule': crontab(hour=1, minute=0),
+        'kwargs': {'days': 1},
+        'options': {
+            'expires': 3600.0,
+        }
+    },
+    
+    # Ingest trading signals daily at 1:15 AM UTC
+    'ingest-signals-daily': {
+        'task': 'trading.tasks.ingest_trading_signals',
+        'schedule': crontab(hour=1, minute=15),
+        'kwargs': {'days': 1, 'limit': 100},
+        'options': {
+            'expires': 3600.0,
+        }
+    },
+    
+    # Ingest backtest results weekly on Sunday at 2 AM UTC
+    'ingest-backtests-weekly': {
+        'task': 'trading.tasks.ingest_backtest_results',
+        'schedule': crontab(hour=2, minute=0, day_of_week=0),
+        'kwargs': {'limit': 20},
+        'options': {
+            'expires': 7200.0,
+        }
+    },
+    
+    # Comprehensive ingestion weekly on Monday at 1 AM UTC
+    'comprehensive-rag-ingestion-weekly': {
+        'task': 'trading.tasks.ingest_all_trading_data',
+        'schedule': crontab(hour=1, minute=0, day_of_week=1),
+        'options': {
+            'expires': 7200.0,
+        }
+    },
+    
+    # Clean up old RAG data monthly (1st of month at 4 AM UTC)
+    'cleanup-old-rag-data-monthly': {
+        'task': 'trading.tasks.cleanup_old_rag_data',
+        'schedule': crontab(hour=4, minute=0, day_of_month=1),
+        'kwargs': {'days': 90},
+        'options': {
+            'expires': 7200.0,
+        }
+    },
 }
 
 

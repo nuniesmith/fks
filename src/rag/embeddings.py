@@ -1,6 +1,6 @@
 """
 Embeddings service for RAG system.
-Handles generating embeddings using OpenAI and storing them in PostgreSQL with pgvector.
+Handles generating embeddings using OpenAI or local models with pgvector storage.
 """
 
 from typing import List, Dict, Any, Optional
@@ -18,17 +18,53 @@ class EmbeddingsService:
     
     def __init__(self, 
                  model: str = "text-embedding-3-small",
-                 dimension: int = 1536):
+                 dimension: int = 1536,
+                 use_local: bool = True):
         """
         Initialize embeddings service.
         
         Args:
-            model: OpenAI embedding model
-            dimension: Embedding dimension (1536 for text-embedding-3-small/large)
+            model: Model name (OpenAI or HuggingFace)
+            dimension: Embedding dimension
+            use_local: Use local model instead of OpenAI API
         """
         self.model = model
         self.dimension = dimension
+        self.use_local = use_local
+        
+        if use_local:
+            self._init_local_model()
+        else:
+            self._init_openai()
+    
+    def _init_local_model(self):
+        """Initialize local embedding model"""
+        try:
+            from rag.local_llm import create_local_embeddings
+            
+            # Default to fast local model
+            if self.model.startswith("text-embedding"):
+                # Map OpenAI models to local equivalents
+                self.model = "all-MiniLM-L6-v2"
+                self.dimension = 384  # MiniLM dimension
+            
+            self.embeddings = create_local_embeddings(model_name=self.model)
+            self.dimension = self.embeddings.dimension
+            print(f"✓ Using local embeddings: {self.model} ({self.dimension}d)")
+            
+        except ImportError as e:
+            print(f"⚠ Local embeddings not available: {e}")
+            print("  Falling back to OpenAI...")
+            self.use_local = False
+            self._init_openai()
+    
+    def _init_openai(self):
+        """Initialize OpenAI client"""
+        if not OPENAI_API_KEY:
+            raise ValueError("OPENAI_API_KEY not set and local models not available")
+        
         self.client = OpenAI(api_key=OPENAI_API_KEY)
+        print(f"✓ Using OpenAI embeddings: {self.model}")
     
     def generate_embedding(self, text: str) -> List[float]:
         """
@@ -43,6 +79,13 @@ class EmbeddingsService:
         if not text or not text.strip():
             return [0.0] * self.dimension
         
+        if self.use_local:
+            return self.embeddings.generate_embedding(text)
+        else:
+            return self._generate_openai(text)
+    
+    def _generate_openai(self, text: str) -> List[float]:
+        """Generate embedding using OpenAI"""
         try:
             response = self.client.embeddings.create(
                 input=text,
@@ -59,11 +102,22 @@ class EmbeddingsService:
         
         Args:
             texts: List of input texts
-            batch_size: Number of texts to process per API call
+            batch_size: Number of texts to process per API call (OpenAI) or batch (local)
             
         Returns:
             List of embedding vectors
         """
+        if self.use_local:
+            # Local model can handle larger batches efficiently
+            batch_size = 32
+            # Filter out empty texts
+            texts = [text if text and text.strip() else " " for text in texts]
+            return self.embeddings.generate_embeddings_batch(texts, batch_size=batch_size)
+        else:
+            return self._generate_openai_batch(texts, batch_size)
+    
+    def _generate_openai_batch(self, texts: List[str], batch_size: int) -> List[List[float]]:
+        """Generate embeddings using OpenAI in batches"""
         embeddings = []
         
         for i in range(0, len(texts), batch_size):
@@ -297,6 +351,15 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
 
 
 # Convenience function
-def create_embeddings_service(model: str = "text-embedding-3-small") -> EmbeddingsService:
-    """Create embeddings service with default settings"""
-    return EmbeddingsService(model=model)
+def create_embeddings_service(model: str = "all-MiniLM-L6-v2", use_local: bool = True) -> EmbeddingsService:
+    """
+    Create embeddings service with local or OpenAI models.
+    
+    Args:
+        model: Model name (local: HuggingFace model, OpenAI: text-embedding-*)
+        use_local: Use local model (default: True)
+        
+    Returns:
+        EmbeddingsService instance
+    """
+    return EmbeddingsService(model=model, use_local=use_local)

@@ -57,3 +57,30 @@ REDIS_DB = int(os.getenv('REDIS_DB', 0))
 WS_RECONNECT_DELAY = 5  # seconds
 WS_PING_INTERVAL = 20  # seconds
 WS_PING_TIMEOUT = 10  # seconds
+
+# Asset Management
+# Import asset registry for centralized asset management
+try:
+    from assets.registry import (
+        SPOT_ASSETS, FUTURES_ASSETS, 
+        get_assets_by_category, get_assets_by_type,
+        AssetCategory, AssetType
+    )
+    ASSET_REGISTRY_AVAILABLE = True
+except ImportError:
+    ASSET_REGISTRY_AVAILABLE = False
+    SPOT_ASSETS = []
+    FUTURES_ASSETS = []
+
+# Oanda API Configuration
+OANDA_API_TOKEN = os.getenv('OANDA_API_TOKEN', '')
+OANDA_ACCOUNT_ID = os.getenv('OANDA_ACCOUNT_ID', '')
+OANDA_ENVIRONMENT = os.getenv('OANDA_ENVIRONMENT', 'practice')  # 'practice' or 'live'
+
+# Asset type preferences for different trading strategies
+PERSONAL_TRADING_ASSET_TYPE = 'spot'  # Spot for personal profits
+PROP_FIRM_ASSET_TYPE = 'futures'  # Futures for prop firms
+
+# Portfolio allocation settings
+PORTFOLIO_SPOT_ALLOCATION = 0.5  # 50% to spot assets (personal)
+PORTFOLIO_FUTURES_ALLOCATION = 0.5  # 50% to futures assets (prop firms)

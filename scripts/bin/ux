@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Purpose: Neutral (namespace-aware) CLI dispatcher wrapping legacy fks binary.
+# Usage: ux <command> [args]
+set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SELF_DIR/.." && pwd)"
+
+# shellcheck source=../lib/env.sh
+override_root_flag="${OVERRIDE_ROOT:-}"
+source "$ROOT/lib/env.sh"
+source "$ROOT/lib/log.sh"
+
+PROJECT_NS="${PROJECT_NS:-fks}"
+
+_bridge_legacy() {
+  if [[ -x "$SELF_DIR/fks" ]]; then
+    "$SELF_DIR/fks" "$@"; return $?
+  fi
+  log_error "Legacy 'fks' dispatcher not found; command '$*' unsupported here yet."; return 127
+}
+
+usage() {
+  cat <<EOF
+${PROJECT_NS^^} Universal CLI (ux)
+
+Usage: ux <command> [args]
+
+Commands:
+  status        Show system status (bridged)
+  deploy        Deployment pipeline (bridged)
+  catalog       Generate scripts catalog (bridged)
+  help          Show this help
+
+Environment:
+  PROJECT_NS     Project namespace (current: $PROJECT_NS)
+  OVERRIDE_ROOT  Explicit project root override
+  LOG_FORMAT     plain|json
+EOF
+}
+
+main() {
+  local cmd=${1:-help}; shift || true
+  case "$cmd" in
+    help|-h|--help) usage ;;
+    status|deploy|catalog) _bridge_legacy "$cmd" "$@" ;;
+    *) log_error "Unknown command: $cmd"; usage; exit 1 ;;
+  esac
+}
+
+main "$@"

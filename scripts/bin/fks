@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Purpose: Unified FKS script CLI dispatcher
+# Usage: fks <command> [args]
+# Commands: deploy, status, logs (extensible)
+set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SELF_DIR/.." && pwd)"
+PATH="$SELF_DIR:$PATH"
+
+# shellcheck source=../lib/log.sh
+source "$ROOT/lib/log.sh"
+source "$ROOT/lib/env.sh"
+source "$ROOT/lib/validate.sh"
+source "$ROOT/lib/error.sh"
+
+usage() {
+  cat <<EOF
+FKS Unified CLI
+
+Usage: fks <command> [args]
+
+Commands:
+  deploy       Run deployment pipeline (placeholder)
+  status       Show orchestration status (placeholder)
+  catalog      Regenerate script catalog
+  help         Show this help
+
+Env:
+  LOG_LEVEL=DEBUG for verbose logs
+EOF
+}
+
+cmd_deploy() { log_info "(stub) deploy command"; }
+cmd_status() { log_info "(stub) status command"; }
+cmd_catalog() { "$ROOT/devtools/scripts-meta/generate_catalog.sh"; }
+
+main() {
+  local cmd=${1:-help}; shift || true
+  case "$cmd" in
+    help|-h|--help) usage ;;
+    deploy) cmd_deploy "$@" ;;
+    status) cmd_status "$@" ;;
+    catalog) cmd_catalog "$@" ;;
+    *) log_error "Unknown command: $cmd"; usage; exit 1 ;;
+  esac
+}
+
+main "$@"

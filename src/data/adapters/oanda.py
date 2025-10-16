@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 from .base import APIAdapter, get_env_any
-from shared_python.exceptions import DataFetchError  # type: ignore
+from core.exceptions import DataFetchError  # type: ignore
 
 # Import asset registry
 try:
-    from assets.registry import AssetType, FuturesSubcategory, get_asset
+    from core.registry import AssetType, FuturesSubcategory, get_asset
 except ImportError:
     # Fallback for environments without asset registry
     class AssetType:

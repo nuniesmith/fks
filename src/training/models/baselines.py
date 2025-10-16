@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 from shared_python.logging import get_logger  # type: ignore
-from shared_python.exceptions import ModelError  # type: ignore
+from core.exceptions import ModelError  # type: ignore
 
 log = get_logger(__name__)
 

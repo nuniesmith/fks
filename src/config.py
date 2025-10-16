@@ -61,7 +61,7 @@ WS_PING_TIMEOUT = 10  # seconds
 # Asset Management
 # Import asset registry for centralized asset management
 try:
-    from assets.registry import (
+    from core.registry import (
         SPOT_ASSETS, FUTURES_ASSETS, 
         get_assets_by_category, get_assets_by_type,
         AssetCategory, AssetType

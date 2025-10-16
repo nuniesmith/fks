@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 
 # Set environment variables for build
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -38,7 +38,7 @@ RUN pip install --no-cache-dir uv && \
     uv pip install --system --no-cache -r requirements.txt
 
 # Stage 2: Runtime
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 # Set environment variables for runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -53,7 +53,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /usr/lib/libta_lib.so* /usr/lib/
 
 # Copy Python site-packages from builder
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 
 # Copy Python executables (celery, gunicorn, etc.) from builder
 COPY --from=builder /usr/local/bin/ /usr/local/bin/

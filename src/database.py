@@ -1,7 +1,7 @@
 # src/database.py
 
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, Boolean, DECIMAL, CheckConstraint, UniqueConstraint, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text, Boolean, DECIMAL, CheckConstraint, UniqueConstraint, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -193,6 +193,99 @@ class StrategyParameters(Base):
     is_active = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE), onupdate=lambda: datetime.now(TIMEZONE))
+
+
+# ============================================================================
+# RAG KNOWLEDGE BASE MODELS
+# ============================================================================
+
+class Document(Base):
+    """Store source documents for RAG knowledge base"""
+    __tablename__ = 'documents'
+    
+    id = Column(Integer, primary_key=True)
+    doc_type = Column(String(50), nullable=False)  # 'signal', 'backtest', 'trade_analysis', 'market_report', 'strategy', 'log'
+    title = Column(String(500))
+    content = Column(Text, nullable=False)
+    source = Column(String(255))  # file path, url, or source identifier
+    symbol = Column(String(20))  # related trading pair
+    timeframe = Column(String(10))  # related timeframe
+    metadata = Column(JSONB)  # additional context (strategy name, metrics, etc.)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE), onupdate=lambda: datetime.now(TIMEZONE))
+    
+    # Relationships
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        CheckConstraint("doc_type IN ('signal', 'backtest', 'trade_analysis', 'market_report', 'strategy', 'log', 'insight', 'other')", name='check_doc_type'),
+    )
+
+
+class DocumentChunk(Base):
+    """Store document chunks with embeddings for semantic search"""
+    __tablename__ = 'document_chunks'
+    
+    id = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey('documents.id'), nullable=False)
+    chunk_index = Column(Integer, nullable=False)  # order within document
+    content = Column(Text, nullable=False)
+    embedding = Column(ARRAY(Float))  # pgvector will be used via raw SQL
+    token_count = Column(Integer)
+    metadata = Column(JSONB)  # chunk-specific metadata
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
+    
+    # Relationships
+    document = relationship("Document", back_populates="chunks")
+    
+    __table_args__ = (
+        Index('idx_document_chunks_document_id', 'document_id'),
+    )
+
+
+class QueryHistory(Base):
+    """Track RAG queries and responses for analysis"""
+    __tablename__ = 'query_history'
+    
+    id = Column(Integer, primary_key=True)
+    query = Column(Text, nullable=False)
+    response = Column(Text)
+    retrieved_chunks = Column(JSONB)  # list of chunk IDs and relevance scores
+    model_used = Column(String(50))
+    query_type = Column(String(50))  # 'strategy_suggestion', 'market_analysis', 'trade_insight', etc.
+    response_time_ms = Column(Integer)
+    user_feedback = Column(Integer)  # rating 1-5
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
+    
+    __table_args__ = (
+        Index('idx_query_history_created_at', 'created_at'),
+    )
+
+
+class TradingInsight(Base):
+    """Curated trading insights and lessons learned"""
+    __tablename__ = 'trading_insights'
+    
+    id = Column(Integer, primary_key=True)
+    insight_type = Column(String(50), nullable=False)  # 'lesson_learned', 'pattern_observed', 'strategy_improvement', 'risk_observation'
+    title = Column(String(500), nullable=False)
+    content = Column(Text, nullable=False)
+    symbol = Column(String(20))
+    related_trades = Column(JSONB)  # trade IDs
+    related_backtests = Column(JSONB)  # backtest IDs
+    impact = Column(String(20))  # 'high', 'medium', 'low'
+    category = Column(String(50))  # 'technical', 'fundamental', 'risk_management', 'psychology'
+    tags = Column(ARRAY(String))
+    metadata = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE), onupdate=lambda: datetime.now(TIMEZONE))
+    
+    __table_args__ = (
+        CheckConstraint("insight_type IN ('lesson_learned', 'pattern_observed', 'strategy_improvement', 'risk_observation', 'market_condition', 'other')", name='check_insight_type'),
+        CheckConstraint("impact IN ('high', 'medium', 'low')", name='check_impact'),
+        Index('idx_trading_insights_symbol', 'symbol'),
+        Index('idx_trading_insights_category', 'category'),
+    )
 
 
 # ============================================================================

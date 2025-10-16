@@ -72,6 +72,8 @@ langchain-openai>=0.3.35
 faiss-cpu>=1.12.0
 sentence-transformers>=5.1.1
 chromadb>=1.1.1
+pgvector>=0.3.6
+tiktoken>=0.9.0
 
 # Document Parsing
 pypdf>=6.1.1

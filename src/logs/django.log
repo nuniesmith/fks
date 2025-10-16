@@ -3077,3 +3077,70 @@ WARNING 2025-10-16 13:21:53,524 inspector Inspect method registered failed
 WARNING 2025-10-16 13:21:53,525 inspector Inspect method active failed
 WARNING 2025-10-16 13:21:53,526 inspector Inspect method revoked failed
 INFO 2025-10-16 18:11:07,770 command 15 detected, shutting down
+INFO 2025-10-16 18:56:21,148 command Visit me at http://0.0.0.0:5555
+INFO 2025-10-16 18:56:21,190 command Broker: redis://redis:6379/0
+INFO 2025-10-16 18:56:21,200 command Registered tasks: 
+['celery.accumulate',
+ 'celery.backend_cleanup',
+ 'celery.chain',
+ 'celery.chord',
+ 'celery.chord_unlock',
+ 'celery.chunks',
+ 'celery.group',
+ 'celery.map',
+ 'celery.starmap',
+ 'fks_project.celery.debug_task',
+ 'trading.tasks.check_position_triggers',
+ 'trading.tasks.cleanup_old_data',
+ 'trading.tasks.fetch_historical_data',
+ 'trading.tasks.fetch_latest_prices',
+ 'trading.tasks.generate_trading_signals',
+ 'trading.tasks.record_account_balances',
+ 'trading.tasks.run_backtest_async',
+ 'trading.tasks.run_daily_optimization',
+ 'trading.tasks.send_discord_notification',
+ 'trading.tasks.send_performance_summary',
+ 'trading.tasks.update_open_positions']
+INFO 2025-10-16 18:56:21,223 mixins Connected to redis://redis:6379/0
+WARNING 2025-10-16 18:56:22,308 inspector Inspect method scheduled failed
+WARNING 2025-10-16 18:56:22,311 inspector Inspect method stats failed
+WARNING 2025-10-16 18:56:22,311 inspector Inspect method revoked failed
+WARNING 2025-10-16 18:56:22,320 inspector Inspect method active_queues failed
+WARNING 2025-10-16 18:56:22,324 inspector Inspect method conf failed
+WARNING 2025-10-16 18:56:22,324 inspector Inspect method registered failed
+WARNING 2025-10-16 18:56:22,325 inspector Inspect method reserved failed
+WARNING 2025-10-16 18:56:22,325 inspector Inspect method active failed
+INFO 2025-10-16 19:07:20,771 command 15 detected, shutting down
+INFO 2025-10-16 19:09:13,737 command Visit me at http://0.0.0.0:5555
+INFO 2025-10-16 19:09:13,775 command Broker: redis://redis:6379/0
+INFO 2025-10-16 19:09:13,782 command Registered tasks: 
+['celery.accumulate',
+ 'celery.backend_cleanup',
+ 'celery.chain',
+ 'celery.chord',
+ 'celery.chord_unlock',
+ 'celery.chunks',
+ 'celery.group',
+ 'celery.map',
+ 'celery.starmap',
+ 'fks_project.celery.debug_task',
+ 'trading.tasks.check_position_triggers',
+ 'trading.tasks.cleanup_old_data',
+ 'trading.tasks.fetch_historical_data',
+ 'trading.tasks.fetch_latest_prices',
+ 'trading.tasks.generate_trading_signals',
+ 'trading.tasks.record_account_balances',
+ 'trading.tasks.run_backtest_async',
+ 'trading.tasks.run_daily_optimization',
+ 'trading.tasks.send_discord_notification',
+ 'trading.tasks.send_performance_summary',
+ 'trading.tasks.update_open_positions']
+INFO 2025-10-16 19:09:13,801 mixins Connected to redis://redis:6379/0
+WARNING 2025-10-16 19:09:14,874 inspector Inspect method active failed
+WARNING 2025-10-16 19:09:14,876 inspector Inspect method reserved failed
+WARNING 2025-10-16 19:09:14,880 inspector Inspect method registered failed
+WARNING 2025-10-16 19:09:14,883 inspector Inspect method stats failed
+WARNING 2025-10-16 19:09:14,883 inspector Inspect method active_queues failed
+WARNING 2025-10-16 19:09:14,884 inspector Inspect method revoked failed
+WARNING 2025-10-16 19:09:14,885 inspector Inspect method conf failed
+WARNING 2025-10-16 19:09:14,885 inspector Inspect method scheduled failed

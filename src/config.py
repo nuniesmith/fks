@@ -37,6 +37,9 @@ RISK_PER_TRADE = 0.01  # 1% risk per trade
 # External services
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 
+# OpenAI API for RAG
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+
 # Database config
 DB_USER = os.getenv('DB_USER', 'user')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')

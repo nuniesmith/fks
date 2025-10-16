@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS positions (
     take_profit DECIMAL(20, 8),
     unrealized_pnl DECIMAL(20, 8),
     unrealized_pnl_percent DECIMAL(10, 4),
+    status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'closed', 'liquidated')),
     opened_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     position_metadata JSONB  -- Additional position data (leverage, fees, etc.)
@@ -94,6 +95,7 @@ CREATE TABLE IF NOT EXISTS positions (
 CREATE INDEX idx_positions_account ON positions(account_id);
 CREATE INDEX idx_positions_symbol ON positions(symbol);
 CREATE INDEX idx_positions_opened ON positions(opened_at DESC);
+CREATE INDEX idx_positions_status ON positions(status);
 
 -- ============================================================================
 -- TRADES TABLE (HYPERTABLE)
@@ -277,15 +279,24 @@ CREATE TABLE IF NOT EXISTS strategies (
 CREATE INDEX idx_strategies_status ON strategies(status);
 CREATE INDEX idx_strategies_name ON strategies(name);
 
--- Trigger for updated_at column
+-- ============================================================================
+-- FUNCTIONS AND TRIGGERS
+-- ============================================================================
+
+-- Function to update timestamps
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger for updated_at column on strategies
 CREATE TRIGGER trigger_strategies_updated_at
 BEFORE UPDATE ON strategies
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
-
--- ============================================================================
--- FUNCTIONS AND TRIGGERS
--- ============================================================================
 
 -- Function to update account balance
 CREATE OR REPLACE FUNCTION update_account_balance()

@@ -254,6 +254,35 @@ ML_MODELS_DIR = PROJECT_ROOT / 'ml_models'
 ML_MODELS_DIR.mkdir(exist_ok=True)
 
 # Logging
+# Determine if we're in test mode
+TESTING = os.getenv('TESTING', 'false').lower() == 'true'
+
+# Configure handlers based on environment
+handlers_config = {
+    'console': {
+        'class': 'logging.StreamHandler',
+        'formatter': 'verbose',
+    },
+}
+
+# Only add file handler if not testing and log directory exists
+if not TESTING:
+    log_dir = Path('/app/logs')
+    if log_dir.exists() or os.getenv('CREATE_LOG_DIR', 'false').lower() == 'true':
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+            handlers_config['file'] = {
+                'class': 'logging.FileHandler',
+                'filename': '/app/logs/django.log',
+                'formatter': 'verbose',
+            }
+        except (OSError, PermissionError):
+            # If we can't create log directory, just use console
+            pass
+
+# Determine which handlers to use
+default_handlers = ['console', 'file'] if 'file' in handlers_config else ['console']
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -263,28 +292,18 @@ LOGGING = {
             'style': '{',
         },
     },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': '/app/logs/django.log',
-            'formatter': 'verbose',
-        },
-    },
+    'handlers': handlers_config,
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': default_handlers,
             'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
         },
         'trading': {
-            'handlers': ['console', 'file'],
+            'handlers': default_handlers,
             'level': 'DEBUG',
         },
         'celery': {
-            'handlers': ['console', 'file'],
+            'handlers': default_handlers,
             'level': 'INFO',
         },
     },

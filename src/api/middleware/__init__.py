@@ -12,7 +12,7 @@ This package provides comprehensive middleware components for FastAPI applicatio
 """
 
 import os
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from fastapi import FastAPI
 

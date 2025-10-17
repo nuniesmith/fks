@@ -11,9 +11,30 @@ env:
   PYTHON_VERSION: '3.13'
 
 jobs:
+  notify-start:
+    name: Notify Workflow Start
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Discord notification
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🚀 CI/CD Pipeline Started"
+          description: |
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ github.ref_name }}
+            **Event:** ${{ github.event_name }}
+            **Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})
+            **Author:** ${{ github.actor }}
+          color: 0x0099ff
+          username: FKS CI/CD Bot
+
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    needs: [notify-start]
     
     services:
       postgres:
@@ -82,10 +103,25 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
+      
+      - name: Notify test results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🧪 Test Results"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
 
   lint:
     name: Code Quality
     runs-on: ubuntu-latest
+    needs: [notify-start]
     
     steps:
       - name: Checkout code
@@ -116,10 +152,25 @@ jobs:
       - name: Run mypy
         run: mypy src/ --ignore-missing-imports
         continue-on-error: true
+      
+      - name: Notify lint results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🔍 Code Quality Check"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    needs: [notify-start]
     
     steps:
       - name: Checkout code
@@ -149,6 +200,20 @@ jobs:
           name: security-reports
           path: |
             bandit-report.json
+      
+      - name: Notify security scan results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🔒 Security Scan"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
 
   docker:
     name: Build Docker Image
@@ -192,6 +257,21 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ secrets.DOCKER_REPOSITORY }}:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKER_REPOSITORY }}:buildcache,mode=max
+      
+      - name: Notify Docker build results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🐳 Docker Build"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Tags:** ${{ steps.meta.outputs.tags }}
+            **Pushed:** ${{ github.event_name != 'pull_request' }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
 
   update-dns:
     name: Update Cloudflare DNS
@@ -372,52 +452,65 @@ jobs:
           echo "- **WWW Record**: ${{ steps.update-www.outcome || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "DNS records have been updated in Cloudflare." >> $GITHUB_STEP_SUMMARY
-
-  deploy:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [docker, update-dns]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
       
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-      
-      - name: Add known hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
-      
-      - name: Deploy to server
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          ssh $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
-            cd ${{ env.DEPLOY_PATH }}
-            git pull origin main
-            docker-compose pull
-            docker-compose up -d --force-recreate
-            docker-compose exec -T web python src/manage.py migrate
-            docker system prune -f
-          EOF
-      
-      - name: Health check
-        run: |
-          sleep 10
-          curl -f https://${{ secrets.DEPLOY_HOST }}/health || exit 1
-      
-      - name: Notify deployment
+      - name: Notify deployment results
+        uses: sarisia/actions-status-discord@v1
         if: always()
-        uses: 8398a7/action-slack@v3
         with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: ${{ job.status }}
-          text: 'Deployment to production: ${{ job.status }}'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          title: "🚀 Deployment Complete"
+          description: |
+            **Status:** ${{ job.status }}
+            **Environment:** ${{ steps.env.outputs.ENVIRONMENT }}
+            **Domain:** ${{ steps.env.outputs.DOMAIN }}
+            **IP Address:** ${{ steps.env.outputs.SERVER_IP }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
+  
+  notify-completion:
+    name: Notify Workflow Completion
+    runs-on: ubuntu-latest
+    needs: [test, lint, security, docker, update-dns]
+    if: always()
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [[ "${{ needs.test.result }}" == "failure" ]] || \
+             [[ "${{ needs.lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.security.result }}" == "failure" ]] || \
+             [[ "${{ needs.docker.result }}" == "failure" ]] || \
+             [[ "${{ needs.update-dns.result }}" == "failure" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          elif [[ "${{ needs.test.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.lint.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.security.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.docker.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.update-dns.result }}" == "cancelled" ]]; then
+            echo "status=cancelled" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Send Discord notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ steps.status.outputs.status }}
+          title: "✅ CI/CD Pipeline Completed"
+          description: |
+            **Overall Status:** ${{ steps.status.outputs.status }}
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})
+            **Triggered by:** ${{ github.actor }}
+            
+            **Job Results:**
+            • Tests: ${{ needs.test.result }}
+            • Lint: ${{ needs.lint.result }}
+            • Security: ${{ needs.security.result }}
+            • Docker: ${{ needs.docker.result }}
+            • Deployment: ${{ needs.update-dns.result }}
+          color: ${{ steps.status.outputs.status == 'success' && 0x00ff00 || steps.status.outputs.status == 'cancelled' && 0xffff00 || 0xff0000 }}
+          username: FKS CI/CD Bot

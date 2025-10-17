@@ -63,7 +63,6 @@ INSTALLED_APPS = [
     
     # Existing apps
     'src.data',
-    'src.worker',
     'src.rag',
     'src.forecasting',
     'src.chatbot',

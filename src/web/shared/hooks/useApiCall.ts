@@ -1,4 +1,0 @@
-import { useState } from 'react';
-interface ApiCallState<T = any> { data: T | null; loading: boolean; error: string | null; }
-interface UseApiCallReturn<T> extends ApiCallState<T> { execute: (apiCall: () => Promise<T>) => Promise<void>; reset: () => void; }
-export const useApiCall = <T = any>(): UseApiCallReturn<T> => { const [state, setState] = useState<ApiCallState<T>>({ data: null, loading: false, error: null }); const execute = async (apiCall: () => Promise<T>) => { setState(p => ({ ...p, loading: true, error: null })); try { const result = await apiCall(); setState({ data: result, loading: false, error: null }); } catch (error) { const msg = error instanceof Error ? error.message : 'An unknown error occurred'; setState({ data: null, loading: false, error: msg }); throw error; } }; const reset = () => setState({ data: null, loading: false, error: null }); return { ...state, execute, reset }; };

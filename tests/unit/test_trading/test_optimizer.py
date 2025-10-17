@@ -18,7 +18,7 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from trading.utils.optimizer import objective, run_optimization, custom_objective
+from trading.optimizer import objective, run_optimization, custom_objective
 
 
 class TestOptimizer:

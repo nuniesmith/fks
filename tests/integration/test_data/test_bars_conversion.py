@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
 	sys.path.insert(0, str(ROOT))
 
-from adapters import get_adapter  # type: ignore
-from bars import to_market_bars  # type: ignore
+from data.adapters import get_adapter  # type: ignore
+from data.bars import to_market_bars  # type: ignore
 
 
 def test_to_market_bars_basic(monkeypatch):

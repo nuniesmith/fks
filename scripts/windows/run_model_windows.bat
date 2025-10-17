@@ -60,7 +60,7 @@ if not exist "%DATA_PATH%" (
 REM Check if config file exists, create default if not
 if not exist "%CONFIG_PATH%" (
     echo Config file not found at %CONFIG_PATH%. Creating default configuration...
-    python -c "from src.core.config import Config; import os; os.makedirs(os.path.dirname(r'%CONFIG_PATH%'), exist_ok=True); config = Config(); config.to_yaml(r'%CONFIG_PATH%'); print('Default configuration created at %CONFIG_PATH%')"
+    python -c "from core.config import Config; import os; os.makedirs(os.path.dirname(r'%CONFIG_PATH%'), exist_ok=True); config = Config(); config.to_yaml(r'%CONFIG_PATH%'); print('Default configuration created at %CONFIG_PATH%')"
 )
 
 REM Check CUDA availability

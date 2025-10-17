@@ -47,7 +47,7 @@ foreach ($dir in $directories) {
 if (!(Test-Path $CONFIG_PATH)) {
     Write-Host "Config file not found at $CONFIG_PATH. Creating default configuration..." -ForegroundColor Yellow
     & python -c "
-from src.core.config import Config
+from core.config import Config
 import os
 os.makedirs(os.path.dirname('$CONFIG_PATH'), exist_ok=True)
 config = Config()

@@ -12,8 +12,8 @@ from datetime import datetime
 # Add parent directory to path to find modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Test the actual backtest_engine from trading.utils
-from trading.utils.backtest_engine import run_backtest
+# Test the actual backtest_engine
+from trading.backtest import run_backtest
 
 
 def create_sample_data(n_periods=1000):

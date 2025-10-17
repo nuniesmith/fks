@@ -6,7 +6,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from signals import generate_signals, calculate_rsi, calculate_macd
+from trading.signals import generate_signals, calculate_rsi, calculate_macd
 
 
 class TestSignals:

@@ -24,15 +24,15 @@ from data import (
     get_historical_data, get_current_price, get_live_prices, 
     get_price_stats, is_live_data_available, get_websocket_status
 )
-from backtest import run_backtest
-from signals import get_current_signal
+from trading.backtest import run_backtest
+from trading.signals import get_current_signal
 from utils import log_trade, send_discord_notification
 from cache import session_manager, price_cache
 from db_utils import (
     get_accounts, create_account, get_positions, update_position,
     record_trade, get_balance_history, get_ohlcv_data, get_sync_status
 )
-from database import Session
+from core.database.models import Session
 
 # Set timezone
 TIMEZONE = pytz.timezone('America/Toronto')

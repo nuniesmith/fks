@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from adapters import get_adapter
+from data.adapters import get_adapter
 
 
 def test_polygon_adapter_normalization():

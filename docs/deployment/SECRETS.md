@@ -251,7 +251,7 @@ docker compose exec redis redis-cli ping
 ### Test Exchange API
 ```bash
 docker compose exec web python manage.py shell
->>> from src.data.providers.binance import BinanceDataProvider
+>>> from data.providers.binance import BinanceDataProvider
 >>> provider = BinanceDataProvider()
 >>> provider.test_connection()
 ```

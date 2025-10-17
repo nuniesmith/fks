@@ -136,7 +136,7 @@ mkdir -p ./logs
 # Check if database is ready
 print_info "Checking database connection..."
 python3 << EOF
-from src.database import Session
+from database import Session
 
 try:
     session = Session()

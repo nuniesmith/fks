@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from adapters import get_adapter
+from data.adapters import get_adapter
 from core.exceptions import DataFetchError  # type: ignore
 
 

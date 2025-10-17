@@ -540,7 +540,7 @@ def health_check(app: FastAPI) -> Dict[str, Any]:
 
 
 # Context manager for temporary middleware configuration
-class temporary_middleware:
+class TemporaryMiddleware:
     """Context manager for temporary middleware configuration."""
 
     def __init__(self, app: FastAPI, config: MiddlewareConfig):
@@ -572,7 +572,7 @@ __all__.extend(
         "get_middleware_info",
         "validate_middleware_config",
         "health_check",
-        "temporary_middleware",
+        "TemporaryMiddleware",
         "get_package_info",
     ]
 )

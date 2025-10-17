@@ -6,7 +6,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from backtest import run_backtest, calculate_metrics
+from trading.backtest import run_backtest
 
 
 class TestBacktest:

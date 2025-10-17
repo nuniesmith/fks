@@ -1,6 +1,6 @@
 # src/optimizer.py
 
-from backtest import run_backtest
+from trading.backtest import run_backtest
 
 def objective(trial, df_prices):
     M = trial.suggest_int('M', 5, 200)

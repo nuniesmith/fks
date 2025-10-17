@@ -16,7 +16,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-from trading.utils.backtest_engine import run_backtest
+from trading.backtest import run_backtest
 
 
 def create_sample_data(n_periods=1000):

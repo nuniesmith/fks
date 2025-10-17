@@ -8,7 +8,7 @@ try:
 except ImportError:  # pragma: no cover
     pytest.skip("jsonschema not installed", allow_module_level=True)
 
-from adapters import get_adapter  # type: ignore
+from data.adapters import get_adapter  # type: ignore
 
 
 def test_market_bar_schema_validation(monkeypatch):

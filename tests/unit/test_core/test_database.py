@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from database import Base, Account, Position, Trade, BalanceHistory, Strategy
+from core.database.models import Base, Account, Position, Trade, BalanceHistory, Strategy
 
 
 @pytest.fixture(scope='function')

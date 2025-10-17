@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.database import (
+from core.database.models import (
     Base, TradingAsset, MarketData, Signal, Trade,
     BacktestResult, Position
 )

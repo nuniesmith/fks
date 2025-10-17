@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from adapters import get_adapter
+from data.adapters import get_adapter
 
 
 def test_retry_backoff(monkeypatch):

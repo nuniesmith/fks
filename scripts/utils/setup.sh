@@ -686,7 +686,7 @@ COPY . .
 
 # Set environment
 ENV FKS_MODE=development
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
 
@@ -727,7 +727,7 @@ USER fks_user
 
 # Set environment
 ENV FKS_MODE=server
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
 

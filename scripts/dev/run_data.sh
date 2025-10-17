@@ -55,5 +55,5 @@ else:
 PY
 
 echo "[fks_data] Starting service on port ${DATA_SERVICE_PORT}..."
-export PYTHONPATH="$ROOT_DIR/src/python:${PYTHONPATH:-}"
+export PYTHONPATH="$ROOT_DIR/src:${PYTHONPATH:-}"
 exec "$PYTHON_BIN" "$ROOT_DIR/src/python/main.py" service data

@@ -1,0 +1,71 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.x"},
+    {"type": "panel", "id": "timeseries", "name": "Time series", "version": "10.x"}
+  ],
+  "title": "Frontend Observability",
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Contract Test Latency p95",
+      "id": 1,
+      "datasource": {"type": "prometheus", "uid": "PROM_DS"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(fks_contract_test_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Contract Test Failures (rate)",
+      "id": 2,
+      "datasource": {"type": "prometheus", "uid": "PROM_DS"},
+      "targets": [
+        {"expr": "sum(rate(fks_contract_test_failures_total[5m]))", "legendFormat": "failures"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "SLA Breaches (rate)",
+      "id": 3,
+      "datasource": {"type": "prometheus", "uid": "PROM_DS"},
+      "targets": [
+        {"expr": "sum(rate(fks_contract_test_sla_breaches_total[5m]))", "legendFormat": "sla breaches"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Route Change Duration p90",
+      "id": 4,
+      "datasource": {"type": "prometheus", "uid": "PROM_DS"},
+      "targets": [
+        {"expr": "histogram_quantile(0.90, sum(rate(frontend_route_change_duration_ms_bucket[5m])) by (le))", "legendFormat": "p90"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Frontend Errors (increase 1h)",
+      "id": 5,
+      "datasource": {"type": "prometheus", "uid": "PROM_DS"},
+      "targets": [
+        {"expr": "increase(frontend_errors_total[1h])", "legendFormat": "errors"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "TTFB p95",
+      "id": 6,
+      "datasource": {"type": "prometheus", "uid": "PROM_DS"},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(frontend_ttfb_ms_bucket[5m])) by (le))", "legendFormat": "p95"}
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s"
+}

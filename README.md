@@ -1,68 +1,185 @@
 # Advanced FKS Trading Platform
 
-A sophisticated **Django-based** trading application with PostgreSQL + TimescaleDB, Redis caching, Celery async tasks, real-time updates, comprehensive backtesting, and **AI-powered RAG system with local LLM support**.
+A sophisticated **Django 5.2.7 monolith** trading application with PostgreSQL + TimescaleDB, Redis caching, Celery 5.5.3 async tasks, comprehensive backtesting, and **AI-powered RAG system with local LLM support**.
+
+> **Architecture**: Migrated from microservices to Django monolith (October 2025)  
+> **Status**: Phase 9 Complete ✅ | Overall 90% Complete (9/10 phases)  
+> **See**: [`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md) for breaking changes
 
 ## 🎯 Features
 
-### ✅ Phase 1: Core Trading Platform (Complete)
-- **Data Fetcher** - Binance API integration with CCXT
-- **Signal Generator** - Technical indicators (RSI, MACD, ATR, SMA)
-- **Backtest Engine** - Strategy performance testing
-- **Optimizer** - Optuna-based parameter optimization
-- **Helper Utilities** - Validation and data processing
-- **15 Django Views** - Dashboard, data pull, optimization, signals, trades
-- **9 Responsive Templates** - Bootstrap 5.3.0 design with Chart.js
-- **7 Comprehensive Forms** - Field validation and security
-- **7 Admin Interfaces** - Advanced filtering and bulk actions
-- **11 Celery Tasks** - Background processing and scheduling
-- **Discord Integration** - Automated notifications
+### ✅ Core Trading Platform
+- **Data Management** - Binance API integration with CCXT
+- **Signal Generation** - Technical indicators (RSI, MACD, ATR, SMA, Bollinger Bands)
+- **Backtesting Engine** - Strategy performance testing with comprehensive metrics
+- **Strategy Optimizer** - Optuna-based parameter optimization
+- **Portfolio Analytics** - Real-time P&L tracking and risk metrics
+- **16 Celery Tasks** - Async background processing (`trading_app.tasks.*`)
+- **REST API** - Full API with circuit breaker and rate limiting
+- **Web Interface** - Django templates with Bootstrap 5
+- **Admin Panels** - Advanced filtering, bulk actions, data export
+- **Discord Integration** - Automated trade notifications and alerts
 
-### ✅ Phase 2: RAG System (Complete)
+### ✅ RAG System (AI-Powered Intelligence)
 - **Local LLM Support** - CUDA-accelerated inference with Ollama/llama.cpp
 - **pgvector Integration** - Semantic search with vector similarity
-- **Document Processing** - Chunking service for trading data
+- **Document Processing** - Automated chunking for trading data
 - **Embeddings Service** - Local (sentence-transformers) + OpenAI fallback
 - **Retrieval Service** - Context-aware semantic search
-- **Intelligence Service** - RAG orchestrator for trading insights
-- **Ingestion Pipeline** - Automated data ingestion from signals/backtests/trades
+- **Intelligence Orchestrator** - RAG system for trading insights
+- **Auto-Ingestion Pipeline** - Real-time data ingestion from signals/backtests/trades
 - **Zero-Cost Inference** - No API fees with local models
 
-### ✅ Phase 3: Testing & Deployment (Complete)
+### ✅ Architecture & Infrastructure
+- **Django 5.2.7** - Monolith architecture with modular apps
+- **Celery 5.5.3** - Distributed task queue with Redis broker
+- **PostgreSQL + TimescaleDB** - High-performance time-series database
+- **Redis** - Caching and session management
+- **Docker + Compose** - Containerized deployment
+- **Framework Layer** - Circuit breaker, rate limiter, metrics, caching (64 files, 928K)
 - **69+ Test Cases** - Unit, integration, and performance tests
-- **CI/CD Pipeline** - GitHub Actions for automated testing/deployment
-- **GPU Support** - Docker GPU for accelerated inference
-- **Developer Tools** - Makefile with 30+ commands
-- **Health Monitoring** - Comprehensive service health checks
-- **Log Management** - Automatic log rotation and organization
-- **Security Scanning** - Bandit + Safety vulnerability checks
+- **CI/CD Pipeline** - GitHub Actions automation
+- **GPU Support** - CUDA acceleration for ML models
 
 ## 📁 Project Structure
 
 ```
 fks/
+├── manage.py                  # Django CLI
+├── docker-compose.yml         # Service orchestration
+├── requirements.txt           # Python dependencies
+├── Makefile                   # Development commands
+├── start.sh                   # Startup script
+├── pytest.ini                 # Test configuration
+│
 ├── docker/
-│   └── Dockerfile
+│   ├── Dockerfile            # Main container image
+│   └── Dockerfile.gpu        # GPU-accelerated image
+│
 ├── sql/
-│   └── init.sql              # TimescaleDB schema and hypertables
-├── src/
-│   ├── __init__.py
-│   ├── app.py                # Streamlit web interface
-│   ├── backtest.py           # Backtesting engine
-│   ├── cache.py              # Redis caching
-│   ├── config.py             # Configuration
-│   ├── data.py               # Binance API client
-│   ├── database.py           # SQLAlchemy models
-│   ├── db_utils.py           # Database helper functions
-│   ├── data_sync_service.py  # Background data sync service
-│   ├── optimizer.py          # Strategy optimizer
-│   ├── signals.py            # Trading signals
-│   └── utils.py              # Utilities
-├── docker-compose.yml
-├── requirements.txt
-├── setup_database.sh         # Database setup script
-├── .env.example
-└── README.md
+│   └── init.sql              # TimescaleDB schema + hypertables
+│
+├── src/                       # Django monolith
+│   ├── fks_project/          # Django project settings
+│   │   ├── settings.py       # Configuration
+│   │   ├── urls.py           # URL routing
+│   │   ├── wsgi.py           # WSGI application
+│   │   └── celery.py         # Celery configuration
+│   │
+│   ├── core/                 # Core models and utilities
+│   │   ├── models/           # Base models (Account, Trade, Position)
+│   │   ├── utils/            # Helper functions
+│   │   ├── cache/            # Caching utilities
+│   │   ├── metrics/          # Prometheus metrics
+│   │   └── patterns/         # Design patterns
+│   │
+│   ├── config_app/           # Configuration management
+│   │   ├── models.py         # Config models
+│   │   ├── views.py          # Config views
+│   │   └── admin.py          # Admin interface
+│   │
+│   ├── trading_app/          # Trading logic (NEW - Phase 9C)
+│   │   ├── models/           # Trading models
+│   │   ├── services/         # Business logic
+│   │   ├── tasks.py          # 16 Celery tasks
+│   │   ├── views/            # Trading views
+│   │   ├── signals.py        # Signal generation
+│   │   ├── backtest.py       # Backtesting engine
+│   │   └── optimizer.py      # Strategy optimization
+│   │
+│   ├── api_app/              # REST API
+│   │   ├── routes/           # API endpoints
+│   │   ├── serializers/      # DRF serializers
+│   │   ├── middleware/       # API middleware
+│   │   │   ├── circuit_breaker/  # Fault tolerance
+│   │   │   └── rate_limiter/     # Rate limiting
+│   │   └── views.py          # API views
+│   │
+│   ├── web_app/              # Web interface
+│   │   ├── views/            # Web views
+│   │   ├── templates/        # Django templates
+│   │   ├── static/           # CSS, JS, images
+│   │   └── forms.py          # Form definitions
+│   │
+│   ├── framework/            # Core abstractions (Phase 9D - kept as-is)
+│   │   ├── middleware/       # Framework middleware
+│   │   │   ├── circuit_breaker/  # Circuit breaker pattern
+│   │   │   ├── rate_limiter/     # Rate limiting
+│   │   │   └── metrics/          # Prometheus metrics
+│   │   ├── exceptions/       # Custom exception hierarchy
+│   │   ├── services/         # Service templates & registry
+│   │   ├── config/           # Configuration management
+│   │   ├── cache/            # Caching abstraction
+│   │   └── lifecycle/        # App lifecycle hooks
+│   │
+│   ├── data/                 # Data management
+│   │   ├── providers/        # Data provider adapters
+│   │   ├── adapters/         # Exchange adapters
+│   │   └── models/           # Data models
+│   │
+│   ├── rag/                  # RAG system
+│   │   ├── services/         # RAG services
+│   │   ├── embeddings/       # Embedding generation
+│   │   ├── retrieval/        # Document retrieval
+│   │   └── ingestion/        # Data ingestion pipeline
+│   │
+│   ├── forecasting/          # Forecasting models
+│   │   ├── models/           # ML models
+│   │   └── services/         # Forecasting services
+│   │
+│   ├── chatbot/              # Chatbot interface
+│   │   ├── handlers/         # Message handlers
+│   │   └── integrations/     # Discord, Telegram, etc.
+│   │
+│   ├── engine/               # Core trading engine
+│   │   ├── execution/        # Trade execution
+│   │   └── risk/             # Risk management
+│   │
+│   └── infrastructure/       # Infrastructure services
+│       ├── database/         # DB connections
+│       ├── cache/            # Redis client
+│       └── external/         # External API clients
+│
+├── tests/                     # Test suite (69+ tests)
+│   ├── unit/                 # Unit tests
+│   ├── integration/          # Integration tests
+│   └── performance/          # Performance tests
+│
+├── docs/                      # Documentation
+│   ├── MIGRATION_GUIDE.md    # Migration instructions (NEW)
+│   ├── PHASE9_FINAL_SUMMARY.md
+│   ├── PHASE9D_FRAMEWORK_ANALYSIS.md
+│   ├── QUICKSTART.md
+│   ├── RAG_SETUP_GUIDE.md
+│   └── ...
+│
+├── logs/                      # Application logs
+├── ml_models/                 # ML model artifacts
+└── scripts/                   # Utility scripts
+    ├── setup.sh
+    ├── deploy-fks.sh
+    └── ...
 ```
+
+### Key Directories
+
+- **`src/trading_app/`** - Main trading functionality (migrated from `src/trading/`)
+  - Contains 16 Celery tasks for async operations
+  - All tasks use `trading_app.tasks.*` naming convention
+  
+- **`src/framework/`** - Core abstractions (64 files, 928K)
+  - Kept as-is per Phase 9D analysis
+  - Provides circuit breaker, rate limiter, exceptions, services, config, caching, lifecycle, metrics
+  - 26 external imports across codebase
+
+- **`src/api_app/`** - REST API with middleware
+  - Circuit breaker for fault tolerance
+  - Rate limiter for API protection
+  
+- **`src/rag/`** - AI-powered intelligence
+  - Local LLM support with CUDA acceleration
+  - pgvector for semantic search
+  - Automated document ingestion
 
 ## 🚀 Quick Start
 

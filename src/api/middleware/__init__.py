@@ -12,7 +12,7 @@ This package provides comprehensive middleware components for FastAPI applicatio
 """
 
 import os
-from typing import Any, Dict, List, Union
+from typing import Any, Union
 
 from fastapi import FastAPI
 
@@ -132,22 +132,22 @@ class MiddlewareConfig:
         timing_slow_threshold_ms: float = 500,
         # CORS configuration
         cors_enabled: bool = True,
-        cors_origins: List[str] = None,
+        cors_origins: list[str] = None,
         cors_allow_credentials: bool = True,
-        cors_allow_methods: List[str] = None,
-        cors_allow_headers: List[str] = None,
+        cors_allow_methods: list[str] = None,
+        cors_allow_headers: list[str] = None,
         # Error handling configuration
         error_handling_enabled: bool = True,
         include_exception_details: bool = False,
         log_validation_errors: bool = True,
         # Metrics configuration
         metrics_enabled: bool = True,
-        metrics_exclude_paths: List[str] = None,
+        metrics_exclude_paths: list[str] = None,
         # Rate limiting configuration
         rate_limit_enabled: bool = False,
         rate_limit_requests: int = 100,
         rate_limit_window_seconds: int = 60,
-        rate_limit_exclude_paths: List[str] = None,
+        rate_limit_exclude_paths: list[str] = None,
         # Environment-specific settings
         environment: str = None,
     ):
@@ -207,7 +207,7 @@ class MiddlewareConfig:
             "/openapi.json",
         ]
 
-    def _get_default_cors_origins(self) -> List[str]:
+    def _get_default_cors_origins(self) -> list[str]:
         """Get default CORS origins based on environment."""
         if self.environment == "production":
             # In production, be restrictive by default
@@ -249,7 +249,7 @@ def create_middleware_config(environment: str = None, **kwargs) -> MiddlewareCon
 
 def setup_all_middleware(
     app: FastAPI, config: MiddlewareConfig = None, settings: Any = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Setup all middleware components for a FastAPI application.
 
@@ -339,7 +339,7 @@ def setup_all_middleware(
     return middleware_info
 
 
-def setup_basic_middleware(app: FastAPI) -> Dict[str, Any]:
+def setup_basic_middleware(app: FastAPI) -> dict[str, Any]:
     """
     Setup basic middleware for simple applications.
 
@@ -362,8 +362,8 @@ def setup_basic_middleware(app: FastAPI) -> Dict[str, Any]:
 
 
 def setup_production_middleware(
-    app: FastAPI, cors_origins: List[str] = None, rate_limit_requests: int = 100
-) -> Dict[str, Any]:
+    app: FastAPI, cors_origins: list[str] = None, rate_limit_requests: int = 100
+) -> dict[str, Any]:
     """
     Setup production-ready middleware configuration.
 
@@ -387,7 +387,7 @@ def setup_production_middleware(
     return setup_all_middleware(app, config)
 
 
-def setup_development_middleware(app: FastAPI) -> Dict[str, Any]:
+def setup_development_middleware(app: FastAPI) -> dict[str, Any]:
     """
     Setup development-friendly middleware configuration.
 
@@ -408,7 +408,7 @@ def setup_development_middleware(app: FastAPI) -> Dict[str, Any]:
 
 
 # Utility functions for middleware management
-def get_middleware_info(app: FastAPI) -> Dict[str, Any]:
+def get_middleware_info(app: FastAPI) -> dict[str, Any]:
     """
     Get information about configured middleware.
 
@@ -435,7 +435,7 @@ def get_middleware_info(app: FastAPI) -> Dict[str, Any]:
     return {"count": len(middleware_stack), "stack": middleware_stack}
 
 
-def validate_middleware_config(config: MiddlewareConfig) -> List[str]:
+def validate_middleware_config(config: MiddlewareConfig) -> list[str]:
     """
     Validate middleware configuration and return any warnings.
 
@@ -443,7 +443,7 @@ def validate_middleware_config(config: MiddlewareConfig) -> List[str]:
         config: Middleware configuration to validate
 
     Returns:
-        List[str]: List of warning messages
+        list[str]: List of warning messages
     """
     warnings = []
 
@@ -506,7 +506,7 @@ def get_package_info():
 
 
 # Health check for middleware package
-def health_check(app: FastAPI) -> Dict[str, Any]:
+def health_check(app: FastAPI) -> dict[str, Any]:
     """
     Perform a health check on the middleware package.
 

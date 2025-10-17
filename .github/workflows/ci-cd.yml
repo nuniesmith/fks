@@ -92,7 +92,7 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_trading_db
           TESTING: "true"
         run: |
-          python src/manage.py migrate || echo "Migrations skipped"
+          python manage.py migrate || echo "Migrations skipped"
       
       - name: Run unit tests
         env:
@@ -101,7 +101,7 @@ jobs:
           TESTING: "true"
           DJANGO_SETTINGS_MODULE: web.django.settings
         run: |
-          pytest src/tests/ -v --cov=src --cov-report=xml --cov-report=html
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=html
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

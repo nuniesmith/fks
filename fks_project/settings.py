@@ -66,9 +66,6 @@ INSTALLED_APPS = [
     'src.rag',
     'src.forecasting',
     'src.chatbot',
-    
-    # Legacy Django apps (to be migrated)
-    'trading',
 ]
 
 MIDDLEWARE = [

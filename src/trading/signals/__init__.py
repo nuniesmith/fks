@@ -1,9 +1,5 @@
-"""Signal generation utilities and types (placeholders)."""
+"""Signal generation utilities and types."""
 
-__all__ = []
+from .generator import get_current_signal
 
-"""
-Signals module - Signal generation and coordination
-"""
-
-__all__ = []
+__all__ = ['get_current_signal']

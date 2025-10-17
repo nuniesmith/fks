@@ -1,12 +1,32 @@
-# src/signals.py
+# src/trading/signals/generator.py
+"""
+Trading signal generation module.
+
+Generates buy/sell signals based on technical indicators and market conditions.
+"""
 
 import pandas as pd
 import talib
 
 from config import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
-from data import get_current_price
+from data.api.binance import get_current_price
+
 
 def get_current_signal(df_prices, best_params, account_size, risk_per_trade=RISK_PER_TRADE):
+    """
+    Generate current trading signal based on price data and strategy parameters.
+    
+    Args:
+        df_prices: Dictionary of DataFrames with OHLCV data for each symbol
+        best_params: Dictionary of optimized strategy parameters
+        account_size: Total account balance
+        risk_per_trade: Risk percentage per trade (default from config)
+    
+    Returns:
+        tuple: (signal, suggestions)
+            - signal: 1 for BUY, 0 for HOLD/SELL
+            - suggestions: List of trade suggestions with entry, SL, TP
+    """
     closes = pd.DataFrame({sym.split('USDT')[0]: df_prices[sym]['close'] for sym in SYMBOLS})
     current_prices = {sym: get_current_price(sym) for sym in SYMBOLS}
     

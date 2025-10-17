@@ -1,4 +1,6 @@
 """Backtesting domain: simulation engines and utilities."""
 
-__all__ = []
+from .engine import run_backtest
+
+__all__ = ['run_backtest']
 

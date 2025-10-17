@@ -1,4 +1,13 @@
-# src/backtest.py
+# src/trading/backtest/engine.py
+"""
+Backtesting engine for trading strategies.
+
+This module provides backtesting functionality with:
+- Multi-symbol support
+- ATR-based stop loss and take profit
+- Fee simulation
+- Advanced performance metrics (Sharpe, Sortino, Calmar, etc.)
+"""
 
 import pandas as pd
 import talib
@@ -6,7 +15,25 @@ from datetime import timedelta
 
 from config import SYMBOLS, MAINS, ALTS, FEE_RATE
 
+
 def run_backtest(df_prices, M, atr_period=14, sl_multiplier=2, tp_multiplier=3):
+    """
+    Run backtest on historical price data.
+    
+    Args:
+        df_prices: Dictionary of DataFrames with OHLCV data for each symbol
+        M: Moving average period for signal generation
+        atr_period: ATR calculation period
+        sl_multiplier: Stop loss multiplier (ATR)
+        tp_multiplier: Take profit multiplier (ATR)
+    
+    Returns:
+        tuple: (metrics, returns, cum_ret, trades)
+            - metrics: Dict of performance metrics
+            - returns: Series of daily returns
+            - cum_ret: Series of cumulative returns
+            - trades: List of trade dictionaries
+    """
     # Combine into multi-symbol DF
     closes = pd.DataFrame({sym.split('USDT')[0]: df_prices[sym]['close'] for sym in SYMBOLS})
     highs = pd.DataFrame({sym.split('USDT')[0]: df_prices[sym]['high'] for sym in SYMBOLS})

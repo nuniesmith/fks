@@ -308,10 +308,29 @@ check_celery_status() {
     fi
     echo
     print_info "Active Celery tasks:"
-    docker exec fks_app celery -A django inspect active || print_warning "Could not get active tasks"
+    docker exec fks_app celery -A web.django inspect active || print_warning "Could not get active tasks"
     echo
     print_info "Registered tasks:"
-    docker exec fks_app celery -A django inspect registered | head -20 || print_warning "Could not get registered tasks"
+    docker exec fks_app celery -A web.django inspect registered | head -20 || print_warning "Could not get registered tasks"
+}
+
+# Check GPU status in container
+check_gpu_status() {
+    if [ "$USE_GPU" != true ]; then
+        print_warning "GPU support not enabled. Use --gpu flag to enable."
+        return 1
+    fi
+    
+    print_info "Checking GPU status in RAG service container..."
+    if docker ps -q -f name=fks_rag_gpu > /dev/null 2>&1; then
+        docker exec fks_rag_gpu nvidia-smi
+        echo ""
+        print_info "GPU memory usage:"
+        docker stats --no-stream fks_rag_gpu
+    else
+        print_warning "RAG GPU service is not running"
+        return 1
+    fi
 }
 
 # Show usage
@@ -335,6 +354,7 @@ show_usage() {
     echo "  migrate          Run Django migrations"
     echo "  createsuperuser  Create Django admin superuser"
     echo "  celery-status    Check Celery worker and beat status"
+    echo "  gpu-status       Check GPU status and usage (requires --gpu)"
     echo "  help             Show this help message"
     echo ""
     echo "Options:"
@@ -342,13 +362,16 @@ show_usage() {
     echo "  --no-cache       Build without cache (for build/rebuild)"
     echo ""
     echo "Examples:"
-    echo "  ./start.sh start            # Quick start all services"
-    echo "  ./start.sh --gpu rebuild    # Rebuild with GPU support"
-    echo "  ./start.sh migrate          # Run database migrations"
-    echo "  ./start.sh createsuperuser  # Create admin user"
-    echo "  ./start.sh celery-status    # Check background tasks"
-    echo "  ./start.sh logs             # View all logs"
-    echo "  ./start.sh stop             # Stop everything"
+    echo "  ./start.sh start                # Quick start all services"
+    echo "  ./start.sh --gpu start          # Start with GPU support"
+    echo "  ./start.sh --gpu rebuild        # Rebuild with GPU support"
+    echo "  ./start.sh --gpu --no-cache rebuild  # Force rebuild with GPU (no cache)"
+    echo "  ./start.sh migrate              # Run database migrations"
+    echo "  ./start.sh createsuperuser      # Create admin user"
+    echo "  ./start.sh celery-status        # Check background tasks"
+    echo "  ./start.sh --gpu gpu-status     # Check GPU usage"
+    echo "  ./start.sh logs                 # View all logs"
+    echo "  ./start.sh stop                 # Stop everything"
 }
 
 # Main script
@@ -357,9 +380,9 @@ main() {
     
     # Parse arguments
     NO_CACHE=""
-    COMMAND="${1:-start}"
-    shift || true
+    COMMAND=""
     
+    # First pass: parse all flags
     while [[ $# -gt 0 ]]; do
         case $1 in
             --gpu)
@@ -374,23 +397,31 @@ main() {
                 ;;
             --no-cache)
                 NO_CACHE="--no-cache"
+                print_info "Build will not use cache"
                 shift
                 ;;
-            --help|help)
+            --help|help|-h)
                 COMMAND="help"
                 shift
                 ;;
-            *)
-                if [ -n "$COMMAND" ] && [ "$COMMAND" != "start" ]; then
-                    print_error "Unknown option: $1"
-                    show_usage
-                    exit 1
+            start|rebuild|restart|build|stop|logs|status|health|clean|clean-volumes|clean-docker|shell|migrate|createsuperuser|celery-status|gpu-status)
+                if [ -z "$COMMAND" ]; then
+                    COMMAND=$1
                 fi
-                COMMAND=$1
                 shift
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                show_usage
+                exit 1
                 ;;
         esac
     done
+    
+    # Default command if none provided
+    if [ -z "$COMMAND" ]; then
+        COMMAND="start"
+    fi
     
     # Execute command
     case $COMMAND in
@@ -454,6 +485,9 @@ main() {
             ;;
         celery-status)
             check_celery_status
+            ;;
+        gpu-status)
+            check_gpu_status
             ;;
         help|--help|-h)
             show_usage

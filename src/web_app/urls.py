@@ -7,5 +7,6 @@ app_name = 'web_app'
 urlpatterns = [
     path('', views.HomeView.as_view(), name='home'),
     path('dashboard/', views.DashboardView.as_view(), name='dashboard'),
+    path('metrics/', views.MetricsView.as_view(), name='metrics'),
     # More URL patterns will be added during migration
 ]

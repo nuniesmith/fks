@@ -1,0 +1,408 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Metrics & Analytics - FKS Trading Platform{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>
+            <i class="bi bi-graph-up"></i>
+            Metrics & Analytics
+        </h2>
+        <p class="text-muted">Comprehensive performance analysis and trading statistics</p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-lg-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Total Trades</h6>
+                <h2 class="mb-0">{{ total_trades|default:"1,247" }}</h2>
+                <small class="text-success">
+                    <i class="bi bi-arrow-up"></i> {{ new_trades|default:"42" }} this week
+                </small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Average Win</h6>
+                <h2 class="mb-0">${{ avg_win|default:"345.20" }}</h2>
+                <small class="text-muted">Per profitable trade</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Average Loss</h6>
+                <h2 class="mb-0">${{ avg_loss|default:"142.50" }}</h2>
+                <small class="text-muted">Per losing trade</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Over Time -->
+<div class="row mb-4">
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-line-chart"></i>
+                    Equity Curve
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary active" data-period="30d">30D</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="90d">90D</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="1y">1Y</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="all">ALL</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="equityCurveChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-clipboard-data"></i>
+                    Key Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Profit Factor</span>
+                        <strong>{{ profit_factor|default:"2.42" }}</strong>
+                    </div>
+                    <div class="progress" style="height: 5px;">
+                        <div class="progress-bar bg-success" style="width: 80%"></div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Max Drawdown</span>
+                        <strong class="text-danger">-{{ max_drawdown|default:"12.5" }}%</strong>
+                    </div>
+                    <div class="progress" style="height: 5px;">
+                        <div class="progress-bar bg-danger" style="width: 25%"></div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Recovery Factor</span>
+                        <strong>{{ recovery_factor|default:"4.8" }}</strong>
+                    </div>
+                    <div class="progress" style="height: 5px;">
+                        <div class="progress-bar bg-info" style="width: 95%"></div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Expectancy</span>
+                        <strong>${{ expectancy|default:"185.50" }}</strong>
+                    </div>
+                    <div class="progress" style="height: 5px;">
+                        <div class="progress-bar bg-primary" style="width: 70%"></div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Kelly %</span>
+                        <strong>{{ kelly_percent|default:"15.8" }}%</strong>
+                    </div>
+                    <div class="progress" style="height: 5px;">
+                        <div class="progress-bar bg-warning" style="width: 32%"></div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Total Commissions</span>
+                    <strong>${{ total_commissions|default:"1,245" }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Win/Loss Analysis -->
+<div class="row mb-4">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-trophy"></i>
+                    Win/Loss Distribution
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="winLossChart" height="60"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-hourglass-split"></i>
+                    Trade Duration Analysis
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="durationChart" height="60"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Strategy Performance -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-diagram-3"></i>
+                    Strategy Performance Comparison
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Strategy</th>
+                                <th>Trades</th>
+                                <th>Win Rate</th>
+                                <th>Profit Factor</th>
+                                <th>Total P&L</th>
+                                <th>Avg Win</th>
+                                <th>Avg Loss</th>
+                                <th>Sharpe</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for strategy in strategies %}
+                            <tr>
+                                <td><strong>{{ strategy.name }}</strong></td>
+                                <td>{{ strategy.total_trades }}</td>
+                                <td>
+                                    <span class="badge {% if strategy.win_rate >= 60 %}bg-success{% elif strategy.win_rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}">
+                                        {{ strategy.win_rate }}%
+                                    </span>
+                                </td>
+                                <td>{{ strategy.profit_factor }}</td>
+                                <td class="{% if strategy.total_pnl > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    ${{ strategy.total_pnl }}
+                                </td>
+                                <td>${{ strategy.avg_win }}</td>
+                                <td>${{ strategy.avg_loss }}</td>
+                                <td>{{ strategy.sharpe }}</td>
+                                <td>
+                                    {% if strategy.status == 'active' %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="9" class="text-center text-muted">
+                                    No strategy data available
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Time-Based Analysis -->
+<div class="row">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-calendar-week"></i>
+                    Best Trading Days
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="weekdayChart" height="60"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-clock"></i>
+                    Best Trading Hours
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="hourlyChart" height="60"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Equity Curve Chart
+const equityCtx = document.getElementById('equityCurveChart').getContext('2d');
+const equityChart = new Chart(equityCtx, {
+    type: 'line',
+    data: {
+        labels: {{ equity_labels|safe }},
+        datasets: [{
+            label: 'Account Balance',
+            data: {{ equity_data|safe }},
+            borderColor: 'rgb(13, 110, 253)',
+            backgroundColor: 'rgba(13, 110, 253, 0.1)',
+            tension: 0.4,
+            fill: true
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Win/Loss Chart
+const winLossCtx = document.getElementById('winLossChart').getContext('2d');
+const winLossChart = new Chart(winLossCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Wins', 'Losses'],
+        datasets: [{
+            data: [{{ winning_trades|default:"854" }}, {{ losing_trades|default:"393" }}],
+            backgroundColor: ['rgba(25, 135, 84, 0.7)', 'rgba(220, 53, 69, 0.7)']
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Trade Duration Chart
+const durationCtx = document.getElementById('durationChart').getContext('2d');
+const durationChart = new Chart(durationCtx, {
+    type: 'bar',
+    data: {
+        labels: ['< 1h', '1-4h', '4-12h', '12-24h', '> 24h'],
+        datasets: [{
+            label: 'Number of Trades',
+            data: {{ duration_data|safe }},
+            backgroundColor: 'rgba(13, 110, 253, 0.7)'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Weekday Performance Chart
+const weekdayCtx = document.getElementById('weekdayChart').getContext('2d');
+const weekdayChart = new Chart(weekdayCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        datasets: [{
+            label: 'Average P&L',
+            data: {{ weekday_pnl|safe }},
+            backgroundColor: function(context) {
+                const value = context.parsed.y;
+                return value >= 0 ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)';
+            }
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Hourly Performance Chart
+const hourlyCtx = document.getElementById('hourlyChart').getContext('2d');
+const hourlyChart = new Chart(hourlyCtx, {
+    type: 'line',
+    data: {
+        labels: {{ hourly_labels|safe }},
+        datasets: [{
+            label: 'Average P&L',
+            data: {{ hourly_pnl|safe }},
+            borderColor: 'rgb(255, 193, 7)',
+            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+            tension: 0.4,
+            fill: true
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Period selection buttons
+document.querySelectorAll('[data-period]').forEach(button => {
+    button.addEventListener('click', function() {
+        document.querySelectorAll('[data-period]').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        console.log('Loading', this.dataset.period, 'data');
+        // TODO: Fetch and update chart data
+    });
+});
+</script>
+{% endblock %}

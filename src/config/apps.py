@@ -6,7 +6,7 @@ class ConfigAppConfig(AppConfig):
     """Configuration management application."""
 
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'config_app'
+    name = 'config'  # Fixed: was 'config_app' but directory is 'config'
     verbose_name = 'FKS Configuration Management'
 
     def ready(self):

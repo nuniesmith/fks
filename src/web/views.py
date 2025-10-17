@@ -1,7 +1,11 @@
 """Web UI views."""
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth import login
+from django.contrib import messages
+from django.urls import reverse_lazy
 import json
 
 
@@ -104,6 +108,35 @@ class MetricsView(LoginRequiredMixin, TemplateView):
         ]
         
         return context
+
+
+class CustomLoginView(LoginView):
+    """Custom login view with custom template."""
+    template_name = 'pages/login.html'
+    redirect_authenticated_user = True
+    
+    def get_success_url(self):
+        """Redirect to next parameter or dashboard."""
+        next_url = self.request.GET.get('next')
+        if next_url:
+            return next_url
+        return reverse_lazy('web_app:dashboard')
+    
+    def form_invalid(self, form):
+        """Add error message on failed login."""
+        messages.error(self.request, 'Invalid username or password. Please try again.')
+        return super().form_invalid(form)
+
+
+class CustomLogoutView(LogoutView):
+    """Custom logout view."""
+    next_page = 'web_app:home'
+    
+    def dispatch(self, request, *args, **kwargs):
+        """Add success message on logout."""
+        if request.user.is_authenticated:
+            messages.success(request, 'You have been successfully logged out.')
+        return super().dispatch(request, *args, **kwargs)
 
 
 # More views will be added during migration from React

@@ -1,0 +1,424 @@
+name: FKS CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_trading_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements.dev.txt
+          pip install pytest pytest-cov pytest-asyncio
+      
+      - name: Setup pgvector extension
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d test_trading_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+      
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_trading_db
+        run: |
+          python src/manage.py migrate || echo "Migrations skipped"
+      
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_trading_db
+          REDIS_URL: redis://localhost:6379/0
+          TESTING: true
+        run: |
+          pytest src/tests/ -v --cov=src --cov-report=xml --cov-report=html
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy black isort
+      
+      - name: Run ruff
+        run: ruff check src/ --output-format=github
+        continue-on-error: true
+      
+      - name: Run black
+        run: black --check src/
+        continue-on-error: true
+      
+      - name: Run isort
+        run: isort --check-only src/
+        continue-on-error: true
+      
+      - name: Run mypy
+        run: mypy src/ --ignore-missing-imports
+        continue-on-error: true
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+      
+      - name: Run bandit
+        run: bandit -r src/ -f json -o bandit-report.json
+        continue-on-error: true
+      
+      - name: Run safety check
+        run: safety check --json
+        continue-on-error: true
+      
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+
+  docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_API_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKER_REPOSITORY }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_REPOSITORY }}:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_REPOSITORY }}:buildcache,mode=max
+
+  update-dns:
+    name: Update Cloudflare DNS
+    runs-on: ubuntu-latest
+    needs: [docker]
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set environment variables
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "ENVIRONMENT=production" >> $GITHUB_OUTPUT
+            echo "DOMAIN=fkstrading.xyz" >> $GITHUB_OUTPUT
+            echo "SERVER_IP=${{ secrets.PRODUCTION_IP }}" >> $GITHUB_OUTPUT
+          else
+            echo "ENVIRONMENT=staging" >> $GITHUB_OUTPUT
+            echo "DOMAIN=staging.fkstrading.xyz" >> $GITHUB_OUTPUT
+            echo "SERVER_IP=${{ secrets.STAGING_IP }}" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Update DNS A record for apex domain
+        id: update-apex
+        run: |
+          # Get Zone ID if not provided as secret
+          ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
+          
+          # List existing DNS records
+          RECORD_ID=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=A&name=${{ steps.env.outputs.DOMAIN }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
+          
+          if [ -z "$RECORD_ID" ]; then
+            # Create new A record
+            echo "Creating new A record for ${{ steps.env.outputs.DOMAIN }}"
+            RESPONSE=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "${{ steps.env.outputs.DOMAIN }}",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          else
+            # Update existing A record
+            echo "Updating A record for ${{ steps.env.outputs.DOMAIN }}"
+            RESPONSE=$(curl -s -X PUT \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "${{ steps.env.outputs.DOMAIN }}",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          fi
+          
+          # Check if successful
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Failed to update DNS record"
+            echo "$RESPONSE" | jq '.'
+            exit 1
+          fi
+          
+          echo "DNS record updated successfully"
+          echo "$RESPONSE" | jq '.result'
+      
+      - name: Update DNS A record for www subdomain
+        id: update-www
+        if: steps.env.outputs.ENVIRONMENT == 'production'
+        run: |
+          ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
+          WWW_DOMAIN="www.${{ steps.env.outputs.DOMAIN }}"
+          
+          # List existing DNS records
+          RECORD_ID=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=A&name=${WWW_DOMAIN}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
+          
+          if [ -z "$RECORD_ID" ]; then
+            # Create new A record
+            echo "Creating new A record for ${WWW_DOMAIN}"
+            RESPONSE=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "'${WWW_DOMAIN}'",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          else
+            # Update existing A record
+            echo "Updating A record for ${WWW_DOMAIN}"
+            RESPONSE=$(curl -s -X PUT \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "'${WWW_DOMAIN}'",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          fi
+          
+          # Check if successful
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Failed to update www DNS record"
+            echo "$RESPONSE" | jq '.'
+            exit 1
+          fi
+          
+          echo "WWW DNS record updated successfully"
+          echo "$RESPONSE" | jq '.result'
+      
+      - name: Verify DNS propagation
+        run: |
+          echo "Waiting for DNS propagation..."
+          sleep 15
+          
+          # Check DNS resolution
+          RESOLVED_IP=$(dig +short ${{ steps.env.outputs.DOMAIN }} @1.1.1.1 | tail -n1)
+          echo "Resolved IP: $RESOLVED_IP"
+          echo "Expected IP: ${{ steps.env.outputs.SERVER_IP }}"
+          
+          if [ "$RESOLVED_IP" != "${{ steps.env.outputs.SERVER_IP }}" ]; then
+            echo "Warning: DNS not yet propagated (expected ${{ steps.env.outputs.SERVER_IP }}, got $RESOLVED_IP)"
+            echo "This is normal for Cloudflare proxied records. Checking Cloudflare API..."
+            
+            # Verify via Cloudflare API
+            ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
+            API_RECORD=$(curl -s -X GET \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=A&name=${{ steps.env.outputs.DOMAIN }}" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" | jq -r '.result[0].content')
+            
+            echo "Cloudflare API shows: $API_RECORD"
+            
+            if [ "$API_RECORD" == "${{ steps.env.outputs.SERVER_IP }}" ]; then
+              echo "✓ DNS record correctly configured in Cloudflare"
+            else
+              echo "✗ DNS record mismatch in Cloudflare"
+              exit 1
+            fi
+          else
+            echo "✓ DNS propagated successfully"
+          fi
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "### DNS Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ steps.env.outputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Domain**: ${{ steps.env.outputs.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **IP Address**: ${{ steps.env.outputs.SERVER_IP }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Apex Record**: ${{ steps.update-apex.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **WWW Record**: ${{ steps.update-www.outcome || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "DNS records have been updated in Cloudflare." >> $GITHUB_STEP_SUMMARY
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [docker, update-dns]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      
+      - name: Add known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST << 'EOF'
+            cd ${{ env.DEPLOY_PATH }}
+            git pull origin main
+            docker-compose pull
+            docker-compose up -d --force-recreate
+            docker-compose exec -T web python src/manage.py migrate
+            docker system prune -f
+          EOF
+      
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f https://${{ secrets.DEPLOY_HOST }}/health || exit 1
+      
+      - name: Notify deployment
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'Deployment to production: ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

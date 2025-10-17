@@ -1,0 +1,247 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FKS Trading Platform - Health Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .status-healthy { color: #28a745; }
+        .status-unhealthy { color: #dc3545; }
+        .status-optional { color: #ffc107; }
+        .service-card {
+            transition: transform 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .service-card.healthy { border-left-color: #28a745; }
+        .service-card.unhealthy { border-left-color: #dc3545; }
+        .service-card.optional { border-left-color: #ffc107; }
+        .service-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .priority-high { border-left: 4px solid #dc3545; }
+        .priority-medium { border-left: 4px solid #ffc107; }
+        .priority-low { border-left: 4px solid #17a2b8; }
+        .issue-warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .issue-error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        .issue-info { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .refresh-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-activity"></i> FKS Trading Platform - Health Dashboard
+            </a>
+            <span class="navbar-text text-light">
+                <i class="bi bi-clock"></i> Last updated: <span id="timestamp">{{ timestamp }}</span>
+            </span>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <!-- System Metrics -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-cpu"></i> CPU Usage</h6>
+                        <h2>{{ system_info.cpu_percent|floatformat:1 }}%</h2>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-memory"></i> Memory</h6>
+                        <h2>{{ system_info.memory_percent|floatformat:1 }}%</h2>
+                        <small>{{ system_info.memory_available }} available</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-hdd"></i> Disk Space</h6>
+                        <h2>{{ system_info.disk_percent|floatformat:1 }}%</h2>
+                        <small>{{ system_info.disk_free }} free</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card metric-card">
+                    <div class="card-body">
+                        <h6 class="card-title"><i class="bi bi-diagram-3"></i> Services</h6>
+                        <h2>{{ services|length }}</h2>
+                        <small>Total components</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Service Status -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h3><i class="bi bi-server"></i> Service Status</h3>
+            </div>
+            {% for service_name, service in services.items %}
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card service-card {{ service.status }}">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            {% if service.status == 'healthy' %}
+                                <i class="bi bi-check-circle-fill status-healthy"></i>
+                            {% elif service.status == 'unhealthy' %}
+                                <i class="bi bi-x-circle-fill status-unhealthy"></i>
+                            {% else %}
+                                <i class="bi bi-exclamation-circle-fill status-optional"></i>
+                            {% endif %}
+                            {{ service_name|title }}
+                        </h5>
+                        <p class="card-text">{{ service.message }}</p>
+                        {% if service.version %}
+                            <small class="text-muted">Version: {{ service.version }}</small><br>
+                        {% endif %}
+                        {% if service.connections %}
+                            <small class="text-muted">Connections: {{ service.connections }}</small><br>
+                        {% endif %}
+                        {% if service.workers %}
+                            <small class="text-muted">Workers: {{ service.workers }}</small><br>
+                        {% endif %}
+                        {% if service.active_tasks %}
+                            <small class="text-muted">Active tasks: {{ service.active_tasks }}</small><br>
+                        {% endif %}
+                        {% if service.memory_used %}
+                            <small class="text-muted">Memory: {{ service.memory_used }}</small><br>
+                        {% endif %}
+                        {% if service.error %}
+                            <small class="text-danger">Error: {{ service.error }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Recent Issues -->
+        {% if recent_issues %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <h3><i class="bi bi-exclamation-triangle"></i> Recent Issues</h3>
+            </div>
+            {% for issue in recent_issues %}
+            <div class="col-12 mb-2">
+                <div class="alert issue-{{ issue.severity }}" role="alert">
+                    <h6 class="alert-heading">
+                        <i class="bi bi-{{ issue.severity }}"></i> {{ issue.category }}
+                    </h6>
+                    <p class="mb-1">{{ issue.message }}</p>
+                    {% if issue.action %}
+                        <hr>
+                        <p class="mb-0"><strong>Action:</strong> <code>{{ issue.action }}</code></p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Next Steps -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h3><i class="bi bi-list-check"></i> Next Development Steps</h3>
+                <p class="text-muted">Prioritized tasks to keep development momentum as a solo developer</p>
+            </div>
+            {% for step in next_steps %}
+            <div class="col-md-6 mb-3">
+                <div class="card priority-{{ step.priority }}">
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <span class="badge bg-{{ step.priority }}">{{ step.priority|upper }}</span>
+                            {{ step.task }}
+                        </h5>
+                        <h6 class="card-subtitle mb-2 text-muted">{{ step.category }}</h6>
+                        <p class="card-text">{{ step.description }}</p>
+                        {% if step.file %}
+                            <p class="mb-1"><strong>File:</strong> <code>{{ step.file }}</code></p>
+                        {% endif %}
+                        {% if step.command %}
+                            <p class="mb-0"><strong>Command:</strong> <code>{{ step.command }}</code></p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Quick Links -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h3><i class="bi bi-link-45deg"></i> Quick Links</h3>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-bar-chart"></i> Monitoring</h5>
+                        <ul class="list-unstyled">
+                            <li><a href="http://localhost:3000" target="_blank">Grafana Dashboard</a></li>
+                            <li><a href="http://localhost:9090" target="_blank">Prometheus</a></li>
+                            <li><a href="http://localhost:5555" target="_blank">Celery Flower</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-database"></i> Database</h5>
+                        <ul class="list-unstyled">
+                            <li><a href="http://localhost:5050" target="_blank">PgAdmin</a></li>
+                            <li><a href="/admin/" target="_blank">Django Admin</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-code-slash"></i> Development</h5>
+                        <ul class="list-unstyled">
+                            <li><a href="https://github.com/nuniesmith/fks" target="_blank">GitHub Repository</a></li>
+                            <li><a href="/api/docs" target="_blank">API Documentation</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Refresh Button -->
+    <button class="btn btn-primary btn-lg refresh-btn" onclick="location.reload()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+    </button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh every 30 seconds
+        setTimeout(() => location.reload(), 30000);
+    </script>
+</body>
+</html>

@@ -16,14 +16,7 @@ import os
 import time
 import random
 
-try:  # shared package (symlinked) imports
-    from shared_python.config import get_settings  # type: ignore
-    from shared_python.logging import get_logger  # type: ignore
-    from core.exceptions import DataFetchError  # type: ignore
-except Exception:  # pragma: no cover - fallback if path not yet wired
-    from shared_python import get_settings  # type: ignore
-    from shared_python.logging import get_logger  # type: ignore
-    from core.exceptions import DataFetchError  # type: ignore
+
 
 
 class HTTPClient(Protocol):

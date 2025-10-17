@@ -224,6 +224,9 @@ packages/bin/
 # Docker
 .docker/
 
+# Docker override file (local development customizations)
+docker-compose.override.yml
+
 # CI/CD artifacts
 /config-output/
 /workflow-env/

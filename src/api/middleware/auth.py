@@ -182,7 +182,7 @@ class JWTManager:
         Returns:
             str: Encoded JWT token
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.est())
 
         # Set expiration based on token type and custom delta
         if expires_delta:

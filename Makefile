@@ -20,6 +20,8 @@ help:
 	@echo "  make clean          - Clean up containers, volumes, and caches"
 	@echo "  make setup-rag      - Setup RAG system (pgvector, models)"
 	@echo "  make test-rag       - Test RAG functionality"
+	@echo "  make health         - Open health dashboard"
+	@echo "  make monitoring     - Open all monitoring UIs"
 	@echo ""
 
 # Docker operations
@@ -32,6 +34,9 @@ up:
 	docker-compose up -d
 	@echo "Services started. Access:"
 	@echo "  - Web App: http://localhost:8000"
+	@echo "  - Health Dashboard: http://localhost:8000/health/dashboard/"
+	@echo "  - Grafana: http://localhost:3000"
+	@echo "  - Prometheus: http://localhost:9090"
 	@echo "  - PgAdmin: http://localhost:5050"
 	@echo "  - Flower: http://localhost:5555"
 
@@ -185,9 +190,30 @@ status:
 	docker stats --no-stream
 
 health:
-	@echo "Checking service health..."
-	@curl -s http://localhost:8000/health || echo "Web service down"
-	@curl -s http://localhost:8001/health || echo "RAG service down (requires GPU setup)"
+	@echo "Opening health dashboard..."
+	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:8000/health/dashboard/ || \
+	command -v open >/dev/null 2>&1 && open http://localhost:8000/health/dashboard/ || \
+	echo "Please open http://localhost:8000/health/dashboard/ in your browser"
+
+monitoring:
+	@echo "Opening monitoring UIs..."
+	@echo "Health Dashboard: http://localhost:8000/health/dashboard/"
+	@echo "Grafana: http://localhost:3000 (admin/admin)"
+	@echo "Prometheus: http://localhost:9090"
+	@echo "Flower (Celery): http://localhost:5555"
+	@echo "PgAdmin: http://localhost:5050"
+	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:3000 || \
+	command -v open >/dev/null 2>&1 && open http://localhost:3000 || \
+	echo "Please open the URLs above in your browser"
+
+logs-prometheus:
+	docker-compose logs -f prometheus
+
+logs-grafana:
+	docker-compose logs -f grafana
+
+logs-tailscale:
+	docker-compose logs -f tailscale
 
 backup-db:
 	@echo "Backing up database..."
@@ -219,3 +245,20 @@ docs:
 docs-serve:
 	@echo "Serving documentation..."
 	cd docs && mkdocs serve
+
+# Security and validation
+security-check:
+	@echo "Running security checks..."
+	@bash scripts/security-check.sh
+
+validate-compose:
+	@echo "Validating docker-compose configuration..."
+	@docker-compose config > /dev/null && echo "✓ docker-compose.yml is valid"
+	@docker-compose -f docker-compose.yml -f docker-compose.gpu.yml config > /dev/null && echo "✓ GPU compose override is valid"
+
+env-check:
+	@echo "Checking environment configuration..."
+	@if [ ! -f .env ]; then echo "✗ .env file not found. Copy from .env.example"; exit 1; fi
+	@echo "✓ .env file exists"
+	@grep -q "POSTGRES_PASSWORD=postgres" .env && echo "⚠ Using default PostgreSQL password" || echo "✓ Custom PostgreSQL password"
+	@grep -q "DJANGO_SECRET_KEY=django-insecure" .env && echo "⚠ Using insecure Django secret key" || echo "✓ Custom Django secret key"

@@ -16,7 +16,6 @@ try:
 except Exception:  # pragma: no cover
     Draft202012Validator = None  # type: ignore
 
-from shared_python.types import MarketBar  # type: ignore
 
 try:  # reuse existing upsert logic for now
     from store import upsert_ohlcv  # type: ignore

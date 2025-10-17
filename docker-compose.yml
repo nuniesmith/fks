@@ -16,8 +16,10 @@ services:
       - ./logs/nginx:/var/log/nginx
       - certbot_webroot:/var/www/certbot:ro
     depends_on:
-      - web
-      - flower
+      web:
+        condition: service_healthy
+      flower:
+        condition: service_started
     environment:
       - TZ=America/Toronto
     restart: unless-stopped
@@ -46,8 +48,16 @@ services:
              python manage.py collectstatic --noinput &&
              gunicorn web.django.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     environment:
       - TZ=America/Toronto
       - PYTHONUNBUFFERED=1
@@ -87,7 +97,13 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-    command: postgres -c shared_preload_libraries=timescaledb
+    command: postgres -c shared_preload_libraries='timescaledb,vector'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - fks-network
 
@@ -158,8 +174,16 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A web.django inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     restart: unless-stopped
     networks:
       - fks-network
@@ -188,9 +212,12 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
-      - celery_worker
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - fks-network
@@ -219,11 +246,130 @@ services:
     networks:
       - fks-network
 
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fks_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - fks-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fks_grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - TZ=America/Toronto
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - fks-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: fks_node_exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    expose:
+      - "9100"
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: fks_postgres_exporter
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-trading_db}?sslmode=disable
+    expose:
+      - "9187"
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: fks_redis_exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    expose:
+      - "9121"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  # Tailscale for secure networking
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: fks_tailscale
+    hostname: fks-trading
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+      - TS_EXTRA_ARGS=--advertise-tags=tag:fks-trading --accept-routes
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: unless-stopped
+    networks:
+      - fks-network
+
 volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
   certbot_webroot:
+  prometheus_data:
+  grafana_data:
+  tailscale_data:
 
 networks:
   fks-network:

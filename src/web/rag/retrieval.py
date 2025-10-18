@@ -6,8 +6,8 @@ Handles context retrieval and ranking for generating responses.
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 
-from database import Session, Document, DocumentChunk, TradingInsight
-from rag.embeddings import EmbeddingsService
+from core.database import Session, Document, DocumentChunk, TradingInsight
+from web.rag.embeddings import EmbeddingsService
 
 
 class RetrievalService:

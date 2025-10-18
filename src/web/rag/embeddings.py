@@ -9,7 +9,7 @@ from openai import OpenAI
 import numpy as np
 from sqlalchemy import text
 
-from database import Session
+from core.database import Session
 from framework.config.constants import OPENAI_API_KEY
 
 
@@ -40,7 +40,7 @@ class EmbeddingsService:
     def _init_local_model(self):
         """Initialize local embedding model"""
         try:
-            from rag.local_llm import create_local_embeddings
+            from web.rag.local_llm import create_local_embeddings
             
             # Default to fast local model
             if self.model.startswith("text-embedding"):

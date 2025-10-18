@@ -7,8 +7,8 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
 import json
 
-from database import Session, Trade, Position, Document
-from rag.intelligence import FKSIntelligence
+from core.database import Session, Trade, Position, Document
+from web.rag.intelligence import FKSIntelligence
 
 
 class DataIngestionPipeline:

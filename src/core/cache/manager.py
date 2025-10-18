@@ -14,7 +14,7 @@ from typing import Any, Optional, Dict
 from datetime import datetime, timedelta
 import pytz
 
-from config import REDIS_HOST, REDIS_PORT, REDIS_DB
+from framework.config.constants import REDIS_HOST, REDIS_PORT, REDIS_DB
 
 TIMEZONE = pytz.timezone('America/Toronto')
 

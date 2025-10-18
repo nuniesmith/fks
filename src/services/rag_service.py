@@ -33,7 +33,7 @@ from database import Session, Document, DocumentChunk, QueryHistory, TradingInsi
 from rag.embeddings import EmbeddingsService
 from rag.retrieval import RetrievalService
 from rag.intelligence import FKSIntelligence
-from config import OPENAI_API_KEY, DATABASE_URL
+from framework.config.constants import OPENAI_API_KEY, DATABASE_URL
 
 
 class FKSEmbeddingsAdapter(Embeddings):

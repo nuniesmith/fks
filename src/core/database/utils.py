@@ -12,7 +12,7 @@ from database import (
     Session, OHLCVData, Account, Position, Trade, 
     BalanceHistory, SyncStatus, IndicatorsCache, StrategyParameters
 )
-from config import SYMBOLS
+from framework.config.constants import SYMBOLS
 
 TIMEZONE = pytz.timezone('America/Toronto')
 

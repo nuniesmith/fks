@@ -12,7 +12,7 @@ from database import Session, Document, DocumentChunk, QueryHistory
 from rag.document_processor import DocumentProcessor
 from rag.embeddings import EmbeddingsService
 from rag.retrieval import RetrievalService
-from config import OPENAI_API_KEY
+from framework.config.constants import OPENAI_API_KEY
 
 
 class FKSIntelligence:

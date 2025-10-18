@@ -17,7 +17,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 
-from config import SYMBOLS, MAINS, ALTS, TIMEFRAMES, DISCORD_WEBHOOK_URL
+from framework.config.constants import SYMBOLS, MAINS, ALTS, TIMEFRAMES, DISCORD_WEBHOOK_URL
 from data import (
     get_historical_data, get_current_price, get_live_prices, 
     get_price_stats, is_live_data_available, get_websocket_status

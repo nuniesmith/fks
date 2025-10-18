@@ -10,7 +10,7 @@ import numpy as np
 from sqlalchemy import text
 
 from database import Session
-from config import OPENAI_API_KEY
+from framework.config.constants import OPENAI_API_KEY
 
 
 class EmbeddingsService:

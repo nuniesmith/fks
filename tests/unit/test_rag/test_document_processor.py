@@ -1,289 +1,289 @@
 """
-Unit tests for RAG document processor with comprehensive mocking.
-Tests chunking, formatting, and preprocessing logic in isolation.
+Unit tests for RAG DocumentProcessor.
 """
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
-
-from web.rag.document_processor import DocumentProcessor
+from web.rag.document_processor import DocumentProcessor, Chunk, create_processor
 
 
 class TestDocumentProcessor:
-    """Test DocumentProcessor in isolation with mocks."""
-
+    """Test DocumentProcessor class."""
+    
     @pytest.fixture
     def processor(self):
-        """Create a document processor instance."""
-        return DocumentProcessor()
-
-    def test_chunk_text_basic(self, processor):
-        """Test basic text chunking functionality."""
-        text = "This is a test sentence. " * 100
-        result = processor.chunk_text(text, chunk_size=200, overlap=20)
+        """Create a document processor."""
+        return DocumentProcessor(chunk_size=512, chunk_overlap=50)
+    
+    def test_initialization(self):
+        """Test processor initialization."""
+        processor = DocumentProcessor(
+            chunk_size=256,
+            chunk_overlap=25,
+            model_name="gpt-3.5-turbo"
+        )
         
-        assert len(result) > 1
-        assert all(hasattr(chunk, 'content') for chunk in result)
-        assert all(hasattr(chunk, 'chunk_index') for chunk in result)
-        assert all(hasattr(chunk, 'token_count') for chunk in result)
-
-    def test_chunk_text_with_metadata(self, processor):
-        """Test chunking with metadata preservation."""
-        text = "Sample text for chunking."
-        metadata = {'doc_id': 123, 'source': 'test'}
+        assert processor.chunk_size == 256
+        assert processor.chunk_overlap == 25
+        assert processor.encoding is not None
+    
+    def test_create_processor(self):
+        """Test convenience function."""
+        processor = create_processor(chunk_size=512, chunk_overlap=50)
         
-        result = processor.chunk_text(text, metadata=metadata)
+        assert isinstance(processor, DocumentProcessor)
+        assert processor.chunk_size == 512
+        assert processor.chunk_overlap == 50
+    
+    def test_count_tokens(self, processor):
+        """Test token counting."""
+        text = "Bitcoin is trading at $42,000"
+        token_count = processor.count_tokens(text)
         
-        assert len(result) > 0
-        for chunk in result:
-            assert chunk.metadata.get('doc_id') == 123
-            assert chunk.metadata.get('source') == 'test'
-
+        assert isinstance(token_count, int)
+        assert token_count > 0
+    
     def test_chunk_text_empty(self, processor):
         """Test chunking empty text."""
-        result = processor.chunk_text("")
+        chunks = processor.chunk_text("")
         
-        # Should handle empty gracefully
-        assert isinstance(result, list)
-        assert len(result) == 0 or (len(result) == 1 and result[0].content == "")
-
+        assert chunks == []
+        
+        chunks = processor.chunk_text("   ")
+        assert chunks == []
+    
     def test_chunk_text_short(self, processor):
-        """Test chunking text shorter than chunk size."""
-        text = "Short text."
-        result = processor.chunk_text(text, chunk_size=1000)
+        """Test chunking short text (single chunk)."""
+        text = "This is a short test text."
+        chunks = processor.chunk_text(text)
         
-        assert len(result) == 1
-        assert result[0].content == text
-
-    def test_chunk_signal_formatting(self, processor):
-        """Test formatting signal data into text."""
-        signal_data = {
-            'id': 1,
-            'symbol': 'BTCUSDT',
-            'type': 'LONG',
-            'strength': 0.85,
-            'price': 50000.0,
-            'timestamp': datetime(2025, 10, 18, 12, 0, 0),
-            'indicators': {'rsi': 35, 'macd': -0.5, 'bb_position': 0.2},
-            'strategy': 'momentum'
-        }
+        assert len(chunks) == 1
+        assert chunks[0].content.strip() == text.strip()
+        assert chunks[0].chunk_index == 0
+        assert chunks[0].token_count > 0
+    
+    def test_chunk_text_long(self, processor):
+        """Test chunking long text (multiple chunks)."""
+        # Create text that will require multiple chunks
+        text = "Bitcoin trading analysis. " * 200  # Long text
+        chunks = processor.chunk_text(text)
         
-        result = processor.chunk_signal(signal_data)
+        assert len(chunks) > 1
         
-        assert 'BTCUSDT' in result
-        assert 'LONG' in result or 'long' in result
-        assert '50000' in result or '50,000' in result
-        assert 'momentum' in result.lower()
-        assert 'rsi' in result.lower() or 'RSI' in result
-
-    def test_chunk_signal_minimal(self, processor):
-        """Test formatting signal with minimal data."""
-        signal_data = {
-            'symbol': 'ETHUSDT',
-            'type': 'SHORT'
-        }
-        
-        result = processor.chunk_signal(signal_data)
-        
-        assert 'ETHUSDT' in result
-        assert 'SHORT' in result or 'short' in result
-
-    def test_chunk_backtest_formatting(self, processor):
-        """Test formatting backtest results into text."""
-        backtest_data = {
-            'id': 1,
-            'symbol': 'BTCUSDT',
-            'strategy': 'momentum',
-            'win_rate': 0.68,
-            'sharpe_ratio': 2.1,
-            'max_drawdown': 0.15,
-            'total_trades': 50,
-            'total_return': 0.35
-        }
-        
-        result = processor.chunk_backtest(backtest_data)
-        
-        assert 'BTCUSDT' in result
-        assert 'momentum' in result.lower()
-        assert '68' in result or '0.68' in result  # Win rate
-        assert '2.1' in result  # Sharpe
-        assert '50' in result  # Total trades
-
-    def test_chunk_backtest_negative_results(self, processor):
-        """Test formatting backtest with negative results."""
-        backtest_data = {
-            'symbol': 'SOLUSDT',
-            'strategy': 'mean_reversion',
-            'win_rate': 0.42,
-            'sharpe_ratio': -0.5,
-            'max_drawdown': 0.35,
-            'total_return': -0.12
-        }
-        
-        result = processor.chunk_backtest(backtest_data)
-        
-        assert 'SOLUSDT' in result
-        assert 'mean_reversion' in result
-        # Should include negative indicators
-        assert '-0.5' in result or 'negative' in result.lower()
-
-    def test_chunk_trade_formatting(self, processor):
-        """Test formatting completed trade into text."""
-        trade_data = {
-            'id': 1,
-            'symbol': 'ETHUSDT',
-            'side': 'BUY',
-            'quantity': 5.0,
-            'entry_price': 2000.0,
-            'exit_price': 2100.0,
-            'pnl': 500.0,
-            'pnl_percent': 0.05,
-            'entry_time': datetime(2025, 10, 18, 10, 0, 0),
-            'exit_time': datetime(2025, 10, 18, 14, 0, 0),
-            'duration_hours': 4.0,
-            'outcome': 'WIN'
-        }
-        
-        result = processor.chunk_trade(trade_data)
-        
-        assert 'ETHUSDT' in result
-        assert 'BUY' in result or 'buy' in result
-        assert '2000' in result  # Entry price
-        assert '2100' in result  # Exit price
-        assert '500' in result or 'profit' in result.lower()
-        assert 'WIN' in result or 'win' in result
-
-    def test_chunk_trade_loss(self, processor):
-        """Test formatting losing trade."""
-        trade_data = {
-            'symbol': 'BNBUSDT',
-            'side': 'SELL',
-            'entry_price': 300.0,
-            'exit_price': 310.0,
-            'pnl': -50.0,
-            'outcome': 'LOSS'
-        }
-        
-        result = processor.chunk_trade(trade_data)
-        
-        assert 'BNBUSDT' in result
-        assert 'SELL' in result or 'sell' in result
-        assert '-50' in result or 'loss' in result.lower()
-        assert 'LOSS' in result or 'loss' in result
-
-    def test_chunk_overlap_preservation(self, processor):
-        """Test that overlap between chunks is preserved."""
-        text = "Word " * 100
-        chunk_size = 100
-        overlap = 20
-        
-        result = processor.chunk_text(text, chunk_size=chunk_size, overlap=overlap)
-        
-        # Should have multiple chunks due to length
-        assert len(result) > 1
-        
-        # Check that chunks have proper indices
-        for i, chunk in enumerate(result):
+        # Check chunk properties
+        for i, chunk in enumerate(chunks):
             assert chunk.chunk_index == i
-
-    def test_token_counting(self, processor):
-        """Test that token counts are calculated."""
-        text = "This is a test with multiple words and tokens."
-        result = processor.chunk_text(text)
-        
-        assert len(result) > 0
-        for chunk in result:
             assert chunk.token_count > 0
-            # Rough estimate: tokens should be less than word count
-            assert chunk.token_count <= len(chunk.content.split()) * 2
-
-    @pytest.mark.parametrize("chunk_size,overlap", [
-        (100, 10),
-        (500, 50),
-        (1000, 100),
-        (200, 40)
-    ])
-    def test_chunk_sizes(self, processor, chunk_size, overlap):
-        """Test different chunk size configurations."""
-        text = "Test sentence. " * 200
-        result = processor.chunk_text(text, chunk_size=chunk_size, overlap=overlap)
+            assert chunk.token_count <= processor.chunk_size
+            assert len(chunk.content) > 0
+    
+    def test_chunk_text_with_metadata(self, processor):
+        """Test chunking with metadata."""
+        text = "Test content"
+        metadata = {'source': 'test', 'category': 'signal'}
         
-        assert len(result) > 0
-        # Each chunk should respect the approximate size
-        for chunk in result[:-1]:  # Exclude last chunk which may be shorter
-            assert len(chunk.content) <= chunk_size * 2  # Allow some flexibility
-
-
-class TestDocumentProcessorEdgeCases:
-    """Test edge cases and error handling."""
-
-    @pytest.fixture
-    def processor(self):
-        return DocumentProcessor()
-
-    def test_chunk_very_long_text(self, processor):
-        """Test chunking very long text."""
-        text = "Long text. " * 10000
-        result = processor.chunk_text(text, chunk_size=500)
+        chunks = processor.chunk_text(text, metadata=metadata)
         
-        assert len(result) > 10
-        # Verify indices are sequential
-        for i, chunk in enumerate(result):
-            assert chunk.chunk_index == i
-
-    def test_chunk_unicode_text(self, processor):
-        """Test chunking text with unicode characters."""
-        text = "Testing unicode: 中文 日本語 한국어 العربية 🚀 📈 💰"
-        result = processor.chunk_text(text)
+        assert len(chunks) == 1
+        assert chunks[0].metadata == metadata
+    
+    def test_clean_text(self, processor):
+        """Test text cleaning."""
+        text = "Bitcoin   trading\n\n\n    analysis\t\twith   extra   spaces"
+        cleaned = processor._clean_text(text)
         
-        assert len(result) > 0
-        assert any('中文' in chunk.content or '日本語' in chunk.content for chunk in result)
-
-    def test_chunk_signal_missing_fields(self, processor):
-        """Test signal chunking with missing optional fields."""
+        # Should normalize whitespace
+        assert "  " not in cleaned
+        assert "\n\n" not in cleaned
+        assert "\t" not in cleaned
+    
+    def test_chunk_trading_signal(self, processor):
+        """Test chunking trading signal data."""
         signal_data = {
             'symbol': 'BTCUSDT',
-            'type': 'LONG'
-            # Missing: strength, price, indicators, etc.
+            'action': 'BUY',
+            'price': 42000.00,
+            'timestamp': '2024-10-18T10:00:00',
+            'indicators': {
+                'rsi': 35.5,
+                'macd': -50.2,
+                'bb_position': 0.15
+            },
+            'reasoning': 'RSI oversold + MACD divergence',
+            'stop_loss': 40500.00,
+            'take_profit': 44000.00
         }
         
-        # Should not raise an error
-        result = processor.chunk_signal(signal_data)
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_chunk_backtest_missing_fields(self, processor):
-        """Test backtest chunking with missing optional fields."""
+        chunks = processor.chunk_trading_signal(signal_data)
+        
+        assert len(chunks) >= 1
+        
+        # Check that chunk contains key information
+        chunk_text = chunks[0].content.lower()
+        assert 'btcusdt' in chunk_text
+        assert 'buy' in chunk_text
+        assert 'rsi' in chunk_text
+        
+        # Check metadata
+        assert chunks[0].metadata['type'] == 'signal'
+        assert chunks[0].metadata['symbol'] == 'BTCUSDT'
+        assert chunks[0].metadata['action'] == 'BUY'
+    
+    def test_chunk_backtest_result(self, processor):
+        """Test chunking backtest results."""
         backtest_data = {
+            'strategy_name': 'RSI Reversal',
             'symbol': 'ETHUSDT',
-            'strategy': 'test'
-            # Missing: metrics
+            'timeframe': '4h',
+            'start_date': '2024-01-01',
+            'end_date': '2024-10-01',
+            'total_return': 45.2,
+            'win_rate': 68.5,
+            'sharpe_ratio': 2.1,
+            'max_drawdown': -12.3,
+            'total_trades': 85,
+            'parameters': {
+                'rsi_period': 14,
+                'rsi_oversold': 30
+            },
+            'insights': 'Strategy performs well in ranging markets.'
         }
         
-        result = processor.chunk_backtest(backtest_data)
-        assert isinstance(result, str)
-        assert 'ETHUSDT' in result
-
-    def test_chunk_trade_missing_fields(self, processor):
-        """Test trade chunking with missing optional fields."""
+        chunks = processor.chunk_backtest_result(backtest_data)
+        
+        assert len(chunks) >= 1
+        
+        # Check content
+        chunk_text = chunks[0].content
+        assert 'RSI Reversal' in chunk_text
+        assert 'ETHUSDT' in chunk_text
+        assert '45.2' in chunk_text
+        assert '68.5' in chunk_text
+        
+        # Check metadata
+        assert chunks[0].metadata['type'] == 'backtest'
+        assert chunks[0].metadata['symbol'] == 'ETHUSDT'
+        assert chunks[0].metadata['total_return'] == 45.2
+        assert chunks[0].metadata['win_rate'] == 68.5
+    
+    def test_chunk_trade_analysis(self, processor):
+        """Test chunking trade analysis."""
         trade_data = {
-            'symbol': 'BNBUSDT',
-            'side': 'BUY'
-            # Missing: prices, pnl, etc.
+            'symbol': 'SOLUSDT',
+            'position_side': 'LONG',
+            'entry_price': 100.0,
+            'exit_price': 105.0,
+            'quantity': 10.0,
+            'realized_pnl': 50.0,
+            'pnl_percent': 5.0,
+            'duration': '2 hours',
+            'time': '2024-10-18T10:00:00',
+            'strategy_name': 'Momentum',
+            'notes': 'Quick profit on breakout'
         }
         
-        result = processor.chunk_trade(trade_data)
-        assert isinstance(result, str)
-        assert 'BNBUSDT' in result
-
-    def test_chunk_with_none_metadata(self, processor):
-        """Test chunking with None metadata."""
-        text = "Test text"
-        result = processor.chunk_text(text, metadata=None)
+        chunks = processor.chunk_trade_analysis(trade_data)
         
-        assert len(result) > 0
-        # Should handle None metadata gracefully
+        assert len(chunks) >= 1
+        
+        # Check content
+        chunk_text = chunks[0].content
+        assert 'SOLUSDT' in chunk_text
+        assert 'LONG' in chunk_text
+        assert '100' in chunk_text
+        assert '105' in chunk_text
+        
+        # Check metadata
+        assert chunks[0].metadata['type'] == 'trade'
+        assert chunks[0].metadata['symbol'] == 'SOLUSDT'
+        assert chunks[0].metadata['pnl'] == 50.0
+    
+    def test_chunk_market_report(self, processor):
+        """Test chunking market report."""
+        report_text = """
+        Bitcoin Technical Analysis - October 18, 2024
+        
+        Current Price: $42,150
+        
+        Key Levels:
+        - Support: $41,500
+        - Resistance: $43,200
+        
+        Technical Indicators:
+        - RSI(14): 52 (neutral)
+        - MACD: Bullish crossover
+        - Volume: Above average
+        """
+        
+        chunks = processor.chunk_market_report(
+            report_text=report_text,
+            symbol='BTCUSDT',
+            timeframe='1d'
+        )
+        
+        assert len(chunks) >= 1
+        
+        # Check metadata
+        assert chunks[0].metadata['type'] == 'market_report'
+        assert chunks[0].metadata['symbol'] == 'BTCUSDT'
+        assert chunks[0].metadata['timeframe'] == '1d'
+    
+    def test_format_signal_text(self, processor):
+        """Test signal formatting."""
+        signal = {
+            'symbol': 'BTCUSDT',
+            'action': 'BUY',
+            'timestamp': '2024-10-18T10:00:00',
+            'price': 42000.00,
+            'indicators': {'rsi': 35},
+            'stop_loss': 40500.00,
+            'reasoning': 'Good entry'
+        }
+        
+        formatted = processor._format_signal_text(signal)
+        
+        assert 'BTCUSDT' in formatted
+        assert 'BUY' in formatted
+        assert 'rsi' in formatted.lower()
+        assert '42000' in formatted
+    
+    def test_format_backtest_text(self, processor):
+        """Test backtest formatting."""
+        backtest = {
+            'strategy_name': 'Test Strategy',
+            'symbol': 'ETHUSDT',
+            'timeframe': '1h',
+            'total_return': 25.0,
+            'win_rate': 65.0,
+            'sharpe_ratio': 1.8,
+            'max_drawdown': -10.0,
+            'total_trades': 50
+        }
+        
+        formatted = processor._format_backtest_text(backtest)
+        
+        assert 'Test Strategy' in formatted
+        assert 'ETHUSDT' in formatted
+        assert '25.00%' in formatted
+        assert '65.00%' in formatted
+    
+    def test_format_trade_text(self, processor):
+        """Test trade formatting."""
+        trade = {
+            'symbol': 'BNBUSDT',
+            'position_side': 'SHORT',
+            'entry_price': 300.0,
+            'exit_price': 290.0,
+            'quantity': 5.0,
+            'realized_pnl': 50.0,
+            'pnl_percent': 3.33
+        }
+        
+        formatted = processor._format_trade_text(trade)
+        
+        assert 'BNBUSDT' in formatted
+        assert 'SHORT' in formatted
+        assert '300' in formatted
+        assert '290' in formatted
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+if __name__ == '__main__':
+    pytest.main([__file__, '-v'])

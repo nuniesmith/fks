@@ -7,12 +7,10 @@ Supports both OpenAI API and local CUDA-accelerated models.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from database import Document, DocumentChunk, QueryHistory, Session
-from openai import OpenAI
-from rag.document_processor import DocumentProcessor
-from rag.embeddings import EmbeddingsService
-from rag.retrieval import RetrievalService
-
+from core.database import Session, Document, DocumentChunk, QueryHistory
+from web.rag.document_processor import DocumentProcessor
+from web.rag.embeddings import EmbeddingsService
+from web.rag.retrieval import RetrievalService
 from framework.config.constants import OPENAI_API_KEY
 
 
@@ -53,8 +51,8 @@ class FKSIntelligence:
     def _init_local_llm(self):
         """Initialize local LLM"""
         try:
-            from rag.local_llm import create_local_llm
-
+            from web.rag.local_llm import create_local_llm
+            
             self.llm = create_local_llm(
                 model_name=self.local_llm_model, backend="ollama"
             )

@@ -1,1 +1,1 @@
-"""Unit tests for RAG system components."""
+"""RAG system unit tests."""

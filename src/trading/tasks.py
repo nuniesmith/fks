@@ -43,6 +43,14 @@ from framework.config.constants import (
 from trading.backtest.engine import run_backtest
 from trading.signals.generator import get_current_signal
 
+# RAG Intelligence imports
+try:
+    from web.rag.orchestrator import IntelligenceOrchestrator
+    RAG_AVAILABLE = True
+except ImportError:
+    logger.warning("RAG system not available - using legacy signal generation")
+    RAG_AVAILABLE = False
+
 logger = get_task_logger(__name__)
 
 
@@ -376,7 +384,10 @@ def update_positions_task(self, account_id: int = None):
 @shared_task(bind=True, max_retries=3)
 def generate_signals_task(self, account_id: int = None, timeframe: str = DEFAULT_TIMEFRAME):
     """
-    Generate trading signals using RSI, MACD, Bollinger Bands and other indicators.
+    Generate trading signals using RAG-powered FKS Intelligence.
+    
+    Uses IntelligenceOrchestrator to analyze historical data and market conditions
+    to generate optimal trading signals based on account state and available cash.
 
     Args:
         account_id: Account ID for signal generation. If None, uses first active account.
@@ -396,75 +407,155 @@ def generate_signals_task(self, account_id: int = None, timeframe: str = DEFAULT
         if not account:
             return {'status': 'error', 'message': 'No active account found'}
 
-        # Get strategy parameters
-        strategy = session.query(StrategyParameters).filter_by(
-            is_active=True
-        ).first()
-
-        if not strategy:
-            # Use default parameters
-            best_params = {
-                'M': 50,
-                'atr_period': 14,
-                'sl_multiplier': 2.0,
-                'tp_multiplier': 3.0
+        account_balance = float(account.current_balance)
+        
+        # Get current positions to calculate available cash
+        positions = session.query(Position).filter_by(account_id=account.id).all()
+        margin_used = sum(float(p.quantity * p.entry_price) for p in positions)
+        available_cash = account_balance - margin_used
+        
+        # Build current positions dict for RAG context
+        current_positions = {}
+        for position in positions:
+            current_positions[position.symbol] = {
+                'quantity': float(position.quantity),
+                'entry_price': float(position.entry_price),
+                'current_price': float(position.current_price) if position.current_price else 0,
+                'unrealized_pnl': float(position.unrealized_pnl or 0)
             }
+
+        # Use RAG if available, otherwise fall back to legacy
+        if RAG_AVAILABLE:
+            logger.info("Using RAG-powered signal generation")
+            orchestrator = IntelligenceOrchestrator(use_local=True)
+            
+            # Generate RAG-powered recommendations for all symbols
+            recommendations = []
+            rag_signals = {}
+            
+            for symbol in SYMBOLS:
+                try:
+                    rec = orchestrator.get_trading_recommendation(
+                        symbol=symbol,
+                        account_balance=account_balance,
+                        available_cash=available_cash,
+                        context=f"current market conditions, timeframe: {timeframe}",
+                        current_positions=current_positions
+                    )
+                    
+                    rag_signals[symbol] = rec
+                    
+                    # Convert to suggestion format
+                    if rec.get('action') == 'BUY' and available_cash > 0:
+                        position_size_usd = rec.get('position_size_usd', 0)
+                        if position_size_usd > 0 and position_size_usd <= available_cash:
+                            recommendations.append({
+                                'symbol': symbol,
+                                'action': 'BUY',
+                                'position_size_usd': position_size_usd,
+                                'reasoning': rec.get('reasoning', ''),
+                                'risk_assessment': rec.get('risk_assessment', 'medium'),
+                                'confidence': rec.get('confidence', 0.7),
+                                'entry_points': rec.get('entry_points', []),
+                                'stop_loss': rec.get('stop_loss'),
+                                'timeframe': rec.get('timeframe', timeframe)
+                            })
+                    
+                except Exception as e:
+                    logger.error(f"RAG recommendation failed for {symbol}: {e}")
+                    continue
+            
+            # Determine overall signal
+            buy_count = sum(1 for r in recommendations if r['action'] == 'BUY')
+            signal = 'BUY' if buy_count > 0 else 'HOLD'
+            
+            result = {
+                'status': 'success',
+                'account_id': account.id,
+                'account_balance': account_balance,
+                'available_cash': available_cash,
+                'signal': signal,
+                'suggestions': recommendations,
+                'rag_signals': rag_signals,
+                'method': 'rag',
+                'timestamp': datetime.now(TIMEZONE).isoformat()
+            }
+            
         else:
-            best_params = strategy.parameters
+            # Fallback to legacy signal generation
+            logger.info("Using legacy signal generation (RAG not available)")
+            
+            # Get strategy parameters
+            strategy = session.query(StrategyParameters).filter_by(
+                is_active=True
+            ).first()
 
-        # Fetch price data for all symbols
-        df_prices = {}
-        for symbol in SYMBOLS:
-            ohlcv_data = session.query(OHLCVData).filter_by(
-                symbol=symbol,
-                timeframe=timeframe
-            ).order_by(OHLCVData.time.desc()).limit(500).all()
+            if not strategy:
+                best_params = {
+                    'M': 50,
+                    'atr_period': 14,
+                    'sl_multiplier': 2.0,
+                    'tp_multiplier': 3.0
+                }
+            else:
+                best_params = strategy.parameters
 
-            if not ohlcv_data:
-                logger.warning(f"No data available for {symbol}")
-                continue
+            # Fetch price data for all symbols
+            df_prices = {}
+            for symbol in SYMBOLS:
+                ohlcv_data = session.query(OHLCVData).filter_by(
+                    symbol=symbol,
+                    timeframe=timeframe
+                ).order_by(OHLCVData.time.desc()).limit(500).all()
 
-            # Convert to DataFrame
-            df = pd.DataFrame([{
-                'time': d.time,
-                'open': float(d.open),
-                'high': float(d.high),
-                'low': float(d.low),
-                'close': float(d.close),
-                'volume': float(d.volume)
-            } for d in reversed(ohlcv_data)])
-            df.set_index('time', inplace=True)
-            df_prices[symbol] = df
+                if not ohlcv_data:
+                    logger.warning(f"No data available for {symbol}")
+                    continue
 
-        if not df_prices:
-            return {'status': 'error', 'message': 'No price data available'}
+                df = pd.DataFrame([{
+                    'time': d.time,
+                    'open': float(d.open),
+                    'high': float(d.high),
+                    'low': float(d.low),
+                    'close': float(d.close),
+                    'volume': float(d.volume)
+                } for d in reversed(ohlcv_data)])
+                df.set_index('time', inplace=True)
+                df_prices[symbol] = df
 
-        # Generate signals
-        account_size = float(account.current_balance)
-        signal, suggestions = get_current_signal(
-            df_prices,
-            best_params,
-            account_size,
-            RISK_PER_TRADE
-        )
+            if not df_prices:
+                return {'status': 'error', 'message': 'No price data available'}
 
-        result = {
-            'status': 'success',
-            'account_id': account.id,
-            'account_balance': account_size,
-            'signal': 'BUY' if signal == 1 else 'HOLD',
-            'suggestions': suggestions,
-            'timestamp': datetime.now(TIMEZONE).isoformat()
-        }
+            # Generate legacy signals
+            signal, suggestions = get_current_signal(
+                df_prices,
+                best_params,
+                account_balance,
+                RISK_PER_TRADE
+            )
 
-        logger.info(f"Generated signal: {result['signal']} for account {account.name}")
+            result = {
+                'status': 'success',
+                'account_id': account.id,
+                'account_balance': account_balance,
+                'available_cash': available_cash,
+                'signal': 'BUY' if signal == 1 else 'HOLD',
+                'suggestions': suggestions,
+                'method': 'legacy',
+                'timestamp': datetime.now(TIMEZONE).isoformat()
+            }
+
+        logger.info(f"Generated signal: {result['signal']} for account {account.name} using {result['method']} method")
 
         # Send notification if BUY signal
-        if signal == 1:
+        if result['signal'] == 'BUY':
+            suggestions = result.get('suggestions', [])
             message = "🚀 **BUY Signal Generated**\n"
             message += f"Account: {account.name}\n"
-            message += f"Balance: ${account_size:.2f}\n"
+            message += f"Balance: ${account_balance:.2f}\n"
+            message += f"Available Cash: ${available_cash:.2f}\n"
             message += f"Suggestions: {len(suggestions)} trades\n"
+            message += f"Method: {result['method'].upper()}\n"
             send_discord_notification(message)
 
         return result
@@ -806,7 +897,10 @@ def run_backtest_task(self, timeframe: str = DEFAULT_TIMEFRAME, optimize: bool =
 @shared_task(bind=True, max_retries=3)
 def optimize_portfolio_task(self, account_id: int = None):
     """
-    RAG-powered portfolio optimization.
+    RAG-powered portfolio optimization using IntelligenceOrchestrator.
+    
+    Uses FKS Intelligence to analyze historical performance and recommend
+    optimal portfolio allocation based on market conditions and past results.
 
     Args:
         account_id: Account ID to optimize. If None, optimizes first active account.
@@ -831,6 +925,7 @@ def optimize_portfolio_task(self, account_id: int = None):
         # Calculate portfolio metrics
         total_value = float(account.current_balance)
         position_values = {}
+        current_positions_dict = {}
 
         for position in positions:
             value = float(position.quantity * position.current_price) if position.current_price else 0
@@ -840,50 +935,118 @@ def optimize_portfolio_task(self, account_id: int = None):
                 'allocation': (value / total_value * 100) if total_value > 0 else 0,
                 'unrealized_pnl': float(position.unrealized_pnl or 0)
             }
+            current_positions_dict[position.symbol] = {
+                'quantity': float(position.quantity),
+                'entry_price': float(position.entry_price),
+                'current_price': float(position.current_price) if position.current_price else 0
+            }
 
-        # Calculate optimal allocation based on market cap
-        # Main coins: 50%, Alt coins: 50%
-        main_alloc = 0.5 / len(MAINS)
-        alt_alloc = 0.5 / len(ALTS)
+        available_cash = float(account.current_balance)
 
-        target_allocation = {}
-        for sym in SYMBOLS:
-            base = sym.replace('USDT', '')
-            if base in MAINS:
-                target_allocation[sym] = main_alloc * 100
-            else:
-                target_allocation[sym] = alt_alloc * 100
+        # Use RAG for portfolio optimization if available
+        if RAG_AVAILABLE:
+            logger.info("Using RAG-powered portfolio optimization")
+            try:
+                orchestrator = IntelligenceOrchestrator(use_local=True)
+                
+                # Get RAG-powered portfolio recommendations
+                rag_result = orchestrator.optimize_portfolio(
+                    symbols=SYMBOLS,
+                    account_balance=total_value,
+                    available_cash=available_cash,
+                    current_positions=current_positions_dict,
+                    market_condition="current market conditions"
+                )
+                
+                # Extract recommendations from RAG response
+                recommendations = []
+                symbol_recs = rag_result.get('symbols', {})
+                
+                for symbol, rec in symbol_recs.items():
+                    if isinstance(rec, dict) and rec.get('action') in ['BUY', 'SELL']:
+                        current_pct = position_values.get(symbol, {}).get('allocation', 0)
+                        position_size = rec.get('position_size_usd', 0)
+                        
+                        # Only recommend if meaningful position size
+                        if position_size > 10:  # Minimum $10 trade
+                            recommendations.append({
+                                'symbol': symbol,
+                                'action': rec.get('action'),
+                                'current_allocation': current_pct,
+                                'target_allocation': (position_size / total_value * 100) if total_value > 0 else 0,
+                                'amount': position_size,
+                                'reasoning': rec.get('reasoning', ''),
+                                'risk_assessment': rec.get('risk_assessment', 'medium'),
+                                'confidence': rec.get('confidence', 0.7)
+                            })
+                
+                result = {
+                    'status': 'success',
+                    'account_id': account.id,
+                    'total_value': total_value,
+                    'current_allocation': position_values,
+                    'recommendations': recommendations,
+                    'portfolio_advice': rag_result.get('portfolio_advice', ''),
+                    'rebalance_needed': len(recommendations) > 0,
+                    'method': 'rag',
+                    'timestamp': datetime.now(TIMEZONE).isoformat()
+                }
+                
+            except Exception as e:
+                logger.error(f"RAG portfolio optimization failed: {e}")
+                # Fall back to legacy method
+                RAG_AVAILABLE_LOCAL = False
+        else:
+            RAG_AVAILABLE_LOCAL = False
+        
+        # Fallback to legacy allocation method if RAG not available
+        if not RAG_AVAILABLE or not RAG_AVAILABLE_LOCAL:
+            logger.info("Using legacy portfolio optimization")
+            
+            # Calculate optimal allocation based on market cap
+            # Main coins: 50%, Alt coins: 50%
+            main_alloc = 0.5 / len(MAINS)
+            alt_alloc = 0.5 / len(ALTS)
 
-        # Generate rebalancing recommendations
-        recommendations = []
-        for sym, target_pct in target_allocation.items():
-            current_pct = position_values.get(sym, {}).get('allocation', 0)
-            diff = target_pct - current_pct
+            target_allocation = {}
+            for sym in SYMBOLS:
+                base = sym.replace('USDT', '')
+                if base in MAINS:
+                    target_allocation[sym] = main_alloc * 100
+                else:
+                    target_allocation[sym] = alt_alloc * 100
 
-            if abs(diff) > 5:  # Only recommend if difference > 5%
-                action = 'BUY' if diff > 0 else 'SELL'
-                amount = abs(diff) / 100 * total_value
-                recommendations.append({
-                    'symbol': sym,
-                    'action': action,
-                    'current_allocation': current_pct,
-                    'target_allocation': target_pct,
-                    'difference': diff,
-                    'amount': amount
-                })
+            # Generate rebalancing recommendations
+            recommendations = []
+            for sym, target_pct in target_allocation.items():
+                current_pct = position_values.get(sym, {}).get('allocation', 0)
+                diff = target_pct - current_pct
 
-        result = {
-            'status': 'success',
-            'account_id': account.id,
-            'total_value': total_value,
-            'current_allocation': position_values,
-            'target_allocation': target_allocation,
-            'recommendations': recommendations,
-            'rebalance_needed': len(recommendations) > 0,
-            'timestamp': datetime.now(TIMEZONE).isoformat()
-        }
+                if abs(diff) > 5:  # Only recommend if difference > 5%
+                    action = 'BUY' if diff > 0 else 'SELL'
+                    amount = abs(diff) / 100 * total_value
+                    recommendations.append({
+                        'symbol': sym,
+                        'action': action,
+                        'current_allocation': current_pct,
+                        'target_allocation': target_pct,
+                        'difference': diff,
+                        'amount': amount
+                    })
 
-        logger.info(f"Portfolio optimization completed: {len(recommendations)} recommendations")
+            result = {
+                'status': 'success',
+                'account_id': account.id,
+                'total_value': total_value,
+                'current_allocation': position_values,
+                'target_allocation': target_allocation,
+                'recommendations': recommendations,
+                'rebalance_needed': len(recommendations) > 0,
+                'method': 'legacy',
+                'timestamp': datetime.now(TIMEZONE).isoformat()
+            }
+
+        logger.info(f"Portfolio optimization completed: {len(recommendations)} recommendations using {result['method']} method")
 
         return result
 
@@ -1540,6 +1703,108 @@ def run_scheduled_backtests():
     """Placeholder for scheduled backtests task."""
     logger.info("Run scheduled backtests task called - not yet implemented")
     return "Run scheduled backtests - stub"
+
+
+# =============================================================================
+# RAG System Auto-Ingestion Tasks
+# =============================================================================
+
+@shared_task(bind=True, max_retries=3)
+def generate_daily_rag_signals_task(self, symbols: list = None, min_confidence: float = 0.7):
+    """
+    Generate daily RAG-powered trading signals for all configured symbols.
+    
+    This is the primary RAG intelligence task that provides daily trading
+    recommendations based on historical data and market analysis.
+    
+    Args:
+        symbols: List of symbols to analyze. If None, uses all SYMBOLS.
+        min_confidence: Minimum confidence threshold for recommendations (0-1)
+        
+    Returns:
+        dict: Daily signals for all symbols with recommendations
+    """
+    if not RAG_AVAILABLE:
+        logger.warning("RAG system not available - cannot generate daily signals")
+        return {'status': 'error', 'message': 'RAG system not available'}
+    
+    session = get_db_session()
+    try:
+        # Use configured symbols if not provided
+        symbols_to_analyze = symbols or SYMBOLS
+        
+        # Initialize RAG orchestrator
+        orchestrator = IntelligenceOrchestrator(use_local=True)
+        
+        # Get daily signals from RAG
+        rag_result = orchestrator.get_daily_signals(
+            symbols=symbols_to_analyze,
+            min_confidence=min_confidence
+        )
+        
+        # Parse and structure results
+        daily_signals = {}
+        high_confidence_signals = []
+        
+        for symbol, signal_data in rag_result.get('signals', {}).items():
+            confidence = signal_data.get('confidence', 0)
+            recommendation = signal_data.get('recommendation', '')
+            
+            # Determine action from recommendation text
+            action = 'HOLD'
+            if 'buy' in recommendation.lower() and 'don\'t buy' not in recommendation.lower():
+                action = 'BUY'
+            elif 'sell' in recommendation.lower():
+                action = 'SELL'
+            
+            signal_entry = {
+                'symbol': symbol,
+                'action': action,
+                'recommendation': recommendation,
+                'confidence': confidence,
+                'sources_used': signal_data.get('sources', 0),
+                'timestamp': datetime.now(TIMEZONE).isoformat()
+            }
+            
+            daily_signals[symbol] = signal_entry
+            
+            # Track high confidence signals
+            if confidence >= min_confidence and action in ['BUY', 'SELL']:
+                high_confidence_signals.append(signal_entry)
+        
+        # Send Discord notification for high confidence signals
+        if high_confidence_signals:
+            message = "📊 **Daily RAG Signals Generated**\n"
+            message += f"Date: {datetime.now(TIMEZONE).strftime('%Y-%m-%d')}\n"
+            message += f"High Confidence Signals: {len(high_confidence_signals)}\n\n"
+            
+            for signal in high_confidence_signals[:5]:  # Limit to top 5
+                message += f"**{signal['symbol']}**: {signal['action']} "
+                message += f"(Confidence: {signal['confidence']:.0%})\n"
+            
+            send_discord_notification(message)
+        
+        result = {
+            'status': 'success',
+            'date': rag_result.get('date'),
+            'signals': daily_signals,
+            'high_confidence_count': len(high_confidence_signals),
+            'high_confidence_signals': high_confidence_signals,
+            'min_confidence': min_confidence,
+            'method': 'rag',
+            'timestamp': datetime.now(TIMEZONE).isoformat()
+        }
+        
+        logger.info(f"Generated daily RAG signals: {len(daily_signals)} symbols, "
+                   f"{len(high_confidence_signals)} high confidence")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Daily RAG signals generation failed: {e}")
+        raise self.retry(exc=e, countdown=60)
+    finally:
+        close_db_session(session)
 
 
 # =============================================================================

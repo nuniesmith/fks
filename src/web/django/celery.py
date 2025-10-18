@@ -42,6 +42,10 @@ app.conf.beat_schedule = {
         'task': 'trading.tasks.generate_signals_task',
         'schedule': crontab(minute='*/15'),  # Every 15 minutes
     },
+    'generate-daily-rag-signals': {
+        'task': 'trading.tasks.generate_daily_rag_signals_task',
+        'schedule': crontab(hour=8, minute=0),  # Daily at 8 AM
+    },
     'update-indicators': {
         'task': 'trading.tasks.update_indicators_task',
         'schedule': crontab(minute='*/30'),  # Every 30 minutes

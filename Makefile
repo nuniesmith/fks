@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs test lint format clean gpu-up install-dev migrate shell db-shell
+.PHONY: help build up down restart logs test lint format clean gpu-up install-dev migrate shell db-shell security-setup security-check
 
 # Default target
 help:
@@ -22,6 +22,8 @@ help:
 	@echo "  make test-rag       - Test RAG functionality"
 	@echo "  make health         - Open health dashboard"
 	@echo "  make monitoring     - Open all monitoring UIs"
+	@echo "  make security-setup - Generate secure passwords and setup .env"
+	@echo "  make security-check - Verify security configuration"
 	@echo ""
 
 # Docker operations
@@ -247,6 +249,10 @@ docs-serve:
 	cd docs && mkdocs serve
 
 # Security and validation
+security-setup:
+	@echo "Running security setup..."
+	@bash scripts/setup-security.sh
+
 security-check:
 	@echo "Running security checks..."
 	@bash scripts/security-check.sh

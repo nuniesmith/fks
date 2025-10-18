@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_celery_beat',
     'django_celery_results',
+    'axes',  # django-axes for login attempt tracking and blocking
     
     # Local apps - using actual directory names from src/
     # Only include apps that are properly configured Django apps
@@ -79,6 +80,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    
+    # Security middleware - django-axes for login attempt tracking
+    'axes.middleware.AxesMiddleware',
     
     # Custom authentication middleware
     'authentication.middleware.APIKeyAuthenticationMiddleware',
@@ -308,3 +312,51 @@ LOGGING = {
         },
     },
 }
+
+# ============================================================================
+# SECURITY HARDENING
+# ============================================================================
+
+# django-axes configuration - Login attempt tracking and blocking
+# https://django-axes.readthedocs.io/
+AUTHENTICATION_BACKENDS = [
+    # AxesStandaloneBackend should be the first backend in the AUTHENTICATION_BACKENDS list
+    'axes.backends.AxesStandaloneBackend',
+    
+    # Django ModelBackend is the default authentication backend
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Axes Configuration
+AXES_FAILURE_LIMIT = 5  # Number of failed login attempts before lockout
+AXES_COOLOFF_TIME = 1  # Hours to wait before allowing login attempts again
+AXES_LOCK_OUT_AT_FAILURE = True  # Lock out after failure limit reached
+AXES_ONLY_USER_FAILURES = True  # Track failures per username, not IP (more secure)
+AXES_LOCKOUT_TEMPLATE = None  # Use default lockout page
+AXES_LOCKOUT_URL = None  # Redirect to this URL on lockout (None = 403 page)
+AXES_RESET_ON_SUCCESS = True  # Reset failure count on successful login
+AXES_VERBOSE = True  # Log lockout attempts
+AXES_ENABLED = True  # Enable axes protection
+AXES_FAILURE_LIMIT_FOR_IP = 10  # Separate IP-based limit (more permissive)
+AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = False  # Lock by username only
+
+# django-ratelimit configuration for API endpoints
+# Applied via decorator: @ratelimit(key='ip', rate='100/h', method='ALL')
+RATELIMIT_ENABLE = True  # Enable rate limiting
+RATELIMIT_USE_CACHE = 'default'  # Use Redis cache for rate limit storage
+RATELIMIT_VIEW = 'web.views.ratelimited'  # Custom view for rate limit errors
+
+# Security Headers (nginx should also set these, but Django can add them too)
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+
+# HTTPS/SSL Settings (enable in production)
+# SECURE_SSL_REDIRECT = True  # Redirect HTTP to HTTPS (nginx handles this)
+# SESSION_COOKIE_SECURE = True  # Already set above based on env var
+# CSRF_COOKIE_SECURE = True  # Already set above based on SESSION_COOKIE_SECURE
+
+# Additional security settings
+SECURE_HSTS_SECONDS = 31536000  # 1 year - Enable HSTS
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True

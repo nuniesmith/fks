@@ -1,7 +1,7 @@
 """
 Unit tests for trading Celery tasks.
 
-Tests all 16 production tasks with mocked dependencies.
+Tests all 17 production tasks with mocked dependencies.
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
@@ -16,6 +16,7 @@ from trading.tasks import (
     update_positions_task,
     # Phase 2: Signal Generation
     generate_signals_task,
+    generate_daily_rag_signals_task,
     update_indicators_task,
     analyze_risk_task,
     # Phase 3: Trading Execution
@@ -554,3 +555,193 @@ class TestTaskSequences:
         # 2. Generate signals (would use synced data)
         mock_signal.return_value = (1, [])
         # Note: Would fail without proper data setup
+
+
+# =============================================================================
+# RAG-POWERED TASKS TESTS
+# =============================================================================
+
+class TestRAGTasks:
+    """Test RAG-powered tasks with mocked IntelligenceOrchestrator."""
+    
+    @patch('trading.tasks.RAG_AVAILABLE', True)
+    @patch('trading.tasks.IntelligenceOrchestrator')
+    @patch('trading.tasks.Session')
+    def test_generate_signals_task_with_rag(self, mock_session_class, mock_orchestrator_class):
+        """Test signal generation using RAG."""
+        # Setup session mock
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        
+        # Setup account mock
+        mock_account = MagicMock()
+        mock_account.id = 1
+        mock_account.name = 'Test Account'
+        mock_account.current_balance = Decimal('10000')
+        mock_session.query().filter_by().first.return_value = mock_account
+        mock_session.query().filter_by().all.return_value = []  # No positions
+        
+        # Setup RAG orchestrator mock
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        
+        # Mock RAG recommendation
+        mock_orchestrator.get_trading_recommendation.return_value = {
+            'symbol': 'BTCUSDT',
+            'action': 'BUY',
+            'position_size_usd': 200.0,
+            'reasoning': 'Strong historical performance',
+            'risk_assessment': 'medium',
+            'confidence': 0.85,
+            'entry_points': [42000, 41800],
+            'stop_loss': 40000,
+            'timeframe': '1h'
+        }
+        
+        # Execute task
+        result = generate_signals_task(account_id=1)
+        
+        # Assertions
+        assert result['status'] == 'success'
+        assert result['method'] == 'rag'
+        assert result['signal'] in ['BUY', 'HOLD']
+        assert 'suggestions' in result
+        assert 'rag_signals' in result
+        mock_orchestrator_class.assert_called_once()
+    
+    @patch('trading.tasks.RAG_AVAILABLE', False)
+    @patch('trading.tasks.Session')
+    @patch('trading.tasks.get_current_signal')
+    def test_generate_signals_task_fallback_to_legacy(self, mock_signal, mock_session_class):
+        """Test signal generation falls back to legacy when RAG unavailable."""
+        # Setup session mock
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        
+        # Setup account mock
+        mock_account = MagicMock()
+        mock_account.id = 1
+        mock_account.name = 'Test Account'
+        mock_account.current_balance = Decimal('10000')
+        mock_session.query().filter_by().first.return_value = mock_account
+        mock_session.query().filter_by().all.return_value = []
+        
+        # Mock legacy signal generation
+        mock_signal.return_value = (1, [{'symbol': 'BTCUSDT', 'action': 'BUY'}])
+        
+        # Execute task
+        result = generate_signals_task(account_id=1)
+        
+        # Assertions
+        assert result['status'] == 'success'
+        assert result['method'] == 'legacy'
+        mock_signal.assert_called_once()
+    
+    @patch('trading.tasks.RAG_AVAILABLE', True)
+    @patch('trading.tasks.IntelligenceOrchestrator')
+    @patch('trading.tasks.Session')
+    def test_optimize_portfolio_task_with_rag(self, mock_session_class, mock_orchestrator_class):
+        """Test portfolio optimization using RAG."""
+        # Setup session mock
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        
+        # Setup account mock
+        mock_account = MagicMock()
+        mock_account.id = 1
+        mock_account.name = 'Test Account'
+        mock_account.current_balance = Decimal('10000')
+        mock_session.query().filter_by().first.return_value = mock_account
+        mock_session.query().filter_by().all.return_value = []  # No positions
+        
+        # Setup RAG orchestrator mock
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        
+        # Mock portfolio optimization result
+        mock_orchestrator.optimize_portfolio.return_value = {
+            'symbols': {
+                'BTCUSDT': {
+                    'action': 'BUY',
+                    'position_size_usd': 2500.0,
+                    'reasoning': 'Increase BTC allocation based on backtests',
+                    'risk_assessment': 'low',
+                    'confidence': 0.88
+                }
+            },
+            'portfolio_advice': 'Increase allocation to BTC based on strong historical performance',
+            'total_balance': 10000.0,
+            'available_cash': 10000.0
+        }
+        
+        # Execute task
+        result = optimize_portfolio_task(account_id=1)
+        
+        # Assertions
+        assert result['status'] == 'success'
+        assert result['method'] == 'rag'
+        assert 'recommendations' in result
+        assert 'portfolio_advice' in result
+        mock_orchestrator.optimize_portfolio.assert_called_once()
+    
+    @patch('trading.tasks.RAG_AVAILABLE', True)
+    @patch('trading.tasks.IntelligenceOrchestrator')
+    @patch('trading.tasks.Session')
+    @patch('trading.tasks.send_discord_notification')
+    def test_generate_daily_rag_signals_task(self, mock_discord, mock_session_class, 
+                                              mock_orchestrator_class):
+        """Test daily RAG signals generation."""
+        # Setup session mock
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        
+        # Setup RAG orchestrator mock
+        mock_orchestrator = MagicMock()
+        mock_orchestrator_class.return_value = mock_orchestrator
+        
+        # Mock daily signals result
+        mock_orchestrator.get_daily_signals.return_value = {
+            'date': '2025-10-18',
+            'signals': {
+                'BTCUSDT': {
+                    'recommendation': 'Strong BUY signal based on momentum',
+                    'confidence': 0.85,
+                    'sources': 12
+                },
+                'ETHUSDT': {
+                    'recommendation': 'HOLD position, consolidating',
+                    'confidence': 0.65,
+                    'sources': 8
+                }
+            }
+        }
+        
+        # Execute task
+        result = generate_daily_rag_signals_task(min_confidence=0.7)
+        
+        # Assertions
+        assert result['status'] == 'success'
+        assert result['method'] == 'rag'
+        assert 'signals' in result
+        assert len(result['signals']) == 2
+        assert 'BTCUSDT' in result['signals']
+        assert result['signals']['BTCUSDT']['action'] == 'BUY'
+        assert result['signals']['BTCUSDT']['confidence'] == 0.85
+        
+        # Should send Discord notification for high confidence signals
+        mock_discord.assert_called_once()
+    
+    @patch('trading.tasks.RAG_AVAILABLE', False)
+    @patch('trading.tasks.Session')
+    def test_generate_daily_rag_signals_task_no_rag(self, mock_session_class):
+        """Test daily RAG signals when RAG unavailable."""
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        
+        # Execute task
+        result = generate_daily_rag_signals_task()
+        
+        # Assertions
+        assert result['status'] == 'error'
+        assert 'RAG system not available' in result['message']
+

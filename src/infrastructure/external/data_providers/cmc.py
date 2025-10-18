@@ -28,7 +28,7 @@ class CoinMarketCapClient(BaseClient):
     SYMBOL_KEY = "symbol"
     DATA_KEY = "data"
 
-    def __init__(self, api_key: Optional[str] = None, metrics: Optional[Any] = None):
+    def __init__(self, api_key: str | None = None, metrics: Any | None = None):
         """
         Initialize the CoinMarketCap client.
         """
@@ -52,7 +52,7 @@ class CoinMarketCapClient(BaseClient):
         wait=wait_exponential(multiplier=2, min=2, max=10),
         reraise=True,
     )
-    def fetch_data(self, symbol: str) -> Optional[pd.DataFrame]:
+    def fetch_data(self, symbol: str) -> pd.DataFrame | None:
         """
         Fetch real-time fkscurrency data from CoinMarketCap API.
 
@@ -115,11 +115,11 @@ class CoinMarketCapClient(BaseClient):
     def _make_custom_request(
         self,
         url: str,
-        params: Dict[str, Any],
-        headers: Dict[str, str],
+        params: dict[str, Any],
+        headers: dict[str, str],
         timeout: int = 30,
         endpoint: str = "unknown",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Custom request method for CoinMarketCap API that requires headers."""
         start_time = time.time()
 
@@ -132,7 +132,7 @@ class CoinMarketCapClient(BaseClient):
             api_call_duration = (time.time() - start_time) * 1000
 
             if response.status_code == 429:
-                logger.warning(f"⏳ Rate limit reached. Waiting...")
+                logger.warning("⏳ Rate limit reached. Waiting...")
                 self.metrics.record_rate_limit(
                     client_name=self.name,
                     remaining=0,
@@ -199,8 +199,8 @@ class CoinMarketCapClient(BaseClient):
         return df
 
     def get_latest_listings(
-        self, params: Optional[Dict[str, Any]] = None
-    ) -> Optional[Dict[str, Any]]:
+        self, params: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
         """
         Fetch latest fkscurrency listings from CoinMarketCap API.
         Used for health checks.
@@ -229,7 +229,7 @@ class CoinMarketCapClient(BaseClient):
 
         return health_status
 
-    def get(self, symbol: str, **kwargs) -> Optional[pd.DataFrame]:
+    def get(self, symbol: str, **kwargs) -> pd.DataFrame | None:
         """
         Standardized get method to match the BaseClient interface.
         """

@@ -573,7 +573,7 @@ ERROR_MESSAGES = {
 # =============================================================================
 
 
-def get_app_info() -> Dict[str, str]:
+def get_app_info() -> dict[str, str]:
     """Get application information dictionary."""
     return {
         "name": APP_NAME,
@@ -591,7 +591,7 @@ def get_app_info() -> Dict[str, str]:
     }
 
 
-def get_default_config() -> Dict[str, Any]:
+def get_default_config() -> dict[str, Any]:
     """Get default configuration dictionary."""
     return {
         "app": get_app_info(),
@@ -643,7 +643,7 @@ def get_feature_flag(flag_name: str, default: bool = False) -> bool:
     return FEATURE_FLAGS.get(flag_name, default)
 
 
-def get_resource_limit(resource_type: str, component: str) -> Optional[int]:
+def get_resource_limit(resource_type: str, component: str) -> int | None:
     """Get resource limit for a specific component."""
     limits_map = {"memory": MEMORY_LIMITS, "cpu": CPU_LIMITS, "disk": DISK_LIMITS}
 

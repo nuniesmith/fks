@@ -29,7 +29,7 @@ class RateLimiter:
         max_requests: int,
         time_window: int = 60,
         algorithm: str = "token_bucket",
-        policy: Union[RateLimitPolicy, str] = RateLimitPolicy.WAIT,
+        policy: RateLimitPolicy | str = RateLimitPolicy.WAIT,
         max_wait_time: float = 5.0,
         name: str = "default",
         burst_capacity: int = 0,
@@ -104,7 +104,7 @@ class RateLimiter:
         )
 
     def enable_client_tracking(
-        self, per_client_max_requests: Optional[int] = None
+        self, per_client_max_requests: int | None = None
     ) -> None:
         """
         Enable per-client rate limiting.
@@ -119,7 +119,7 @@ class RateLimiter:
             f"{self.per_client_max_requests} req/{self.time_window}s per client"
         )
 
-    async def acquire_async(self, client_id: Optional[str] = None) -> bool:
+    async def acquire_async(self, client_id: str | None = None) -> bool:
         """
         Asynchronously acquire a token/request slot.
 
@@ -135,9 +135,7 @@ class RateLimiter:
         async with self.async_lock:
             return await self._acquire_internal(client_id, is_async=True)
 
-    def acquire(
-        self, client_id: Optional[str] = None, wait: Optional[bool] = None
-    ) -> bool:
+    def acquire(self, client_id: str | None = None, wait: bool | None = None) -> bool:
         """
         Synchronously acquire a token/request slot.
 
@@ -155,7 +153,7 @@ class RateLimiter:
             return self._acquire_sync(client_id, wait)
 
     async def _acquire_internal(
-        self, client_id: Optional[str], is_async: bool = False
+        self, client_id: str | None, is_async: bool = False
     ) -> bool:
         """Internal acquire logic that handles both sync and async cases."""
         start_time = time.time()
@@ -241,7 +239,7 @@ class RateLimiter:
         self.stats.record_request(allowed=False)
         return False
 
-    def _acquire_sync(self, client_id: Optional[str], wait: Optional[bool]) -> bool:
+    def _acquire_sync(self, client_id: str | None, wait: bool | None) -> bool:
         """Synchronous acquire implementation."""
         # Temporarily override policy if wait parameter is provided
         original_policy = self.policy
@@ -271,7 +269,7 @@ class RateLimiter:
             # Restore original policy
             self.policy = original_policy
 
-    def _acquire_sync_internal(self, client_id: Optional[str]) -> bool:
+    def _acquire_sync_internal(self, client_id: str | None) -> bool:
         """Pure synchronous implementation without asyncio."""
         start_time = time.time()
         effective_client_id = client_id or "global"
@@ -327,7 +325,7 @@ class RateLimiter:
         self.stats.record_request(allowed=False)
         return False
 
-    def get_stats(self, client_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_stats(self, client_id: str | None = None) -> dict[str, Any]:
         """
         Get rate limiter statistics.
 
@@ -373,7 +371,7 @@ class RateLimiter:
 
             return stats
 
-    def reset(self, client_id: Optional[str] = None) -> None:
+    def reset(self, client_id: str | None = None) -> None:
         """
         Reset rate limiter state.
 

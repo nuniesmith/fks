@@ -6,9 +6,12 @@ to make it easier to test circuit breaker functionality and applications
 that use circuit breakers.
 """
 
+import builtins
+import contextlib
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, Union
 from unittest.mock import MagicMock
 
 from .config import CircuitBreakerConfig
@@ -34,12 +37,12 @@ class MockStateProvider(StateProvider):
         Args:
             fail_operations: If True, all operations will fail
         """
-        self._storage: Dict[str, Dict[str, Any]] = {}
+        self._storage: dict[str, dict[str, Any]] = {}
         self._fail_operations = fail_operations
         self._operation_calls = []
         self._lock = threading.RLock()
 
-    def persist_state(self, key: str, state: Dict[str, Any]) -> bool:
+    def persist_state(self, key: str, state: dict[str, Any]) -> bool:
         """Mock persist operation."""
         with self._lock:
             self._operation_calls.append(("persist", key, state.copy()))
@@ -48,7 +51,7 @@ class MockStateProvider(StateProvider):
             self._storage[key] = state.copy()
             return True
 
-    def retrieve_state(self, key: str) -> Optional[Dict[str, Any]]:
+    def retrieve_state(self, key: str) -> dict[str, Any] | None:
         """Mock retrieve operation."""
         with self._lock:
             self._operation_calls.append(("retrieve", key, None))
@@ -75,13 +78,13 @@ class MockStateProvider(StateProvider):
                 return False
             return key in self._storage
 
-    def list_keys(self, prefix: str = "") -> List[str]:
+    def list_keys(self, prefix: str = "") -> list[str]:
         """Mock key listing."""
         with self._lock:
             self._operation_calls.append(("list_keys", prefix, None))
             if self._fail_operations:
                 return []
-            return [k for k in self._storage.keys() if k.startswith(prefix)]
+            return [k for k in self._storage if k.startswith(prefix)]
 
     def clear_all(self, prefix: str = "") -> bool:
         """Mock clear operation."""
@@ -93,13 +96,13 @@ class MockStateProvider(StateProvider):
                 self._storage.clear()
             else:
                 keys_to_delete = [
-                    k for k in self._storage.keys() if k.startswith(prefix)
+                    k for k in self._storage if k.startswith(prefix)
                 ]
                 for key in keys_to_delete:
                     del self._storage[key]
             return True
 
-    def get_operation_calls(self) -> List[tuple]:
+    def get_operation_calls(self) -> list[tuple]:
         """Get list of all operations called on this provider."""
         with self._lock:
             return self._operation_calls.copy()
@@ -114,7 +117,7 @@ class MockStateProvider(StateProvider):
         with self._lock:
             self._fail_operations = fail
 
-    def get_storage_copy(self) -> Dict[str, Dict[str, Any]]:
+    def get_storage_copy(self) -> dict[str, dict[str, Any]]:
         """Get a copy of the internal storage for inspection."""
         with self._lock:
             return {k: v.copy() for k, v in self._storage.items()}
@@ -203,7 +206,7 @@ class CircuitBreakerTestHelper:
         """Get the current state of the circuit breaker."""
         return self.circuit.state
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get the current metrics of the circuit breaker."""
         return self.circuit.get_metrics()
 
@@ -247,7 +250,7 @@ class MockFunction:
 
     def __init__(
         self,
-        success_pattern: List[bool] = None,
+        success_pattern: list[bool] = None,
         default_return_value: Any = "success",
         exception_to_raise: Exception = None,
     ):
@@ -288,7 +291,7 @@ class MockFunction:
         self.call_count = 0
         self.call_history.clear()
 
-    def set_pattern(self, pattern: List[bool]) -> None:
+    def set_pattern(self, pattern: list[bool]) -> None:
         """Set a new success/failure pattern."""
         self.success_pattern = pattern
         self.call_count = 0
@@ -349,7 +352,7 @@ class CircuitBreakerScenario:
 
 
 def assert_circuit_state(
-    circuit_or_helper: Union[CircuitBreaker, CircuitBreakerTestHelper],
+    circuit_or_helper: CircuitBreaker | CircuitBreakerTestHelper,
     expected_state: CircuitState,
 ) -> None:
     """
@@ -373,21 +376,21 @@ def assert_circuit_state(
 
 
 def assert_circuit_open(
-    circuit_or_helper: Union[CircuitBreaker, CircuitBreakerTestHelper],
+    circuit_or_helper: CircuitBreaker | CircuitBreakerTestHelper,
 ) -> None:
     """Assert that a circuit breaker is open."""
     assert_circuit_state(circuit_or_helper, CircuitState.OPEN)
 
 
 def assert_circuit_closed(
-    circuit_or_helper: Union[CircuitBreaker, CircuitBreakerTestHelper],
+    circuit_or_helper: CircuitBreaker | CircuitBreakerTestHelper,
 ) -> None:
     """Assert that a circuit breaker is closed."""
     assert_circuit_state(circuit_or_helper, CircuitState.CLOSED)
 
 
 def assert_circuit_half_open(
-    circuit_or_helper: Union[CircuitBreaker, CircuitBreakerTestHelper],
+    circuit_or_helper: CircuitBreaker | CircuitBreakerTestHelper,
 ) -> None:
     """Assert that a circuit breaker is half-open."""
     assert_circuit_state(circuit_or_helper, CircuitState.HALF_OPEN)
@@ -428,10 +431,8 @@ class TestScenarios:
         helper.wait_for_reset_timeout()
 
         # Next call should transition to half-open
-        try:
+        with contextlib.suppress(builtins.BaseException):
             helper.circuit.execute(lambda: "success")
-        except:
-            pass
         assert_circuit_half_open(helper)
 
         # Successful calls should close the circuit
@@ -452,7 +453,7 @@ class TestScenarios:
         # This should timeout and count as a failure
         try:
             helper.circuit.execute(slow_function)
-            assert False, "Should have timed out"
+            raise AssertionError("Should have timed out")
         except Exception:
             pass
 

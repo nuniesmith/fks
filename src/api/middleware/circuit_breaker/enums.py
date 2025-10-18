@@ -50,7 +50,7 @@ class CircuitState(Enum):
         return self == CircuitState.HALF_OPEN
 
     @property
-    def valid_next_states(self) -> Set["CircuitState"]:
+    def valid_next_states(self) -> set["CircuitState"]:
         """Get the valid states this state can transition to."""
         transitions = {
             CircuitState.CLOSED: {CircuitState.OPEN},

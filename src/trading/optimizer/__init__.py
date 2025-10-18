@@ -3,4 +3,4 @@
 
 from .engine import objective
 
-__all__ = ['objective']
+__all__ = ["objective"]

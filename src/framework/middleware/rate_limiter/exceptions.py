@@ -25,8 +25,8 @@ class RateLimitExceededError(RateLimitError):
         self,
         message: str,
         retry_after: float = 0,
-        limit: Optional[int] = None,
-        window: Optional[int] = None,
+        limit: int | None = None,
+        window: int | None = None,
     ):
         super().__init__(message)
         self.retry_after = retry_after

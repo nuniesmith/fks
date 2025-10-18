@@ -1,7 +1,8 @@
 import asyncio
 import functools
 import inspect
-from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, cast
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union, cast
 
 from framework.exceptions.api import SourceUnavailableError
 
@@ -19,13 +20,13 @@ def with_circuit_breaker(
     reset_timeout: float = 60.0,
     success_threshold: int = 2,
     timeout: float = 10.0,
-    excluded_exceptions: Optional[List[Type[Exception]]] = None,
+    excluded_exceptions: list[type[Exception]] | None = None,
     use_persistent_storage: bool = False,
     track_metrics: bool = True,
     max_state_history: int = 100,
     log_level_state_change: str = "INFO",
     log_level_failure: str = "ERROR",
-    storage_provider: Optional[str] = None,
+    storage_provider: str | None = None,
 ):
     """
     Decorator to apply circuit breaker pattern to a function.
@@ -112,7 +113,7 @@ def with_circuit_breaker(
                         result = await asyncio.wait_for(
                             func(*args, **kwargs), timeout=req_timeout
                         )
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         if config.track_metrics:
                             circuit.metrics.timeout_requests += 1
                         circuit._on_failure("persistent")

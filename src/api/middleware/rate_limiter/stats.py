@@ -28,14 +28,14 @@ class RateLimitStats:
     last_wait_time_ms: float = 0
 
     # Time series data (minute buckets)
-    requests_per_minute: List[Tuple[int, int]] = field(default_factory=list)
+    requests_per_minute: list[tuple[int, int]] = field(default_factory=list)
 
     # Creation timestamp
     created_at: float = field(default_factory=time.time)
 
     # Peak rate tracking
     peak_minute_rate: int = 0
-    peak_minute_timestamp: Optional[int] = None
+    peak_minute_timestamp: int | None = None
 
     # Recent activity tracking
     last_request_time: float = field(default_factory=time.time)
@@ -130,7 +130,7 @@ class RateLimitStats:
             return 0.0
         return self.total_requests / uptime
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert statistics to a dictionary.
 

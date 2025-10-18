@@ -14,27 +14,25 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import path, include
+
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.urls import include, path
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    
+    path("admin/", admin.site.urls),
     # Authentication URLs
-    path('auth/', include('authentication.urls')),  # ✅ Authentication endpoints
-    path('api-auth/', include('rest_framework.urls')),  # ✅ DRF browsable API auth
-    
+    path("auth/", include("authentication.urls")),  # ✅ Authentication endpoints
+    path("api-auth/", include("rest_framework.urls")),  # ✅ DRF browsable API auth
     # App URLs
     # path('trading/', include('trading.urls')),
     # path('forecasting/', include('forecasting.urls')),
     # path('chatbot/', include('chatbot.urls')),
     # path('rag/', include('rag.urls')),
     # path('api/', include('api.urls')),
-    
     # Web UI - must be last to catch root path
-    path('', include('web.urls')),  # ✅ Enabled
+    path("", include("web.urls")),  # ✅ Enabled
 ]
 
 # Serve media files in development

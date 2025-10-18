@@ -1,6 +1,7 @@
 """
 Dataset splitting helpers: create 80/10/10 time-based splits from managed CSVs.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,11 +10,11 @@ from typing import List, Optional, Tuple
 import pandas as pd
 from loguru import logger
 
-from .validation import compute_time_splits
 from .active_assets import csv_path_for
+from .validation import compute_time_splits
 
 
-def _dt_col(df: pd.DataFrame) -> Optional[str]:
+def _dt_col(df: pd.DataFrame) -> str | None:
     for c in df.columns:
         cl = str(c).lower()
         if "date" in cl or "time" in cl:
@@ -21,7 +22,9 @@ def _dt_col(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
-def split_managed_csv(source: str, symbol: str, interval: str, out_dir: Optional[Path] = None) -> List[Path]:
+def split_managed_csv(
+    source: str, symbol: str, interval: str, out_dir: Path | None = None
+) -> list[Path]:
     src = csv_path_for(source, symbol, interval)
     if not src.exists():
         return []
@@ -37,11 +40,13 @@ def split_managed_csv(source: str, symbol: str, interval: str, out_dir: Optional
         out_dir = src.parent / "splits"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_paths: List[Path] = []
+    out_paths: list[Path] = []
     for name, a, b in splits:
         part = df[(df[dcol] >= a) & (df[dcol] <= b)].copy()
         p = out_dir / f"{symbol.replace('/', '-')}_{interval}_{name}.csv"
         part.to_csv(p, index=False)
         out_paths.append(p)
-    logger.info(f"Wrote splits for {source}:{symbol}:{interval} -> {len(out_paths)} files")
+    logger.info(
+        f"Wrote splits for {source}:{symbol}:{interval} -> {len(out_paths)} files"
+    )
     return out_paths

@@ -21,8 +21,8 @@ class BaseException(Exception):
     def __init__(
         self,
         message: str,
-        details: Optional[Dict[str, Any]] = None,
-        code: Optional[int] = None,
+        details: dict[str, Any] | None = None,
+        code: int | None = None,
     ):
         """
         Initialize a BaseException instance.
@@ -51,7 +51,7 @@ class BaseException(Exception):
             base_message += f" | Details: {self.details}"
         return base_message
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the exception to a dictionary representation.
 
@@ -77,7 +77,7 @@ class FrameworkException(Exception):
         self,
         message: str = "",
         code: str = "FRAMEWORK_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new framework exception.
@@ -101,7 +101,7 @@ class FrameworkException(Exception):
         """
         return f"[{self.code}] {self.message}"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the exception to a dictionary.
 
@@ -125,7 +125,7 @@ class ValidationException(FrameworkException):
         self,
         message: str = "",
         code: str = "VALIDATION_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new validation exception.
@@ -153,8 +153,8 @@ class ComponentException(FrameworkException):
         self,
         message: str = "",
         code: str = "COMPONENT_ERROR",
-        details: Optional[Dict[str, Any]] = None,
-        component_id: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        component_id: str | None = None,
     ):
         """
         Initialize a new component exception.
@@ -188,8 +188,8 @@ class ServiceException(ComponentException):
         self,
         message: str = "",
         code: str = "SERVICE_ERROR",
-        details: Optional[Dict[str, Any]] = None,
-        service_id: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        service_id: str | None = None,
     ):
         """
         Initialize a new service exception.
@@ -217,7 +217,7 @@ class NotImplementedException(FrameworkException):
         self,
         message: str = "",
         code: str = "NOT_IMPLEMENTED",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new not implemented exception.
@@ -245,7 +245,7 @@ class AuthenticationError(FrameworkException):
         self,
         message: str = "",
         code: str = "AUTH_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new authentication exception.
@@ -273,8 +273,8 @@ class NotFoundError(FrameworkException):
         self,
         message: str = "",
         code: str = "NOT_FOUND",
-        details: Optional[Dict[str, Any]] = None,
-        resource: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        resource: str | None = None,
     ):
         """
         Initialize a new not found exception.
@@ -308,7 +308,7 @@ class ConfigurationException(FrameworkException):
         self,
         message: str = "",
         code: str = "CONFIG_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new configuration exception.
@@ -336,8 +336,8 @@ class ConfigurationSourceError(ConfigurationException):
         self,
         message: str = "",
         code: str = "CONFIG_SOURCE_ERROR",
-        details: Optional[Dict[str, Any]] = None,
-        source: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        source: str | None = None,
     ):
         """
         Initialize a new configuration source exception.
@@ -371,8 +371,8 @@ class ConfigurationValidationError(ConfigurationException):
         self,
         message: str = "",
         code: str = "CONFIG_VALIDATION_ERROR",
-        details: Optional[Dict[str, Any]] = None,
-        field: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        field: str | None = None,
     ):
         """
         Initialize a new configuration validation exception.

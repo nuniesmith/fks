@@ -11,11 +11,12 @@ import os
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from threading import Lock, RLock
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -121,7 +122,7 @@ class RateLimiter(ABC):
         pass
 
     @abstractmethod
-    def reset(self, client_id: Optional[str] = None) -> None:
+    def reset(self, client_id: str | None = None) -> None:
         """
         Reset rate limit data.
 
@@ -130,7 +131,7 @@ class RateLimiter(ABC):
         """
         pass
 
-    def get_limiter_stats(self) -> Dict[str, Any]:
+    def get_limiter_stats(self) -> dict[str, Any]:
         """Get overall limiter statistics."""
         return {
             "identifier": self.identifier,
@@ -156,7 +157,7 @@ class TokenBucketRateLimiter(RateLimiter):
         self, requests: int, window_seconds: int, identifier: str = "token_bucket"
     ):
         super().__init__(requests, window_seconds, identifier)
-        self.buckets: Dict[str, Dict[str, float]] = defaultdict(
+        self.buckets: dict[str, dict[str, float]] = defaultdict(
             lambda: {"tokens": float(requests), "last_refill": time.time()}
         )
         self.refill_rate = requests / window_seconds  # tokens per second
@@ -213,7 +214,7 @@ class TokenBucketRateLimiter(RateLimiter):
                 total_requests=self.requests,
             )
 
-    def reset(self, client_id: Optional[str] = None) -> None:
+    def reset(self, client_id: str | None = None) -> None:
         """Reset bucket data."""
         with self._lock:
             if client_id:
@@ -230,7 +231,7 @@ class SlidingWindowRateLimiter(RateLimiter):
         self, requests: int, window_seconds: int, identifier: str = "sliding_window"
     ):
         super().__init__(requests, window_seconds, identifier)
-        self.windows: Dict[str, deque] = defaultdict(lambda: deque())
+        self.windows: dict[str, deque] = defaultdict(lambda: deque())
 
     def _clean_window(self, client_id: str) -> None:
         """Remove old requests from the sliding window."""
@@ -278,7 +279,7 @@ class SlidingWindowRateLimiter(RateLimiter):
                 total_requests=self.requests,
             )
 
-    def reset(self, client_id: Optional[str] = None) -> None:
+    def reset(self, client_id: str | None = None) -> None:
         """Reset window data."""
         with self._lock:
             if client_id:
@@ -296,7 +297,7 @@ class FixedWindowRateLimiter(RateLimiter):
         self, requests: int, window_seconds: int, identifier: str = "fixed_window"
     ):
         super().__init__(requests, window_seconds, identifier)
-        self.windows: Dict[str, Dict[str, Union[int, float]]] = defaultdict(
+        self.windows: dict[str, dict[str, int | float]] = defaultdict(
             lambda: {"count": 0, "window_start": self._get_current_window()}
         )
 
@@ -350,7 +351,7 @@ class FixedWindowRateLimiter(RateLimiter):
                 total_requests=self.requests,
             )
 
-    def reset(self, client_id: Optional[str] = None) -> None:
+    def reset(self, client_id: str | None = None) -> None:
         """Reset window data."""
         with self._lock:
             current_window = self._get_current_window()
@@ -370,7 +371,7 @@ class RateLimiterRegistry:
     """Registry for managing multiple rate limiters."""
 
     def __init__(self):
-        self.limiters: Dict[str, RateLimiter] = {}
+        self.limiters: dict[str, RateLimiter] = {}
         self._lock = Lock()
 
     def register(self, name: str, limiter: RateLimiter) -> None:
@@ -400,12 +401,12 @@ class RateLimiterRegistry:
                 return True
             return False
 
-    def list_limiters(self) -> List[str]:
+    def list_limiters(self) -> list[str]:
         """Get list of registered limiter names."""
         with self._lock:
             return list(self.limiters.keys())
 
-    def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get statistics for all limiters."""
         with self._lock:
             return {
@@ -489,12 +490,12 @@ class ClientIdentifier:
         return "unknown"
 
     @staticmethod
-    def get_api_key(request: Request, header_name: str = "X-API-Key") -> Optional[str]:
+    def get_api_key(request: Request, header_name: str = "X-API-Key") -> str | None:
         """Get API key from request headers."""
         return request.headers.get(header_name)
 
     @staticmethod
-    def get_user_id(request: Request) -> Optional[str]:
+    def get_user_id(request: Request) -> str | None:
         """Get user ID from authenticated request."""
         # Try to get from request state (set by auth middleware)
         user_info = getattr(request.state, "user", None)
@@ -509,7 +510,7 @@ class ClientIdentifier:
         return None
 
     @staticmethod
-    def create_composite_id(request: Request, components: List[str]) -> str:
+    def create_composite_id(request: Request, components: list[str]) -> str:
         """Create a composite client ID from multiple components."""
         id_parts = []
 
@@ -541,13 +542,13 @@ class RateLimitConfig:
     requests: int = 100
     window_seconds: int = 60
     algorithm: RateLimitAlgorithm = RateLimitAlgorithm.TOKEN_BUCKET
-    client_id_components: List[str] = field(default_factory=lambda: ["ip"])
-    exclude_paths: List[str] = field(
+    client_id_components: list[str] = field(default_factory=lambda: ["ip"])
+    exclude_paths: list[str] = field(
         default_factory=lambda: ["/health", "/docs", "/openapi.json"]
     )
     api_key_header: str = "X-API-Key"
     api_key_multiplier: float = 5.0  # API key users get 5x limit
-    custom_limits: Dict[str, Tuple[int, int]] = field(
+    custom_limits: dict[str, tuple[int, int]] = field(
         default_factory=dict
     )  # path -> (requests, window)
     enable_headers: bool = True  # Include rate limit headers in response
@@ -568,7 +569,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     - Error resilience
     """
 
-    def __init__(self, app: ASGIApp, config: Optional[RateLimitConfig] = None):
+    def __init__(self, app: ASGIApp, config: RateLimitConfig | None = None):
         """
         Initialize rate limiting middleware.
 
@@ -636,7 +637,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             request, self.config.client_id_components
         )
 
-    def _get_limiter_for_request(self, request: Request) -> Tuple[RateLimiter, str]:
+    def _get_limiter_for_request(self, request: Request) -> tuple[RateLimiter, str]:
         """Determine which rate limiter to use for the request."""
         path = request.url.path
 
@@ -774,7 +775,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     content={"error": "Rate limiting service unavailable"},
                 )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get middleware statistics."""
         with self._stats_lock:
             middleware_stats = self.stats.copy()

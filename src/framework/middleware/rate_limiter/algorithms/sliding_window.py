@@ -34,7 +34,7 @@ class SlidingWindowAlgorithm(RateLimitAlgorithm):
         """
         super().__init__(max_requests, time_window, name)
 
-    def _get_client_data(self, client_id: str) -> Dict[str, Any]:
+    def _get_client_data(self, client_id: str) -> dict[str, Any]:
         """Get or initialize sliding window data for a client."""
         if client_id not in self._client_data:
             current_time = time.time()
@@ -44,7 +44,7 @@ class SlidingWindowAlgorithm(RateLimitAlgorithm):
             }
         return self._client_data[client_id]
 
-    def _clean_window(self, requests: Deque[float], current_time: float) -> None:
+    def _clean_window(self, requests: deque[float], current_time: float) -> None:
         """Remove requests that fall outside the current time window."""
         cutoff_time = current_time - self.time_window
 
@@ -107,7 +107,7 @@ class SlidingWindowAlgorithm(RateLimitAlgorithm):
 
         return False
 
-    def get_window_info(self, client_id: str) -> Dict[str, Any]:
+    def get_window_info(self, client_id: str) -> dict[str, Any]:
         """
         Get detailed window information for a client.
 
@@ -132,10 +132,7 @@ class SlidingWindowAlgorithm(RateLimitAlgorithm):
                 window_span = newest_request - oldest_request
 
                 # Calculate requests per second in current window
-                if window_span > 0:
-                    current_rate = len(requests) / window_span
-                else:
-                    current_rate = 0.0
+                current_rate = len(requests) / window_span if window_span > 0 else 0.0
             else:
                 oldest_request = None
                 newest_request = None

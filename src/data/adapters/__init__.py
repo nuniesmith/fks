@@ -1,12 +1,14 @@
 """Adapter registry/factory."""
+
 from __future__ import annotations
 
 from typing import Dict, Type
+
 from .base import APIAdapter
 from .binance import BinanceAdapter
 from .polygon import PolygonAdapter
 
-_ADAPTERS: Dict[str, Type[APIAdapter]] = {
+_ADAPTERS: dict[str, type[APIAdapter]] = {
     BinanceAdapter.name: BinanceAdapter,
     PolygonAdapter.name: PolygonAdapter,
 }

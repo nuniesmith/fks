@@ -100,7 +100,7 @@ ConfigManager = FKSConfigManager
 
 
 def create_config_manager(
-    config_path: Optional[Union[str, Path]] = None,
+    config_path: str | Path | None = None,
     env_prefix: str = "FKS_",
     watch_changes: bool = True,
     **kwargs,
@@ -136,9 +136,9 @@ def create_config_manager(
 
 
 def load_config(
-    sources: Union[str, Path, List[Union[str, Path, ConfigSource]]],
+    sources: str | Path | list[str | Path | ConfigSource],
     env_prefix: str = "FKS_",
-    base_dir: Optional[Path] = None,
+    base_dir: Path | None = None,
     apply_defaults: bool = True,
 ) -> Config:
     """
@@ -163,10 +163,7 @@ def load_config(
         sources = [sources]
 
     # Start with defaults if requested
-    if apply_defaults:
-        merged_config = get_default_config()
-    else:
-        merged_config = {}
+    merged_config = get_default_config() if apply_defaults else {}
 
     # Load from all sources
     source_config = provider_registry.load_multiple(sources)
@@ -183,7 +180,7 @@ def load_config(
     return config
 
 
-def load_config_from_env(prefix: str = "FKS_") -> Dict[str, Any]:
+def load_config_from_env(prefix: str = "FKS_") -> dict[str, Any]:
     """
     Load configuration from environment variables only.
 
@@ -234,7 +231,7 @@ def get_default_config_path() -> Path:
     return Path.cwd() / "config" / "config.yaml"
 
 
-def validate_config(config: Union[Config, Dict[str, Any]]) -> ValidationResult:
+def validate_config(config: Config | dict[str, Any]) -> ValidationResult:
     """
     Validate configuration object.
 
@@ -261,7 +258,7 @@ def validate_config(config: Union[Config, Dict[str, Any]]) -> ValidationResult:
     return result
 
 
-def setup_logging_from_config(config: Union[Config, LoggingConfig]) -> None:
+def setup_logging_from_config(config: Config | LoggingConfig) -> None:
     """
     Set up logging from configuration.
 
@@ -273,10 +270,7 @@ def setup_logging_from_config(config: Union[Config, LoggingConfig]) -> None:
     """
     from loguru import logger
 
-    if isinstance(config, Config):
-        logging_config = config.logging
-    else:
-        logging_config = config
+    logging_config = config.logging if isinstance(config, Config) else config
 
     if not logging_config:
         return
@@ -299,7 +293,7 @@ def setup_logging_from_config(config: Union[Config, LoggingConfig]) -> None:
         )
 
 
-def create_config_from_dict(data: Dict[str, Any]) -> Config:
+def create_config_from_dict(data: dict[str, Any]) -> Config:
     """
     Create a Config object from a dictionary.
 
@@ -376,34 +370,7 @@ def create_default_config() -> Config:
     return config
 
 
-def is_production() -> bool:
-    """
-    Check if running in production environment.
-
-    Returns:
-        True if in production environment
-    """
-    return APP_ENV == AppEnvironment.PRODUCTION
-
-
-def is_development() -> bool:
-    """
-    Check if running in development environment.
-
-    Returns:
-        True if in development environment
-    """
-    return APP_ENV == AppEnvironment.DEVELOPMENT
-
-
-def is_testing() -> bool:
-    """
-    Check if running in testing environment.
-
-    Returns:
-        True if in testing environment
-    """
-    return APP_ENV == AppEnvironment.TESTING
+# Functions is_production, is_development, and is_testing are imported from .constants above
 
 
 # Export all public symbols

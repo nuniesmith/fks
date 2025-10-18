@@ -4,28 +4,29 @@ Combines document processing, embeddings, retrieval, and LLM generation.
 Supports both OpenAI API and local CUDA-accelerated models.
 """
 
-from typing import List, Dict, Any, Optional
 from datetime import datetime
-from openai import OpenAI
+from typing import Any, Dict, List, Optional
 
-from database import Session, Document, DocumentChunk, QueryHistory
-from rag.document_processor import DocumentProcessor
-from rag.embeddings import EmbeddingsService
-from rag.retrieval import RetrievalService
+from core.database import Session, Document, DocumentChunk, QueryHistory
+from web.rag.document_processor import DocumentProcessor
+from web.rag.embeddings import EmbeddingsService
+from web.rag.retrieval import RetrievalService
 from framework.config.constants import OPENAI_API_KEY
 
 
 class FKSIntelligence:
     """Main RAG system for FKS trading intelligence"""
-    
-    def __init__(self,
-                 openai_model: str = "gpt-4o-mini",
-                 embedding_model: str = "all-MiniLM-L6-v2",
-                 use_local: bool = True,
-                 local_llm_model: str = "llama3.2:3b"):
+
+    def __init__(
+        self,
+        openai_model: str = "gpt-4o-mini",
+        embedding_model: str = "all-MiniLM-L6-v2",
+        use_local: bool = True,
+        local_llm_model: str = "llama3.2:3b",
+    ):
         """
         Initialize FKS Intelligence.
-        
+
         Args:
             openai_model: OpenAI model for generation (fallback)
             embedding_model: Model for embeddings (local or OpenAI)
@@ -35,57 +36,55 @@ class FKSIntelligence:
         self.openai_model = openai_model
         self.use_local = use_local
         self.local_llm_model = local_llm_model
-        
+
         # Initialize RAG components
         self.processor = DocumentProcessor()
-        self.embeddings = EmbeddingsService(
-            model=embedding_model,
-            use_local=use_local
-        )
+        self.embeddings = EmbeddingsService(model=embedding_model, use_local=use_local)
         self.retrieval = RetrievalService(embeddings_service=self.embeddings)
-        
+
         # Initialize LLM
         if use_local:
             self._init_local_llm()
         else:
             self._init_openai()
-    
+
     def _init_local_llm(self):
         """Initialize local LLM"""
         try:
-            from rag.local_llm import create_local_llm
+            from web.rag.local_llm import create_local_llm
             
             self.llm = create_local_llm(
-                model_name=self.local_llm_model,
-                backend="ollama"
+                model_name=self.local_llm_model, backend="ollama"
             )
             print(f"✓ Using local LLM: {self.local_llm_model}")
-            
+
         except Exception as e:
             print(f"⚠ Local LLM not available: {e}")
             print("  Falling back to OpenAI...")
             self.use_local = False
             self._init_openai()
-    
+
     def _init_openai(self):
         """Initialize OpenAI client"""
         if not OPENAI_API_KEY:
             raise ValueError("OpenAI API key not set and local LLM not available")
-        
+
         self.client = OpenAI(api_key=OPENAI_API_KEY)
         print(f"✓ Using OpenAI: {self.openai_model}")
-    
-    def ingest_document(self,
-                       content: str,
-                       doc_type: str,
-                       title: Optional[str] = None,
-                       symbol: Optional[str] = None,
-                       timeframe: Optional[str] = None,
-                       metadata: Optional[Dict[str, Any]] = None,
-                       session: Optional[Session] = None) -> int:
+
+    def ingest_document(
+        self,
+        content: str,
+        doc_type: str,
+        title: str | None = None,
+        symbol: str | None = None,
+        timeframe: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        session: Session | None = None,
+    ) -> int:
         """
         Ingest a document into the knowledge base.
-        
+
         Args:
             content: Document content
             doc_type: Type of document
@@ -94,7 +93,7 @@ class FKSIntelligence:
             timeframe: Timeframe
             metadata: Additional metadata
             session: SQLAlchemy session
-            
+
         Returns:
             Document ID
         """
@@ -102,55 +101,54 @@ class FKSIntelligence:
         if session is None:
             session = Session()
             should_close = True
-        
+
         try:
             # Create document
             doc = Document(
                 doc_type=doc_type,
-                title=title or f"{doc_type} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                title=title
+                or f"{doc_type} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 content=content,
                 symbol=symbol,
                 timeframe=timeframe,
-                metadata=metadata or {}
+                metadata=metadata or {},
             )
             session.add(doc)
             session.flush()  # Get document ID
-            
+
             # Chunk document
-            chunks = self.processor.chunk_text(content, metadata={'doc_id': doc.id})
-            
+            chunks = self.processor.chunk_text(content, metadata={"doc_id": doc.id})
+
             # Create chunk records and generate embeddings
             chunk_texts = []
             chunk_records = []
-            
+
             for chunk in chunks:
                 chunk_record = DocumentChunk(
                     document_id=doc.id,
                     chunk_index=chunk.chunk_index,
                     content=chunk.content,
                     token_count=chunk.token_count,
-                    metadata=chunk.metadata
+                    metadata=chunk.metadata,
                 )
                 session.add(chunk_record)
                 chunk_records.append(chunk_record)
                 chunk_texts.append(chunk.content)
-            
+
             session.flush()  # Get chunk IDs
-            
+
             # Generate embeddings in batch
             embeddings = self.embeddings.generate_embeddings_batch(chunk_texts)
-            
+
             # Store embeddings
-            for chunk_record, embedding in zip(chunk_records, embeddings):
+            for chunk_record, embedding in zip(chunk_records, embeddings, strict=False):
                 self.embeddings.store_chunk_embedding(
-                    chunk_id=chunk_record.id,
-                    embedding=embedding,
-                    session=session
+                    chunk_id=chunk_record.id, embedding=embedding, session=session
                 )
-            
+
             session.commit()
             return doc.id
-            
+
         except Exception as e:
             print(f"Error ingesting document: {e}")
             session.rollback()
@@ -158,118 +156,114 @@ class FKSIntelligence:
         finally:
             if should_close:
                 session.close()
-    
-    def query(self,
-             question: str,
-             symbol: Optional[str] = None,
-             doc_types: Optional[List[str]] = None,
-             top_k: int = 5,
-             session: Optional[Session] = None) -> Dict[str, Any]:
+
+    def query(
+        self,
+        question: str,
+        symbol: str | None = None,
+        doc_types: list[str] | None = None,
+        top_k: int = 5,
+        session: Session | None = None,
+    ) -> dict[str, Any]:
         """
         Query the knowledge base and generate a response.
-        
+
         Args:
             question: User question
             symbol: Filter by trading pair
             doc_types: Filter by document types
             top_k: Number of context chunks to retrieve
             session: SQLAlchemy session
-            
+
         Returns:
             Response dictionary with answer, sources, and metadata
         """
         start_time = datetime.now()
-        
+
         should_close = False
         if session is None:
             session = Session()
             should_close = True
-        
+
         try:
             # Build filters
             filters = {}
             if symbol:
-                filters['symbol'] = symbol
-            
+                filters["symbol"] = symbol
+
             # Retrieve context
             all_results = []
-            
+
             if doc_types:
                 for doc_type in doc_types:
-                    filters['doc_type'] = doc_type
+                    filters["doc_type"] = doc_type
                     results = self.retrieval.retrieve_context(
-                        query=question,
-                        top_k=top_k,
-                        filters=filters,
-                        session=session
+                        query=question, top_k=top_k, filters=filters, session=session
                     )
                     all_results.extend(results)
             else:
                 all_results = self.retrieval.retrieve_context(
-                    query=question,
-                    top_k=top_k,
-                    filters=filters,
-                    session=session
+                    query=question, top_k=top_k, filters=filters, session=session
                 )
-            
+
             # Re-rank results
             ranked_results = self.retrieval.rerank_results(
-                query=question,
-                results=all_results,
-                method='hybrid'
+                query=question, results=all_results, method="hybrid"
             )[:top_k]
-            
+
             # Format context
             context = self.retrieval.format_context_for_prompt(ranked_results)
-            
+
             # Generate response
             response = self._generate_response(question, context)
-            
+
             # Calculate response time
             response_time = int((datetime.now() - start_time).total_seconds() * 1000)
-            
+
             # Log query
             self._log_query(
                 query=question,
                 response=response,
                 retrieved_chunks=ranked_results,
                 response_time=response_time,
-                session=session
+                session=session,
             )
-            
+
             return {
-                'answer': response,
-                'sources': ranked_results,
-                'context_used': len(ranked_results),
-                'response_time_ms': response_time,
-                'timestamp': datetime.now().isoformat()
+                "answer": response,
+                "sources": ranked_results,
+                "context_used": len(ranked_results),
+                "response_time_ms": response_time,
+                "timestamp": datetime.now().isoformat(),
             }
-            
+
         except Exception as e:
             print(f"Error processing query: {e}")
             return {
-                'answer': f"Error processing query: {str(e)}",
-                'sources': [],
-                'context_used': 0,
-                'response_time_ms': 0,
-                'timestamp': datetime.now().isoformat()
+                "answer": f"Error processing query: {str(e)}",
+                "sources": [],
+                "context_used": 0,
+                "response_time_ms": 0,
+                "timestamp": datetime.now().isoformat(),
             }
         finally:
             if should_close:
                 session.close()
-    
-    def suggest_strategy(self,
-                        symbol: str,
-                        market_condition: Optional[str] = None,
-                        session: Optional[Session] = None) -> Dict[str, Any]:
+
+    def suggest_strategy(
+        self,
+        symbol: str,
+        market_condition: str | None = None,
+        session: Session | None = None,
+    ) -> dict[str, Any]:
         """
         Suggest trading strategy based on historical data.
-        
+
         Args:
             symbol: Trading pair
             market_condition: Current market condition (e.g., 'trending', 'ranging')
             session: SQLAlchemy session
-            
+
         Returns:
             Strategy suggestion with reasoning
         """
@@ -278,26 +272,26 @@ class FKSIntelligence:
         if market_condition:
             query += f" in {market_condition} market conditions"
         query += " based on past performance and signals."
-        
+
         # Use specialized doc types
         return self.query(
             question=query,
             symbol=symbol,
-            doc_types=['backtest', 'signal', 'strategy', 'trade_analysis'],
+            doc_types=["backtest", "signal", "strategy", "trade_analysis"],
             top_k=7,
-            session=session
+            session=session,
         )
-    
-    def analyze_past_trades(self,
-                           symbol: Optional[str] = None,
-                           session: Optional[Session] = None) -> Dict[str, Any]:
+
+    def analyze_past_trades(
+        self, symbol: str | None = None, session: Session | None = None
+    ) -> dict[str, Any]:
         """
         Analyze past trading performance.
-        
+
         Args:
             symbol: Trading pair to analyze
             session: SQLAlchemy session
-            
+
         Returns:
             Analysis with insights
         """
@@ -305,52 +299,56 @@ class FKSIntelligence:
         if symbol:
             query += f" for {symbol}"
         query += "? What mistakes were made and what strategies worked well?"
-        
+
         return self.query(
             question=query,
             symbol=symbol,
-            doc_types=['trade_analysis', 'backtest', 'insight'],
+            doc_types=["trade_analysis", "backtest", "insight"],
             top_k=10,
-            session=session
+            session=session,
         )
-    
-    def explain_signal(self,
-                      symbol: str,
-                      current_indicators: Dict[str, float],
-                      session: Optional[Session] = None) -> Dict[str, Any]:
+
+    def explain_signal(
+        self,
+        symbol: str,
+        current_indicators: dict[str, float],
+        session: Session | None = None,
+    ) -> dict[str, Any]:
         """
         Explain a trading signal based on historical context.
-        
+
         Args:
             symbol: Trading pair
             current_indicators: Current technical indicators
             session: SQLAlchemy session
-            
+
         Returns:
             Signal explanation with context
         """
         # Format indicators
-        indicators_str = ", ".join([f"{k}={v:.2f}" for k, v in current_indicators.items()])
-        
+        indicators_str = ", ".join(
+            [f"{k}={v:.2f}" for k, v in current_indicators.items()]
+        )
+
         query = f"For {symbol}, given current indicators: {indicators_str}, "
         query += "what trading action is recommended based on historical signals and performance?"
-        
+
         return self.query(
             question=query,
             symbol=symbol,
-            doc_types=['signal', 'backtest', 'strategy'],
+            doc_types=["signal", "backtest", "strategy"],
             top_k=5,
-            session=session
+            session=session,
         )
-    
+
     def _generate_response(self, question: str, context: str) -> str:
         """
         Generate response using local LLM or OpenAI with retrieved context.
-        
+
         Args:
             question: User question
             context: Retrieved context
-            
+
         Returns:
             Generated response
         """
@@ -383,19 +381,17 @@ Please provide a comprehensive answer based on the context above."""
             return self._generate_local(user_prompt, system_prompt)
         else:
             return self._generate_openai(user_prompt, system_prompt)
-    
+
     def _generate_local(self, prompt: str, system_prompt: str) -> str:
         """Generate response using local LLM"""
         try:
             response = self.llm.generate(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                max_tokens=1000
+                prompt=prompt, system_prompt=system_prompt, max_tokens=1000
             )
             return response
         except Exception as e:
             return f"Error generating response: {str(e)}"
-    
+
     def _generate_openai(self, prompt: str, system_prompt: str) -> str:
         """Generate response using OpenAI"""
         try:
@@ -403,40 +399,42 @@ Please provide a comprehensive answer based on the context above."""
                 model=self.openai_model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.7,
-                max_tokens=1000
+                max_tokens=1000,
             )
-            
+
             return response.choices[0].message.content
-            
+
         except Exception as e:
             return f"Error generating response: {str(e)}"
-    
-    def _log_query(self,
-                   query: str,
-                   response: str,
-                   retrieved_chunks: List[Dict[str, Any]],
-                   response_time: int,
-                   session: Session):
+
+    def _log_query(
+        self,
+        query: str,
+        response: str,
+        retrieved_chunks: list[dict[str, Any]],
+        response_time: int,
+        session: Session,
+    ):
         """Log query to database"""
         try:
             log_entry = QueryHistory(
                 query=query,
                 response=response,
                 retrieved_chunks={
-                    'chunks': [
+                    "chunks": [
                         {
-                            'chunk_id': chunk.get('chunk_id'),
-                            'similarity': chunk.get('similarity'),
-                            'doc_type': chunk.get('doc_type')
+                            "chunk_id": chunk.get("chunk_id"),
+                            "similarity": chunk.get("similarity"),
+                            "doc_type": chunk.get("doc_type"),
                         }
                         for chunk in retrieved_chunks
                     ]
                 },
                 model_used=self.openai_model,
-                response_time_ms=response_time
+                response_time_ms=response_time,
             )
             session.add(log_entry)
             session.commit()
@@ -445,22 +443,24 @@ Please provide a comprehensive answer based on the context above."""
 
 
 # Convenience function
-def create_intelligence(use_local: bool = True,
-                       local_llm_model: str = "llama3.2:3b",
-                       embedding_model: str = "all-MiniLM-L6-v2") -> FKSIntelligence:
+def create_intelligence(
+    use_local: bool = True,
+    local_llm_model: str = "llama3.2:3b",
+    embedding_model: str = "all-MiniLM-L6-v2",
+) -> FKSIntelligence:
     """
     Create FKS Intelligence instance with local or OpenAI models.
-    
+
     Args:
         use_local: Use local CUDA-accelerated models (default: True)
         local_llm_model: Ollama model name (e.g., "llama3.2:3b", "mistral:7b")
         embedding_model: Embedding model name
-        
+
     Returns:
         FKSIntelligence instance
     """
     return FKSIntelligence(
         use_local=use_local,
         local_llm_model=local_llm_model,
-        embedding_model=embedding_model
+        embedding_model=embedding_model,
     )

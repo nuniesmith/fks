@@ -14,7 +14,7 @@ class TradingSignal:
     quantity: float
     confidence: float
     reason: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     timestamp: datetime
 
 
@@ -42,7 +42,7 @@ class MarketEvent:
     """Market event placeholder."""
 
     event_type: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
 
 
 class StrategyState(Enum):
@@ -56,7 +56,7 @@ class StrategyState(Enum):
 class BaseStrategy(ABC):
     """Base class for all trading strategies"""
 
-    def __init__(self, strategy_id: str, config: Dict[str, Any]):
+    def __init__(self, strategy_id: str, config: dict[str, Any]):
         self.strategy_id = strategy_id
         self.config = config
         self.is_active = True
@@ -64,11 +64,11 @@ class BaseStrategy(ABC):
         self.metrics = StrategyMetrics(strategy_id=strategy_id)
 
     @abstractmethod
-    async def analyze(self, market_data: MarketData) -> Optional[TradingSignal]:
+    async def analyze(self, market_data: MarketData) -> TradingSignal | None:
         """Analyze market data and generate signal"""
         pass
 
-    async def process(self, event: MarketEvent) -> Optional[TradingSignal]:
+    async def process(self, event: MarketEvent) -> TradingSignal | None:
         """Process event with pre/post processing"""
         # Pre-process
         if not await self.should_process(event):

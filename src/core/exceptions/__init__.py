@@ -4,7 +4,8 @@ Core exceptions for FKS project.
 Consolidates exceptions from across the application into a centralized module.
 All application-specific exceptions should inherit from FKSException.
 """
-from typing import Optional, Dict, Any
+
+from typing import Any, Dict, Optional
 
 
 class FKSException(Exception):
@@ -13,12 +14,12 @@ class FKSException(Exception):
     def __init__(
         self,
         message: str,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize exception.
-        
+
         Args:
             message: Human-readable error message
             code: Error code for programmatic handling
@@ -29,7 +30,7 @@ class FKSException(Exception):
         self.details = details or {}
         super().__init__(message)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary format."""
         return {
             "error": self.__class__.__name__,
@@ -41,103 +42,124 @@ class FKSException(Exception):
 
 # Data-related exceptions
 
+
 class DataError(FKSException):
     """Base class for data-related errors."""
+
     pass
 
 
 class DataFetchError(DataError):
     """Error fetching data from external source."""
+
     pass
 
 
 class DataValidationError(DataError):
     """Error validating data."""
+
     pass
 
 
 class DataStorageError(DataError):
     """Error storing or retrieving data."""
+
     pass
 
 
 # Trading-related exceptions
 
+
 class TradingError(FKSException):
     """Base class for trading-related errors."""
+
     pass
 
 
 class SignalError(TradingError):
     """Error generating or processing trading signal."""
+
     pass
 
 
 class StrategyError(TradingError):
     """Error in strategy execution."""
+
     pass
 
 
 class BacktestError(TradingError):
     """Error during backtesting."""
+
     pass
 
 
 class OrderError(TradingError):
     """Error placing or managing order."""
+
     pass
 
 
 # Model/ML-related exceptions
 
+
 class ModelError(FKSException):
     """Base class for machine learning model errors."""
+
     pass
 
 
 class ModelTrainingError(ModelError):
     """Error during model training."""
+
     pass
 
 
 class ModelPredictionError(ModelError):
     """Error during model prediction."""
+
     pass
 
 
 class ModelNotFoundError(ModelError):
     """Model not found in registry."""
+
     pass
 
 
 # Configuration exceptions
 
+
 class ConfigError(FKSException):
     """Base class for configuration errors."""
+
     pass
 
 
 class ConfigValidationError(ConfigError):
     """Configuration validation failed."""
+
     pass
 
 
 class ConfigNotFoundError(ConfigError):
     """Configuration key not found."""
+
     pass
 
 
 # API/HTTP exceptions
 
+
 class ApplicationError(FKSException):
     """Base class for application-specific HTTP errors."""
-    
+
     def __init__(
         self,
         message: str,
         status_code: int = 500,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         """Initialize with HTTP status code."""
         super().__init__(message, code, details)
@@ -186,8 +208,10 @@ class ConflictError(ApplicationError):
 
 # Circuit breaker exceptions
 
+
 class CircuitBreakerError(FKSException):
     """Base class for circuit breaker errors."""
+
     pass
 
 
@@ -197,7 +221,7 @@ class CircuitOpenError(CircuitBreakerError):
     def __init__(
         self,
         message: str = "Circuit breaker is open",
-        circuit_name: Optional[str] = None,
+        circuit_name: str | None = None,
         **kwargs
     ):
         """Initialize with circuit information."""
@@ -208,22 +232,27 @@ class CircuitOpenError(CircuitBreakerError):
 
 class StateTransitionError(CircuitBreakerError):
     """Error during circuit breaker state transition."""
+
     pass
 
 
 # Worker/Task exceptions
 
+
 class TaskError(FKSException):
     """Base class for asynchronous task errors."""
+
     pass
 
 
 class EnsembleError(TaskError):
     """Error in ensemble model execution."""
+
     pass
 
 
 # Rate limiting exceptions
+
 
 class RateLimitError(FKSException):
     """Rate limit exceeded."""
@@ -231,7 +260,7 @@ class RateLimitError(FKSException):
     def __init__(
         self,
         message: str = "Rate limit exceeded",
-        retry_after: Optional[int] = None,
+        retry_after: int | None = None,
         **kwargs
     ):
         """Initialize with retry information."""
@@ -242,30 +271,37 @@ class RateLimitError(FKSException):
 
 # Database exceptions
 
+
 class DatabaseError(FKSException):
     """Base class for database errors."""
+
     pass
 
 
 class ConnectionError(DatabaseError):
     """Database connection error."""
+
     pass
 
 
 class QueryError(DatabaseError):
     """Database query error."""
+
     pass
 
 
 # Authentication/Authorization exceptions
 
+
 class AuthenticationError(FKSException):
     """Authentication failed."""
+
     pass
 
 
 class AuthorizationError(FKSException):
     """Authorization/permission denied."""
+
     pass
 
 

@@ -13,7 +13,7 @@ from .exceptions import RateLimitConfigError, RateLimitRegistryError
 from .policies import RateLimitPolicy
 
 # Global registry of rate limiters
-_RATE_LIMITERS: Dict[str, RateLimiter] = {}
+_RATE_LIMITERS: dict[str, RateLimiter] = {}
 _REGISTRY_LOCK = threading.RLock()
 _REGISTRY_STATS = {
     "created_at": time.time(),
@@ -51,7 +51,7 @@ def get_or_create_rate_limiter(
     max_requests: int = 100,
     time_window: int = 60,
     algorithm: str = "token_bucket",
-    policy: Union[str, RateLimitPolicy] = RateLimitPolicy.WAIT,
+    policy: str | RateLimitPolicy = RateLimitPolicy.WAIT,
     **kwargs,
 ) -> RateLimiter:
     """
@@ -82,7 +82,7 @@ def register_rate_limiter(
     max_requests: int,
     time_window: int = 60,
     algorithm: str = "token_bucket",
-    policy: Union[str, RateLimitPolicy] = RateLimitPolicy.WAIT,
+    policy: str | RateLimitPolicy = RateLimitPolicy.WAIT,
     force_replace: bool = False,
     **kwargs,
 ) -> RateLimiter:
@@ -180,7 +180,7 @@ def unregister_rate_limiter(name: str, force: bool = False) -> None:
         logger.info(f"Unregistered rate limiter '{name}'")
 
 
-def list_rate_limiters() -> List[str]:
+def list_rate_limiters() -> list[str]:
     """
     Get a list of all registered rate limiter names.
 
@@ -191,7 +191,7 @@ def list_rate_limiters() -> List[str]:
         return sorted(_RATE_LIMITERS.keys())
 
 
-def get_all_stats() -> Dict[str, Dict[str, Any]]:
+def get_all_stats() -> dict[str, dict[str, Any]]:
     """
     Get statistics for all registered rate limiters.
 
@@ -289,7 +289,7 @@ def clear_registry(confirm: bool = False) -> None:
         )
 
 
-def get_registry_stats() -> Dict[str, Any]:
+def get_registry_stats() -> dict[str, Any]:
     """
     Get statistics about the registry itself.
 
@@ -325,7 +325,7 @@ def exists(name: str) -> bool:
         return name in _RATE_LIMITERS
 
 
-def find_limiters_by_algorithm(algorithm: str) -> List[str]:
+def find_limiters_by_algorithm(algorithm: str) -> list[str]:
     """
     Find all rate limiters using a specific algorithm.
 
@@ -349,7 +349,7 @@ def find_limiters_by_algorithm(algorithm: str) -> List[str]:
     return matching_limiters
 
 
-def find_limiters_by_policy(policy: Union[str, RateLimitPolicy]) -> List[str]:
+def find_limiters_by_policy(policy: str | RateLimitPolicy) -> list[str]:
     """
     Find all rate limiters using a specific policy.
 

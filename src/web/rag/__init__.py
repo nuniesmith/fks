@@ -13,13 +13,13 @@ Components:
 
 Usage:
     from rag.intelligence import FKSIntelligence
-    
+
     intelligence = FKSIntelligence()
-    
+
     # Query knowledge base
     result = intelligence.query("What strategy works best for BTCUSDT?")
     print(result['answer'])
-    
+
     # Ingest trading data
     intelligence.ingest_document(
         content="Trade analysis...",
@@ -28,23 +28,23 @@ Usage:
     )
 """
 
-from rag.intelligence import FKSIntelligence, create_intelligence
 from rag.document_processor import DocumentProcessor, create_processor
 from rag.embeddings import EmbeddingsService, create_embeddings_service
-from rag.retrieval import RetrievalService, create_retrieval_service
 from rag.ingestion import DataIngestionPipeline, create_ingestion_pipeline
+from rag.intelligence import FKSIntelligence, create_intelligence
+from rag.retrieval import RetrievalService, create_retrieval_service
 
 __all__ = [
-    'FKSIntelligence',
-    'create_intelligence',
-    'DocumentProcessor',
-    'create_processor',
-    'EmbeddingsService',
-    'create_embeddings_service',
-    'RetrievalService',
-    'create_retrieval_service',
-    'DataIngestionPipeline',
-    'create_ingestion_pipeline',
+    "FKSIntelligence",
+    "create_intelligence",
+    "DocumentProcessor",
+    "create_processor",
+    "EmbeddingsService",
+    "create_embeddings_service",
+    "RetrievalService",
+    "create_retrieval_service",
+    "DataIngestionPipeline",
+    "create_ingestion_pipeline",
 ]
 
-__version__ = '0.1.0'
+__version__ = "0.1.0"

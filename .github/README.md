@@ -31,21 +31,28 @@ If a task doesn't meet these criteria, backlog it.
 
 ### 2. GitHub Actions (.github/workflows/)
 
-#### `project-health-check.yml`
-**Triggers**:
-- Every push to main/develop
-- Every PR
-- Weekly (Monday 9 AM UTC)
-- Manual via workflow_dispatch
+#### CI/CD Pipeline
+**Complete automation for build, test, lint, and deploy**
 
-**What it does**:
-- Runs test suite with coverage
-- Security audit (pip-audit)
-- Lint check (ruff)
-- Type check (mypy)
-- Generates metrics (analyze_project.py)
-- Updates PROJECT_STATUS.md
-- Comments on PRs with summary
+Three main workflows:
+- **`ci-cd.yml`**: Full CI/CD pipeline (runs on every push/PR)
+- **`weekly-health-check.yml`**: Automated weekly analysis with auto-commit
+- **`project-health-check.yml`**: Quick health check for PRs
+
+**Documentation**:
+- 📚 [Workflows README](workflows/README.md) - Detailed workflow documentation
+- 🚀 [Quick Start Guide](CI_CD_QUICKSTART.md) - Get started in 5 minutes
+- 🔐 [Secrets Setup](SECRETS_SETUP.md) - Configure GitHub secrets
+- 🛡️ [Branch Protection](BRANCH_PROTECTION.md) - Protect main/develop branches
+
+**Key Features**:
+- ✅ Test failures block PR merge
+- ✅ Coverage reports posted to PRs
+- ✅ Security scanning (pip-audit, bandit)
+- ✅ Auto-commit PROJECT_STATUS.md updates
+- ✅ Discord notifications
+- ✅ Docker image builds
+- ✅ Auto-deploy to staging/production
 
 **Artifacts**: Download from Actions tab for detailed reports
 
@@ -155,16 +162,28 @@ python scripts/setup_github_project.py --owner yourname --repo yourrepo
      - ✅ Done
    - Add automation: Auto-move issues based on status
 
-4. **Configure GitHub Actions**:
+4. **Configure CI/CD Pipeline**:
    ```bash
-   # Actions are already in .github/workflows/
-   # Push to main to trigger first run
-   git add .github/
-   git commit -m "Add project management automation"
-   git push origin main
+   # Enable GitHub Actions (if not already enabled)
+   # Go to: Settings → Actions → General → Allow all actions
+   
+   # Configure secrets (minimum: Discord webhook)
+   gh secret set DISCORD_WEBHOOK -b "YOUR_WEBHOOK_URL"
+   
+   # Optional: Full setup for Docker and deployment
+   # See: .github/SECRETS_SETUP.md for complete guide
+   ```
+   
+   **Quick Start**: [CI/CD Quick Start Guide](CI_CD_QUICKSTART.md) (5 minutes)
+
+5. **Set Up Branch Protection**:
+   ```bash
+   # Recommended: Protect main and develop branches
+   # Requires: test, lint, security checks to pass
+   # See: .github/BRANCH_PROTECTION.md for setup guide
    ```
 
-5. **Set Up Weekly Review Reminder**:
+6. **Set Up Weekly Review Reminder**:
    - Option A: Calendar reminder (Friday 4 PM)
    - Option B: GitHub Action (already scheduled for Mondays)
 

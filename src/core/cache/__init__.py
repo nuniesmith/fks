@@ -9,14 +9,7 @@ This package provides comprehensive caching functionality including:
 """
 
 # Import backend implementations
-from .backends import (
-    CacheBackend,
-    FileBackend,
-    LayeredBackend,
-    MemoryBackend,
-    RedisBackend,
-    create_backend,
-)
+from .backends import CacheBackend, FileBackend, LayeredBackend, MemoryBackend, RedisBackend, create_backend
 
 # Import core cache functionality
 from .cache import (

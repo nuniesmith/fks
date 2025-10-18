@@ -32,7 +32,7 @@ class AlphaVantageClient(BaseClient):
     CLOSE_COL = "4. close"
     VOLUME_COL = "5. volume"
 
-    def __init__(self, api_key: Optional[str] = None, metrics: Optional[Any] = None):
+    def __init__(self, api_key: str | None = None, metrics: Any | None = None):
         """
         Initialize the AlphaVantageClient.
         """
@@ -46,7 +46,7 @@ class AlphaVantageClient(BaseClient):
 
         self.rate_limited = False  # Track if we hit the rate limit
 
-    def fetch_data(self, symbol: str, timeframe: str = "1d") -> Optional[pd.DataFrame]:
+    def fetch_data(self, symbol: str, timeframe: str = "1d") -> pd.DataFrame | None:
         """
         Fetch OHLC data from Alpha Vantage API.
         """
@@ -89,7 +89,7 @@ class AlphaVantageClient(BaseClient):
 
         # Check for Rate Limit Response
         if "Information" in data and "rate limit" in data["Information"].lower():
-            logger.warning(f"⚠️ Rate limit exceeded. Setting rate_limited flag.")
+            logger.warning("⚠️ Rate limit exceeded. Setting rate_limited flag.")
             self.rate_limited = True
             self.metrics.record_rate_limit(
                 client_name=self.name, remaining=0, limit=5
@@ -114,11 +114,11 @@ class AlphaVantageClient(BaseClient):
 
         return df
 
-    def _process_data(self, data: dict) -> Optional[pd.DataFrame]:
+    def _process_data(self, data: dict) -> pd.DataFrame | None:
         """
         Process Alpha Vantage response into a Pandas DataFrame.
         """
-        key = next((k for k in data.keys() if "Time Series" in k), None)
+        key = next((k for k in data if "Time Series" in k), None)
         if not key:
             logger.warning(
                 f"⚠️ No market data key found in response. Keys: {list(data.keys())}."
@@ -150,8 +150,8 @@ class AlphaVantageClient(BaseClient):
         return df
 
     def get(
-        self, symbol: str, timeframe: str, params: Optional[Dict[str, Any]] = None
-    ) -> Optional[pd.DataFrame]:
+        self, symbol: str, timeframe: str, params: dict[str, Any] | None = None
+    ) -> pd.DataFrame | None:
         """
         Public method to fetch OHLCV data.
         """

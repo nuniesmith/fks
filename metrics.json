@@ -1,0 +1,86 @@
+{
+  "timestamp": "2025-10-18T14:45:56.845909",
+  "files": {
+    "total": 436,
+    "by_type": {
+      ".py": 266,
+      ".js": 96,
+      ".css": 24,
+      ".svg": 23,
+      ".html": 6,
+      ".png": 4,
+      ".md": 3,
+      ".txt": 3,
+      ".eot": 2,
+      ".ttf": 2,
+      ".woff": 2,
+      ".map": 2,
+      "no_extension": 1,
+      ".woff2": 1,
+      ".ico": 1
+    },
+    "total_size_kb": 5428.07,
+    "empty_files": [],
+    "small_files": [
+      "src/__init__.py",
+      "src/framework/__init__.py",
+      "src/api/models.py",
+      "src/api/__init__.py",
+      "src/api/urls.py",
+      "src/api/admin.py",
+      "src/engine/__init__.py",
+      "src/authentication/__init__.py",
+      "src/core/models.py",
+      "src/core/admin.py",
+      "src/config/admin.py",
+      "src/web/models.py",
+      "src/web/__init__.py",
+      "src/web/admin.py",
+      "src/data/active_assets.py",
+      "src/data/exceptions.py",
+      "src/trading/models.py",
+      "src/trading/__init__.py",
+      "src/trading/admin.py",
+      "src/infrastructure/__init__.py"
+    ]
+  },
+  "code": {
+    "python_files": 266,
+    "total_lines": 62239,
+    "functions": 546,
+    "classes": 471,
+    "avg_lines_per_file": 234
+  },
+  "tests": {
+    "test_files": 26,
+    "tests_total": 34,
+    "tests_passed": 14,
+    "pass_rate": 41.2
+  },
+  "imports": {
+    "legacy_imports": {
+      "config_module": [
+        "src/framework/config/constants.py"
+      ]
+    },
+    "files_with_legacy": 1,
+    "framework_imports": 38,
+    "django_imports": 33
+  },
+  "technical_debt": {
+    "markers": {
+      "TODO": 10,
+      "FIXME": 0,
+      "HACK": 0,
+      "XXX": 0,
+      "stub": 8,
+      "legacy": 71
+    },
+    "total_debt_comments": 89
+  },
+  "git": {
+    "branch": "copilot/code-cleanup-empty-files-duplicates",
+    "uncommitted_changes": 0,
+    "clean": true
+  }
+}

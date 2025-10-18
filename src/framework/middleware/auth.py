@@ -9,10 +9,11 @@ import hashlib
 import os
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import jwt
 from fastapi import Depends, HTTPException, Request, Security, status
@@ -74,14 +75,14 @@ class TokenPayload:
     """Structured token payload."""
 
     sub: str  # Subject (user ID)
-    username: Optional[str] = None
-    email: Optional[str] = None
-    roles: List[str] = None
-    permissions: List[str] = None
+    username: str | None = None
+    email: str | None = None
+    roles: list[str] = None
+    permissions: list[str] = None
     token_type: str = TokenType.ACCESS.value
-    iat: Optional[int] = None  # Issued at
-    exp: Optional[int] = None  # Expires at
-    jti: Optional[str] = None  # JWT ID
+    iat: int | None = None  # Issued at
+    exp: int | None = None  # Expires at
+    jti: str | None = None  # JWT ID
 
     def __post_init__(self):
         if self.roles is None:
@@ -95,10 +96,10 @@ class UserInfo:
     """User information extracted from token."""
 
     user_id: str
-    username: Optional[str] = None
-    email: Optional[str] = None
-    roles: List[str] = None
-    permissions: List[str] = None
+    username: str | None = None
+    email: str | None = None
+    roles: list[str] = None
+    permissions: list[str] = None
     is_active: bool = True
     is_verified: bool = True
 
@@ -116,19 +117,19 @@ class UserInfo:
         """Check if user has a specific permission."""
         return permission.lower() in [p.lower() for p in self.permissions]
 
-    def has_any_role(self, roles: List[str]) -> bool:
+    def has_any_role(self, roles: list[str]) -> bool:
         """Check if user has any of the specified roles."""
         return any(self.has_role(role) for role in roles)
 
-    def has_all_roles(self, roles: List[str]) -> bool:
+    def has_all_roles(self, roles: list[str]) -> bool:
         """Check if user has all of the specified roles."""
         return all(self.has_role(role) for role in roles)
 
-    def has_any_permission(self, permissions: List[str]) -> bool:
+    def has_any_permission(self, permissions: list[str]) -> bool:
         """Check if user has any of the specified permissions."""
         return any(self.has_permission(perm) for perm in permissions)
 
-    def has_all_permissions(self, permissions: List[str]) -> bool:
+    def has_all_permissions(self, permissions: list[str]) -> bool:
         """Check if user has all of the specified permissions."""
         return all(self.has_permission(perm) for perm in permissions)
 
@@ -157,13 +158,13 @@ class JWTManager:
     def create_token(
         self,
         user_id: str,
-        username: Optional[str] = None,
-        email: Optional[str] = None,
-        roles: List[str] = None,
-        permissions: List[str] = None,
+        username: str | None = None,
+        email: str | None = None,
+        roles: list[str] = None,
+        permissions: list[str] = None,
         token_type: TokenType = TokenType.ACCESS,
-        expires_delta: Optional[timedelta] = None,
-        additional_claims: Optional[Dict[str, Any]] = None,
+        expires_delta: timedelta | None = None,
+        additional_claims: dict[str, Any] | None = None,
     ) -> str:
         """
         Create a JWT token.
@@ -181,7 +182,7 @@ class JWTManager:
         Returns:
             str: Encoded JWT token
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Set expiration based on token type and custom delta
         if expires_delta:
@@ -295,7 +296,7 @@ class JWTManager:
             logger.error(f"Token decode error: {e}")
             raise InvalidTokenError("Token decode failed")
 
-    def refresh_token(self, refresh_token: str) -> Dict[str, str]:
+    def refresh_token(self, refresh_token: str) -> dict[str, str]:
         """
         Create new access token from refresh token.
 
@@ -353,7 +354,7 @@ jwt_manager = JWTManager()
 
 # Backward compatibility functions
 def create_access_token(
-    data: Dict[str, Any], expires_delta: Optional[timedelta] = None
+    data: dict[str, Any], expires_delta: timedelta | None = None
 ) -> str:
     """
     Create a JWT access token (backward compatible).
@@ -382,7 +383,7 @@ def create_access_token(
     )
 
 
-def decode_token(token: str) -> Dict[str, Any]:
+def decode_token(token: str) -> dict[str, Any]:
     """
     Decode and validate a JWT token (backward compatible).
 
@@ -425,7 +426,7 @@ def decode_token(token: str) -> Dict[str, Any]:
         )
 
 
-def authenticate_user(token: str) -> Dict[str, Any]:
+def authenticate_user(token: str) -> dict[str, Any]:
     """
     Authenticate a user with a JWT token (backward compatible).
 
@@ -451,7 +452,7 @@ def authenticate_user(token: str) -> Dict[str, Any]:
     return payload
 
 
-def get_auth_token(request: Request) -> Optional[str]:
+def get_auth_token(request: Request) -> str | None:
     """
     Extract the JWT token from the request.
 
@@ -675,7 +676,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def validate_password_strength(password: str) -> List[str]:
+def validate_password_strength(password: str) -> list[str]:
     """
     Validate password strength.
 
@@ -748,7 +749,7 @@ def create_verification_token(
     )
 
 
-def refresh_tokens(refresh_token: str) -> Dict[str, str]:
+def refresh_tokens(refresh_token: str) -> dict[str, str]:
     """
     Refresh access and refresh tokens.
 
@@ -787,7 +788,7 @@ def constant_time_compare(a: str, b: str) -> bool:
 
 
 # Configuration and health check
-def get_auth_config() -> Dict[str, Any]:
+def get_auth_config() -> dict[str, Any]:
     """
     Get authentication configuration.
 
@@ -803,7 +804,7 @@ def get_auth_config() -> Dict[str, Any]:
     }
 
 
-def auth_health_check() -> Dict[str, Any]:
+def auth_health_check() -> dict[str, Any]:
     """
     Perform health check on authentication system.
 

@@ -4,4 +4,5 @@ class DataFetchError(RuntimeError):
         self.provider = provider
         self.message = message
 
+
 __all__ = ["DataFetchError"]

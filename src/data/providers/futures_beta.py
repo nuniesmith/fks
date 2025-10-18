@@ -2,22 +2,34 @@
 
 Abstracts forwarding logic so the Flask route layer stays thin.
 """
+
 from __future__ import annotations
+
 from typing import Any, Dict, Optional
 
 
 def build_url(base: str, version: str, path_suffix: str) -> str:
-    return base.rstrip('/') + f"/futures/{version}" + path_suffix
+    return base.rstrip("/") + f"/futures/{version}" + path_suffix
 
 
-def forward(requests_mod, request, base: Optional[str], version: Optional[str], api_key: Optional[str],
-            path_suffix: str, extra_params: Optional[Dict[str, Any]] = None):
+def forward(
+    requests_mod,
+    request,
+    base: str | None,
+    version: str | None,
+    api_key: str | None,
+    path_suffix: str,
+    extra_params: dict[str, Any] | None = None,
+):
     if requests_mod is None:
         return {"ok": False, "error": "requests not available"}, 500
     if not base:
         return {"ok": False, "error": "Set FUTURES_BETA_REST_URL"}, 400
     if not version:
-        return {"ok": False, "error": "Set FUTURES_BETA_VERSION or provide ?version=vX"}, 400
+        return {
+            "ok": False,
+            "error": "Set FUTURES_BETA_VERSION or provide ?version=vX",
+        }, 400
     url = build_url(base, version, path_suffix)
     params = dict(request.args)
     params.pop("version", None)

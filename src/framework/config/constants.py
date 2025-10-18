@@ -573,7 +573,7 @@ ERROR_MESSAGES = {
 # =============================================================================
 
 
-def get_app_info() -> Dict[str, str]:
+def get_app_info() -> dict[str, str]:
     """Get application information dictionary."""
     return {
         "name": APP_NAME,
@@ -591,7 +591,7 @@ def get_app_info() -> Dict[str, str]:
     }
 
 
-def get_default_config() -> Dict[str, Any]:
+def get_default_config() -> dict[str, Any]:
     """Get default configuration dictionary."""
     return {
         "app": get_app_info(),
@@ -643,7 +643,7 @@ def get_feature_flag(flag_name: str, default: bool = False) -> bool:
     return FEATURE_FLAGS.get(flag_name, default)
 
 
-def get_resource_limit(resource_type: str, component: str) -> Optional[int]:
+def get_resource_limit(resource_type: str, component: str) -> int | None:
     """Get resource limit for a specific component."""
     limits_map = {"memory": MEMORY_LIMITS, "cpu": CPU_LIMITS, "disk": DISK_LIMITS}
 
@@ -777,23 +777,23 @@ __all__ = [
 
 # Trading Symbols
 SYMBOLS = [
-    'BTCUSDT',
-    'ETHUSDT',
-    'BNBUSDT',
-    'ADAUSDT',
-    'SOLUSDT',
-    'DOTUSDT',
-    'MATICUSDT',
-    'AVAXUSDT',
-    'LINKUSDT',
-    'ATOMUSDT',
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "ADAUSDT",
+    "SOLUSDT",
+    "DOTUSDT",
+    "MATICUSDT",
+    "AVAXUSDT",
+    "LINKUSDT",
+    "ATOMUSDT",
 ]
 
 # Main cryptocurrencies (larger market cap, lower volatility)
-MAINS = ['BTC', 'ETH', 'BNB']
+MAINS = ["BTC", "ETH", "BNB"]
 
 # Alternative cryptocurrencies (smaller market cap, higher volatility)
-ALTS = ['ADA', 'SOL', 'DOT', 'MATIC', 'AVAX', 'LINK', 'ATOM']
+ALTS = ["ADA", "SOL", "DOT", "MATIC", "AVAX", "LINK", "ATOM"]
 
 # Trading Configuration
 FEE_RATE = 0.001  # 0.1% trading fee (Binance standard)
@@ -802,19 +802,18 @@ RISK_PER_TRADE = 0.02  # 2% risk per trade
 # Database Configuration (for backward compatibility)
 # Note: In Django projects, use settings.DATABASES instead
 DATABASE_URL = os.environ.get(
-    'DATABASE_URL',
-    'postgresql://postgres:postgres@db:5432/trading_db'
+    "DATABASE_URL", "postgresql://postgres:postgres@db:5432/trading_db"
 )
 
 # Redis Configuration (for backward compatibility)
-REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
-REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
-REDIS_DB = int(os.environ.get('REDIS_DB', '0'))
+REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
+REDIS_PORT = int(os.environ.get("REDIS_PORT", "6379"))
+REDIS_DB = int(os.environ.get("REDIS_DB", "0"))
 
 # WebSocket Configuration (for backward compatibility)
 WS_PING_INTERVAL = 20  # seconds
 WS_PING_TIMEOUT = 10  # seconds
 
 # External Service Configuration (for backward compatibility)
-DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")

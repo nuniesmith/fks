@@ -32,6 +32,8 @@ try:
 except ImportError:
     consul = None
 
+import contextlib
+
 from loguru import logger
 
 from .models import ConfigFormat, ConfigSource, ValidationResult
@@ -41,18 +43,16 @@ class ConfigProvider(ABC):
     """Abstract base class for configuration providers."""
 
     @abstractmethod
-    def load(self, source: Union[str, Path, ConfigSource]) -> Dict[str, Any]:
+    def load(self, source: str | Path | ConfigSource) -> dict[str, Any]:
         """Load configuration from source."""
         pass
 
     @abstractmethod
-    def supports(self, source: Union[str, Path, ConfigSource]) -> bool:
+    def supports(self, source: str | Path | ConfigSource) -> bool:
         """Check if provider supports the given source."""
         pass
 
-    def validate_source(
-        self, source: Union[str, Path, ConfigSource]
-    ) -> ValidationResult:
+    def validate_source(self, source: str | Path | ConfigSource) -> ValidationResult:
         """Validate configuration source."""
         result = ValidationResult(is_valid=True)
 
@@ -75,7 +75,7 @@ class FileProvider(ConfigProvider):
             ConfigFormat.TOML: self._load_toml,
         }
 
-    def supports(self, source: Union[str, Path, ConfigSource]) -> bool:
+    def supports(self, source: str | Path | ConfigSource) -> bool:
         """Check if provider supports the source."""
         if isinstance(source, ConfigSource):
             return source.format in self._loaders
@@ -84,7 +84,7 @@ class FileProvider(ConfigProvider):
         suffix = path.suffix.lower()
         return suffix in [".yaml", ".yml", ".json", ".env", ".toml"]
 
-    def load(self, source: Union[str, Path, ConfigSource]) -> Dict[str, Any]:
+    def load(self, source: str | Path | ConfigSource) -> dict[str, Any]:
         """Load configuration from file."""
         if isinstance(source, ConfigSource):
             path = source.path
@@ -123,25 +123,25 @@ class FileProvider(ConfigProvider):
 
         return format_type
 
-    def _load_yaml(self, path: Path) -> Dict[str, Any]:
+    def _load_yaml(self, path: Path) -> dict[str, Any]:
         """Load YAML configuration file."""
         if not yaml:
             raise ImportError("PyYAML is required for YAML configuration files")
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             content = yaml.safe_load(f)
             return content or {}
 
-    def _load_json(self, path: Path) -> Dict[str, Any]:
+    def _load_json(self, path: Path) -> dict[str, Any]:
         """Load JSON configuration file."""
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
 
-    def _load_env(self, path: Path) -> Dict[str, Any]:
+    def _load_env(self, path: Path) -> dict[str, Any]:
         """Load environment file (.env format)."""
         env_vars = {}
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
 
@@ -156,9 +156,12 @@ class FileProvider(ConfigProvider):
                     value = value.strip()
 
                     # Remove quotes if present
-                    if value.startswith('"') and value.endswith('"'):
-                        value = value[1:-1]
-                    elif value.startswith("'") and value.endswith("'"):
+                    if (
+                        value.startswith('"')
+                        and value.endswith('"')
+                        or value.startswith("'")
+                        and value.endswith("'")
+                    ):
                         value = value[1:-1]
 
                     # Try to parse as JSON for complex values
@@ -173,12 +176,12 @@ class FileProvider(ConfigProvider):
 
         return env_vars
 
-    def _load_toml(self, path: Path) -> Dict[str, Any]:
+    def _load_toml(self, path: Path) -> dict[str, Any]:
         """Load TOML configuration file."""
         if not toml:
             raise ImportError("toml is required for TOML configuration files")
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return toml.load(f)
 
 
@@ -189,11 +192,11 @@ class EnvironmentProvider(ConfigProvider):
         self.prefix = prefix.upper()
         self.separator = separator
 
-    def supports(self, source: Union[str, Path, ConfigSource]) -> bool:
+    def supports(self, source: str | Path | ConfigSource) -> bool:
         """Environment provider supports all sources (always available)."""
         return True
 
-    def load(self, source: Union[str, Path, ConfigSource] = None) -> Dict[str, Any]:
+    def load(self, source: str | Path | ConfigSource = None) -> dict[str, Any]:
         """Load configuration from environment variables."""
         env_config = {}
 
@@ -238,7 +241,7 @@ class EnvironmentProvider(ConfigProvider):
         except ValueError:
             return False
 
-    def _set_nested_value(self, target: Dict[str, Any], key: str, value: Any) -> None:
+    def _set_nested_value(self, target: dict[str, Any], key: str, value: Any) -> None:
         """Set a nested value in dictionary using dot notation."""
         keys = key.split(".")
         for k in keys[:-1]:
@@ -258,13 +261,13 @@ class AWSParameterStoreProvider(ConfigProvider):
         self.client = boto3.client("ssm", region_name=region)
         self.prefix = prefix
 
-    def supports(self, source: Union[str, Path, ConfigSource]) -> bool:
+    def supports(self, source: str | Path | ConfigSource) -> bool:
         """Check if source is AWS Parameter Store path."""
         if isinstance(source, str):
             return source.startswith("aws://") or source.startswith("/fks/")
         return False
 
-    def load(self, source: Union[str, Path, ConfigSource]) -> Dict[str, Any]:
+    def load(self, source: str | Path | ConfigSource) -> dict[str, Any]:
         """Load configuration from AWS Parameter Store."""
         if isinstance(source, str):
             if source.startswith("aws://"):
@@ -301,7 +304,7 @@ class AWSParameterStoreProvider(ConfigProvider):
             logger.error(f"Error loading from AWS Parameter Store: {e}")
             return {}
 
-    def _set_nested_value(self, target: Dict[str, Any], key: str, value: Any) -> None:
+    def _set_nested_value(self, target: dict[str, Any], key: str, value: Any) -> None:
         """Set nested value using dot notation."""
         keys = key.split(".")
         for k in keys[:-1]:
@@ -321,13 +324,13 @@ class ConsulProvider(ConfigProvider):
         self.client = consul.Consul(host=host, port=port)
         self.prefix = prefix
 
-    def supports(self, source: Union[str, Path, ConfigSource]) -> bool:
+    def supports(self, source: str | Path | ConfigSource) -> bool:
         """Check if source is Consul KV path."""
         if isinstance(source, str):
             return source.startswith("consul://") or source.startswith("fks/")
         return False
 
-    def load(self, source: Union[str, Path, ConfigSource]) -> Dict[str, Any]:
+    def load(self, source: str | Path | ConfigSource) -> dict[str, Any]:
         """Load configuration from Consul KV store."""
         if isinstance(source, str):
             if source.startswith("consul://"):
@@ -368,7 +371,7 @@ class ConsulProvider(ConfigProvider):
             logger.error(f"Error loading from Consul: {e}")
             return {}
 
-    def _set_nested_value(self, target: Dict[str, Any], key: str, value: Any) -> None:
+    def _set_nested_value(self, target: dict[str, Any], key: str, value: Any) -> None:
         """Set nested value using dot notation."""
         keys = key.split(".")
         for k in keys[:-1]:
@@ -381,13 +384,13 @@ class ConsulProvider(ConfigProvider):
 class URLProvider(ConfigProvider):
     """Provider for loading configuration from URLs."""
 
-    def supports(self, source: Union[str, Path, ConfigSource]) -> bool:
+    def supports(self, source: str | Path | ConfigSource) -> bool:
         """Check if source is a URL."""
         if isinstance(source, str):
             return source.startswith(("http://", "https://"))
         return False
 
-    def load(self, source: Union[str, Path, ConfigSource]) -> Dict[str, Any]:
+    def load(self, source: str | Path | ConfigSource) -> dict[str, Any]:
         """Load configuration from URL."""
         import urllib.request
 
@@ -424,7 +427,7 @@ class ConfigProviderRegistry:
     """Registry for configuration providers."""
 
     def __init__(self):
-        self._providers: List[ConfigProvider] = []
+        self._providers: list[ConfigProvider] = []
         self._register_default_providers()
 
     def _register_default_providers(self):
@@ -434,15 +437,11 @@ class ConfigProviderRegistry:
         self.register(URLProvider())
 
         # Register cloud providers if available
-        try:
+        with contextlib.suppress(ImportError):
             self.register(AWSParameterStoreProvider())
-        except ImportError:
-            pass
 
-        try:
+        with contextlib.suppress(ImportError):
             self.register(ConsulProvider())
-        except ImportError:
-            pass
 
     def register(self, provider: ConfigProvider) -> None:
         """Register a configuration provider."""
@@ -454,16 +453,14 @@ class ConfigProviderRegistry:
             f"Registered configuration provider: {provider.__class__.__name__}"
         )
 
-    def get_provider(
-        self, source: Union[str, Path, ConfigSource]
-    ) -> Optional[ConfigProvider]:
+    def get_provider(self, source: str | Path | ConfigSource) -> ConfigProvider | None:
         """Get appropriate provider for source."""
         for provider in self._providers:
             if provider.supports(source):
                 return provider
         return None
 
-    def load(self, source: Union[str, Path, ConfigSource]) -> Dict[str, Any]:
+    def load(self, source: str | Path | ConfigSource) -> dict[str, Any]:
         """Load configuration using appropriate provider."""
         provider = self.get_provider(source)
 
@@ -478,9 +475,7 @@ class ConfigProviderRegistry:
 
         return provider.load(source)
 
-    def load_multiple(
-        self, sources: List[Union[str, Path, ConfigSource]]
-    ) -> Dict[str, Any]:
+    def load_multiple(self, sources: list[str | Path | ConfigSource]) -> dict[str, Any]:
         """Load configuration from multiple sources and merge."""
         merged_config = {}
 
@@ -502,7 +497,7 @@ class ConfigProviderRegistry:
 
         return merged_config
 
-    def _deep_merge(self, base: Dict[str, Any], overlay: Dict[str, Any]) -> None:
+    def _deep_merge(self, base: dict[str, Any], overlay: dict[str, Any]) -> None:
         """Deep merge overlay into base dictionary."""
         for key, value in overlay.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):

@@ -5,17 +5,18 @@ Tables (TimescaleDB-first schema, compatible with plain Postgres):
   - ohlcv (source, symbol, interval, ts, open, high, low, close, volume, PRIMARY KEY (source, symbol, interval, ts))
   - dataset_splits (source, symbol, interval, split, start_ts, end_ts, created_at)
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from loguru import logger
 
 from infrastructure.database.postgres import get_connection
-
 
 DDL = {
     "ohlcv": """
@@ -73,12 +74,14 @@ def upsert_ohlcv(source: str, symbol: str, interval: str, df: pd.DataFrame) -> i
         return 0
     work = df.copy()
     work[dt_col] = pd.to_datetime(work[dt_col])
-    cols = {k: k for k in ["open", "high", "low", "close", "volume"] if k in work.columns}
+    cols = {
+        k: k for k in ["open", "high", "low", "close", "volume"] if k in work.columns
+    }
 
-    rows: List[Tuple] = []
+    rows: list[tuple] = []
     for _, r in work.iterrows():
         row = [source, symbol, interval, r[dt_col]]
-        vals: List[Optional[float]] = []
+        vals: list[float | None] = []
         for k in ["open", "high", "low", "close", "volume"]:
             if k in cols and k in r and pd.notna(r[k]):
                 try:
@@ -107,10 +110,18 @@ def upsert_ohlcv(source: str, symbol: str, interval: str, df: pd.DataFrame) -> i
         return 0
 
 
-def materialize_splits(source: str, symbol: str, interval: str, splits: List[Tuple[str, pd.Timestamp, pd.Timestamp]]) -> int:
+def materialize_splits(
+    source: str,
+    symbol: str,
+    interval: str,
+    splits: list[tuple[str, pd.Timestamp, pd.Timestamp]],
+) -> int:
     if not splits:
         return 0
-    values = [(source, symbol, interval, s, a.to_pydatetime(), b.to_pydatetime()) for s, a, b in splits]
+    values = [
+        (source, symbol, interval, s, a.to_pydatetime(), b.to_pydatetime())
+        for s, a, b in splits
+    ]
     sql = (
         "INSERT INTO dataset_splits (source, symbol, interval, split, start_ts, end_ts) "
         "VALUES (%s,%s,%s,%s,%s,%s) "

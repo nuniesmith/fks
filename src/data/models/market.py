@@ -71,10 +71,10 @@ class MarketData(Model):
         "quote_volume": Optional[float],
         "bid_volume": Optional[float],
         "ask_volume": Optional[float],
-        "order_book_depth": Optional[Dict[str, Any]],
+        "order_book_depth": Optional[dict[str, Any]],
         "exchange": str,
         "source": str,
-        "metadata": Dict[str, Any],
+        "metadata": dict[str, Any],
     }
 
     _required_fields = [
@@ -100,14 +100,14 @@ class MarketData(Model):
     low_24h: float
     price_change_24h: float
     price_change_pct_24h: float
-    base_volume: Optional[float] = None
-    quote_volume: Optional[float] = None
-    bid_volume: Optional[float] = None
-    ask_volume: Optional[float] = None
-    order_book_depth: Optional[Dict[str, Any]] = field(default_factory=dict)
+    base_volume: float | None = None
+    quote_volume: float | None = None
+    bid_volume: float | None = None
+    ask_volume: float | None = None
+    order_book_depth: dict[str, Any] | None = field(default_factory=dict)
     exchange: str = "unknown"
     source: str = "unknown"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """Call validate to ensure all data is valid"""
@@ -177,7 +177,7 @@ class MarketData(Model):
         """Alias for 'last' for backward compatibility"""
         return self.last
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the market data to a dictionary.
 
@@ -203,7 +203,7 @@ class MarketData(Model):
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MarketData":
+    def from_dict(cls, data: dict[str, Any]) -> "MarketData":
         """
         Create a MarketData instance from a dictionary.
 
@@ -280,20 +280,20 @@ class MarketData(Model):
                 kwargs[field_name] = default_value
 
         # Add optional fields if they exist
-        for field in optional_fields:
-            if field in data_copy:
+        for field_name in optional_fields:
+            if field_name in data_copy:
                 try:
                     if (
-                        field
+                        field_name
                         in ["base_volume", "quote_volume", "bid_volume", "ask_volume"]
-                        and data_copy[field] is not None
+                        and data_copy[field_name] is not None
                     ):
-                        kwargs[field] = float(data_copy[field])
+                        kwargs[field_name] = float(data_copy[field_name])
                     else:
-                        kwargs[field] = data_copy[field]
+                        kwargs[field_name] = data_copy[field_name]
                 except (ValueError, TypeError) as e:
                     logger.warning(
-                        f"Error processing optional field '{field}': {e}, skipping"
+                        f"Error processing optional field '{field_name}': {e}, skipping"
                     )
 
         # Handle last_price -> last field conversion for compatibility
@@ -337,7 +337,7 @@ class OrderBookEntry(Model):
 
     price: float
     volume: float
-    count: Optional[int] = None
+    count: int | None = None
 
     def __post_init__(self):
         """Call validate to ensure all data is valid"""
@@ -353,7 +353,7 @@ class OrderBookEntry(Model):
             self.count = 0
 
     @classmethod
-    def from_tuple(cls: "type[T]", data: Tuple[float, float, Optional[int]]) -> T:
+    def from_tuple(cls: "type[T]", data: tuple[float, float, int | None]) -> T:
         """Create an OrderBookEntry from a tuple representation"""
         price = float(data[0])
         volume = float(data[1])
@@ -380,8 +380,8 @@ class OrderBook(Model):
     _fields = {
         "symbol": str,
         "timestamp": datetime,
-        "bids": List[OrderBookEntry],
-        "asks": List[OrderBookEntry],
+        "bids": list[OrderBookEntry],
+        "asks": list[OrderBookEntry],
         "source": str,
         "exchange": str,
     }
@@ -390,8 +390,8 @@ class OrderBook(Model):
 
     symbol: str
     timestamp: datetime
-    bids: List[Union[OrderBookEntry, Tuple[float, float, Optional[int]]]]
-    asks: List[Union[OrderBookEntry, Tuple[float, float, Optional[int]]]]
+    bids: list[OrderBookEntry | tuple[float, float, int | None]]
+    asks: list[OrderBookEntry | tuple[float, float, int | None]]
     source: str = "unknown"
     exchange: str = "unknown"
     depth: int = field(init=False)
@@ -418,7 +418,7 @@ class OrderBook(Model):
     def _convert_entries(self):
         """Convert tuple entries to OrderBookEntry objects if needed"""
         # Process bids
-        processed_bids: List[OrderBookEntry] = []
+        processed_bids: list[OrderBookEntry] = []
         for entry in self.bids:
             if isinstance(entry, OrderBookEntry):
                 processed_bids.append(entry)
@@ -439,7 +439,7 @@ class OrderBook(Model):
         self.bids = processed_bids
 
         # Process asks
-        processed_asks: List[OrderBookEntry] = []
+        processed_asks: list[OrderBookEntry] = []
         for entry in self.asks:
             if isinstance(entry, OrderBookEntry):
                 processed_asks.append(entry)
@@ -489,12 +489,12 @@ class OrderBook(Model):
         return (self.asks[0].price + self.bids[0].price) / 2
 
     @property
-    def best_bid(self) -> Optional[OrderBookEntry]:
+    def best_bid(self) -> OrderBookEntry | None:
         """Get the best (highest) bid"""
         return self.bids[0] if self.bids else None
 
     @property
-    def best_ask(self) -> Optional[OrderBookEntry]:
+    def best_ask(self) -> OrderBookEntry | None:
         """Get the best (lowest) ask"""
         return self.asks[0] if self.asks else None
 
@@ -546,7 +546,7 @@ class OrderBook(Model):
 
         return (bid_vol - ask_vol) / total_vol
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the order book to a dictionary.
 
@@ -575,7 +575,7 @@ class OrderBook(Model):
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "OrderBook":
+    def from_dict(cls, data: dict[str, Any]) -> "OrderBook":
         """
         Create an OrderBook instance from a dictionary.
 
@@ -597,8 +597,8 @@ class OrderBook(Model):
                 data_copy["timestamp"] = datetime.now()
 
         # Process bids and asks
-        bids: List[OrderBookEntry] = []
-        asks: List[OrderBookEntry] = []
+        bids: list[OrderBookEntry] = []
+        asks: list[OrderBookEntry] = []
 
         # Handle different formats of bids/asks
         if "bids" in data_copy:

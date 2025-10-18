@@ -40,7 +40,7 @@ _logger = logger.bind(name="core.database.postgres")
 
 # Connection pools by DSN
 _pool_lock = threading.RLock()
-_connection_pools: Dict[str, Any] = {}
+_connection_pools: dict[str, Any] = {}
 
 # Default connection parameters
 DEFAULT_POOL_MIN_CONN = 1
@@ -59,17 +59,17 @@ class PostgresConnection:
 
     def __init__(
         self,
-        dsn: Optional[str] = None,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        dbname: Optional[str] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
+        dsn: str | None = None,
+        host: str | None = None,
+        port: int | None = None,
+        dbname: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
         use_pool: bool = True,
         min_connections: int = DEFAULT_POOL_MIN_CONN,
         max_connections: int = DEFAULT_POOL_MAX_CONN,
         connect_timeout: int = DEFAULT_CONNECT_TIMEOUT,
-        application_name: Optional[str] = None,
+        application_name: str | None = None,
         cursor_factory=None,
     ):
         """
@@ -327,12 +327,12 @@ class PostgresConnection:
 
 @contextmanager
 def get_connection(
-    dsn: Optional[str] = None,
-    host: Optional[str] = None,
-    port: Optional[int] = None,
-    dbname: Optional[str] = None,
-    user: Optional[str] = None,
-    password: Optional[str] = None,
+    dsn: str | None = None,
+    host: str | None = None,
+    port: int | None = None,
+    dbname: str | None = None,
+    user: str | None = None,
+    password: str | None = None,
     use_pool: bool = True,
     cursor_factory=None,
 ) -> Any:
@@ -374,7 +374,7 @@ def get_connection(
         conn.close()
 
 
-def close_postgres_connections(connections: Optional[List[Any]] = None) -> bool:
+def close_postgres_connections(connections: list[Any] | None = None) -> bool:
     """
     Close PostgreSQL database connections.
 

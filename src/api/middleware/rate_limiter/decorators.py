@@ -5,8 +5,9 @@ Enhanced decorators for function-level rate limiting.
 import asyncio
 import inspect
 import time
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from loguru import logger
 
@@ -21,13 +22,13 @@ def rate_limited(
     limit: int,
     window: int = 60,
     algorithm: str = "token_bucket",
-    policy: Union[str, RateLimitPolicy] = RateLimitPolicy.WAIT,
-    limiter_name: Optional[str] = None,
-    client_key: Optional[Union[str, Callable]] = None,
+    policy: str | RateLimitPolicy = RateLimitPolicy.WAIT,
+    limiter_name: str | None = None,
+    client_key: str | Callable | None = None,
     max_wait_time: float = 5.0,
     burst_capacity: int = 0,
     per_client: bool = False,
-    error_handler: Optional[Callable] = None,
+    error_handler: Callable | None = None,
     fallback_value: Any = None,
     **limiter_kwargs,
 ):
@@ -113,10 +114,7 @@ def rate_limited(
             )
 
         # Choose the appropriate wrapper
-        if inspect.iscoroutinefunction(func):
-            wrapper = async_wrapper
-        else:
-            wrapper = sync_wrapper
+        wrapper = async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
 
         # Add utility methods to the wrapper
         _add_wrapper_methods(wrapper, limiter, func)
@@ -369,10 +367,7 @@ def conditional_rate_limit(
                 return await func(*args, **kwargs_inner)
 
         # Choose appropriate wrapper
-        if inspect.iscoroutinefunction(func):
-            wrapper = async_wrapper
-        else:
-            wrapper = sync_wrapper
+        wrapper = async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
 
         # Copy over rate limiter methods
         for attr in [

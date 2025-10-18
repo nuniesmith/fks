@@ -12,8 +12,8 @@ logger = get_task_logger(__name__)
 @shared_task(bind=True)
 def debug_task(self):
     """Debug task to test Celery is working."""
-    logger.info(f'Request: {self.request!r}')
-    return 'Celery is working!'
+    logger.info(f"Request: {self.request!r}")
+    return "Celery is working!"
 
 
 @shared_task

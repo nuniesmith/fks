@@ -65,7 +65,7 @@ class OandaAdapter(ExchangeAdapterInterface):
         side: str,
         quantity: float,
         order_type: str = "market",
-        price: Optional[float] = None,
+        price: float | None = None,
     ) -> dict:
         """
         Place an order on OANDA.
@@ -169,7 +169,7 @@ async def place_oanda_order(
     side: Literal["buy", "sell"],
     quantity: float,
     order_type: Literal["market", "limit"] = "market",
-    price: Optional[float] = None,
+    price: float | None = None,
     oanda_adapter: OandaAdapter = Depends(get_oanda_adapter),
 ):
     """

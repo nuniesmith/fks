@@ -8,19 +8,26 @@ Week 2 scaffolding: establishes a thin, testable abstraction that:
 Concrete adapters implement `_build_request` + `_normalize` only.
 Runtime HTTP callable is injectable for deterministic tests.
 """
+
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, Optional, Protocol
+import contextlib
 import os
-import time
 import random
-
-
+import time
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from typing import Any, Dict, Optional, Protocol
 
 
 class HTTPClient(Protocol):
-    def __call__(self, url: str, params: Dict[str, Any] | None = None, headers: Dict[str, str] | None = None, timeout: float | None = None) -> Any:  # noqa: D401,E501
+    def __call__(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> Any:  # noqa: D401,E501
         ...
 
 
@@ -46,12 +53,12 @@ class APIAdapter(ABC):
             else float(env_timeout_specific or env_timeout_global or 10.0)
         )
         # Rate limit override: FKS_<NAME>_RPS or FKS_DEFAULT_RPS
-        override_rps = os.getenv(f"FKS_{self.name.upper()}_RPS") or os.getenv("FKS_DEFAULT_RPS")
+        override_rps = os.getenv(f"FKS_{self.name.upper()}_RPS") or os.getenv(
+            "FKS_DEFAULT_RPS"
+        )
         if override_rps:
-            try:
+            with contextlib.suppress(ValueError):
                 self.rate_limit_per_sec = float(override_rps)
-            except ValueError:
-                pass
         # Retry config
         self._max_retries = int(os.getenv("FKS_API_MAX_RETRIES", "2"))
         self._backoff_base = float(os.getenv("FKS_API_BACKOFF_BASE", "0.3"))
@@ -61,7 +68,7 @@ class APIAdapter(ABC):
         self._last_call_ts: float | None = None
 
     # ----------------- Public API -----------------
-    def fetch(self, **kwargs) -> Dict[str, Any]:  # noqa: D401
+    def fetch(self, **kwargs) -> dict[str, Any]:  # noqa: D401
         """Fetch provider payload; return normalized dict.
 
         Raises:
@@ -73,7 +80,10 @@ class APIAdapter(ABC):
             self._log.debug("request", extra={"url": url, "params": params})
             raw = self._request_with_retries(url, params, headers)
             normalized = self._normalize(raw, request_kwargs=kwargs)
-            self._log.info("fetched", extra={"rows": len(normalized.get("data", [])), "status": "ok"})
+            self._log.info(
+                "fetched",
+                extra={"rows": len(normalized.get("data", [])), "status": "ok"},
+            )
             return normalized
         except DataFetchError:
             raise
@@ -83,11 +93,13 @@ class APIAdapter(ABC):
 
     # ----------------- Overridables -----------------
     @abstractmethod
-    def _build_request(self, **kwargs) -> tuple[str, Dict[str, Any] | None, Dict[str, str] | None]:
+    def _build_request(
+        self, **kwargs
+    ) -> tuple[str, dict[str, Any] | None, dict[str, str] | None]:
         """Return (url, params, headers)."""
 
     @abstractmethod
-    def _normalize(self, raw: Any, *, request_kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize(self, raw: Any, *, request_kwargs: dict[str, Any]) -> dict[str, Any]:
         """Normalize raw provider payload -> canonical structure.
 
         Expected canonical dict keys:
@@ -109,31 +121,52 @@ class APIAdapter(ABC):
             time.sleep(min_interval - elapsed)
         self._last_call_ts = time.time()
 
-    def _request_with_retries(self, url: str, params: Dict[str, Any] | None, headers: Dict[str, str] | None):  # noqa: D401
+    def _request_with_retries(
+        self, url: str, params: dict[str, Any] | None, headers: dict[str, str] | None
+    ):  # noqa: D401
         attempt = 0
         last_err: Exception | None = None
         while attempt <= self._max_retries:
             try:
-                return self._http(url, params=params, headers=headers, timeout=self._timeout)
+                return self._http(
+                    url, params=params, headers=headers, timeout=self._timeout
+                )
             except Exception as e:  # broad catch to wrap network errors
                 last_err = e
                 if attempt == self._max_retries:
-                    raise DataFetchError(self.name, f"failed after {attempt+1} attempts: {e}") from e
-                sleep_for = self._backoff_base * (2 ** attempt)
+                    raise DataFetchError(
+                        self.name, f"failed after {attempt+1} attempts: {e}"
+                    ) from e
+                sleep_for = self._backoff_base * (2**attempt)
                 if self._backoff_jitter:
                     sleep_for += random.random() * self._backoff_jitter
                 self._log.warning(
-                    "retrying", extra={"attempt": attempt + 1, "max": self._max_retries + 1, "sleep": round(sleep_for, 4)}
+                    "retrying",
+                    extra={
+                        "attempt": attempt + 1,
+                        "max": self._max_retries + 1,
+                        "sleep": round(sleep_for, 4),
+                    },
                 )
                 time.sleep(sleep_for)
                 attempt += 1
         # Should not reach here
         if last_err:  # pragma: no cover
-            raise DataFetchError(self.name, f"unreachable retry loop termination: {last_err}") from last_err
-        raise DataFetchError(self.name, "unreachable state without error")  # pragma: no cover
+            raise DataFetchError(
+                self.name, f"unreachable retry loop termination: {last_err}"
+            ) from last_err
+        raise DataFetchError(
+            self.name, "unreachable state without error"
+        )  # pragma: no cover
 
     # Default HTTP client using requests (lazy import to avoid hard dep if tests inject stub)
-    def _default_http(self, url: str, params: Dict[str, Any] | None = None, headers: Dict[str, str] | None = None, timeout: float | None = None):  # noqa: D401,E501
+    def _default_http(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float | None = None,
+    ):  # noqa: D401,E501
         try:
             import requests  # type: ignore
         except Exception as e:  # pragma: no cover

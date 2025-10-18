@@ -164,7 +164,7 @@ def create_provider(provider_type: str, **kwargs) -> StateProvider:
     elif provider_type == "redis":
         if not _REDIS_AVAILABLE:
             raise ImportError(
-                f"Redis provider not available. Install redis package to use RedisStateProvider."
+                "Redis provider not available. Install redis package to use RedisStateProvider."
             )
         return create_redis_provider(**kwargs)
     else:

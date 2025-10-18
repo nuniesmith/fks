@@ -228,8 +228,8 @@ __all__.extend(
 
 
 # Module-level configuration
-class CircuitBreakerConfig:
-    """Module-level configuration for circuit breaker defaults."""
+class CircuitBreakerDefaults:
+    """Module-level defaults for circuit breaker configuration."""
 
     # Default values that can be overridden
     default_failure_threshold = 5

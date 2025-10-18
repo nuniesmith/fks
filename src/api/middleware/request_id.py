@@ -11,7 +11,8 @@ import platform
 import re
 import time
 import uuid
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from fastapi import Request, Response
 from loguru import logger
@@ -40,15 +41,15 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         self,
         app: ASGIApp,
         header_name: str = "X-Request-ID",
-        response_header_name: Optional[str] = None,
+        response_header_name: str | None = None,
         include_in_response: bool = True,
         enforce_uuid_format: bool = False,
         contextualizer_name: str = "request_id",
-        generator: Optional[Callable[[], str]] = None,
-        trace_header_names: Optional[List[str]] = None,
+        generator: Callable[[], str] | None = None,
+        trace_header_names: list[str] | None = None,
         include_trace_context: bool = True,
         include_timing: bool = True,
-        node_id: Optional[str] = None,
+        node_id: str | None = None,
         max_id_length: int = 128,
     ):
         """
@@ -231,7 +232,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
     def _get_or_generate_request_id(
         self, request: Request
-    ) -> Tuple[str, Optional[Dict[str, Any]]]:
+    ) -> tuple[str, dict[str, Any] | None]:
         """
         Get existing request ID from headers or generate a new one.
 
@@ -328,7 +329,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
         return request_id, trace_info if trace_info else None
 
-    def _add_timing_info(self, request: Request, start_time: Optional[float]) -> None:
+    def _add_timing_info(self, request: Request, start_time: float | None) -> None:
         """
         Add timing information to the request state.
 
@@ -349,7 +350,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         request.state.get_elapsed_time = get_elapsed_time
 
     def _add_trace_context_headers(
-        self, response: Response, request_id: str, trace_info: Optional[Dict[str, Any]]
+        self, response: Response, request_id: str, trace_info: dict[str, Any] | None
     ) -> None:
         """
         Add W3C Trace Context headers to the response.
@@ -383,7 +384,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
             if "sampled" in trace_info:
                 response.headers["X-B3-Sampled"] = trace_info["sampled"]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get statistics about the request ID middleware.
 
@@ -407,7 +408,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 # Utils for working with request IDs
 
 
-def get_request_id(request: Request) -> Optional[str]:
+def get_request_id(request: Request) -> str | None:
     """
     Get the request ID from a request object.
 
@@ -420,7 +421,7 @@ def get_request_id(request: Request) -> Optional[str]:
     return getattr(request.state, "request_id", None)
 
 
-def get_trace_info(request: Request) -> Optional[Dict[str, Any]]:
+def get_trace_info(request: Request) -> dict[str, Any] | None:
     """
     Get trace information from a request object.
 
@@ -433,7 +434,7 @@ def get_trace_info(request: Request) -> Optional[Dict[str, Any]]:
     return getattr(request.state, "trace_info", None)
 
 
-def get_request_duration_ms(request: Request) -> Optional[float]:
+def get_request_duration_ms(request: Request) -> float | None:
     """
     Get the current request duration in milliseconds.
 

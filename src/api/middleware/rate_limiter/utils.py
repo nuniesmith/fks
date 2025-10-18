@@ -3,7 +3,8 @@ Utility functions for rate limiting.
 """
 
 import hashlib
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any, List, Optional
 
 from fastapi import Request
 
@@ -52,7 +53,7 @@ class ClientIdentifier:
         return "unknown"
 
     @staticmethod
-    def get_api_key(request: Request, header_name: str = "X-API-Key") -> Optional[str]:
+    def get_api_key(request: Request, header_name: str = "X-API-Key") -> str | None:
         """
         Extract API key from request headers.
 
@@ -66,7 +67,7 @@ class ClientIdentifier:
         return request.headers.get(header_name)
 
     @staticmethod
-    def get_user_id(request: Request) -> Optional[str]:
+    def get_user_id(request: Request) -> str | None:
         """
         Extract user ID from authenticated request.
 
@@ -134,7 +135,7 @@ class ClientIdentifier:
         return request.headers.get("User-Agent", "unknown")
 
     @staticmethod
-    def create_composite_id(request: Request, components: List[str]) -> str:
+    def create_composite_id(request: Request, components: list[str]) -> str:
         """
         Create a composite client ID from multiple components.
 
@@ -200,8 +201,8 @@ class ClientIdentifier:
 
 def create_client_key_func(
     strategy: str = "ip",
-    components: Optional[List[str]] = None,
-    custom_func: Optional[Callable[[Request], str]] = None,
+    components: list[str] | None = None,
+    custom_func: Callable[[Request], str] | None = None,
 ) -> Callable[[Any], str]:
     """
     Factory function to create client key extraction functions for decorators.
@@ -271,7 +272,7 @@ def format_rate_limit_message(
     window: int,
     retry_after: float = 0,
     algorithm: str = "",
-    custom_message: Optional[str] = None,
+    custom_message: str | None = None,
 ) -> str:
     """
     Format a user-friendly rate limit exceeded message.
@@ -302,10 +303,7 @@ def format_rate_limit_message(
     message = f"Rate limit exceeded: {limit} requests per {window_str}"
 
     if retry_after > 0:
-        if retry_after >= 60:
-            retry_str = f"{retry_after // 60:.0f} minute(s)"
-        else:
-            retry_str = f"{retry_after:.1f} second(s)"
+        retry_str = f"{retry_after // 60:.0f} minute(s)" if retry_after >= 60 else f"{retry_after:.1f} second(s)"
         message += f". Try again in {retry_str}"
 
     return message

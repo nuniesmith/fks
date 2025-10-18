@@ -57,7 +57,7 @@ async def build_status():
 
 
 @app.post("/api/analyze")
-async def analyze_trading_data(data: Dict[str, Any]):
+async def analyze_trading_data(data: dict[str, Any]):
     # Mock analysis response
     analysis_result = {
         "signal": "BUY",
@@ -89,7 +89,7 @@ async def lgmm_status():
 
 
 @app.post("/api/lgmm/train")
-async def train_lgmm(config: Dict[str, Any]):
+async def train_lgmm(config: dict[str, Any]):
     return JSONResponse(
         {
             "status": "training_started",

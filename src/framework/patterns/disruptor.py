@@ -1,5 +1,7 @@
 import asyncio
-from typing import Any, Callable, List, Optional
+import contextlib
+from collections.abc import Callable
+from typing import Any, List, Optional
 
 
 class EventProcessor:
@@ -23,8 +25,8 @@ class Disruptor:
 
     def __init__(self, buffer_size: int = 65536) -> None:
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=buffer_size)
-        self._processors: List[EventProcessor] = []
-        self._worker_task: Optional[asyncio.Task] = None
+        self._processors: list[EventProcessor] = []
+        self._worker_task: asyncio.Task | None = None
         self._sequence: int = 0
         self._stopped = asyncio.Event()
 
@@ -40,15 +42,11 @@ class Disruptor:
     async def stop(self) -> None:
         self._stopped.set()
         # Enqueue sentinel to unblock queue.get()
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             self._queue.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
         if self._worker_task:
-            try:
+            with contextlib.suppress(Exception):
                 await self._worker_task
-            except Exception:
-                pass
             self._worker_task = None
 
     async def publish(self, event: Any) -> None:

@@ -69,13 +69,13 @@ class BaseException(Exception):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[int] = None,
-        code_str: Optional[str] = None,
-        http_status: Optional[int] = None,
-        severity: Optional[ErrorSeverity] = None,
+        message: str | None = None,
+        code: int | None = None,
+        code_str: str | None = None,
+        http_status: int | None = None,
+        severity: ErrorSeverity | None = None,
         retryable: bool = False,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
         **kwargs,
     ):
         """
@@ -116,7 +116,7 @@ class BaseException(Exception):
         # Increment Prometheus error counter
         _increment_error_counter(self.__class__.__name__)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serialize the exception to a comprehensive dictionary.
 
@@ -160,9 +160,9 @@ class BaseException(Exception):
 
     @classmethod
     def create(
-        cls: Type[T],
-        message: Optional[str] = None,
-        code: Optional[int] = None,
+        cls: type[T],
+        message: str | None = None,
+        code: int | None = None,
         **kwargs,
     ) -> T:
         """
@@ -227,10 +227,10 @@ class ErrorRegistry:
     Central registry for tracking and managing application exceptions.
     """
 
-    _registry: Dict[str, Type[BaseException]] = {}
+    _registry: dict[str, type[BaseException]] = {}
 
     @classmethod
-    def register(cls, exception_class: Type[BaseException]):
+    def register(cls, exception_class: type[BaseException]):
         """
         Register an exception class in the central registry.
 
@@ -241,7 +241,7 @@ class ErrorRegistry:
         logger.info(f"Registered exception: {exception_class.__name__}")
 
     @classmethod
-    def get(cls, exception_name: str) -> Optional[Type[BaseException]]:
+    def get(cls, exception_name: str) -> type[BaseException] | None:
         """
         Retrieve a registered exception class.
 
@@ -254,7 +254,7 @@ class ErrorRegistry:
         return cls._registry.get(exception_name)
 
     @classmethod
-    def list_exceptions(cls) -> List[str]:
+    def list_exceptions(cls) -> list[str]:
         """
         List all registered exception names.
 
@@ -265,9 +265,9 @@ class ErrorRegistry:
 
 
 def create_exception(
-    exception_class: Type[T],
-    message: Optional[str] = None,
-    code: Optional[int] = None,
+    exception_class: type[T],
+    message: str | None = None,
+    code: int | None = None,
     **kwargs,
 ) -> T:
     """
@@ -309,7 +309,7 @@ _register_core_exceptions()
 class NetworkError(GeneralError):
     def __init__(
         self,
-        message: Optional[str] = "Network error occurred.",
+        message: str | None = "Network error occurred.",
         code: int = 7000,
         **kwargs,
     ):
@@ -319,7 +319,7 @@ class NetworkError(GeneralError):
 class TimeoutError(NetworkError):
     def __init__(
         self,
-        message: Optional[str] = "The operation timed out.",
+        message: str | None = "The operation timed out.",
         code: int = 7001,
         **kwargs,
     ):
@@ -329,7 +329,7 @@ class TimeoutError(NetworkError):
 class RateLimitExceeded(NetworkError):
     def __init__(
         self,
-        message: Optional[str] = "Rate limit has been exceeded.",
+        message: str | None = "Rate limit has been exceeded.",
         code: int = 7004,
         **kwargs,
     ):

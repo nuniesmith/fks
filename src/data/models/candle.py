@@ -75,9 +75,9 @@ class Candle(ModelBase):
     close: float
     volume: float
     interval: Union[str, "TimeInterval"] = "1h"
-    trades: Optional[int] = None
+    trades: int | None = None
     source: str = "unknown"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """Validate candle data after initialization"""
@@ -176,7 +176,7 @@ class Candle(ModelBase):
         """Alias for price_range for backward compatibility"""
         return self.price_range
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the candle to a dictionary.
 
@@ -209,7 +209,7 @@ class Candle(ModelBase):
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Candle":
+    def from_dict(cls, data: dict[str, Any]) -> "Candle":
         """
         Create a Candle instance from a dictionary.
 

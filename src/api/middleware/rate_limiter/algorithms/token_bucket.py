@@ -40,7 +40,7 @@ class TokenBucketAlgorithm(RateLimitAlgorithm):
         self.bucket_capacity = max_requests + self.burst_capacity
         self.refill_rate = max_requests / time_window  # tokens per second
 
-    def _get_client_data(self, client_id: str) -> Dict[str, Any]:
+    def _get_client_data(self, client_id: str) -> dict[str, Any]:
         """Get or initialize token bucket data for a client."""
         if client_id not in self._client_data:
             current_time = time.time()
@@ -51,7 +51,7 @@ class TokenBucketAlgorithm(RateLimitAlgorithm):
             }
         return self._client_data[client_id]
 
-    def _refill_bucket(self, client_data: Dict[str, Any], current_time: float) -> None:
+    def _refill_bucket(self, client_data: dict[str, Any], current_time: float) -> None:
         """Refill the token bucket based on elapsed time."""
         time_passed = current_time - client_data["last_refill"]
         if time_passed > 0:
@@ -109,7 +109,7 @@ class TokenBucketAlgorithm(RateLimitAlgorithm):
 
         return False
 
-    def get_bucket_info(self, client_id: str) -> Dict[str, Any]:
+    def get_bucket_info(self, client_id: str) -> dict[str, Any]:
         """
         Get detailed bucket information for a client.
 

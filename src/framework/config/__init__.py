@@ -100,7 +100,7 @@ ConfigManager = FKSConfigManager
 
 
 def create_config_manager(
-    config_path: Optional[Union[str, Path]] = None,
+    config_path: str | Path | None = None,
     env_prefix: str = "FKS_",
     watch_changes: bool = True,
     **kwargs,
@@ -136,9 +136,9 @@ def create_config_manager(
 
 
 def load_config(
-    sources: Union[str, Path, List[Union[str, Path, ConfigSource]]],
+    sources: str | Path | list[str | Path | ConfigSource],
     env_prefix: str = "FKS_",
-    base_dir: Optional[Path] = None,
+    base_dir: Path | None = None,
     apply_defaults: bool = True,
 ) -> Config:
     """
@@ -183,7 +183,7 @@ def load_config(
     return config
 
 
-def load_config_from_env(prefix: str = "FKS_") -> Dict[str, Any]:
+def load_config_from_env(prefix: str = "FKS_") -> dict[str, Any]:
     """
     Load configuration from environment variables only.
 
@@ -234,7 +234,7 @@ def get_default_config_path() -> Path:
     return Path.cwd() / "config" / "config.yaml"
 
 
-def validate_config(config: Union[Config, Dict[str, Any]]) -> ValidationResult:
+def validate_config(config: Config | dict[str, Any]) -> ValidationResult:
     """
     Validate configuration object.
 
@@ -261,7 +261,7 @@ def validate_config(config: Union[Config, Dict[str, Any]]) -> ValidationResult:
     return result
 
 
-def setup_logging_from_config(config: Union[Config, LoggingConfig]) -> None:
+def setup_logging_from_config(config: Config | LoggingConfig) -> None:
     """
     Set up logging from configuration.
 
@@ -299,7 +299,7 @@ def setup_logging_from_config(config: Union[Config, LoggingConfig]) -> None:
         )
 
 
-def create_config_from_dict(data: Dict[str, Any]) -> Config:
+def create_config_from_dict(data: dict[str, Any]) -> Config:
     """
     Create a Config object from a dictionary.
 

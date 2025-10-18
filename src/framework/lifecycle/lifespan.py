@@ -8,8 +8,9 @@ particularly for FastAPI and other web frameworks that support lifespan events.
 
 import asyncio
 import contextlib
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Callable, List, Optional
+from typing import Any, List, Optional
 
 try:
     from loguru import logger
@@ -28,7 +29,7 @@ except ImportError:
 
 
 @asynccontextmanager
-async def get_lifespan_manager(app: Optional[Any] = None) -> AsyncGenerator[None, None]:
+async def get_lifespan_manager(app: Any | None = None) -> AsyncGenerator[None]:
     """
     Lifespan context manager for FastAPI application.
 
@@ -256,7 +257,7 @@ class ApplicationLifecycle:
         self.services.append(service)
         logger.debug(f"Registered service: {service.__class__.__name__}")
 
-    def register_services(self, services: List[Any]) -> None:
+    def register_services(self, services: list[Any]) -> None:
         """
         Register multiple services to be managed by the lifecycle manager.
 

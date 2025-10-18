@@ -17,17 +17,8 @@ from typing import Any, Union
 from fastapi import FastAPI
 
 # Import core middleware classes
-from .auth import (
-    authenticate_user,
-    create_access_token,
-    decode_token,
-    get_auth_token,
-)
-from .cors import (
-    CORSMiddleware,
-    create_cors_middleware,
-    setup_cors,
-)
+from .auth import authenticate_user, create_access_token, decode_token, get_auth_token
+from .cors import CORSMiddleware, create_cors_middleware, setup_cors
 from .error import (
     ApplicationError,
     BadRequestError,
@@ -40,14 +31,8 @@ from .error import (
     create_error_logger,
     register_app_errors,
 )
-from .metrics import (
-    MetricsMiddleware,
-    metrics_middleware,
-)
-from .rate_limiter.rate_limit import (
-    RateLimitMiddleware,
-    rate_limit_middleware,
-)
+from .metrics import MetricsMiddleware, metrics_middleware
+from .rate_limiter.rate_limit import RateLimitMiddleware, rate_limit_middleware
 from .request_id import (
     RequestIdMiddleware,
     create_child_id,
@@ -56,12 +41,7 @@ from .request_id import (
     get_trace_info,
     request_id_middleware,
 )
-from .timing import (
-    TimingMiddleware,
-    TimingStats,
-    get_request_timing,
-    setup_timing_middleware,
-)
+from .timing import TimingMiddleware, TimingStats, get_request_timing, setup_timing_middleware
 
 # Version information
 __version__ = "1.0.0"

@@ -15,10 +15,12 @@ import sys
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
 from werkzeug.exceptions import HTTPException
 
 __all__ = [
@@ -97,7 +99,7 @@ class ServiceConfig:
     fallback_port: int = 8080
     shutdown_timeout: int = 30  # seconds
     enable_metrics: bool = False
-    custom_endpoints: Dict[str, Callable] = field(default_factory=dict)
+    custom_endpoints: dict[str, Callable] = field(default_factory=dict)
 
 
 class HealthEndpoint:
@@ -118,7 +120,7 @@ class HealthEndpoint:
         else:
             return LoggerAdapter(f"{self.config.name}.health")
 
-    def get_service_info(self) -> Dict[str, Any]:
+    def get_service_info(self) -> dict[str, Any]:
         """Get comprehensive service information."""
         uptime = datetime.now() - self.start_time
         days, remainder = divmod(uptime.total_seconds(), 86400)
@@ -226,7 +228,10 @@ class HealthEndpoint:
 
                 if methods:
                     self.app.add_url_rule(
-                        path, endpoint=endpoint_name, view_func=view_func, methods=methods
+                        path,
+                        endpoint=endpoint_name,
+                        view_func=view_func,
+                        methods=methods,
                     )
                 else:
                     self.app.add_url_rule(
@@ -329,12 +334,12 @@ class ServiceTemplate:
     Enhanced service template with lifecycle management and health endpoints.
     """
 
-    def __init__(self, config: Optional[ServiceConfig] = None):
+    def __init__(self, config: ServiceConfig | None = None):
         self.config = config or ServiceConfig()
         self.health_endpoint = HealthEndpoint(self.config)
         self.logger = self._create_logger()
-        self.shutdown_handlers: List[Callable] = []
-        self.startup_handlers: List[Callable] = []
+        self.shutdown_handlers: list[Callable] = []
+        self.startup_handlers: list[Callable] = []
         self._shutdown_requested = False
         self._setup_logging()
 
@@ -416,7 +421,7 @@ class ServiceTemplate:
                 )
             time.sleep(60)
 
-    def run(self, main_loop: Optional[Callable] = None) -> None:
+    def run(self, main_loop: Callable | None = None) -> None:
         """
         Run the service with lifecycle management.
 
@@ -496,7 +501,7 @@ class ServiceTemplate:
 
 
 def start_template_service(
-    service_name: Optional[str] = None, service_port: Optional[int] = None, **kwargs
+    service_name: str | None = None, service_port: int | None = None, **kwargs
 ) -> None:
     """
     Start a service using the template with the specified configuration.
@@ -521,9 +526,7 @@ def start_template_service(
     service.run()
 
 
-def start(
-    service_name: Optional[str] = None, service_port: Optional[int] = None
-) -> None:
+def start(service_name: str | None = None, service_port: int | None = None) -> None:
     """
     Convenience function for starting a service template.
 

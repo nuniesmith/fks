@@ -19,7 +19,7 @@ class PolygonClient(BaseClient):
 
     BASE_URL = "https://api.polygon.io/v2/aggs/ticker/{symbol}/range/{multiplier}/{interval}/{start}/{end}"
     EXCHANGES_URL = "https://api.polygon.io/v3/reference/exchanges"  # Health check
-    TIMEFRAME_MAP: Dict[str, Tuple[int, str]] = {
+    TIMEFRAME_MAP: dict[str, tuple[int, str]] = {
         "1m": (1, "minute"),
         "5m": (5, "minute"),
         "15m": (15, "minute"),
@@ -44,9 +44,7 @@ class PolygonClient(BaseClient):
     COLUMN_VOLUME = "Volume"
     COLUMN_TIMESTAMP = "Timestamp"
 
-    def __init__(
-        self, api_key: Optional[str] = None, metrics: Optional[Any] = None
-    ) -> None:
+    def __init__(self, api_key: str | None = None, metrics: Any | None = None) -> None:
         """
         Initialize the Polygon.io client.
         """
@@ -70,8 +68,8 @@ class PolygonClient(BaseClient):
         timeframe: str,
         start_timestamp: int,
         end_timestamp: int,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Optional[pd.DataFrame]:
+        params: dict[str, Any] | None = None,
+    ) -> pd.DataFrame | None:
         """
         High-level method to fetch OHLCV data for a given symbol and timeframe.
         """
@@ -85,7 +83,7 @@ class PolygonClient(BaseClient):
         start_timestamp: int,
         end_timestamp: int,
         max_retries: int = 3,
-    ) -> Optional[pd.DataFrame]:
+    ) -> pd.DataFrame | None:
         """
         Fetch OHLCV data from Polygon.io in chunks and concatenate them.
         """
@@ -119,7 +117,7 @@ class PolygonClient(BaseClient):
             "apiKey": self.api_key,
         }
 
-        all_results: List[Dict[str, Union[int, float]]] = []
+        all_results: list[dict[str, int | float]] = []
         next_url = url
 
         overall_start_time = time.time()
@@ -155,8 +153,8 @@ class PolygonClient(BaseClient):
         return df
 
     def _fetch_single_page(
-        self, url: str, params: Dict[str, Any], max_retries: int
-    ) -> Optional[Dict[str, Any]]:
+        self, url: str, params: dict[str, Any], max_retries: int
+    ) -> dict[str, Any] | None:
         """
         Fetch a single page from Polygon, enforcing throttling and retries.
         """
@@ -236,7 +234,7 @@ class PolygonClient(BaseClient):
         df.sort_index(inplace=True)
         return df
 
-    def get_exchanges(self) -> Optional[Dict[str, Any]]:
+    def get_exchanges(self) -> dict[str, Any] | None:
         """
         Fetch exchanges list from Polygon API.
         Used for health checks.

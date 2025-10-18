@@ -11,18 +11,8 @@ import json
 import re
 import sys
 import time
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    Generic,
-    List,
-    Optional,
-    TypeVar,
-    Union,
-    cast,
-)
+from collections.abc import Awaitable, Callable
+from typing import Any, Dict, Generic, List, Optional, TypeVar, Union, cast
 
 from loguru import logger
 
@@ -77,7 +67,7 @@ class CacheStats:
         self.expirations = 0
         self.total_size_bytes = 0
         self.creation_time = time.time()
-        self.response_times: List[float] = []  # List of response times in ms
+        self.response_times: list[float] = []  # List of response times in ms
 
     @property
     def hit_rate(self) -> float:
@@ -115,7 +105,7 @@ class CacheStats:
         if len(self.response_times) > 1000:
             self.response_times = self.response_times[-1000:]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert stats to dictionary."""
         return {
             "hits": self.hits,
@@ -138,7 +128,7 @@ class AsyncCache(Generic[T]):
         self,
         default_ttl: int = 300,
         max_size: int = 1000,
-        max_bytes: Optional[int] = None,
+        max_bytes: int | None = None,
     ):
         """
         Initialize the cache.
@@ -151,7 +141,7 @@ class AsyncCache(Generic[T]):
         self.default_ttl = default_ttl
         self.max_size = max_size
         self.max_bytes = max_bytes
-        self.cache: Dict[str, CacheEntry[T]] = {}
+        self.cache: dict[str, CacheEntry[T]] = {}
         self.stats = CacheStats()
         self._lock = asyncio.Lock()  # Async lock for thread safety
 
@@ -211,7 +201,7 @@ class AsyncCache(Generic[T]):
         key_string = ":".join(key_parts)
         return hashlib.md5(key_string.encode()).hexdigest()
 
-    async def get(self, key: str) -> Optional[T]:
+    async def get(self, key: str) -> T | None:
         """
         Get an entry from the cache if it exists and is not expired.
 
@@ -241,7 +231,7 @@ class AsyncCache(Generic[T]):
             self.stats.record_miss()
             return None
 
-    async def set(self, key: str, data: T, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, data: T, ttl: int | None = None) -> None:
         """
         Store a response in the cache.
 
@@ -402,7 +392,7 @@ class AsyncCache(Generic[T]):
         self.stats.total_size_bytes = 0
         logger.debug(f"Cleared entire async cache synchronously ({count} entries)")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get statistics about the cache performance."""
         return {
             **self.stats.to_dict(),
@@ -413,7 +403,7 @@ class AsyncCache(Generic[T]):
 
     async def refresh(
         self, key: str, refresh_func: Callable[[], Awaitable[T]]
-    ) -> Optional[T]:
+    ) -> T | None:
         """
         Refresh a cache entry by calling a function and updating the cache.
 
@@ -441,7 +431,7 @@ class AsyncCache(Generic[T]):
         self,
         key: str,
         value_func: Callable[[], Awaitable[T]],
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
     ) -> T:
         """
         Get a value from cache or compute and store it if not available.
@@ -475,11 +465,11 @@ class AsyncCache(Generic[T]):
 
 
 # Registry of named async caches
-_cache_registry: Dict[str, AsyncCache] = {}
+_cache_registry: dict[str, AsyncCache] = {}
 
 
 def get_async_cache(
-    name: str = "default", max_size: int = 1000, max_bytes: Optional[int] = None
+    name: str = "default", max_size: int = 1000, max_bytes: int | None = None
 ) -> AsyncCache:
     """
     Get or create a named async cache instance.
@@ -504,6 +494,6 @@ async def clear_all_async_caches() -> None:
         logger.debug(f"Cleared async cache: {cache_name}")
 
 
-def get_all_async_cache_stats() -> Dict[str, Dict[str, Any]]:
+def get_all_async_cache_stats() -> dict[str, dict[str, Any]]:
     """Get statistics for all async caches."""
     return {name: cache.get_stats() for name, cache in _cache_registry.items()}

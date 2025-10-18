@@ -9,7 +9,8 @@ import asyncio
 import functools
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Callable, TypeVar, Union
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 from loguru import logger
 
@@ -241,7 +242,7 @@ def timeout_handler(timeout_seconds: float):
                     func(*args, **kwargs), timeout=timeout_seconds
                 )
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 raise TimeoutError(
                     f"Function {func.__name__} timed out after {timeout_seconds}s"
                 )

@@ -12,7 +12,8 @@ import importlib.util
 import sys
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, cast
 
 try:
     from loguru import logger
@@ -65,7 +66,7 @@ def _update_teardown_state(**kwargs) -> None:
                 _teardown_state[key] = value
 
 
-def get_teardown_state() -> Dict[str, Any]:
+def get_teardown_state() -> dict[str, Any]:
     """
     Get the current teardown state.
 
@@ -79,7 +80,7 @@ def get_teardown_state() -> Dict[str, Any]:
 
 def _shutdown_component(
     component_name: str, timeout: float = DEFAULT_TEARDOWN_TIMEOUT
-) -> Tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """
     Shutdown a specific core component with timeout.
 
@@ -117,17 +118,17 @@ def _shutdown_component(
 
         # Look for shutdown/teardown function
         if hasattr(module, "teardown"):
-            teardown_func = getattr(module, "teardown")
+            teardown_func = module.teardown
         elif hasattr(module, "shutdown"):
-            teardown_func = getattr(module, "shutdown")
+            teardown_func = module.shutdown
         else:
             _logger.debug(f"No teardown/shutdown function found in {module_path}")
             return True, None  # Assume success if no teardown function
 
         # If we have a background thread version, use it with timeout
         if hasattr(module, "teardown_async") or hasattr(module, "shutdown_async"):
-            async_func = getattr(module, "teardown_async", None) or getattr(
-                module, "shutdown_async"
+            async_func = (
+                getattr(module, "teardown_async", None) or module.shutdown_async
             )
 
             # Create a thread to run the teardown
@@ -187,9 +188,7 @@ def shutdown_databases() -> bool:
                 try:
                     db_module = importlib.import_module("core.db")
                     if hasattr(db_module, "close_all_connections"):
-                        close_all_connections = getattr(
-                            db_module, "close_all_connections"
-                        )
+                        close_all_connections = db_module.close_all_connections
                         close_all_connections()
                         _logger.info("All database connections closed")
                 except ImportError:
@@ -197,9 +196,7 @@ def shutdown_databases() -> bool:
                     try:
                         db_module = importlib.import_module("core.database")
                         if hasattr(db_module, "close_all_connections"):
-                            close_all_connections = getattr(
-                                db_module, "close_all_connections"
-                            )
+                            close_all_connections = db_module.close_all_connections
                             close_all_connections()
                             _logger.info("All database connections closed")
                     except ImportError:
@@ -220,7 +217,7 @@ def shutdown_databases() -> bool:
                 try:
                     orm_module = importlib.import_module("core.db.orm")
                     if hasattr(orm_module, "shutdown_engine"):
-                        shutdown_engine = getattr(orm_module, "shutdown_engine")
+                        shutdown_engine = orm_module.shutdown_engine
                         shutdown_engine()
                         _logger.info("ORM engine shut down")
                 except ImportError:
@@ -228,7 +225,7 @@ def shutdown_databases() -> bool:
                     try:
                         orm_module = importlib.import_module("core.database.orm")
                         if hasattr(orm_module, "shutdown_engine"):
-                            shutdown_engine = getattr(orm_module, "shutdown_engine")
+                            shutdown_engine = orm_module.shutdown_engine
                             shutdown_engine()
                             _logger.info("ORM engine shut down")
                     except ImportError:
@@ -419,7 +416,7 @@ def shutdown_security() -> bool:
 
 
 def teardown(
-    components: Optional[List[str]] = None, timeout: float = DEFAULT_TEARDOWN_TIMEOUT
+    components: list[str] | None = None, timeout: float = DEFAULT_TEARDOWN_TIMEOUT
 ) -> bool:
     """
     Orchestrate the teardown of all core components.

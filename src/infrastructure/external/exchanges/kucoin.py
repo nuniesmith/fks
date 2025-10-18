@@ -67,7 +67,7 @@ class KuCoinAdapter(ExchangeAdapterInterface):
         side: str,
         quantity: float,
         order_type: str = "market",
-        price: Optional[float] = None,
+        price: float | None = None,
     ) -> dict:
         """
         Place an order on KuCoin.
@@ -167,7 +167,7 @@ async def place_kucoin_order(
     side: Literal["buy", "sell"],
     quantity: float,
     order_type: Literal["market", "limit"] = "market",
-    price: Optional[float] = None,
+    price: float | None = None,
     kucoin_adapter: KuCoinAdapter = Depends(get_kucoin_adapter),
 ):
     """

@@ -3,8 +3,9 @@ HTTP middleware for rate limiting FastAPI and Starlette applications.
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
@@ -31,26 +32,24 @@ class RateLimitConfig:
 
     # Client identification
     client_id_strategy: str = "ip"  # 'ip', 'user_id', 'api_key', 'composite'
-    client_id_components: List[str] = field(default_factory=lambda: ["ip"])
+    client_id_components: list[str] = field(default_factory=lambda: ["ip"])
 
     # Path configuration
-    exclude_paths: Set[str] = field(
+    exclude_paths: set[str] = field(
         default_factory=lambda: {"/health", "/docs", "/openapi.json"}
     )
-    include_paths: Optional[Set[str]] = (
-        None  # If set, only these paths are rate limited
-    )
+    include_paths: set[str] | None = None  # If set, only these paths are rate limited
 
     # Advanced features
     api_key_multiplier: float = 5.0  # API key users get higher limits
     api_key_header: str = "X-API-Key"
-    custom_limits: Dict[str, Tuple[int, int]] = field(
+    custom_limits: dict[str, tuple[int, int]] = field(
         default_factory=dict
     )  # path -> (requests, window)
 
     # Response configuration
     enable_headers: bool = True  # Add rate limit headers to responses
-    custom_error_message: Optional[str] = None
+    custom_error_message: str | None = None
     error_response_format: str = "json"  # 'json' or 'plain'
 
     # Behavior
@@ -73,7 +72,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     - Graceful error handling
     """
 
-    def __init__(self, app: ASGIApp, config: Optional[RateLimitConfig] = None):
+    def __init__(self, app: ASGIApp, config: RateLimitConfig | None = None):
         """
         Initialize the rate limiting middleware.
 
@@ -131,7 +130,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self.api_key_limiter = None
 
         # Path-specific limiters
-        self.path_limiters: Dict[str, RateLimiter] = {}
+        self.path_limiters: dict[str, RateLimiter] = {}
         for path, (requests, window) in self.config.custom_limits.items():
             limiter_name = f"middleware_path_{path.replace('/', '_')}"
             self.path_limiters[path] = get_or_create_rate_limiter(
@@ -171,7 +170,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _select_limiter_and_client_id(
         self, request: Request
-    ) -> Tuple[RateLimiter, str]:
+    ) -> tuple[RateLimiter, str]:
         """Select the appropriate rate limiter and client ID for the request."""
         path = request.url.path
 
@@ -330,7 +329,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
                 if self.config.log_violations:
                     logger.warning(
-                        f"Rate limit exceeded",
+                        "Rate limit exceeded",
                         client_id=(
                             client_id[:8] + "..." if len(client_id) > 8 else client_id
                         ),
@@ -346,7 +345,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             if self.config.log_allowed_requests:
                 logger.debug(
-                    f"Request allowed",
+                    "Request allowed",
                     client_id=(
                         client_id[:8] + "..." if len(client_id) > 8 else client_id
                     ),
@@ -420,7 +419,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     },
                 )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get comprehensive middleware statistics."""
         # Get middleware stats
         middleware_stats = self.stats.copy()

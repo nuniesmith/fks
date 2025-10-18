@@ -60,13 +60,13 @@ class Tick(BaseClass):
     timestamp: datetime
     price: float
     volume: float
-    side: Optional[Literal["buy", "sell"]] = None
-    trade_id: Optional[str] = None
+    side: Literal["buy", "sell"] | None = None
+    trade_id: str | None = None
     source: str = "unknown"
-    buyer_order_id: Optional[str] = None
-    seller_order_id: Optional[str] = None
-    is_market_maker: Optional[bool] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    buyer_order_id: str | None = None
+    seller_order_id: str | None = None
+    is_market_maker: bool | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """Validate tick data after initialization"""
@@ -110,7 +110,7 @@ class Tick(BaseClass):
         """
         return self.side == "sell"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the tick to a dictionary.
 
@@ -149,7 +149,7 @@ class Tick(BaseClass):
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Tick":
+    def from_dict(cls, data: dict[str, Any]) -> "Tick":
         """
         Create a Tick instance from a dictionary.
 

@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Callable, List, Optional
+from collections.abc import Callable
+from typing import Any, List, Optional
 
 
 class EventProcessor:
@@ -23,8 +24,8 @@ class Disruptor:
 
     def __init__(self, buffer_size: int = 65536) -> None:
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=buffer_size)
-        self._processors: List[EventProcessor] = []
-        self._worker_task: Optional[asyncio.Task] = None
+        self._processors: list[EventProcessor] = []
+        self._worker_task: asyncio.Task | None = None
         self._sequence: int = 0
         self._stopped = asyncio.Event()
 

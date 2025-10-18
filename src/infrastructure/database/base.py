@@ -7,17 +7,14 @@ Provides centralized database connection handling for the application.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Self, Union
 
-from framework.exceptions.data import DatabaseError
-from infrastructure.persistence.database import (
-    register_connection,
-    unregister_connection,
-)
+from infrastructure.persistence.database import register_connection, unregister_connection
 from infrastructure.persistence.database.orm import init_engine, shutdown_engine
 from infrastructure.persistence.database.postgres import PostgresConnection
 from pydantic import BaseModel, Field, field_validator
-from typing_extensions import Self
+
+from framework.exceptions.data import DatabaseError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -26,12 +23,12 @@ logger = logging.getLogger(__name__)
 class DatabaseConfig(BaseModel):
     """Database configuration model."""
 
-    dsn: Optional[str] = None
-    host: Optional[str] = None
-    port: Optional[int] = Field(default=5432)
-    dbname: Optional[str] = None
-    user: Optional[str] = None
-    password: Optional[str] = None
+    dsn: str | None = None
+    host: str | None = None
+    port: int | None = Field(default=5432)
+    dbname: str | None = None
+    user: str | None = None
+    password: str | None = None
     use_pool: bool = Field(default=True)
     use_orm: bool = Field(default=False)
     pool_min_size: int = Field(default=1)
@@ -40,7 +37,7 @@ class DatabaseConfig(BaseModel):
 
     @field_validator("host", "dbname", "user", "password")
     @classmethod
-    def check_connection_params(cls, v: Optional[str], info) -> Optional[str]:
+    def check_connection_params(cls, v: str | None, info) -> str | None:
         """Validate that either DSN or individual parameters are provided."""
         # Skip validation if value is provided
         if v is not None:
@@ -60,7 +57,7 @@ class DatabaseConfig(BaseModel):
 
         return v
 
-    def to_connection_params(self) -> Dict[str, Any]:
+    def to_connection_params(self) -> dict[str, Any]:
         """Convert config to connection parameters dict."""
         return {
             "dsn": self.dsn,
@@ -86,14 +83,14 @@ class Database:
 
     def __init__(self):
         """Initialize the database manager."""
-        self._pg_connection: Optional[PostgresConnection] = None
+        self._pg_connection: PostgresConnection | None = None
         self._engine_initialized: bool = False
-        self._config: Optional[DatabaseConfig] = None
+        self._config: DatabaseConfig | None = None
         self._is_connected: bool = False
         self._connecting: bool = False
         self._connection_lock = asyncio.Lock()
 
-    def configure(self, config: Union[DatabaseConfig, Dict[str, Any]]) -> Self:
+    def configure(self, config: DatabaseConfig | dict[str, Any]) -> Self:
         """
         Configure database connection parameters.
 
@@ -267,7 +264,7 @@ class Database:
         conn = self.connection
         try:
             # Start transaction if applicable
-            if hasattr(conn, "begin") and callable(getattr(conn, "begin")):
+            if hasattr(conn, "begin") and callable(conn.begin):
                 conn.begin()
 
             yield conn

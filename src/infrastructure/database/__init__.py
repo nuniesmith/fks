@@ -7,7 +7,8 @@ across the application, with support for multiple database types.
 
 import asyncio
 import threading
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, Set, Union
 
 from loguru import logger
 
@@ -38,7 +39,7 @@ __all__ = [
 
 # Active connection tracking
 _connection_lock = threading.RLock()
-_active_connections: Dict[str, List[Any]] = {"postgres": [], "other": []}
+_active_connections: dict[str, list[Any]] = {"postgres": [], "other": []}
 
 # Module logger
 _logger = logger.bind(name="core.data.db")
@@ -78,7 +79,7 @@ def unregister_connection(connection: Any, db_type: str = "other") -> None:
     _logger.debug(f"Unregistered {db_type} connection: {connection}")
 
 
-def get_connection_count() -> Dict[str, int]:
+def get_connection_count() -> dict[str, int]:
     """
     Get count of active connections by database type.
 
@@ -200,7 +201,7 @@ async def run_async(func: Callable, *args, **kwargs) -> Any:
 
 
 # Database instance cache for efficient reuse
-_db_instances: Dict[str, Database] = {}
+_db_instances: dict[str, Database] = {}
 
 
 def get_db(name: str = "default") -> Database:

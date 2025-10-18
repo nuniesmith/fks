@@ -61,8 +61,8 @@ _current_config = None
 
 
 def setup_logging(
-    config: Optional[Union[LogConfig, Dict[str, Any]]] = None,
-    environment: Optional[str] = None,
+    config: LogConfig | dict[str, Any] | None = None,
+    environment: str | None = None,
     force_reconfigure: bool = False,
 ) -> LogConfig:
     """
@@ -94,7 +94,7 @@ def setup_logging(
     return _current_config
 
 
-def get_current_config() -> Optional[LogConfig]:
+def get_current_config() -> LogConfig | None:
     """
     Get the current logging configuration.
 
@@ -329,8 +329,8 @@ def get_context():
 # Logger factory with framework defaults
 def create_logger(
     name: str,
-    level: Optional[str] = None,
-    extra_fields: Optional[Dict[str, Any]] = None,
+    level: str | None = None,
+    extra_fields: dict[str, Any] | None = None,
 ) -> Any:
     """
     Create a logger with framework defaults.
@@ -512,7 +512,7 @@ def get_package_info():
 
 
 # Health check for logging system
-def health_check() -> Dict[str, Any]:
+def health_check() -> dict[str, Any]:
     """
     Perform a health check on the logging system.
 
@@ -558,7 +558,7 @@ def health_check() -> Dict[str, Any]:
 class temporary_logging_config:
     """Context manager for temporary logging configuration."""
 
-    def __init__(self, config: Union[LogConfig, Dict[str, Any]]):
+    def __init__(self, config: LogConfig | dict[str, Any]):
         self.temp_config = config
         self.original_config = None
         self.was_configured = False

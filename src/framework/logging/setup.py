@@ -12,11 +12,12 @@ import sys
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 try:
     from loguru import logger
@@ -83,14 +84,14 @@ class LogConfig:
     max_file_size: str = DEFAULT_MAX_FILE_SIZE
     retention: str = DEFAULT_RETENTION
     rotation: str = DEFAULT_ROTATION
-    format_string: Optional[str] = None
+    format_string: str | None = None
     json_logs: bool = False
     request_id_header: str = "X-Request-ID"
     correlation_id_header: str = "X-Correlation-ID"
     enable_performance_logging: bool = True
     enable_audit_logging: bool = True
     enable_security_logging: bool = True
-    extra_fields: Dict[str, Any] = None
+    extra_fields: dict[str, Any] = None
 
     def __post_init__(self):
         if self.extra_fields is None:
@@ -107,7 +108,7 @@ class RequestContext:
         """Set the current request ID."""
         self._local.request_id = request_id
 
-    def get_request_id(self) -> Optional[str]:
+    def get_request_id(self) -> str | None:
         """Get the current request ID."""
         return getattr(self._local, "request_id", None)
 
@@ -115,7 +116,7 @@ class RequestContext:
         """Set the current correlation ID."""
         self._local.correlation_id = correlation_id
 
-    def get_correlation_id(self) -> Optional[str]:
+    def get_correlation_id(self) -> str | None:
         """Get the current correlation ID."""
         return getattr(self._local, "correlation_id", None)
 
@@ -123,7 +124,7 @@ class RequestContext:
         """Set the current user ID."""
         self._local.user_id = user_id
 
-    def get_user_id(self) -> Optional[str]:
+    def get_user_id(self) -> str | None:
         """Get the current user ID."""
         return getattr(self._local, "user_id", None)
 
@@ -131,7 +132,7 @@ class RequestContext:
         """Set the current session ID."""
         self._local.session_id = session_id
 
-    def get_session_id(self) -> Optional[str]:
+    def get_session_id(self) -> str | None:
         """Get the current session ID."""
         return getattr(self._local, "session_id", None)
 
@@ -141,7 +142,7 @@ class RequestContext:
             if hasattr(self._local, attr):
                 delattr(self._local, attr)
 
-    def get_context_dict(self) -> Dict[str, str]:
+    def get_context_dict(self) -> dict[str, str]:
         """Get all context as a dictionary."""
         context = {}
         for attr in ["request_id", "correlation_id", "user_id", "session_id"]:
@@ -381,8 +382,8 @@ def setup_security_logging(config: LogConfig):
 
 
 def configure_logging(
-    config: Optional[Union[LogConfig, Dict[str, Any]]] = None,
-    environment: Optional[str] = None,
+    config: LogConfig | dict[str, Any] | None = None,
+    environment: str | None = None,
 ) -> LogConfig:
     """
     Configure logging based on configuration and environment.

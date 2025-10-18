@@ -3,8 +3,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 import requests
-from framework.middleware.metrics import MetricType, PrometheusMetrics
 from loguru import logger
+
+from framework.middleware.metrics import MetricType, PrometheusMetrics
 
 
 class BaseClient:
@@ -12,7 +13,7 @@ class BaseClient:
     Base client class that provides common functionality for all API clients.
     """
 
-    def __init__(self, name: str, metrics: Optional[Any] = None):
+    def __init__(self, name: str, metrics: Any | None = None):
         """Initialize the base client with common properties."""
         self.name = name
         # Create an instance of PrometheusMetrics if metrics is not provided
@@ -21,11 +22,11 @@ class BaseClient:
     def _make_request(
         self,
         url: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         timeout: int = 30,
         max_retries: int = 3,
         endpoint: str = "unknown",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Make an API request with retry logic and metric recording.
 
@@ -154,7 +155,7 @@ class BaseClient:
         """
         raise NotImplementedError("Subclasses must implement _process_data method")
 
-    def get(self, symbol: str, timeframe: str, **kwargs) -> Optional[pd.DataFrame]:
+    def get(self, symbol: str, timeframe: str, **kwargs) -> pd.DataFrame | None:
         """
         Generic method to fetch data for a symbol and timeframe.
         To be implemented by subclasses.

@@ -27,7 +27,7 @@ class MemoryStateProvider(StateProvider):
             deep_copy: Whether to make deep copies of state when storing/retrieving
         """
         # Storage structure: {key: (state_dict, expiration_timestamp)}
-        self._storage: Dict[str, Tuple[Dict[str, Any], float]] = {}
+        self._storage: dict[str, tuple[dict[str, Any], float]] = {}
         self._lock = threading.RLock()
         self.ttl_seconds = ttl_seconds
         self.deep_copy = deep_copy
@@ -43,7 +43,7 @@ class MemoryStateProvider(StateProvider):
             "expired_entries_removed": 0,
         }
 
-    def persist_state(self, key: str, state: Dict[str, Any]) -> bool:
+    def persist_state(self, key: str, state: dict[str, Any]) -> bool:
         """
         Persist the circuit breaker state in memory.
 
@@ -75,7 +75,7 @@ class MemoryStateProvider(StateProvider):
                 print(f"Error persisting state for key {key}: {str(e)}")
                 return False
 
-    def retrieve_state(self, key: str) -> Optional[Dict[str, Any]]:
+    def retrieve_state(self, key: str) -> dict[str, Any] | None:
         """
         Retrieve the circuit breaker state from memory.
 
@@ -127,7 +127,7 @@ class MemoryStateProvider(StateProvider):
                 return True
             return False
 
-    def update_state(self, key: str, updates: Dict[str, Any]) -> bool:
+    def update_state(self, key: str, updates: dict[str, Any]) -> bool:
         """
         Update parts of the state for the given key.
 
@@ -190,7 +190,7 @@ class MemoryStateProvider(StateProvider):
 
             return True
 
-    def list_keys(self, prefix: str = "") -> List[str]:
+    def list_keys(self, prefix: str = "") -> list[str]:
         """
         List all keys with the given prefix.
 
@@ -260,7 +260,7 @@ class MemoryStateProvider(StateProvider):
         """
         return True
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get statistics about the state provider.
 
@@ -347,7 +347,7 @@ class MemoryStateProvider(StateProvider):
             final_count = len(self._storage)
             return initial_count - final_count
 
-    def get_entry_info(self, key: str) -> Optional[Dict[str, Any]]:
+    def get_entry_info(self, key: str) -> dict[str, Any] | None:
         """
         Get detailed information about a specific entry.
 

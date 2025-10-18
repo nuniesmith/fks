@@ -8,22 +8,12 @@ handling proper startup and shutdown sequencing with dependency management.
 import asyncio
 import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Protocol,
-    Set,
-    Type,
-    Union,
-)
+from typing import Any, Dict, List, Optional, Protocol, Set, Type, Union
 
 __all__ = [
     "ServiceRegistry",
@@ -61,11 +51,11 @@ class ServiceInfo:
     instance: Any
     priority: int
     status: ServiceStatus = ServiceStatus.REGISTERED
-    dependencies: Set[str] = field(default_factory=set)
-    health_check: Optional[Callable[[], Awaitable[bool]]] = None
-    start_time: Optional[datetime] = None
-    stop_time: Optional[datetime] = None
-    error_message: Optional[str] = None
+    dependencies: set[str] = field(default_factory=set)
+    health_check: Callable[[], Awaitable[bool]] | None = None
+    start_time: datetime | None = None
+    stop_time: datetime | None = None
+    error_message: str | None = None
     restart_count: int = 0
 
 
@@ -74,11 +64,11 @@ class StrategyInfo:
     """Information about a registered strategy."""
 
     name: str
-    strategy_class: Type
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    description: Optional[str] = None
+    strategy_class: type
+    metadata: dict[str, Any] = field(default_factory=dict)
+    description: str | None = None
     version: str = "1.0.0"
-    tags: Set[str] = field(default_factory=set)
+    tags: set[str] = field(default_factory=set)
 
 
 class ServiceProtocol(Protocol):
@@ -103,20 +93,20 @@ class ServiceRegistry:
     """
 
     def __init__(self):
-        self._services: Dict[str, ServiceInfo] = {}
+        self._services: dict[str, ServiceInfo] = {}
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         self._shutdown_timeout = 30.0  # seconds
         self._startup_timeout = 60.0  # seconds
         self._health_check_interval = 30.0  # seconds
-        self._health_check_task: Optional[asyncio.Task] = None
+        self._health_check_task: asyncio.Task | None = None
 
     def register(
         self,
         name: str,
         service: Any,
         startup_priority: int = 100,
-        dependencies: Optional[Set[str]] = None,
-        health_check: Optional[Callable[[], Awaitable[bool]]] = None,
+        dependencies: set[str] | None = None,
+        health_check: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
         """
         Register a service with the registry.
@@ -141,7 +131,7 @@ class ServiceRegistry:
 
         self._logger.info(f"Registered service: {name} (priority: {startup_priority})")
 
-    def get(self, name: str) -> Optional[Any]:
+    def get(self, name: str) -> Any | None:
         """
         Get a service instance by name.
 
@@ -154,7 +144,7 @@ class ServiceRegistry:
         service_info = self._services.get(name)
         return service_info.instance if service_info else None
 
-    def get_service_info(self, name: str) -> Optional[ServiceInfo]:
+    def get_service_info(self, name: str) -> ServiceInfo | None:
         """
         Get detailed service information by name.
 
@@ -166,7 +156,7 @@ class ServiceRegistry:
         """
         return self._services.get(name)
 
-    def list_services(self) -> List[str]:
+    def list_services(self) -> list[str]:
         """
         List all registered services.
 
@@ -175,7 +165,7 @@ class ServiceRegistry:
         """
         return list(self._services.keys())
 
-    def get_services_by_status(self, status: ServiceStatus) -> List[str]:
+    def get_services_by_status(self, status: ServiceStatus) -> list[str]:
         """
         Get services filtered by status.
 
@@ -187,7 +177,7 @@ class ServiceRegistry:
         """
         return [name for name, info in self._services.items() if info.status == status]
 
-    def _resolve_startup_order(self) -> List[str]:
+    def _resolve_startup_order(self) -> list[str]:
         """
         Resolve service startup order considering dependencies and priorities.
 
@@ -198,7 +188,7 @@ class ServiceRegistry:
             ValueError: If circular dependencies are detected
         """
         # Topological sort with priority ordering
-        in_degree = {name: 0 for name in self._services}
+        in_degree = dict.fromkeys(self._services, 0)
         graph = {name: [] for name in self._services}
 
         # Build dependency graph
@@ -322,7 +312,7 @@ class ServiceRegistry:
             self._logger.info(f"Started service: {name}")
             return True
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._logger.error(f"Timeout starting service {name}")
             service_info.status = ServiceStatus.ERROR
             service_info.error_message = "Startup timeout"
@@ -424,7 +414,7 @@ class ServiceRegistry:
             self._logger.info(f"Stopped service: {name}")
             return True
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._logger.error(f"Timeout stopping service {name}")
             service_info.status = ServiceStatus.ERROR
             service_info.error_message = "Shutdown timeout"
@@ -515,17 +505,17 @@ class StrategyRegistry:
 
     def __init__(self):
         """Initialize the strategy registry."""
-        self._strategies: Dict[str, StrategyInfo] = {}
+        self._strategies: dict[str, StrategyInfo] = {}
         self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
     def register(
         self,
         name: str,
-        strategy_class: Type,
-        metadata: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None,
+        strategy_class: type,
+        metadata: dict[str, Any] | None = None,
+        description: str | None = None,
         version: str = "1.0.0",
-        tags: Optional[Set[str]] = None,
+        tags: set[str] | None = None,
     ) -> None:
         """
         Register a strategy with the registry.
@@ -553,7 +543,7 @@ class StrategyRegistry:
         )
         self._logger.info(f"Registered strategy: {name} (version: {version})")
 
-    def get_strategy_class(self, name: str) -> Optional[Type]:
+    def get_strategy_class(self, name: str) -> type | None:
         """
         Get a strategy class by name.
 
@@ -566,7 +556,7 @@ class StrategyRegistry:
         strategy_info = self._strategies.get(name)
         return strategy_info.strategy_class if strategy_info else None
 
-    def get_strategy_info(self, name: str) -> Optional[StrategyInfo]:
+    def get_strategy_info(self, name: str) -> StrategyInfo | None:
         """
         Get complete strategy information by name.
 
@@ -578,7 +568,7 @@ class StrategyRegistry:
         """
         return self._strategies.get(name)
 
-    def create_strategy_instance(self, name: str, **kwargs) -> Optional[Any]:
+    def create_strategy_instance(self, name: str, **kwargs) -> Any | None:
         """
         Create a new instance of a registered strategy.
 
@@ -600,7 +590,7 @@ class StrategyRegistry:
             self._logger.error(f"Error creating strategy {name}: {str(e)}")
             return None
 
-    def list_strategies(self) -> List[Dict[str, Any]]:
+    def list_strategies(self) -> list[dict[str, Any]]:
         """
         List all registered strategies with their information.
 
@@ -618,7 +608,7 @@ class StrategyRegistry:
             for info in self._strategies.values()
         ]
 
-    def filter_strategies(self, **filters) -> List[str]:
+    def filter_strategies(self, **filters) -> list[str]:
         """
         Filter strategies based on metadata criteria.
 
@@ -662,7 +652,7 @@ class StrategyRegistry:
 
         return result
 
-    def get_strategies_by_tag(self, tag: str) -> List[str]:
+    def get_strategies_by_tag(self, tag: str) -> list[str]:
         """
         Get strategies that have a specific tag.
 

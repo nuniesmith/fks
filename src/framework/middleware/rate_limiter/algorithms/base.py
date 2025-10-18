@@ -52,7 +52,7 @@ class RateLimitAlgorithm(ABC):
         self._lock = threading.RLock()
 
         # Per-client storage
-        self._client_data: Dict[str, Dict[str, Any]] = {}
+        self._client_data: dict[str, dict[str, Any]] = {}
 
         # Statistics
         self.total_requests = 0
@@ -90,7 +90,7 @@ class RateLimitAlgorithm(ABC):
         pass
 
     @abstractmethod
-    def _get_client_data(self, client_id: str) -> Dict[str, Any]:
+    def _get_client_data(self, client_id: str) -> dict[str, Any]:
         """
         Get or initialize data structure for a client.
 
@@ -207,7 +207,7 @@ class RateLimitAlgorithm(ABC):
 
         return len(expired_clients)
 
-    def get_algorithm_stats(self) -> Dict[str, Any]:
+    def get_algorithm_stats(self) -> dict[str, Any]:
         """Get statistics about this algorithm instance."""
         with self._lock:
             uptime = time.time() - self.created_at

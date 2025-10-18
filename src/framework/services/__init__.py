@@ -102,13 +102,7 @@ except ImportError as e:
 
 # Import service template components
 try:
-    from .template import (
-        HealthEndpoint,
-        ServiceConfig,
-        ServiceTemplate,
-        start,
-        start_template_service,
-    )
+    from .template import HealthEndpoint, ServiceConfig, ServiceTemplate, start, start_template_service
 
     _TEMPLATE_AVAILABLE = True
     _logger.debug("Template module loaded successfully")
@@ -187,7 +181,7 @@ def create_service(
     environment: str = "development",
     version: str = "1.0.0",
     **kwargs,
-) -> Optional[ServiceTemplate]:
+) -> ServiceTemplate | None:
     """
     Convenience function to create a service template with common configuration.
 
@@ -222,8 +216,8 @@ def register_service(
     name: str,
     service_instance,
     startup_priority: int = 100,
-    dependencies: Optional[set] = None,
-    health_check: Optional[callable] = None,
+    dependencies: set | None = None,
+    health_check: callable | None = None,
 ) -> bool:
     """
     Convenience function to register a service with the global registry.
@@ -266,10 +260,10 @@ def register_service(
 def register_strategy(
     name: str,
     strategy_class,
-    metadata: Optional[dict] = None,
-    description: Optional[str] = None,
+    metadata: dict | None = None,
+    description: str | None = None,
     version: str = "1.0.0",
-    tags: Optional[set] = None,
+    tags: set | None = None,
 ) -> bool:
     """
     Convenience function to register a strategy with the global registry.

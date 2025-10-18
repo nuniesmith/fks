@@ -33,13 +33,7 @@ from .lifespan import (
 )
 
 # Import the main lifecycle manager
-from .manager import (
-    LifecycleManager,
-    LifecyclePhase,
-    LifecycleState,
-    create_lifecycle_manager,
-    get_lifecycle_manager,
-)
+from .manager import LifecycleManager, LifecyclePhase, LifecycleState, create_lifecycle_manager, get_lifecycle_manager
 
 # Import teardown functionality
 from .teardown import (
@@ -362,9 +356,9 @@ __all__.extend(
 try:
     from loguru import logger
 
-    logger.debug(f"Framework lifecycle package loaded successfully")
+    logger.debug("Framework lifecycle package loaded successfully")
 except ImportError:
     import logging
 
     logging.basicConfig(level=logging.INFO)
-    logging.getLogger(__name__).info(f"Framework lifecycle package loaded successfully")
+    logging.getLogger(__name__).info("Framework lifecycle package loaded successfully")

@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any, Optional
 
 
 class Space:
@@ -14,7 +15,7 @@ class Space:
     async def put(self, item: Any) -> None:
         await self._q.put(item)
 
-    async def take(self, predicate: Optional[Callable[[Any], bool]] = None) -> Any:
+    async def take(self, predicate: Callable[[Any], bool] | None = None) -> Any:
         """Take first item matching predicate (or any item if predicate is None)."""
         if predicate is None:
             return await self._q.get()

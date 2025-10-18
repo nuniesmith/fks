@@ -9,8 +9,9 @@ analysis, and monitoring capabilities.
 import statistics
 import time
 from collections import defaultdict, deque
+from collections.abc import Callable
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from fastapi import FastAPI, Request, Response
 from loguru import logger
@@ -49,7 +50,7 @@ class TimingStats:
             self.min_time = min(self.min_time, time_ms)
             self.max_time = max(self.max_time, time_ms)
 
-    def get_stats(self) -> Dict[str, float]:
+    def get_stats(self) -> dict[str, float]:
         """
         Get timing statistics.
 
@@ -92,11 +93,11 @@ class TimingMiddleware(BaseHTTPMiddleware):
         header_name: str = "X-Process-Time",
         include_in_response: bool = True,
         log_timing: bool = True,
-        slow_threshold_ms: Optional[float] = 500,
-        exclude_paths: Optional[List[str]] = None,
+        slow_threshold_ms: float | None = 500,
+        exclude_paths: list[str] | None = None,
         collect_stats: bool = True,
         max_stats_samples: int = 1000,
-        custom_thresholds: Optional[Dict[str, float]] = None,
+        custom_thresholds: dict[str, float] | None = None,
         classification_header: bool = False,
         classification_header_name: str = "X-Request-Classification",
     ):
@@ -334,7 +335,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
             # Re-raise the exception
             raise
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get timing statistics.
 
@@ -345,7 +346,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
             return {"stats_collection_disabled": True}
 
         # Get global stats
-        stats: Dict[str, Any] = {"global": self.global_stats.get_stats()}
+        stats: dict[str, Any] = {"global": self.global_stats.get_stats()}
 
         # Get method stats
         method_stats = {}
@@ -389,7 +390,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
             self.method_stats.clear()
 
 
-def get_request_timing(request: Request) -> Dict[str, Any]:
+def get_request_timing(request: Request) -> dict[str, Any]:
     """
     Get timing information from a request.
 
@@ -406,7 +407,7 @@ def get_request_timing(request: Request) -> Dict[str, Any]:
     }
 
 
-def get_timing_middleware(app: FastAPI) -> Optional[TimingMiddleware]:
+def get_timing_middleware(app: FastAPI) -> TimingMiddleware | None:
     """
     Get the TimingMiddleware instance from a FastAPI application.
 

@@ -112,11 +112,7 @@ from .utils import (
 
 # Middleware (imported separately to avoid FastAPI dependency for non-web usage)
 try:
-    from .middleware import (
-        RateLimitConfig,
-        RateLimitMiddleware,
-        create_rate_limit_middleware,
-    )
+    from .middleware import RateLimitConfig, RateLimitMiddleware, create_rate_limit_middleware
 
     _MIDDLEWARE_AVAILABLE = True
 except ImportError:

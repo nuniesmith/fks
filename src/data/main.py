@@ -1,18 +1,20 @@
 """Data service entrypoint (flat layout)."""
 
-import os
-import sys
 import base64
 import hashlib
+import os
+import sys
 
 try:
-    from framework.services.template import (
-        start_template_service as _framework_start_template_service,
-    )  # type: ignore
+    from framework.services.template import start_template_service as _framework_start_template_service  # type: ignore
 except Exception:  # pragma: no cover - framework not present in minimal test env
+
     def _framework_start_template_service(*args, **kwargs):  # type: ignore
         # Provide a tiny fallback so importing the module in tests doesn't explode.
-        print("[fks_data.main] framework.services.template missing - fallback noop service start")
+        print(
+            "[fks_data.main] framework.services.template missing - fallback noop service start"
+        )
+
 
 # Module-level optional fksgraphy import so helpers are patchable/testable
 try:  # pragma: no cover - import guard
@@ -66,17 +68,19 @@ def _decrypt_value(val, enc):  # pragma: no cover - exercised indirectly
     except Exception:
         return None
 
+
 # Reconstituted minimal custom endpoint builder
 def _custom_endpoints():  # noqa: C901
     import re
     import time
     from typing import Any, Dict, Optional
-    from flask import request, jsonify  # type: ignore
+
+    from flask import jsonify, request  # type: ignore
 
     try:
         from fksgraphy.fernet import Fernet  # type: ignore
     except Exception:  # pragma: no cover
-        Fernet = None  # type: ignore
+        pass  # type: ignore
     try:
         import yfinance as yf  # type: ignore
     except Exception:  # pragma: no cover
@@ -126,12 +130,20 @@ def _custom_endpoints():  # noqa: C901
             candidate = auth_header[7:].strip()
         elif auth_header:
             candidate = auth_header
-        candidate = candidate or request.headers.get("X-API-Key") or request.headers.get("X-Admin-Token") or request.args.get("api_key")
+        candidate = (
+            candidate
+            or request.headers.get("X-API-Key")
+            or request.headers.get("X-Admin-Token")
+            or request.args.get("api_key")
+        )
         if candidate != token_required:
-            return jsonify({"ok": False, "error": "unauthorized", "code": "unauthorized"}), 401
+            return (
+                jsonify({"ok": False, "error": "unauthorized", "code": "unauthorized"}),
+                401,
+            )
         return None
 
-    def _error(message: str, status: int = 400, code: Optional[str] = None, **extra):
+    def _error(message: str, status: int = 400, code: str | None = None, **extra):
         payload = {"ok": False, "error": message}
         if code:
             payload["code"] = code
@@ -139,7 +151,7 @@ def _custom_endpoints():  # noqa: C901
             payload.update(extra)
         return jsonify(payload), status
 
-    def _ok(payload: Dict[str, Any]):
+    def _ok(payload: dict[str, Any]):
         if not isinstance(payload, dict):
             return jsonify({"ok": True, "data": payload})
         if "ok" not in payload:
@@ -154,13 +166,18 @@ def _custom_endpoints():  # noqa: C901
 
     # Cache ---------------------------------------------------------
     from threading import Lock as _Lock
-    _CACHE: Dict[str, tuple[float, Any]] = {}
+
+    _CACHE: dict[str, tuple[float, Any]] = {}
     _CACHE_LOCK = _Lock()
     _DEFAULT_TTL = float(os.getenv("DATA_CACHE_DEFAULT_TTL", "30"))
 
     def _cache_key(name: str) -> str:
         try:
-            return name + "|" + "&".join(f"{k}={v}" for k, v in sorted(request.args.items()))
+            return (
+                name
+                + "|"
+                + "&".join(f"{k}={v}" for k, v in sorted(request.args.items()))
+            )
         except Exception:
             return name
 
@@ -179,22 +196,28 @@ def _custom_endpoints():  # noqa: C901
                 return None
             return val
 
-    def _cache_set(name: str, value, ttl: Optional[float] = None):
+    def _cache_set(name: str, value, ttl: float | None = None):
         if request.method != "GET":
             return
         key = _cache_key(name)
         with _CACHE_LOCK:
-            _CACHE[key] = (time.time() + (ttl if ttl is not None else _DEFAULT_TTL), value)
+            _CACHE[key] = (
+                time.time() + (ttl if ttl is not None else _DEFAULT_TTL),
+                value,
+            )
 
     # Key storage & encryption -------------------------------------
-    def _load_saved_keys_file() -> Dict[str, Any]:
+    def _load_saved_keys_file() -> dict[str, Any]:
         try:
-            base_dir = os.getenv("FKS_DATA_DIR") or os.path.join(os.getcwd(), "data", "managed")
+            base_dir = os.getenv("FKS_DATA_DIR") or os.path.join(
+                os.getcwd(), "data", "managed"
+            )
             os.makedirs(base_dir, exist_ok=True)
             path = os.path.join(base_dir, "provider_keys.json")
             if os.path.exists(path):
                 import json as _json
-                with open(path, "r", encoding="utf-8") as f:
+
+                with open(path, encoding="utf-8") as f:
                     return _json.load(f) or {}
         except Exception:  # pragma: no cover
             pass
@@ -210,7 +233,9 @@ def _custom_endpoints():  # noqa: C901
                 fcntl.flock(fh, fcntl.LOCK_EX)
             except Exception:  # pragma: no cover
                 pass
-            fh.seek(0); fh.truncate(); writer(fh)
+            fh.seek(0)
+            fh.truncate()
+            writer(fh)
             try:
                 fcntl.flock(fh, fcntl.LOCK_UN)
             except Exception:  # pragma: no cover
@@ -218,18 +243,23 @@ def _custom_endpoints():  # noqa: C901
 
     # Encryption helpers now module-level (_get_fernet/_encrypt_value/_decrypt_value)
 
-    def _get_saved_key(provider: str) -> Optional[Dict[str, Any]]:
+    def _get_saved_key(provider: str) -> dict[str, Any] | None:
         data = _load_saved_keys_file()
         v = data.get(provider)
         if isinstance(v, dict):
             if v.get("enc"):
                 api_key = _decrypt_value(v.get("api_key"), True)
-                secret = _decrypt_value(v.get("secret"), True) if v.get("secret") else None
+                secret = (
+                    _decrypt_value(v.get("secret"), True) if v.get("secret") else None
+                )
                 return {"api_key": api_key, **({"secret": secret} if secret else {})}
-            return {"api_key": v.get("api_key"), **({"secret": v.get("secret")} if v.get("secret") else {})}
+            return {
+                "api_key": v.get("api_key"),
+                **({"secret": v.get("secret")} if v.get("secret") else {}),
+            }
         return None
 
-    def _mask_short(s: Optional[str]):
+    def _mask_short(s: str | None):
         if not s:
             return None
         return s[:3] + "***" + (s[-3:] if len(s) > 6 else "")
@@ -238,7 +268,13 @@ def _custom_endpoints():  # noqa: C901
     def _providers_info():
         out = [
             {"name": "rithmic", "mock": True, "status": "mock"},
-            {"name": "alpha", "status": "available", "daily": True, "intraday": True, "news": True},
+            {
+                "name": "alpha",
+                "status": "available",
+                "daily": True,
+                "intraday": True,
+                "news": True,
+            },
             {"name": "polygon", "status": "available", "aggs": True},
             {"name": "binance", "status": "available", "klines": True},
         ]
@@ -250,7 +286,10 @@ def _custom_endpoints():  # noqa: C901
         out = {}
         for p in providers:
             sk = _get_saved_key(p)
-            out[p] = {"exists": bool(sk), "masked": _mask_short((sk or {}).get("api_key"))}
+            out[p] = {
+                "exists": bool(sk),
+                "masked": _mask_short((sk or {}).get("api_key")),
+            }
         return _ok({"providers": out})
 
     # Rithmic mock --------------------------------------------------
@@ -264,7 +303,11 @@ def _custom_endpoints():  # noqa: C901
         if not mock:
             return _error("Mock mode only in this environment", 400, code="no_mock")
         if _prov_rithmic is None:
-            return _error("rithmic provider module unavailable", 500, code="rithmic_module_missing")
+            return _error(
+                "rithmic provider module unavailable",
+                500,
+                code="rithmic_module_missing",
+            )
         try:
             res = _prov_rithmic.mock_ohlcv(yf, symbol, limit)  # type: ignore[attr-defined]
             # Test expects top-level ok and nested data dict, so embed provider response
@@ -279,9 +322,14 @@ def _custom_endpoints():  # noqa: C901
         symbol = request.args.get("symbol", "AAPL")
         func = request.args.get("function", "TIME_SERIES_DAILY_ADJUSTED")
         outputsize = request.args.get("outputsize", "compact")
-        api_key = (_get_saved_key("alpha") or {}).get("api_key") or os.getenv("ALPHA_API_KEY") or os.getenv("ALPHAVANTAGE_API_KEY")
+        api_key = (
+            (_get_saved_key("alpha") or {}).get("api_key")
+            or os.getenv("ALPHA_API_KEY")
+            or os.getenv("ALPHAVANTAGE_API_KEY")
+        )
         if not api_key:
             return _error("alpha api key missing", 400, code="missing_key")
+
         def _req(url, params):  # type: ignore[override]
             params["apikey"] = api_key
             if requests is None:  # defensive
@@ -289,6 +337,7 @@ def _custom_endpoints():  # noqa: C901
             r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
             return r.json()
+
         try:
             data = _prov_alpha.alpha_daily(_req, symbol, func, outputsize)
             return _ok(data)
@@ -301,9 +350,14 @@ def _custom_endpoints():  # noqa: C901
         symbol = request.args.get("symbol", "AAPL")
         interval = request.args.get("interval", "5min")
         outputsize = request.args.get("outputsize", "compact")
-        api_key = (_get_saved_key("alpha") or {}).get("api_key") or os.getenv("ALPHA_API_KEY") or os.getenv("ALPHAVANTAGE_API_KEY")
+        api_key = (
+            (_get_saved_key("alpha") or {}).get("api_key")
+            or os.getenv("ALPHA_API_KEY")
+            or os.getenv("ALPHAVANTAGE_API_KEY")
+        )
         if not api_key:
             return _error("alpha api key missing", 400, code="missing_key")
+
         def _req(url, params):  # type: ignore[override]
             params["apikey"] = api_key
             if requests is None:
@@ -311,6 +365,7 @@ def _custom_endpoints():  # noqa: C901
             r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
             return r.json()
+
         try:
             data = _prov_alpha.alpha_intraday(_req, symbol, interval, outputsize)
             return _ok(data)
@@ -325,9 +380,14 @@ def _custom_endpoints():  # noqa: C901
         time_from = request.args.get("time_from")
         time_to = request.args.get("time_to")
         limit = int(request.args.get("limit", "25"))
-        api_key = (_get_saved_key("alpha") or {}).get("api_key") or os.getenv("ALPHA_API_KEY") or os.getenv("ALPHAVANTAGE_API_KEY")
+        api_key = (
+            (_get_saved_key("alpha") or {}).get("api_key")
+            or os.getenv("ALPHA_API_KEY")
+            or os.getenv("ALPHAVANTAGE_API_KEY")
+        )
         if not api_key:
             return _error("alpha api key missing", 400, code="missing_key")
+
         def _req(url, params):  # type: ignore[override]
             params["apikey"] = api_key
             if requests is None:
@@ -335,8 +395,11 @@ def _custom_endpoints():  # noqa: C901
             r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
             return r.json()
+
         try:
-            data = _prov_alpha.alpha_news(_req, tickers, topics, time_from, time_to, limit)
+            data = _prov_alpha.alpha_news(
+                _req, tickers, topics, time_from, time_to, limit
+            )
             return _ok(data)
         except Exception as e:  # pragma: no cover
             return _error(str(e), 500, code="alpha_failed")
@@ -344,15 +407,20 @@ def _custom_endpoints():  # noqa: C901
     # Polygon endpoint ----------------------------------------------
     def _polygon_aggs():
         if _prov_polygon is None or requests is None:
-            return _error("polygon provider unavailable", 500, code="polygon_unavailable")
+            return _error(
+                "polygon provider unavailable", 500, code="polygon_unavailable"
+            )
         ticker = request.args.get("ticker", "AAPL")
         rng = request.args.get("range", "1")
         timespan = request.args.get("timespan", "day")
         fro = request.args.get("from", "2024-01-01")
         to = request.args.get("to", "2024-01-02")
-        api_key = (_get_saved_key("polygon") or {}).get("api_key") or os.getenv("POLYGON_API_KEY")
+        api_key = (_get_saved_key("polygon") or {}).get("api_key") or os.getenv(
+            "POLYGON_API_KEY"
+        )
         if not api_key:
             return _error("polygon api key missing", 400, code="missing_key")
+
         def _req(url, params):  # type: ignore[override]
             params["apikey"] = api_key
             if requests is None:
@@ -360,6 +428,7 @@ def _custom_endpoints():  # noqa: C901
             r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
             return r.json()
+
         try:
             data = _prov_polygon.polygon_aggs(_req, ticker, rng, timespan, fro, to)
             return _ok(data)
@@ -369,20 +438,26 @@ def _custom_endpoints():  # noqa: C901
     # Binance endpoint ----------------------------------------------
     def _binance_klines():
         if _prov_binance is None or requests is None:
-            return _error("binance provider unavailable", 500, code="binance_unavailable")
+            return _error(
+                "binance provider unavailable", 500, code="binance_unavailable"
+            )
         symbol = request.args.get("symbol", "BTCUSDT")
         interval = request.args.get("interval", "1m")
         limit = int(request.args.get("limit", "500"))
         start = request.args.get("start_time")
         end = request.args.get("end_time")
+
         def _req(url, params):  # type: ignore[override]
             if requests is None:
                 raise RuntimeError("requests library unavailable")
             r = requests.get(url, params=params, timeout=10)
             r.raise_for_status()
             return r.json()
+
         try:
-            data = _prov_binance.binance_klines(_req, symbol, interval, limit, start, end)
+            data = _prov_binance.binance_klines(
+                _req, symbol, interval, limit, start, end
+            )
             return _ok(data)
         except Exception as e:  # pragma: no cover
             return _error(str(e), 500, code="binance_failed")
@@ -400,13 +475,17 @@ def _custom_endpoints():  # noqa: C901
         cached = _cache_get("merged_config")
         if cached is not None:
             return cached
-        raw = {k: v for k, v in os.environ.items() if k.startswith("FKS_") or k.endswith("_API_KEY")}
+        raw = {
+            k: v
+            for k, v in os.environ.items()
+            if k.startswith("FKS_") or k.endswith("_API_KEY")
+        }
         masked = {k: _mask_sensitive(k, v) for k, v in raw.items()}
         resp = _ok({"overrides": masked})
         _cache_set("merged_config", resp, ttl=5)
         return resp
 
-    _runtime_overrides: Dict[str, str] = {}
+    _runtime_overrides: dict[str, str] = {}
 
     def _config_set():
         auth_fail = _require_auth()
@@ -431,27 +510,42 @@ def _custom_endpoints():  # noqa: C901
         auth_fail = _require_auth()
         if auth_fail:
             return auth_fail
-        provider = (request.view_args or {}).get("provider") if request.view_args else None
+        provider = (
+            (request.view_args or {}).get("provider") if request.view_args else None
+        )
         if not provider:
             return _error("Missing provider", 400, code="missing_provider")
         try:
             payload = request.get_json(force=True, silent=True) or {}
             api_key = (payload.get("api_key") or payload.get("apikey") or "").strip()
-            secret = (payload.get("secret") or payload.get("api_secret") or None)
+            secret = payload.get("secret") or payload.get("api_secret") or None
             if not api_key:
                 return _error("api_key required", 400, code="missing_api_key")
-            base_dir = os.getenv("FKS_DATA_DIR") or os.path.join(os.getcwd(), "data", "managed")
+            base_dir = os.getenv("FKS_DATA_DIR") or os.path.join(
+                os.getcwd(), "data", "managed"
+            )
             os.makedirs(base_dir, exist_ok=True)
             path = os.path.join(base_dir, "provider_keys.json")
             import json as _json
+
             data = _load_saved_keys_file()
             f = _get_fernet()
             if f is not None:
-                data[provider] = {"api_key": _encrypt_value(api_key), **({"secret": _encrypt_value(secret)} if secret else {}), "enc": True}
+                data[provider] = {
+                    "api_key": _encrypt_value(api_key),
+                    **({"secret": _encrypt_value(secret)} if secret else {}),
+                    "enc": True,
+                }
             else:
-                data[provider] = {"api_key": api_key, **({"secret": secret} if secret else {}), "enc": False}
+                data[provider] = {
+                    "api_key": api_key,
+                    **({"secret": secret} if secret else {}),
+                    "enc": False,
+                }
+
             def _write(fh):
                 _json.dump(data, fh, indent=2)
+
             _locked_file_write(path, _write)
             return _success(provider=provider)
         except Exception as e:
@@ -461,7 +555,9 @@ def _custom_endpoints():  # noqa: C901
         auth_fail = _require_auth()
         if auth_fail:
             return auth_fail
-        provider = (request.view_args or {}).get("provider") if request.view_args else None
+        provider = (
+            (request.view_args or {}).get("provider") if request.view_args else None
+        )
         if not provider:
             return _error("Missing provider", 400, code="missing_provider")
         key = (_get_saved_key(provider) or {}).get("api_key")
@@ -471,25 +567,30 @@ def _custom_endpoints():  # noqa: C901
         return _save_provider_key() if request.method == "POST" else _get_provider_key()
 
     # Route map -----------------------------------------------------
-    routes: Dict[str, Any] = {
+    routes: dict[str, Any] = {
         "/providers": _providers_info,
         "/providers/keys": _providers_keys,
         "/futures/rithmic/ohlcv": futures_rithmic_ohlcv,
         "/config": _config_get,
         "/config/set": {"handler": _config_set, "methods": ["POST"]},
-        "/providers/<provider>/key": {"handler": _provider_key_handler, "methods": ["GET", "POST"]},
-    # Newly reintroduced provider endpoints
-    "/providers/alpha/daily": _alpha_daily,
-    "/providers/alpha/intraday": _alpha_intraday,
-    "/providers/alpha/news": _alpha_news,
-    "/providers/polygon/aggs": _polygon_aggs,
-    "/fks/binance/klines": _binance_klines,
+        "/providers/<provider>/key": {
+            "handler": _provider_key_handler,
+            "methods": ["GET", "POST"],
+        },
+        # Newly reintroduced provider endpoints
+        "/providers/alpha/daily": _alpha_daily,
+        "/providers/alpha/intraday": _alpha_intraday,
+        "/providers/alpha/news": _alpha_news,
+        "/providers/polygon/aggs": _polygon_aggs,
+        "/fks/binance/klines": _binance_klines,
     }
 
     return routes
 
 
-def start_template_service(service_name: str | None = None, service_port: int | None = None):
+def start_template_service(
+    service_name: str | None = None, service_port: int | None = None
+):
     """Wrapper so the runner can call this and still get our custom endpoints."""
     if service_name:
         os.environ["DATA_SERVICE_NAME"] = str(service_name)
@@ -512,6 +613,7 @@ def main():
     if os.getenv("FKS_SKIP_MIGRATIONS", "0").lower() not in ("1", "true", "yes"):
         try:
             from scripts.run_migrations import run as run_migrations  # type: ignore
+
             run_migrations()
         except Exception as e:  # pragma: no cover
             print(f"[fks_data.main] migration step skipped due to error: {e}")

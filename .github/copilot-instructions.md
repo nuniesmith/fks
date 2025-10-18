@@ -1,5 +1,10 @@
 # FKS Trading Platform - AI Coding Agent Instructions
 
+## Quick Reference
+**Language:** Python 3.12 | **Framework:** Django 5.2.7 | **Database:** PostgreSQL + TimescaleDB  
+**Test:** `make test` or `pytest tests/` | **Lint:** `make lint` | **Format:** `make format`  
+**Run:** `make up` (standard) or `make gpu-up` (with AI/RAG)
+
 ## Project Overview
 **Django 5.2.7 monolith** trading platform with PostgreSQL+TimescaleDB, Redis, Celery 5.5.3, and AI-powered RAG system for intelligent trading insights. Recently migrated from microservices to monolith (Oct 2025). **Currently in local development** - focus on building core functionality with comprehensive testing before deployment.
 
@@ -159,11 +164,21 @@ make format          # black, isort
 
 ## Project-Specific Conventions
 
+### File Organization & Naming
+- **Django apps**: Use directory-based apps under `src/` (e.g., `src/authentication/`, `src/trading/`)
+- **Models**: Place in `models.py` or `models/` subdirectory for complex apps
+- **Views**: Use `views.py` or `views/` for multiple view files
+- **Tests**: Mirror source structure in `tests/unit/` and `tests/integration/`
+- **Templates**: Place in `src/web/templates/` with app-specific subdirectories
+- **Static files**: Place in `src/web/static/` (CSS, JS, images)
+- **Naming convention**: Use `snake_case` for files, functions, and variables; `PascalCase` for classes
+
 ### Import Patterns
 - **Framework imports**: `from framework.middleware.circuit_breaker import CircuitBreaker`
 - **Core models**: `from core.database.models import Trade, Position`
 - **Django apps**: `from authentication.models import User`
 - **Avoid**: Importing from `infrastructure/` or `services/` - legacy modules being phased out
+- **Absolute imports**: Always use absolute imports from `src/` root
 
 ### Exception Hierarchy
 All custom exceptions inherit from `FKSException` in `src/core/exceptions/__init__.py`:
@@ -369,13 +384,66 @@ pytest tests/integration/ -v            # Fix and verify
 
 ## When Making Changes
 
+### Pre-Development Checklist
 1. **Check Django app registration** - Verify app in `INSTALLED_APPS` before importing
-2. **Run migrations** - `make migrate` after model changes
-3. **Test locally** - Use `make up` + `make logs` to verify
-4. **Write tests first** - TDD approach, run `pytest` before committing
-5. **Validate syntax** - `make lint` before committing
-6. **Check imports** - Ensure no circular dependencies with framework layer
-7. **Update docs** - If changing architecture or adding major features
+2. **Review existing tests** - Understand test patterns before adding new code
+3. **Check imports** - Ensure no circular dependencies with framework layer
+
+### Development Workflow
+1. **Write tests first** - TDD approach, create test cases before implementation
+2. **Implement changes** - Follow existing code patterns and conventions
+3. **Run tests frequently** - `pytest tests/` after each logical change
+4. **Validate syntax** - `make lint` to check for style issues
+5. **Format code** - `make format` to apply consistent formatting
+
+### Post-Development Checklist
+1. **Run migrations** - `make migrate` after model changes
+2. **Test locally** - Use `make up` + `make logs` to verify services
+3. **Full test suite** - Run complete test suite: `pytest tests/ -v --cov=src`
+4. **Check coverage** - Ensure new code has adequate test coverage (>80%)
+5. **Update docs** - If changing architecture or adding major features
+6. **Verify no regressions** - Ensure existing functionality still works
+
+### Code Style & Quality
+- **Formatting**: Use Black (line length 100) and isort for imports
+- **Type hints**: Add type annotations for function parameters and returns
+- **Docstrings**: Use Google-style docstrings for classes and functions
+- **Comments**: Add comments only when code intent is not obvious
+- **DRY principle**: Extract repeated code into reusable functions/classes
+
+## Pull Request Guidelines
+
+### PR Requirements
+- **Tests**: All new code must have corresponding test cases (unit and/or integration)
+- **Linting**: Code must pass `make lint` without errors
+- **Coverage**: Maintain or improve overall test coverage (currently 41%, target 80%+)
+- **Documentation**: Update relevant docs if changing architecture or major features
+- **Commits**: Use descriptive commit messages following conventional commits format
+
+### PR Description Template
+```markdown
+## Changes
+- Brief description of what changed
+
+## Testing
+- [ ] Unit tests added/updated
+- [ ] Integration tests added/updated  
+- [ ] Manual testing completed
+- [ ] All tests passing locally
+
+## Checklist
+- [ ] Code follows project conventions
+- [ ] Linting passes (`make lint`)
+- [ ] Tests pass (`make test`)
+- [ ] Documentation updated (if needed)
+- [ ] No sensitive data or secrets committed
+```
+
+### Code Review Expectations
+- **Small PRs**: Keep changes focused and manageable (< 500 lines preferred)
+- **Self-review**: Review your own code before requesting review
+- **Test evidence**: Include test output or screenshots demonstrating changes
+- **Breaking changes**: Clearly document any breaking changes in PR description
 
 ## Next Steps for AI Agent
 
@@ -390,8 +458,9 @@ When working on this codebase, prioritize:
 Avoid:
 - Production deployment concerns (not ready yet)
 - NinjaTrader integration (future feature)
-- Modifying `framework/` without analysis
-- Implementing features without tests
+- Modifying `framework/` without analysis (26 external imports - high risk)
+- Implementing features without tests (violates TDD approach)
+- Large, unfocused PRs (keep changes small and surgical)
 
 ## Test Status Summary
 
@@ -402,5 +471,51 @@ Avoid:
 **Current Test Results**: 14 passing / 34 total (41% pass rate)  
 **Target**: 34 passing / 34 total (100% pass rate)
 
+## Troubleshooting for Copilot Agent
+
+### Common Issues & Solutions
+
+**Import Errors (config, shared_python)**
+- **Problem**: Legacy microservices imports failing
+- **Solution**: Use `from framework.config` or `from django.conf import settings`
+- **See**: "Known Test Failures" section above for detailed fix strategy
+
+**Django App Not Found**
+- **Problem**: `ModuleNotFoundError` or `AppNotFound`
+- **Solution**: Verify app is in `INSTALLED_APPS` in `src/web/django/settings.py`
+- **Check**: Some apps are intentionally disabled (see "Common Pitfalls" #6)
+
+**Circular Import Errors**
+- **Problem**: `ImportError: cannot import name 'X' from partially initialized module`
+- **Solution**: Avoid importing from `framework/` during module initialization
+- **Pattern**: Use lazy imports or import inside functions when needed
+
+**Test Discovery Issues**
+- **Problem**: Pytest can't find tests
+- **Solution**: Ensure test files are named `test_*.py` and in `tests/` directory
+- **Config**: Check `pytest.ini` for test discovery settings
+
+**Docker/Container Issues**
+- **Problem**: Services won't start or connection errors
+- **Solution**: 
+  1. Check `.env` file exists (copy from `.env.example`)
+  2. Run `make down && make up` to restart services
+  3. View logs with `make logs` to identify specific errors
+  4. Verify ports aren't in use: `docker-compose ps`
+
+**Database Migration Errors**
+- **Problem**: Migration conflicts or missing migrations
+- **Solution**: 
+  1. Check for unapplied migrations: `make migrate`
+  2. If conflicts, resolve manually in `src/*/migrations/`
+  3. Create new migration: `docker-compose exec web python manage.py makemigrations`
+
+### Getting Help
+- **Logs**: Always check `make logs` first for error details
+- **Health Dashboard**: Visit http://localhost:8000/health/dashboard/ for system status
+- **Documentation**: Refer to `docs/ARCHITECTURE.md` for detailed architecture info
+- **Tests**: Run specific test files to isolate issues: `pytest tests/unit/test_X.py -v`
+
 ---
-*Generated: October 2025 | Based on Django 5.2.7 monolith migration | Status: Phase 9 Complete (90%)*
+*Generated: October 2025 | Based on Django 5.2.7 monolith migration | Status: Phase 9 Complete (90%)*  
+*Last Updated: 2025-10-18 | Copilot Instructions v2.0*

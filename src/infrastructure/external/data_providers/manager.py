@@ -49,19 +49,19 @@ class ClientManager:
 
     def __init__(
         self,
-        assets: List[str],
-        metrics_manager: Optional[Any] = None,
-        rate_limits: Optional[Dict[str, int]] = None,
-        event_loop: Optional[asyncio.AbstractEventLoop] = None,
+        assets: list[str],
+        metrics_manager: Any | None = None,
+        rate_limits: dict[str, int] | None = None,
+        event_loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """
         Initialize the ClientManager with API clients, rate limiting, and health checks.
         """
         self._lock = threading.RLock()
-        self.failed_clients: Dict[str, float] = (
+        self.failed_clients: dict[str, float] = (
             {}
         )  # Tracks failed clients with timestamp
-        self._health_check_tasks: Dict[str, Optional[asyncio.Task]] = (
+        self._health_check_tasks: dict[str, asyncio.Task | None] = (
             {}
         )  # Health check tasks
 
@@ -87,7 +87,7 @@ class ClientManager:
         )
 
         # Load API keys from environment variables
-        self.api_keys: Dict[str, Any] = {
+        self.api_keys: dict[str, Any] = {
             "cmc": os.getenv("CMC_API_KEY"),
             "polygon": os.getenv("POLYGON_API_KEY"),
             "bitstamp": {},  # Bitstamp doesn't require an API key
@@ -96,14 +96,14 @@ class ClientManager:
         self._validate_api_keys()
 
         # Initialize API clients and corresponding rate limit semaphores.
-        self.clients: Dict[str, BaseClient] = {}  # Updated type hint
-        self._rate_limit_semaphores: Dict[str, asyncio.Semaphore] = {}
+        self.clients: dict[str, BaseClient] = {}  # Updated type hint
+        self._rate_limit_semaphores: dict[str, asyncio.Semaphore] = {}
 
         # Initialize all clients
         self._initialize_clients()
 
         # Configure preferred clients for each asset (using upper-case symbols)
-        self.preferred_clients: Dict[str, List[str]] = {}
+        self.preferred_clients: dict[str, list[str]] = {}
         for asset in self.assets:
             self.preferred_clients[asset.upper()] = [
                 "bitstamp",
@@ -152,7 +152,7 @@ class ClientManager:
             logger.warning(f"PolygonS3Client not initialized: {e}")
 
     def _initialize_client_with_key(
-        self, client_name: str, client_class, api_key: Optional[str]
+        self, client_name: str, client_class, api_key: str | None
     ) -> None:
         """Helper method to initialize a client that requires an API key"""
         if not api_key:
@@ -390,7 +390,7 @@ class ClientManager:
                 f"❌ No client found for API='{client_name}'. Available clients: {available}"
             )
 
-    async def get_client_async(self, client_name: str) -> Optional[BaseClient]:
+    async def get_client_async(self, client_name: str) -> BaseClient | None:
         """
         Asynchronously get a client by name.
         """
@@ -400,7 +400,7 @@ class ClientManager:
             logger.error(f"❌ Async: No client found for '{client_name}'.")
             return None
 
-    def get_all_clients(self) -> Dict[str, BaseClient]:
+    def get_all_clients(self) -> dict[str, BaseClient]:
         """
         Get a dictionary of all available clients.
         """
@@ -408,7 +408,7 @@ class ClientManager:
 
     # Expose preferred clients configuration
     @property
-    def preferred_clients_config(self) -> Dict[str, List[str]]:
+    def preferred_clients_config(self) -> dict[str, list[str]]:
         """
         Get the preferred clients configuration for all assets.
         """
@@ -436,7 +436,7 @@ class SymbolPayload(BaseModel):
 @router.get("/client", summary="Get preferred client for an asset symbol")
 def get_client_for_asset(
     symbol: str = Query(..., description="Asset symbol (e.g., BTC)")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Retrieve the preferred API client for a given asset symbol.
     Returns the client's name.
@@ -449,7 +449,7 @@ def get_client_for_asset(
 
 
 @router.get("/clients", summary="List all available API clients")
-def list_all_clients() -> Dict[str, Any]:
+def list_all_clients() -> dict[str, Any]:
     """
     List the names of all available API clients.
     """
@@ -458,7 +458,7 @@ def list_all_clients() -> Dict[str, Any]:
 
 
 @router.get("/status", summary="Get client health status")
-def get_status() -> Dict[str, Any]:
+def get_status() -> dict[str, Any]:
     """
     Retrieve the current status of the API clients.
     Returns a list of failed clients (with timestamps) along with all client names.
@@ -472,7 +472,7 @@ def get_status() -> Dict[str, Any]:
 @router.get("/preferred", summary="Get preferred clients for an asset")
 def get_preferred_clients(
     symbol: str = Query(..., description="Asset symbol (e.g., BTC)")
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Retrieve the configured preferred API clients for the given asset.
     """

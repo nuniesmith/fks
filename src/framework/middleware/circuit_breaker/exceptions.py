@@ -18,7 +18,7 @@ class CircuitBreakerError(Exception):
     exception type if needed.
     """
 
-    def __init__(self, message: str, circuit_name: Optional[str] = None):
+    def __init__(self, message: str, circuit_name: str | None = None):
         """
         Initialize the circuit breaker error.
 
@@ -49,8 +49,8 @@ class CircuitOpenError(CircuitBreakerError):
     def __init__(
         self,
         message: str,
-        circuit_name: Optional[str] = None,
-        retry_after_seconds: Optional[float] = None,
+        circuit_name: str | None = None,
+        retry_after_seconds: float | None = None,
     ):
         """
         Initialize the circuit open error.
@@ -77,7 +77,7 @@ class StateTransitionError(CircuitBreakerError):
         message: str,
         current_state: str,
         attempted_state: str,
-        circuit_name: Optional[str] = None,
+        circuit_name: str | None = None,
     ):
         """
         Initialize the state transition error.
@@ -101,7 +101,7 @@ class ConfigurationError(CircuitBreakerError):
     invalid parameters are provided.
     """
 
-    def __init__(self, message: str, parameter_name: Optional[str] = None):
+    def __init__(self, message: str, parameter_name: str | None = None):
         """
         Initialize the configuration error.
 
@@ -125,8 +125,8 @@ class StateProviderError(CircuitBreakerError):
         self,
         message: str,
         operation: str,
-        circuit_name: Optional[str] = None,
-        underlying_error: Optional[Exception] = None,
+        circuit_name: str | None = None,
+        underlying_error: Exception | None = None,
     ):
         """
         Initialize the state provider error.
@@ -151,7 +151,7 @@ class CircuitTimeoutError(CircuitBreakerError):
     """
 
     def __init__(
-        self, message: str, timeout_seconds: float, circuit_name: Optional[str] = None
+        self, message: str, timeout_seconds: float, circuit_name: str | None = None
     ):
         """
         Initialize the circuit timeout error.
@@ -176,8 +176,8 @@ class CircuitExecutionError(CircuitBreakerError):
     def __init__(
         self,
         message: str,
-        circuit_name: Optional[str] = None,
-        underlying_error: Optional[Exception] = None,
+        circuit_name: str | None = None,
+        underlying_error: Exception | None = None,
         failure_type: str = "unknown",
     ):
         """

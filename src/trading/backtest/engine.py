@@ -10,13 +10,15 @@ This module provides backtesting functionality with:
 - Optimized DataFrame operations for 3x performance improvement
 """
 
+from datetime import timedelta
+
 import pandas as pd
 import numpy as np
 import talib
 from datetime import timedelta
 from typing import Dict, List, Tuple, Any
 
-from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE
+from framework.config.constants import ALTS, FEE_RATE, MAINS, SYMBOLS
 
 
 def run_backtest(df_prices, M, atr_period=14, sl_multiplier=2, tp_multiplier=3, fast_mode=True):
@@ -109,7 +111,7 @@ def run_backtest(df_prices, M, atr_period=14, sl_multiplier=2, tp_multiplier=3, 
     equity.append(capital)
     trades = []
     daily_returns = []
-    
+
     main_alloc = 0.5 / len(MAINS)  # e.g., 0.25 each
     alt_alloc = 0.5 / len(ALTS)   # e.g., ~0.1667 each
     
@@ -120,9 +122,9 @@ def run_backtest(df_prices, M, atr_period=14, sl_multiplier=2, tp_multiplier=3, 
     
     for i in range(1, len(signal)):
         date = closes.index[i]
-        prev_signal = signal.iloc[i-1]
+        prev_signal = signal.iloc[i - 1]
         curr_signal = signal.iloc[i]
-        
+
         if prev_signal == 0 and curr_signal == 1:  # Enter
             entry_capital = capital * (1 - FEE_RATE)
             
@@ -198,33 +200,35 @@ def run_backtest(df_prices, M, atr_period=14, sl_multiplier=2, tp_multiplier=3, 
         daily_ret = (current_value / equity[-1]) - 1 if equity[-1] > 0 else 0
         daily_returns.append(daily_ret)
         equity.append(current_value)
-    
+
     # Create equity series with correct index
     # equity has len(closes) + 1 elements (initial + one per day)
     equity_index = [closes.index[0] - timedelta(days=1)] + list(closes.index)
     cum_ret = pd.Series(equity, index=equity_index)[1:]
     cum_ret = (cum_ret / cum_ret.iloc[0]).fillna(1)
-    
+
     # Advanced metrics
     returns = pd.Series(daily_returns, index=closes.index[1:])
     total_return = equity[-1] - 1
-    annualized_return = (1 + total_return) ** (365 / len(returns)) - 1 if len(returns) > 0 else 0
-    sharpe = returns.mean() / returns.std() * (365 ** 0.5) if returns.std() != 0 else 0
+    annualized_return = (
+        (1 + total_return) ** (365 / len(returns)) - 1 if len(returns) > 0 else 0
+    )
+    sharpe = returns.mean() / returns.std() * (365**0.5) if returns.std() != 0 else 0
     downside_dev = returns[returns < 0].std() if len(returns[returns < 0]) > 0 else 0
-    sortino = returns.mean() / downside_dev * (365 ** 0.5) if downside_dev != 0 else 0
+    sortino = returns.mean() / downside_dev * (365**0.5) if downside_dev != 0 else 0
     cum_max = cum_ret.cummax()
     drawdown = (cum_ret - cum_max) / cum_max
     max_dd = drawdown.min()
     calmar = annualized_return / abs(max_dd) if max_dd != 0 else 0
-    
+
     metrics = {
-        'Sharpe': sharpe,
-        'Sortino': sortino,
-        'Max Drawdown': max_dd,
-        'Calmar': calmar,
-        'Total Return': total_return,
-        'Annualized Return': annualized_return,
-        'Trades': len(trades) // 2  # Enter-exit pairs
+        "Sharpe": sharpe,
+        "Sortino": sortino,
+        "Max Drawdown": max_dd,
+        "Calmar": calmar,
+        "Total Return": total_return,
+        "Annualized Return": annualized_return,
+        "Trades": len(trades) // 2,  # Enter-exit pairs
     }
-    
+
     return metrics, returns, cum_ret, trades

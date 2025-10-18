@@ -5,12 +5,15 @@ repository scaffold wrapping existing upsert helpers. Actual DB round‑trip
 tests are deferred until a Postgres test fixture is available; current tests
 focus on pure transformation.
 """
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Iterable, List
-from pathlib import Path
 import json
+from collections.abc import Iterable
+from datetime import UTC, datetime, timezone
+from pathlib import Path
+from typing import List
+
 try:
     from jsonschema import Draft202012Validator  # type: ignore
 except Exception:  # pragma: no cover
@@ -32,7 +35,14 @@ def _get_validator():  # lazy load
         return _SCHEMA_VALIDATOR
     if Draft202012Validator is None:  # pragma: no cover
         return None
-    schema_path = Path(__file__).resolve().parents[3] / "shared" / "shared_schema" / "bars" / "v1" / "market_bar.schema.json"
+    schema_path = (
+        Path(__file__).resolve().parents[3]
+        / "shared"
+        / "shared_schema"
+        / "bars"
+        / "v1"
+        / "market_bar.schema.json"
+    )
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         _SCHEMA_VALIDATOR = Draft202012Validator(schema)
@@ -41,7 +51,9 @@ def _get_validator():  # lazy load
     return _SCHEMA_VALIDATOR
 
 
-def to_market_bars(adapter_result: dict, *, provider_override: str | None = None, validate: bool = True):  # -> List[MarketBar]
+def to_market_bars(
+    adapter_result: dict, *, provider_override: str | None = None, validate: bool = True
+):  # -> List[MarketBar]
     """Convert normalized adapter result -> List[MarketBar].
 
     Expects shape: { provider: str, data: [ {ts, open, high, low, close, volume, ...}, ... ] }
@@ -92,7 +104,7 @@ class BarRepository:
                     "provider": b.provider or provider,
                     "symbol": symbol,
                     "interval": interval,
-                    "datetime": datetime.fromtimestamp(b.ts, tz=timezone.utc),
+                    "datetime": datetime.fromtimestamp(b.ts, tz=UTC),
                     "open": b.open,
                     "high": b.high,
                     "low": b.low,
@@ -105,7 +117,9 @@ class BarRepository:
         # DataFrame helper expects some datetime-like column
         return upsert_ohlcv(provider, symbol, interval, df)
 
-    def fetch_range(self, *, provider: str, symbol: str, interval: str, start_ts: int, end_ts: int):
+    def fetch_range(
+        self, *, provider: str, symbol: str, interval: str, start_ts: int, end_ts: int
+    ):
         """Fetch bars in [start_ts, end_ts]; returns list of MarketBar. Empty list on error."""
         try:
             from infrastructure.database.postgres import get_connection  # type: ignore

@@ -19,7 +19,7 @@ class BitstampClient(BaseClient):
     MAX_CANDLES_PER_REQUEST = 1000  # Bitstamp allows max 1000 candles per request
     log_prefix = "[BitstampClient]"
 
-    def __init__(self, metrics: Optional[Any] = None):
+    def __init__(self, metrics: Any | None = None):
         """Initialize the Bitstamp client."""
         super().__init__(name="BitstampClient", metrics=metrics)
 
@@ -30,8 +30,8 @@ class BitstampClient(BaseClient):
         end_timestamp: int,
         timeframe: int = 60,
         max_retries: int = 3,
-        limit: Optional[int] = None,
-    ) -> Optional[pd.DataFrame]:
+        limit: int | None = None,
+    ) -> pd.DataFrame | None:
         """
         Fetch OHLCV data from Bitstamp API in chunks.
         """
@@ -133,7 +133,7 @@ class BitstampClient(BaseClient):
         )
         return None
 
-    def _process_data(self, data: List[Dict[str, Any]]) -> pd.DataFrame:
+    def _process_data(self, data: list[dict[str, Any]]) -> pd.DataFrame:
         """
         Convert JSON 'ohlc' batch into a standardized pandas DataFrame.
         """
@@ -169,9 +169,9 @@ class BitstampClient(BaseClient):
         self,
         symbol: str,
         timeframe: int = 60,
-        params: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None,
-    ) -> Optional[pd.DataFrame]:
+        params: dict[str, Any] | None = None,
+        limit: int | None = None,
+    ) -> pd.DataFrame | None:
         """
         Public method to fetch OHLCV data for a symbol.
         """
@@ -188,7 +188,7 @@ class BitstampClient(BaseClient):
             limit=limit,
         )
 
-    def get_markets(self) -> Optional[List[Dict[str, Any]]]:
+    def get_markets(self) -> list[dict[str, Any]] | None:
         """
         Fetch trading pairs info from Bitstamp API (used for health checks).
         """
@@ -246,11 +246,9 @@ def fetch_data(
     timeframe: int = Query(
         60, description="Timeframe in seconds (e.g., 60 for 1 minute)"
     ),
-    start: Optional[int] = Query(None, description="Start timestamp (Unix epoch)"),
-    end: Optional[int] = Query(None, description="End timestamp (Unix epoch)"),
-    limit: Optional[int] = Query(
-        None, description="Maximum number of candles to fetch"
-    ),
+    start: int | None = Query(None, description="Start timestamp (Unix epoch)"),
+    end: int | None = Query(None, description="End timestamp (Unix epoch)"),
+    limit: int | None = Query(None, description="Maximum number of candles to fetch"),
 ):
     """
     Endpoint to fetch OHLCV data for a given asset symbol and timeframe.

@@ -11,8 +11,9 @@ import hashlib
 import inspect
 import json
 import time
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Awaitable, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, Dict, Optional, TypeVar, Union
 
 from loguru import logger
 
@@ -31,17 +32,17 @@ class CacheConfig:
 
     def __init__(
         self,
-        backend: Optional[CacheBackend] = None,
+        backend: CacheBackend | None = None,
         ttl: int = 300,
         key_prefix: str = "",
         include_args: bool = True,
         include_kwargs: bool = True,
-        exclude_args: Optional[list] = None,
-        exclude_kwargs: Optional[list] = None,
-        key_generator: Optional[Callable] = None,
-        condition: Optional[Callable] = None,
-        on_cache_hit: Optional[Callable] = None,
-        on_cache_miss: Optional[Callable] = None,
+        exclude_args: list | None = None,
+        exclude_kwargs: list | None = None,
+        key_generator: Callable | None = None,
+        condition: Callable | None = None,
+        on_cache_hit: Callable | None = None,
+        on_cache_miss: Callable | None = None,
     ):
         """
         Initialize cache configuration.
@@ -204,16 +205,16 @@ async def _async_cache_wrapper(
 
 def async_cached(
     ttl: int = 300,
-    backend: Optional[CacheBackend] = None,
+    backend: CacheBackend | None = None,
     key_prefix: str = "",
     include_args: bool = True,
     include_kwargs: bool = True,
-    exclude_args: Optional[list] = None,
-    exclude_kwargs: Optional[list] = None,
-    key_generator: Optional[Callable] = None,
-    condition: Optional[Callable] = None,
-    on_cache_hit: Optional[Callable] = None,
-    on_cache_miss: Optional[Callable] = None,
+    exclude_args: list | None = None,
+    exclude_kwargs: list | None = None,
+    key_generator: Callable | None = None,
+    condition: Callable | None = None,
+    on_cache_hit: Callable | None = None,
+    on_cache_miss: Callable | None = None,
 ) -> Callable[[AF], AF]:
     """
     Decorator for caching async functions.
@@ -284,16 +285,16 @@ def async_cached(
 
 def cached(
     ttl: int = 300,
-    backend: Optional[CacheBackend] = None,
+    backend: CacheBackend | None = None,
     key_prefix: str = "",
     include_args: bool = True,
     include_kwargs: bool = True,
-    exclude_args: Optional[list] = None,
-    exclude_kwargs: Optional[list] = None,
-    key_generator: Optional[Callable] = None,
-    condition: Optional[Callable] = None,
-    on_cache_hit: Optional[Callable] = None,
-    on_cache_miss: Optional[Callable] = None,
+    exclude_args: list | None = None,
+    exclude_kwargs: list | None = None,
+    key_generator: Callable | None = None,
+    condition: Callable | None = None,
+    on_cache_hit: Callable | None = None,
+    on_cache_miss: Callable | None = None,
 ) -> Callable[[F], F]:
     """
     Decorator for caching sync functions (executed in async context).
@@ -364,15 +365,15 @@ def cached(
 
 def method_cached(
     ttl: int = 300,
-    backend: Optional[CacheBackend] = None,
+    backend: CacheBackend | None = None,
     key_prefix: str = "",
     include_self: bool = False,
     include_args: bool = True,
     include_kwargs: bool = True,
-    exclude_args: Optional[list] = None,
-    exclude_kwargs: Optional[list] = None,
-    key_generator: Optional[Callable] = None,
-    condition: Optional[Callable] = None,
+    exclude_args: list | None = None,
+    exclude_kwargs: list | None = None,
+    key_generator: Callable | None = None,
+    condition: Callable | None = None,
 ) -> Callable:
     """
     Decorator for caching class methods.
@@ -435,14 +436,14 @@ class CacheManager:
     """Manager for multiple cache instances and global operations."""
 
     def __init__(self):
-        self.backends: Dict[str, CacheBackend] = {}
+        self.backends: dict[str, CacheBackend] = {}
         self.cached_functions: list = []
 
     def register_backend(self, name: str, backend: CacheBackend) -> None:
         """Register a named cache backend."""
         self.backends[name] = backend
 
-    def get_backend(self, name: str) -> Optional[CacheBackend]:
+    def get_backend(self, name: str) -> CacheBackend | None:
         """Get a registered cache backend."""
         return self.backends.get(name)
 
@@ -451,7 +452,7 @@ class CacheManager:
         if hasattr(func, "_cache_config"):
             self.cached_functions.append(func)
 
-    async def clear_all_caches(self) -> Dict[str, int]:
+    async def clear_all_caches(self) -> dict[str, int]:
         """Clear all registered cache backends."""
         results = {}
         for name, backend in self.backends.items():
@@ -463,11 +464,11 @@ class CacheManager:
                 results[name] = -1  # Error
         return results
 
-    async def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
+    async def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get statistics from all registered cache backends."""
         return {name: backend.get_stats() for name, backend in self.backends.items()}
 
-    async def invalidate_pattern(self, pattern: str) -> Dict[str, int]:
+    async def invalidate_pattern(self, pattern: str) -> dict[str, int]:
         """Invalidate keys matching pattern across all backends."""
         results = {}
         for name, backend in self.backends.items():

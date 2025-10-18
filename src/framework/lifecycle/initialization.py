@@ -48,7 +48,7 @@ CORE_COMPONENTS = [
 ]
 
 
-def validate_environment() -> Tuple[bool, Dict[str, Any]]:
+def validate_environment() -> tuple[bool, dict[str, Any]]:
     """
     Validate the execution environment.
 
@@ -101,8 +101,8 @@ def validate_environment() -> Tuple[bool, Dict[str, Any]]:
 
 
 def load_configuration(
-    config_path: Optional[str] = None,
-) -> Tuple[bool, Dict[str, Any]]:
+    config_path: str | None = None,
+) -> tuple[bool, dict[str, Any]]:
     """
     Load the system configuration from the specified path.
 
@@ -123,7 +123,7 @@ def load_configuration(
         return False, {}
 
     try:
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             # Determine file type by extension
             if config_path.endswith((".yaml", ".yml")):
                 config = yaml.safe_load(f)
@@ -146,7 +146,7 @@ def load_configuration(
         return False, {}
 
 
-def check_dependencies(required_modules: List[str] = []) -> Tuple[bool, List[str]]:
+def check_dependencies(required_modules: list[str] = None) -> tuple[bool, list[str]]:
     """
     Check that all required external dependencies are available.
 
@@ -156,6 +156,8 @@ def check_dependencies(required_modules: List[str] = []) -> Tuple[bool, List[str
     Returns:
         Tuple[bool, List[str]]: (success, missing_dependencies)
     """
+    if required_modules is None:
+        required_modules = []
     if required_modules is None:
         required_modules = ["loguru", "pyyaml", "sqlalchemy"]
 
@@ -178,8 +180,8 @@ def check_dependencies(required_modules: List[str] = []) -> Tuple[bool, List[str
 
 
 def setup_database_connections(
-    config: Optional[Dict[str, Any]],
-) -> Tuple[bool, Dict[str, Any]]:
+    config: dict[str, Any] | None,
+) -> tuple[bool, dict[str, Any]]:
     """
     Set up connections to required databases based on configuration.
 
@@ -314,8 +316,8 @@ def setup_database_connections(
 
 
 def _initialize_component(
-    component_name: str, config: Dict[str, Any]
-) -> Tuple[bool, Any]:
+    component_name: str, config: dict[str, Any]
+) -> tuple[bool, Any]:
     """
     Initialize a specific system component.
 
@@ -359,15 +361,15 @@ def _initialize_component(
 
                 # Look for initialization function
                 if hasattr(module, "initialize"):
-                    init_func = getattr(module, "initialize")
+                    init_func = module.initialize
                     component_instance = init_func(component_config)
                     break
                 elif hasattr(module, "init"):
-                    init_func = getattr(module, "init")
+                    init_func = module.init
                     component_instance = init_func(component_config)
                     break
                 elif hasattr(module, "create"):
-                    init_func = getattr(module, "create")
+                    init_func = module.create
                     component_instance = init_func(component_config)
                     break
             except ImportError:
@@ -396,10 +398,10 @@ def _initialize_component(
 
 
 def initialize(
-    components: Optional[List[str]] = None,
-    config_path: Optional[str] = None,
-    additional_config: Optional[Dict[str, Any]] = None,
-) -> Tuple[bool, Dict[str, Any]]:
+    components: list[str] | None = None,
+    config_path: str | None = None,
+    additional_config: dict[str, Any] | None = None,
+) -> tuple[bool, dict[str, Any]]:
     """
     Initialize the system components.
 

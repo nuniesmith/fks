@@ -12,7 +12,7 @@ class CircuitBreakerConfig:
     reset_timeout: float = 60.0  # Seconds before trying again (half-open)
     success_threshold: int = 2  # Successes needed to close circuit again
     timeout: float = 10.0  # Request timeout in seconds
-    excluded_exceptions: List[type] = field(
+    excluded_exceptions: list[type] = field(
         default_factory=list
     )  # Exceptions that don't count as failures
     use_persistent_storage: bool = False  # Whether to persist state to external storage
@@ -20,7 +20,7 @@ class CircuitBreakerConfig:
     max_state_history: int = 100  # Maximum number of state changes to track
     log_level_state_change: str = "INFO"  # Log level for state changes
     log_level_failure: str = "ERROR"  # Log level for failures
-    storage_provider: Optional[str] = (
+    storage_provider: str | None = (
         None  # Storage provider type ("memory", "redis", etc.)
     )
 

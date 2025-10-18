@@ -7,15 +7,15 @@ Consolidates logging functionality from:
 
 Usage:
     from core.utils.logging import get_logger, init_logging
-    
+
     logger = get_logger(__name__)
     logger.info("Trading signal generated", extra={"symbol": "BTCUSDT"})
 """
-import logging
+
 import json
+import logging
 import os
 from typing import Optional
-
 
 _FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 _LOGGER_INITIALIZED = False
@@ -32,87 +32,84 @@ class JsonFormatter(logging.Formatter):
             "name": record.name,
             "message": record.getMessage(),
         }
-        
+
         # Add extra fields if provided
         extra = getattr(record, "extra", None)
         if isinstance(extra, dict):
             data.update(extra)
-        
+
         # Add exception info if present
         if record.exc_info:
             data["exception"] = self.formatException(record.exc_info)
-        
+
         return json.dumps(data)
 
 
-def init_logging(force: bool = False, level: Optional[str] = None) -> None:
+def init_logging(force: bool = False, level: str | None = None) -> None:
     """
     Initialize logging configuration.
-    
+
     Args:
         force: Force re-initialization even if already initialized
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
     global _LOGGER_INITIALIZED
-    
+
     if _LOGGER_INITIALIZED and not force:
         return
-    
+
     # Determine if JSON logging is enabled
     json_logs = os.getenv("FKS_JSON_LOGS", "0").lower() in ("1", "true", "yes")
-    
+
     # Determine log level
     if level is None:
         level = os.getenv("FKS_LOG_LEVEL", "INFO").upper()
     log_level = getattr(logging, level, logging.INFO)
-    
+
     # Create handlers
     handlers = []
     handler = logging.StreamHandler()
-    
+
     if json_logs:
         handler.setFormatter(JsonFormatter())
     else:
         handler.setFormatter(
             logging.Formatter(
-                '[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
-                datefmt='%Y-%m-%d %H:%M:%S'
+                "[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
-    
+
     handlers.append(handler)
-    
+
     # Configure logging
-    logging.basicConfig(
-        level=log_level,
-        format=_FORMAT,
-        handlers=handlers,
-        force=True
-    )
-    
+    logging.basicConfig(level=log_level, format=_FORMAT, handlers=handlers, force=True)
+
     _LOGGER_INITIALIZED = True
 
 
 def get_logger(name: str = "fks") -> logging.Logger:
     """
     Get a logger instance with the specified name.
-    
+
     Args:
         name: Logger name (typically __name__ of the module)
-        
+
     Returns:
         Configured logger instance
     """
     if not _LOGGER_INITIALIZED:
         init_logging()
-    
+
     return logging.getLogger(name)
 
 
-def log_trade(symbol: str, action: str, price: float, quantity: float, **kwargs) -> None:
+def log_trade(
+    symbol: str, action: str, price: float, quantity: float, **kwargs
+) -> None:
     """
     Log a trading action.
-    
+
     Args:
         symbol: Trading symbol (e.g., "BTCUSDT")
         action: Trading action (e.g., "BUY", "SELL")
@@ -129,15 +126,15 @@ def log_trade(symbol: str, action: str, price: float, quantity: float, **kwargs)
             "action": action,
             "price": price,
             "quantity": quantity,
-            **kwargs
-        }
+            **kwargs,
+        },
     )
 
 
 def log_signal(symbol: str, signal_type: str, confidence: float, **kwargs) -> None:
     """
     Log a trading signal.
-    
+
     Args:
         symbol: Trading symbol
         signal_type: Signal type (e.g., "BUY", "SELL", "HOLD")
@@ -152,8 +149,8 @@ def log_signal(symbol: str, signal_type: str, confidence: float, **kwargs) -> No
             "symbol": symbol,
             "signal_type": signal_type,
             "confidence": confidence,
-            **kwargs
-        }
+            **kwargs,
+        },
     )
 
 

@@ -39,7 +39,7 @@ class CircuitMetrics:
     max_response_time_ms: float = 0
 
     # State change history
-    state_changes: List[Tuple[float, str]] = field(default_factory=list)
+    state_changes: list[tuple[float, str]] = field(default_factory=list)
 
     # Time-based metrics for trend analysis
     created_at: float = field(default_factory=time.time)
@@ -48,7 +48,7 @@ class CircuitMetrics:
     last_failure_time: float = 0
 
     # Time window metrics for trend analysis (1-minute windows)
-    time_windows: List[TimeWindow] = field(default_factory=list)
+    time_windows: list[TimeWindow] = field(default_factory=list)
     current_window_start: float = field(default_factory=time.time)
     window_size_seconds: int = 60
     max_windows: int = 60  # Keep up to 60 windows (1 hour with 1-minute windows)
@@ -193,7 +193,7 @@ class CircuitMetrics:
             # Calculate all-time success rate
             return self.successful_requests / max(1, self.total_requests)
 
-    def get_window_metrics(self, window_minutes: int) -> Tuple[int, int]:
+    def get_window_metrics(self, window_minutes: int) -> tuple[int, int]:
         """
         Get success and total request counts for a specific time window.
 
@@ -250,7 +250,7 @@ class CircuitMetrics:
             return self.total_response_time_ms / self.successful_requests
         return 0
 
-    def get_recovery_time(self) -> Optional[float]:
+    def get_recovery_time(self) -> float | None:
         """
         Calculate average recovery time (time from open to closed state).
 
@@ -274,7 +274,7 @@ class CircuitMetrics:
             return sum(recovery_times) / len(recovery_times)
         return None
 
-    def get_trends(self, window_count: int = 5) -> Dict[str, List[float]]:
+    def get_trends(self, window_count: int = 5) -> dict[str, list[float]]:
         """
         Get trending metrics over recent time windows.
 
@@ -318,7 +318,7 @@ class CircuitMetrics:
 
         return trends
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert metrics to a comprehensive dictionary for reporting.
 
@@ -388,7 +388,7 @@ class CircuitMetrics:
             "uptime_formatted": self._format_duration(uptime_seconds),
         }
 
-    def to_prometheus_format(self) -> List[str]:
+    def to_prometheus_format(self) -> list[str]:
         """
         Convert metrics to Prometheus exposition format.
 

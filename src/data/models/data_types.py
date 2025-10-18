@@ -8,10 +8,10 @@ from typing import Any, TypedDict
 
 
 class Row(TypedDict, total=False):
-	"""Generic row structure placeholder."""
-	id: str
-	data: Any
+    """Generic row structure placeholder."""
+
+    id: str
+    data: Any
 
 
 __all__ = ["Row"]
-

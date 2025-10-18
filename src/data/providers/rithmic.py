@@ -4,11 +4,14 @@ This module encapsulates the mock OHLCV logic used when real Rithmic
 credentials are not configured. Real adapter integration can later
 replace the placeholder function while keeping the public interface.
 """
+
 from __future__ import annotations
-from typing import Any, Dict, List, Tuple, Optional
+
+from typing import Any, Dict, List, Optional, Tuple
+
 
 # yfinance is optional; caller passes the imported reference (or None)
-def mock_ohlcv(yf_mod, symbol: str, limit: int = 500) -> Dict[str, Any]:
+def mock_ohlcv(yf_mod, symbol: str, limit: int = 500) -> dict[str, Any]:
     """Return mock OHLCV data for a futures symbol using yfinance.
 
     Parameters
@@ -20,7 +23,7 @@ def mock_ohlcv(yf_mod, symbol: str, limit: int = 500) -> Dict[str, Any]:
     limit : int
         Maximum number of rows to return (most recent N).
     """
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     if yf_mod is not None:
         try:  # pragma: no cover - network dependent
             df = yf_mod.download(symbol, period="1y", interval="1d", progress=False)  # type: ignore[attr-defined]

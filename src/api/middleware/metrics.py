@@ -10,11 +10,12 @@ import statistics
 import time
 import traceback
 from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from enum import Enum
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -39,21 +40,21 @@ class RequestMetrics:
     endpoint: str
     method: str
     start_time: float
-    end_time: Optional[float] = None
-    duration: Optional[float] = None
-    status_code: Optional[int] = None
+    end_time: float | None = None
+    duration: float | None = None
+    status_code: int | None = None
     response_size: int = 0
-    error: Optional[str] = None
-    context: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    context: dict[str, Any] = field(default_factory=dict)
     metric_type: MetricType = MetricType.REQUEST
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         """Calculate derived fields after initialization."""
         if self.end_time and self.start_time:
             self.duration = self.end_time - self.start_time
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary format."""
         return {
             "endpoint": self.endpoint,
@@ -181,7 +182,7 @@ class MetricsCollector:
             if metrics.duration:
                 method_stat["total_duration"] += metrics.duration
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """
         Get summary statistics.
 
@@ -209,7 +210,7 @@ class MetricsCollector:
                 "retention_hours": self.retention_hours,
             }
 
-    def get_endpoint_stats(self, top_n: int = 10) -> Dict[str, Any]:
+    def get_endpoint_stats(self, top_n: int = 10) -> dict[str, Any]:
         """
         Get per-endpoint statistics.
 
@@ -271,7 +272,7 @@ class MetricsCollector:
                 "total_endpoints": len(endpoint_summaries),
             }
 
-    def get_method_stats(self) -> Dict[str, Any]:
+    def get_method_stats(self) -> dict[str, Any]:
         """Get per-method statistics."""
         with self._lock:
             method_summaries = {}
@@ -295,7 +296,7 @@ class MetricsCollector:
 
             return method_summaries
 
-    def get_recent_metrics(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_recent_metrics(self, limit: int = 100) -> list[dict[str, Any]]:
         """
         Get recent metrics.
 
@@ -318,7 +319,7 @@ class MetricsCollector:
             self.total_duration = 0.0
             self.endpoint_stats.clear()
             self.method_stats.clear()
-            self.performance_buckets = {k: 0 for k in self.performance_buckets}
+            self.performance_buckets = dict.fromkeys(self.performance_buckets, 0)
             self.status_codes.clear()
             logger.info("Metrics collector statistics reset")
 
@@ -340,9 +341,9 @@ class MetricsMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        metrics_collector: Optional[MetricsCollector] = None,
-        exclude_paths: Optional[List[str]] = None,
-        metrics_paths: Optional[List[str]] = None,
+        metrics_collector: MetricsCollector | None = None,
+        exclude_paths: list[str] | None = None,
+        metrics_paths: list[str] | None = None,
         collect_user_agent: bool = True,
         collect_query_params: bool = False,
         sampling_rate: float = 1.0,
@@ -452,8 +453,8 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             return self._handle_unhandled_exception(e, request_metrics)
 
     def _build_context(
-        self, request: Request, request_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, request: Request, request_id: str | None = None
+    ) -> dict[str, Any]:
         """
         Build detailed context information from the request.
 
@@ -630,7 +631,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             content={"detail": "An internal server error occurred"},
         )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get metrics statistics."""
         return {
             "summary": self.metrics_collector.get_summary(),
@@ -643,7 +644,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
 
 # Utility functions for setting up metrics
 def setup_metrics_middleware(
-    app: FastAPI, metrics_collector: Optional[MetricsCollector] = None, **kwargs
+    app: FastAPI, metrics_collector: MetricsCollector | None = None, **kwargs
 ) -> MetricsMiddleware:
     """
     Setup metrics middleware for a FastAPI application.
@@ -682,7 +683,7 @@ def create_metrics_endpoint(app: FastAPI, path: str = "/metrics") -> None:
     @app.get(path)
     async def get_metrics(
         summary_only: bool = False, recent_limit: int = 100, endpoint_limit: int = 20
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get application metrics.
 
@@ -700,7 +701,7 @@ def create_metrics_endpoint(app: FastAPI, path: str = "/metrics") -> None:
 
         result = {
             "summary": metrics_collector.get_summary(),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         if not summary_only:

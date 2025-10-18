@@ -10,7 +10,8 @@ import json
 import sys
 import time
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Set, Type, Union
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, Set, Type, Union
 
 from fastapi import FastAPI, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -30,11 +31,11 @@ class ErrorResponse:
         status_code: int,
         message: str,
         error_type: str,
-        details: Optional[Any] = None,
-        error_code: Optional[str] = None,
-        path: Optional[str] = None,
-        request_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        details: Any | None = None,
+        error_code: str | None = None,
+        path: str | None = None,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
         """
         Create a structured error response.
 
@@ -73,7 +74,7 @@ def add_error_handlers(
     include_exception_details: bool = False,
     log_validation_errors: bool = True,
     include_request_id: bool = True,
-    custom_errors: Optional[Dict[Type[Exception], int]] = None,
+    custom_errors: dict[type[Exception], int] | None = None,
 ) -> None:
     """
     Add error handlers to the FastAPI application.
@@ -275,7 +276,7 @@ def create_error_logger(
     app: FastAPI,
     log_request_body: bool = False,
     include_headers: bool = False,
-    sensitive_headers: Optional[Set[str]] = None,
+    sensitive_headers: set[str] | None = None,
 ) -> Callable[[Request, Exception], Any]:
     """
     Create a middleware to log errors.
@@ -408,7 +409,7 @@ class ErrorContext:
         request.state.error_context.update(kwargs)
 
     @staticmethod
-    def get_context(request: Request) -> Dict[str, Any]:
+    def get_context(request: Request) -> dict[str, Any]:
         """
         Get error context from request state.
 
@@ -428,7 +429,7 @@ class ApplicationError(Exception):
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     error_type = "application_error"
 
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None):
         self.message = message
         self.details = details
         super().__init__(message)

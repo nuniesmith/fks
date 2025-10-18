@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from adapters import get_adapter  # type: ignore
+from .adapters import get_adapter  # type: ignore
 
 
 class DataManager:

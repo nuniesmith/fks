@@ -13,7 +13,7 @@ import pandas as pd
 import talib
 from datetime import timedelta
 
-from config import SYMBOLS, MAINS, ALTS, FEE_RATE
+from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE
 
 
 def run_backtest(df_prices, M, atr_period=14, sl_multiplier=2, tp_multiplier=3):

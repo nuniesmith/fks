@@ -8,7 +8,7 @@ Generates buy/sell signals based on technical indicators and market conditions.
 import pandas as pd
 import talib
 
-from config import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
+from framework.config.constants import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
 from data.api.binance import get_current_price
 
 

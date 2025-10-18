@@ -13,7 +13,7 @@ SRC_DIR = ROOT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 # Django setup
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "fks_project.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "web.django.settings")
 
 import django
 django.setup()

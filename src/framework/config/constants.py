@@ -752,4 +752,49 @@ __all__ = [
     "is_testing",
     "get_feature_flag",
     "get_resource_limit",
+    # Trading constants (for backward compatibility with legacy config module)
+    "SYMBOLS",
+    "MAINS",
+    "ALTS",
+    "FEE_RATE",
+    "RISK_PER_TRADE",
+    "DATABASE_URL",
 ]
+
+
+# =============================================================================
+# Trading Constants (Legacy config module compatibility)
+# =============================================================================
+# These constants were previously in the legacy 'config' module.
+# Migration: from config import SYMBOLS -> from framework.config.constants import SYMBOLS
+
+# Trading Symbols
+SYMBOLS = [
+    'BTCUSDT',
+    'ETHUSDT',
+    'BNBUSDT',
+    'ADAUSDT',
+    'SOLUSDT',
+    'DOTUSDT',
+    'MATICUSDT',
+    'AVAXUSDT',
+    'LINKUSDT',
+    'ATOMUSDT',
+]
+
+# Main cryptocurrencies (larger market cap, lower volatility)
+MAINS = ['BTC', 'ETH', 'BNB']
+
+# Alternative cryptocurrencies (smaller market cap, higher volatility)
+ALTS = ['ADA', 'SOL', 'DOT', 'MATIC', 'AVAX', 'LINK', 'ATOM']
+
+# Trading Configuration
+FEE_RATE = 0.001  # 0.1% trading fee (Binance standard)
+RISK_PER_TRADE = 0.02  # 2% risk per trade
+
+# Database Configuration (for backward compatibility)
+# Note: In Django projects, use settings.DATABASES instead
+DATABASE_URL = os.environ.get(
+    'DATABASE_URL',
+    'postgresql://postgres:postgres@db:5432/trading_db'
+)

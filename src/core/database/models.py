@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import pytz
 
-from config import DATABASE_URL
+from framework.config.constants import DATABASE_URL
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_size=10, max_overflow=20)
 Base = declarative_base()

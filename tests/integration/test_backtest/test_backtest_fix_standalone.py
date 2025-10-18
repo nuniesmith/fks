@@ -8,7 +8,7 @@ import sys
 import django
 
 # Setup Django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'fks_project.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'web.django.settings')
 sys.path.insert(0, '/app')
 django.setup()
 

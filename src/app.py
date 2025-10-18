@@ -9,8 +9,6 @@ Enhanced Streamlit app with:
 """
 
 import os
-os.environ['TZ'] = 'America/Toronto'
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -35,6 +33,7 @@ from db_utils import (
 from core.database.models import Session
 
 # Set timezone
+os.environ['TZ'] = 'America/Toronto'
 TIMEZONE = pytz.timezone('America/Toronto')
 
 # Page config

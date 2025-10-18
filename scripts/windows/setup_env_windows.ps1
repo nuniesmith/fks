@@ -5,8 +5,8 @@ Write-Host "Setting up Conda Environment for FKS Trading Systems Model..." -Fore
 Write-Host "==============================================================" -ForegroundColor Green
 
 # Configuration
-$ENV_NAME = "transformer_gold"
-$PYTHON_VERSION = "3.11"
+$ENV_NAME = "fks"
+$PYTHON_VERSION = "3.13"
 $REQUIREMENTS_FILE = "requirements.txt"
 
 # Step 1: Remove existing virtual environment
@@ -197,7 +197,7 @@ $activateBat | Out-File -FilePath "activate_env.bat" -Encoding ASCII
 
 # Create activate_env.ps1
 $activatePs1 = @"
-# Activate the transformer_gold conda environment
+# Activate the fks conda environment
 & conda activate $ENV_NAME
 Write-Host "Conda environment '$ENV_NAME' activated" -ForegroundColor Green
 Write-Host "Python: " -NoNewline

@@ -510,7 +510,7 @@ def update_indicators_task(self, symbol: str = None, timeframe: str = DEFAULT_TI
                 closes = [float(d.close) for d in data]
                 highs = [float(d.high) for d in data]
                 lows = [float(d.low) for d in data]
-                [float(d.volume) for d in data]
+                volumes = [float(d.volume) for d in data]
 
                 # Calculate indicators
                 indicators_data = []

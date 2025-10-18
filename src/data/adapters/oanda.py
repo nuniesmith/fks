@@ -57,13 +57,10 @@ class OandaAdapter(APIAdapter):
         limit: int = int(kwargs.get("limit", 500))
         start_time = kwargs.get("start_time")
         end_time = kwargs.get("end_time")
-        asset_type: str = kwargs.get("asset_type", AssetType.SPOT)
+        kwargs.get("asset_type", AssetType.SPOT)
 
         # Map futures symbols to Oanda equivalents
-        if symbol in self.FUTURES_SYMBOL_MAP:
-            oanda_symbol = self.FUTURES_SYMBOL_MAP[symbol]
-        else:
-            oanda_symbol = symbol
+        oanda_symbol = self.FUTURES_SYMBOL_MAP.get(symbol, symbol)
 
         # Convert interval format (Binance-style to Oanda-style)
         oanda_granularity = self._convert_interval(interval)

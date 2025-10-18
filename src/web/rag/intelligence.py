@@ -143,7 +143,7 @@ class FKSIntelligence:
             embeddings = self.embeddings.generate_embeddings_batch(chunk_texts)
 
             # Store embeddings
-            for chunk_record, embedding in zip(chunk_records, embeddings):
+            for chunk_record, embedding in zip(chunk_records, embeddings, strict=False):
                 self.embeddings.store_chunk_embedding(
                     chunk_id=chunk_record.id, embedding=embedding, session=session
                 )

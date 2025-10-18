@@ -6,6 +6,8 @@ to make it easier to test circuit breaker functionality and applications
 that use circuit breakers.
 """
 
+import builtins
+import contextlib
 import threading
 import time
 from collections.abc import Callable
@@ -82,7 +84,7 @@ class MockStateProvider(StateProvider):
             self._operation_calls.append(("list_keys", prefix, None))
             if self._fail_operations:
                 return []
-            return [k for k in self._storage.keys() if k.startswith(prefix)]
+            return [k for k in self._storage if k.startswith(prefix)]
 
     def clear_all(self, prefix: str = "") -> bool:
         """Mock clear operation."""
@@ -94,7 +96,7 @@ class MockStateProvider(StateProvider):
                 self._storage.clear()
             else:
                 keys_to_delete = [
-                    k for k in self._storage.keys() if k.startswith(prefix)
+                    k for k in self._storage if k.startswith(prefix)
                 ]
                 for key in keys_to_delete:
                     del self._storage[key]
@@ -429,10 +431,8 @@ class TestScenarios:
         helper.wait_for_reset_timeout()
 
         # Next call should transition to half-open
-        try:
+        with contextlib.suppress(builtins.BaseException):
             helper.circuit.execute(lambda: "success")
-        except:
-            pass
         assert_circuit_half_open(helper)
 
         # Successful calls should close the circuit
@@ -453,7 +453,7 @@ class TestScenarios:
         # This should timeout and count as a failure
         try:
             helper.circuit.execute(slow_function)
-            assert False, "Should have timed out"
+            raise AssertionError("Should have timed out")
         except Exception:
             pass
 

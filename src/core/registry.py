@@ -428,8 +428,8 @@ SPOT_ASSETS: list[Asset] = []
 FUTURES_ASSETS: list[Asset] = []
 
 # Build convenience lookups
-for category, types_dict in ASSET_REGISTRY.items():
-    for asset_type, assets in types_dict.items():
+for _category, types_dict in ASSET_REGISTRY.items():
+    for _asset_type, assets in types_dict.items():
         for asset in assets:
             ALL_ASSETS.append(asset)
             ASSETS_BY_SYMBOL[asset.symbol] = asset
@@ -454,7 +454,7 @@ def get_asset(symbol: str) -> Asset | None:
 def get_assets_by_category(category: AssetCategory) -> list[Asset]:
     """Get all assets in a category"""
     assets = []
-    for asset_type, asset_list in ASSET_REGISTRY[category].items():
+    for _asset_type, asset_list in ASSET_REGISTRY[category].items():
         assets.extend(asset_list)
     return assets
 

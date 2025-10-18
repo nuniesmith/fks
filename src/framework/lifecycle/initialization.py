@@ -146,7 +146,7 @@ def load_configuration(
         return False, {}
 
 
-def check_dependencies(required_modules: list[str] = []) -> tuple[bool, list[str]]:
+def check_dependencies(required_modules: list[str] = None) -> tuple[bool, list[str]]:
     """
     Check that all required external dependencies are available.
 
@@ -156,6 +156,8 @@ def check_dependencies(required_modules: list[str] = []) -> tuple[bool, list[str
     Returns:
         Tuple[bool, List[str]]: (success, missing_dependencies)
     """
+    if required_modules is None:
+        required_modules = []
     if required_modules is None:
         required_modules = ["loguru", "pyyaml", "sqlalchemy"]
 

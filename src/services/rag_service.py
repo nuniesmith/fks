@@ -555,7 +555,7 @@ Conclusion: {"Strong performance" if metrics.get('win_rate', 0) > 0.6 else "Need
 
         results = []
         query_obj = session.query(DocumentChunk).filter(
-            DocumentChunk.is_deleted == False
+            not DocumentChunk.is_deleted
         )
 
         # Match any keyword in content
@@ -619,7 +619,7 @@ Conclusion: {"Strong performance" if metrics.get('win_rate', 0) > 0.6 else "Need
 
         # Calculate hybrid scores
         ranked = []
-        for chunk_id, data in scores.items():
+        for _chunk_id, data in scores.items():
             hybrid_score = (
                 data["semantic"] * semantic_weight + data["keyword"] * keyword_weight
             )
@@ -701,7 +701,7 @@ Conclusion: {"Strong performance" if metrics.get('win_rate', 0) > 0.6 else "Need
             avg_sources = np.mean([q.num_sources for q in queries])
 
             # Most common query patterns
-            query_texts = [q.query_text.lower() for q in queries]
+            [q.query_text.lower() for q in queries]
 
             return {
                 "period_days": days,

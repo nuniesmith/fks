@@ -9,7 +9,7 @@ import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -334,10 +334,8 @@ class ServiceRegistry:
         # Stop health monitoring
         if self._health_check_task:
             self._health_check_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._health_check_task
-            except asyncio.CancelledError:
-                pass
             self._health_check_task = None
 
         # Get reverse startup order

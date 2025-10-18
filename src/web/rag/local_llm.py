@@ -258,10 +258,7 @@ class LocalLLM:
     ) -> str:
         """Generate using transformers"""
         # Format prompt with system message if provided
-        if system_prompt:
-            full_prompt = f"System: {system_prompt}\n\nUser: {prompt}\n\nAssistant:"
-        else:
-            full_prompt = prompt
+        full_prompt = f"System: {system_prompt}\n\nUser: {prompt}\n\nAssistant:" if system_prompt else prompt
 
         inputs = self.tokenizer(full_prompt, return_tensors="pt").to(self.model.device)
 
@@ -287,10 +284,7 @@ class LocalLLM:
     ) -> str:
         """Generate using llama.cpp"""
         # Format with system prompt if provided
-        if system_prompt:
-            full_prompt = f"System: {system_prompt}\n\nUser: {prompt}\n\nAssistant:"
-        else:
-            full_prompt = prompt
+        full_prompt = f"System: {system_prompt}\n\nUser: {prompt}\n\nAssistant:" if system_prompt else prompt
 
         response = self.model(
             full_prompt,

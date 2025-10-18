@@ -546,10 +546,7 @@ if __name__ == "__main__":
         start_template_service(svc_name, svc_port)
     except Exception as e:
         # Create basic logger for critical errors
-        if HAS_LOGURU:
-            logger = loguru_logger
-        else:
-            logger = LoggerAdapter("service-template")
+        logger = loguru_logger if HAS_LOGURU else LoggerAdapter("service-template")
 
         logger.error(f"Unhandled exception: {e}")
         logger.debug(traceback.format_exc())

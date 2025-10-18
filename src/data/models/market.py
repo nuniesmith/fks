@@ -280,20 +280,20 @@ class MarketData(Model):
                 kwargs[field_name] = default_value
 
         # Add optional fields if they exist
-        for field in optional_fields:
-            if field in data_copy:
+        for field_name in optional_fields:
+            if field_name in data_copy:
                 try:
                     if (
-                        field
+                        field_name
                         in ["base_volume", "quote_volume", "bid_volume", "ask_volume"]
-                        and data_copy[field] is not None
+                        and data_copy[field_name] is not None
                     ):
-                        kwargs[field] = float(data_copy[field])
+                        kwargs[field_name] = float(data_copy[field_name])
                     else:
-                        kwargs[field] = data_copy[field]
+                        kwargs[field_name] = data_copy[field_name]
                 except (ValueError, TypeError) as e:
                     logger.warning(
-                        f"Error processing optional field '{field}': {e}, skipping"
+                        f"Error processing optional field '{field_name}': {e}, skipping"
                     )
 
         # Handle last_price -> last field conversion for compatibility

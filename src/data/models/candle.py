@@ -255,15 +255,15 @@ class Candle(ModelBase):
 
         # Ensure all numeric fields are converted properly
         numeric_fields = ["open", "high", "low", "close", "volume", "trades"]
-        for field in numeric_fields:
-            if field in data_copy and data_copy[field] is not None:
+        for field_name in numeric_fields:
+            if field_name in data_copy and data_copy[field_name] is not None:
                 try:
-                    data_copy[field] = float(data_copy[field])
+                    data_copy[field_name] = float(data_copy[field_name])
                 except (ValueError, TypeError):
                     logger.warning(
-                        f"Invalid {field} value: {data_copy[field]}, setting to 0"
+                        f"Invalid {field_name} value: {data_copy[field_name]}, setting to 0"
                     )
-                    data_copy[field] = 0.0
+                    data_copy[field_name] = 0.0
 
         # Extract metadata (any fields not in core_fields)
         metadata = {k: v for k, v in data_copy.items() if k not in core_fields}

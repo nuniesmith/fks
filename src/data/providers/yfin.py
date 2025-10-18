@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any, Dict, List, Optional
 
 
@@ -22,10 +23,8 @@ def sample_prices(
             .reset_index()
             .rename(columns={"Date": "date", "Close": "close"})
         )
-        try:
+        with contextlib.suppress(Exception):
             closes["date"] = closes["date"].astype(str)
-        except Exception:
-            pass
         count = int(len(closes))
         records = closes.to_dict(orient="records")  # type: ignore
     return {"count": count, "records": records}
@@ -57,10 +56,8 @@ def daily_ohlcv(
         }
     )
     if "date" in out.columns:
-        try:
+        with contextlib.suppress(Exception):
             out["date"] = out["date"].astype(str)
-        except Exception:
-            pass
     recs = out.to_dict(orient="records")  # type: ignore
     return {"count": len(recs), "records": recs}
 
@@ -107,9 +104,7 @@ def fks_ohlcv(
         try:
             out["time"] = (out["time"].astype("int64") // 10**9).astype(int)
         except Exception:
-            try:
+            with contextlib.suppress(Exception):
                 out["time"] = out["time"].astype(str)
-            except Exception:
-                pass
     recs = out.to_dict(orient="records")  # type: ignore
     return {"count": len(recs), "records": recs}

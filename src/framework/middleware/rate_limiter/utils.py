@@ -303,10 +303,7 @@ def format_rate_limit_message(
     message = f"Rate limit exceeded: {limit} requests per {window_str}"
 
     if retry_after > 0:
-        if retry_after >= 60:
-            retry_str = f"{retry_after // 60:.0f} minute(s)"
-        else:
-            retry_str = f"{retry_after:.1f} second(s)"
+        retry_str = f"{retry_after // 60:.0f} minute(s)" if retry_after >= 60 else f"{retry_after:.1f} second(s)"
         message += f". Try again in {retry_str}"
 
     return message

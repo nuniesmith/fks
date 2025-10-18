@@ -58,7 +58,7 @@ def get_current_signal(
             ).iloc[-1]
             for sym in SYMBOLS
         }
-        avg_atr = sum(atrs.values()) / len(atrs)
+        sum(atrs.values()) / len(atrs)
         risk_amount = account_size * risk_per_trade
         position_size_usdt = (
             risk_amount * len(SYMBOLS) / best_params["sl_multiplier"]

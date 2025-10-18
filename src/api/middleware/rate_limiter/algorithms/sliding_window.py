@@ -132,10 +132,7 @@ class SlidingWindowAlgorithm(RateLimitAlgorithm):
                 window_span = newest_request - oldest_request
 
                 # Calculate requests per second in current window
-                if window_span > 0:
-                    current_rate = len(requests) / window_span
-                else:
-                    current_rate = 0.0
+                current_rate = len(requests) / window_span if window_span > 0 else 0.0
             else:
                 oldest_request = None
                 newest_request = None

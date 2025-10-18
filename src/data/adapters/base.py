@@ -11,6 +11,7 @@ Runtime HTTP callable is injectable for deterministic tests.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import random
 import time
@@ -56,10 +57,8 @@ class APIAdapter(ABC):
             "FKS_DEFAULT_RPS"
         )
         if override_rps:
-            try:
+            with contextlib.suppress(ValueError):
                 self.rate_limit_per_sec = float(override_rps)
-            except ValueError:
-                pass
         # Retry config
         self._max_retries = int(os.getenv("FKS_API_MAX_RETRIES", "2"))
         self._backoff_base = float(os.getenv("FKS_API_BACKOFF_BASE", "0.3"))

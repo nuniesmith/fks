@@ -23,7 +23,7 @@ def alpha_daily(
         "datatype": "json",
     }
     j = requester(url, params)
-    key = next((k for k in j.keys() if "Time Series" in k), None)
+    key = next((k for k in j if "Time Series" in k), None)
     series = j.get(key) if key else None
     rows: list[dict[str, Any]] = []
     if isinstance(series, dict):

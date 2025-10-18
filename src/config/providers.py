@@ -32,6 +32,8 @@ try:
 except ImportError:
     consul = None
 
+import contextlib
+
 from loguru import logger
 
 from .models import ConfigFormat, ConfigSource, ValidationResult
@@ -435,15 +437,11 @@ class ConfigProviderRegistry:
         self.register(URLProvider())
 
         # Register cloud providers if available
-        try:
+        with contextlib.suppress(ImportError):
             self.register(AWSParameterStoreProvider())
-        except ImportError:
-            pass
 
-        try:
+        with contextlib.suppress(ImportError):
             self.register(ConsulProvider())
-        except ImportError:
-            pass
 
     def register(self, provider: ConfigProvider) -> None:
         """Register a configuration provider."""

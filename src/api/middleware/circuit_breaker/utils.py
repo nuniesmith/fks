@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def log_execution(func: F) -> F:
+def log_execution[F: Callable[..., Any]](func: F) -> F:
     """
     Decorator to log function execution time and result.
 

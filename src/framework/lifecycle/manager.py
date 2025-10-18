@@ -277,7 +277,7 @@ class LifecycleManager:
                     self.context.components = init_context.get("components", {})
 
                     # Register components with app lifecycle if they have start/stop methods
-                    for name, component in self.context.components.items():
+                    for _name, component in self.context.components.items():
                         if (
                             component
                             and hasattr(component, "start")
@@ -623,7 +623,7 @@ class LifecycleManager:
 
         while not self._shutdown_event.is_set():
             try:
-                health_data = self.health_check()
+                self.health_check()
 
                 # Check for degraded health and attempt recovery if enabled
                 if (

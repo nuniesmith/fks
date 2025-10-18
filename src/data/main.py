@@ -80,7 +80,7 @@ def _custom_endpoints():  # noqa: C901
     try:
         from fksgraphy.fernet import Fernet  # type: ignore
     except Exception:  # pragma: no cover
-        Fernet = None  # type: ignore
+        pass  # type: ignore
     try:
         import yfinance as yf  # type: ignore
     except Exception:  # pragma: no cover

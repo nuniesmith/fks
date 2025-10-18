@@ -204,7 +204,7 @@ class MemoryStateProvider(StateProvider):
             self._remove_expired_entries()
 
             keys = []
-            for key in self._storage.keys():
+            for key in self._storage:
                 if key.startswith(prefix):
                     # Check if entry has expired
                     _, expiration = self._storage[key]
@@ -230,7 +230,7 @@ class MemoryStateProvider(StateProvider):
                 return True
 
             # Clear matching keys
-            keys_to_delete = [k for k in self._storage.keys() if k.startswith(prefix)]
+            keys_to_delete = [k for k in self._storage if k.startswith(prefix)]
             for key in keys_to_delete:
                 del self._storage[key]
                 self._stats["total_deletes"] += 1

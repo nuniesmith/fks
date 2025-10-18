@@ -231,10 +231,7 @@ class CORSMiddleware(BaseHTTPMiddleware):
             return True
 
         # Check regex pattern
-        if self.allow_origin_regex and self.allow_origin_regex.match(origin):
-            return True
-
-        return False
+        return bool(self.allow_origin_regex and self.allow_origin_regex.match(origin))
 
     def _get_cors_headers(self, origin: str, request_method: str) -> dict[str, str]:
         """

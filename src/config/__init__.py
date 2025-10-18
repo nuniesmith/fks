@@ -163,10 +163,7 @@ def load_config(
         sources = [sources]
 
     # Start with defaults if requested
-    if apply_defaults:
-        merged_config = get_default_config()
-    else:
-        merged_config = {}
+    merged_config = get_default_config() if apply_defaults else {}
 
     # Load from all sources
     source_config = provider_registry.load_multiple(sources)
@@ -273,10 +270,7 @@ def setup_logging_from_config(config: Config | LoggingConfig) -> None:
     """
     from loguru import logger
 
-    if isinstance(config, Config):
-        logging_config = config.logging
-    else:
-        logging_config = config
+    logging_config = config.logging if isinstance(config, Config) else config
 
     if not logging_config:
         return
@@ -376,34 +370,7 @@ def create_default_config() -> Config:
     return config
 
 
-def is_production() -> bool:
-    """
-    Check if running in production environment.
-
-    Returns:
-        True if in production environment
-    """
-    return APP_ENV == AppEnvironment.PRODUCTION
-
-
-def is_development() -> bool:
-    """
-    Check if running in development environment.
-
-    Returns:
-        True if in development environment
-    """
-    return APP_ENV == AppEnvironment.DEVELOPMENT
-
-
-def is_testing() -> bool:
-    """
-    Check if running in testing environment.
-
-    Returns:
-        True if in testing environment
-    """
-    return APP_ENV == AppEnvironment.TESTING
+# Functions is_production, is_development, and is_testing are imported from .constants above
 
 
 # Export all public symbols

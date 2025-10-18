@@ -264,7 +264,7 @@ class ErrorRegistry:
         return list(cls._registry.keys())
 
 
-def create_exception(
+def create_exception[T: "BaseException"](
     exception_class: type[T],
     message: str | None = None,
     code: int | None = None,

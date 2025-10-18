@@ -12,6 +12,7 @@ This package provides comprehensive logging functionality for the framework incl
 - Automatic log rotation and retention
 """
 
+import contextlib
 import os
 import sys
 from typing import Any, Dict, Optional, Union
@@ -546,10 +547,8 @@ def health_check() -> dict[str, Any]:
 
     # Count handlers if using loguru
     if LOGURU_AVAILABLE:
-        try:
+        with contextlib.suppress(Exception):
             health_info["handlers_count"] = len(logger._core.handlers)
-        except Exception:
-            pass
 
     return health_info
 

@@ -6,7 +6,7 @@ from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 T = TypeVar("T", bound=dict[str, Any])
 
 
-class StateProvider(ABC, Generic[T]):
+class StateProvider[T: dict[str, Any]](ABC):
     """
     Abstract base class for state persistence providers.
 

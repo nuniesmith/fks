@@ -41,7 +41,6 @@ class BaseClient:
             Response JSON data if successful, None otherwise
         """
         start_time = time.time()
-        success = False
 
         for attempt in range(max_retries):
             try:
@@ -93,7 +92,6 @@ class BaseClient:
                     duration_ms=api_call_duration,
                 )
 
-                success = True
                 return response.json()
 
             except requests.exceptions.RequestException as e:

@@ -114,10 +114,7 @@ def rate_limited(
             )
 
         # Choose the appropriate wrapper
-        if inspect.iscoroutinefunction(func):
-            wrapper = async_wrapper
-        else:
-            wrapper = sync_wrapper
+        wrapper = async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
 
         # Add utility methods to the wrapper
         _add_wrapper_methods(wrapper, limiter, func)
@@ -370,10 +367,7 @@ def conditional_rate_limit(
                 return await func(*args, **kwargs_inner)
 
         # Choose appropriate wrapper
-        if inspect.iscoroutinefunction(func):
-            wrapper = async_wrapper
-        else:
-            wrapper = sync_wrapper
+        wrapper = async_wrapper if inspect.iscoroutinefunction(func) else sync_wrapper
 
         # Copy over rate limiter methods
         for attr in [

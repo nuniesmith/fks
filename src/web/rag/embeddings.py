@@ -166,7 +166,7 @@ class EmbeddingsService:
             # Note: We use raw SQL for pgvector operations
             query = text(
                 """
-                UPDATE document_chunks 
+                UPDATE document_chunks
                 SET embedding = :embedding::vector
                 WHERE id = :chunk_id
             """
@@ -242,7 +242,7 @@ class EmbeddingsService:
             # Semantic search query using pgvector cosine similarity
             query = text(
                 f"""
-                SELECT 
+                SELECT
                     dc.id,
                     dc.document_id,
                     dc.content,
@@ -310,7 +310,7 @@ class EmbeddingsService:
         try:
             query = text(
                 """
-                SELECT 
+                SELECT
                     dc2.id,
                     dc2.content,
                     dc2.document_id,

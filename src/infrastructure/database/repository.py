@@ -156,7 +156,7 @@ class Pagination:
         return f"ORDER BY {safe_order_by} {self.order_dir}"
 
 
-class PaginatedResult(Generic[T]):
+class PaginatedResult[T: BaseModel]:
     """
     Result of a paginated query.
     """
@@ -211,7 +211,7 @@ class PaginatedResult(Generic[T]):
         }
 
 
-class BaseRepository(Generic[T, ID]):
+class BaseRepository[T: BaseModel, ID: (str, int, UUID)]:
     """
     Base repository for data access operations.
 
@@ -631,7 +631,7 @@ class BaseRepository(Generic[T, ID]):
             )
 
     async def execute_raw(
-        self, query: str, params: list[Any] = []
+        self, query: str, params: list[Any] = None
     ) -> list[dict[str, Any]]:
         """
         Execute a raw SQL query.
@@ -649,6 +649,8 @@ class BaseRepository(Generic[T, ID]):
         Raises:
             DatabaseError: If a database error occurs
         """
+        if params is None:
+            params = []
         try:
             params = params or []
 
@@ -659,7 +661,7 @@ class BaseRepository(Generic[T, ID]):
                 if cursor.description:
                     columns = [col[0] for col in cursor.description]
                     rows = cursor.fetchall()
-                    return [dict(zip(columns, row)) for row in rows]
+                    return [dict(zip(columns, row, strict=False)) for row in rows]
 
                 return []
 

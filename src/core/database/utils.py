@@ -324,7 +324,7 @@ def get_accounts(active_only: bool = True) -> list[Account]:
     try:
         query = session.query(Account)
         if active_only:
-            query = query.filter(Account.is_active == True)
+            query = query.filter(Account.is_active)
         return query.all()
     finally:
         session.close()
@@ -620,7 +620,7 @@ def get_active_strategy_parameters(strategy_name: str) -> StrategyParameters | N
             .filter(
                 and_(
                     StrategyParameters.strategy_name == strategy_name,
-                    StrategyParameters.is_active == True,
+                    StrategyParameters.is_active,
                 )
             )
             .first()

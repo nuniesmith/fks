@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from collections.abc import Callable
 from typing import Any, List, Optional
 
@@ -41,15 +42,11 @@ class Disruptor:
     async def stop(self) -> None:
         self._stopped.set()
         # Enqueue sentinel to unblock queue.get()
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             self._queue.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
         if self._worker_task:
-            try:
+            with contextlib.suppress(Exception):
                 await self._worker_task
-            except Exception:
-                pass
             self._worker_task = None
 
     async def publish(self, event: Any) -> None:

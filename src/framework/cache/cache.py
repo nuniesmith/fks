@@ -20,7 +20,7 @@ from loguru import logger
 T = TypeVar("T")
 
 
-class CacheEntry(Generic[T]):
+class CacheEntry[T]:
     """Represents a cached response with metadata."""
 
     def __init__(self, data: T, expiry: float):
@@ -121,7 +121,7 @@ class CacheStats:
         }
 
 
-class AsyncCache(Generic[T]):
+class AsyncCache[T]:
     """Thread-safe asynchronous cache implementation."""
 
     def __init__(
@@ -362,7 +362,7 @@ class AsyncCache(Generic[T]):
         count = 0
 
         async with self._lock:
-            keys_to_remove = [k for k in self.cache.keys() if regex.search(k)]
+            keys_to_remove = [k for k in self.cache if regex.search(k)]
             for key in keys_to_remove:
                 self.stats.total_size_bytes -= self.cache[key].size_bytes
                 del self.cache[key]

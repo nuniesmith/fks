@@ -754,12 +754,12 @@ with tab8:
                     session = DBSession()
                     doc_count = (
                         session.query(Document)
-                        .filter(Document.is_deleted == False)
+                        .filter(not Document.is_deleted)
                         .count()
                     )
                     chunk_count = (
                         session.query(DocumentChunk)
-                        .filter(DocumentChunk.is_deleted == False)
+                        .filter(not DocumentChunk.is_deleted)
                         .count()
                     )
                     session.close()

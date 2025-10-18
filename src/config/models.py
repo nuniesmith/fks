@@ -315,12 +315,11 @@ class Config:
         ]
         for config_name in typed_configs:
             config_obj = getattr(self, config_name)
-            if config_obj:
-                if hasattr(config_obj, "__dict__"):
-                    result[config_name] = {
-                        k: str(v) if isinstance(v, Path) else v
-                        for k, v in config_obj.__dict__.items()
-                    }
+            if config_obj and hasattr(config_obj, "__dict__"):
+                result[config_name] = {
+                    k: str(v) if isinstance(v, Path) else v
+                    for k, v in config_obj.__dict__.items()
+                }
 
         # Add paths if available
         if self.paths:
@@ -374,9 +373,8 @@ class Config:
                 errors.append("Database name is required")
 
         # Validate API configuration
-        if self.api:
-            if self.api.port < 1 or self.api.port > 65535:
-                errors.append("API port must be between 1 and 65535")
+        if self.api and (self.api.port < 1 or self.api.port > 65535):
+            errors.append("API port must be between 1 and 65535")
 
         # Validate ML configuration
         if self.ml:

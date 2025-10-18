@@ -128,8 +128,8 @@ Trader Notes:
 {notes or 'No additional notes'}
 
 Analysis:
-This {outcome} trade on {symbol} using {strategy} in {market_condition} market conditions 
-resulted in {pnl_pct:+.2f}% P&L. {'Strategy performed well' if pnl > 0 else 'Strategy underperformed'} 
+This {outcome} trade on {symbol} using {strategy} in {market_condition} market conditions
+resulted in {pnl_pct:+.2f}% P&L. {'Strategy performed well' if pnl > 0 else 'Strategy underperformed'}
 for this setup. Consider {'repeating' if pnl > 0 else 'avoiding'} similar entries in {market_condition} conditions.
 """
 

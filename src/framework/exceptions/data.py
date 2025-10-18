@@ -66,10 +66,7 @@ class DataSourceException(DataException):
         if source_name:
             details["source"] = source_name
 
-        if source_name:
-            message = message or f"Error from data source: {source_name}"
-        else:
-            message = message or "Data source error"
+        message = message or f"Error from data source: {source_name}" if source_name else message or "Data source error"
 
         super().__init__(message=message, code=code, details=details)
 
@@ -235,10 +232,7 @@ class DataStorageException(DataException):
         if storage_type:
             details["storage_type"] = storage_type
 
-        if storage_type:
-            message = message or f"Error in {storage_type} storage"
-        else:
-            message = message or "Data storage error"
+        message = message or f"Error in {storage_type} storage" if storage_type else message or "Data storage error"
 
         super().__init__(message=message, code=code, details=details)
 

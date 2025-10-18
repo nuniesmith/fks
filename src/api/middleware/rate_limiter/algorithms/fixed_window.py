@@ -65,7 +65,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
         client_data = self._get_client_data(client_id)
 
         # Reset window if needed
-        window_reset = self._reset_window_if_needed(client_data, current_time)
+        self._reset_window_if_needed(client_data, current_time)
         self._update_last_seen(client_id, current_time)
 
         # Check if we're under the limit
@@ -78,10 +78,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
         reset_time = window_end
 
         # Calculate retry_after
-        if allowed:
-            retry_after = 0.0
-        else:
-            retry_after = max(0.0, reset_time - current_time)
+        retry_after = 0.0 if allowed else max(0.0, reset_time - current_time)
 
         return RateLimitResult(
             allowed=allowed,
@@ -129,10 +126,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
 
             # Calculate current rate
             time_elapsed = current_time - window_start
-            if time_elapsed > 0:
-                current_rate = client_data["count"] / time_elapsed
-            else:
-                current_rate = 0.0
+            current_rate = client_data["count"] / time_elapsed if time_elapsed > 0 else 0.0
 
             return {
                 "client_id": client_id,

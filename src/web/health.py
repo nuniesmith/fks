@@ -118,7 +118,7 @@ class HealthDashboardView(View):
 
             # Test cache
             cache.set("health_check", "ok", 10)
-            test_value = cache.get("health_check")
+            cache.get("health_check")
 
             # Get Redis info
             r = redis.from_url(redis_url)
@@ -150,7 +150,7 @@ class HealthDashboardView(View):
             # Check active workers
             stats = inspect.stats()
             active_tasks = inspect.active()
-            scheduled_tasks = inspect.scheduled()
+            inspect.scheduled()
 
             if not stats:
                 return {
@@ -204,7 +204,7 @@ class HealthDashboardView(View):
         try:
             # Check if tailscale container is responding
             # This is a simplified check - expand based on your needs
-            response = requests.get("http://tailscale:41641/status", timeout=2)
+            requests.get("http://tailscale:41641/status", timeout=2)
             return {"status": "healthy", "message": "✓ Tailscale VPN active"}
         except Exception:
             return {

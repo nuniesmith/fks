@@ -1,0 +1,329 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Strategy Settings - FKS Trading Platform{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>
+            <i class="bi bi-gear"></i>
+            Strategy Settings
+        </h2>
+        <p class="text-muted">Configure trading strategies and risk parameters</p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Strategy List -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-ul"></i>
+                    Available Strategies
+                </h5>
+            </div>
+            <div class="list-group list-group-flush">
+                <a href="#rsi" class="list-group-item list-group-item-action active" data-strategy="rsi">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">RSI Divergence</h6>
+                            <small class="text-muted">Momentum-based strategy</small>
+                        </div>
+                        <span class="badge bg-success">Active</span>
+                    </div>
+                </a>
+                <a href="#macd" class="list-group-item list-group-item-action" data-strategy="macd">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">MACD Crossover</h6>
+                            <small class="text-muted">Trend-following strategy</small>
+                        </div>
+                        <span class="badge bg-success">Active</span>
+                    </div>
+                </a>
+                <a href="#bollinger" class="list-group-item list-group-item-action" data-strategy="bollinger">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">Bollinger Bands</h6>
+                            <small class="text-muted">Volatility-based strategy</small>
+                        </div>
+                        <span class="badge bg-success">Active</span>
+                    </div>
+                </a>
+                <a href="#breakout" class="list-group-item list-group-item-action" data-strategy="breakout">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">Breakout</h6>
+                            <small class="text-muted">Price action strategy</small>
+                        </div>
+                        <span class="badge bg-success">Active</span>
+                    </div>
+                </a>
+                <a href="#mean_reversion" class="list-group-item list-group-item-action" data-strategy="mean_reversion">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">Mean Reversion</h6>
+                            <small class="text-muted">Statistical strategy</small>
+                        </div>
+                        <span class="badge bg-secondary">Inactive</span>
+                    </div>
+                </a>
+            </div>
+            <div class="card-footer">
+                <button class="btn btn-sm btn-primary w-100">
+                    <i class="bi bi-plus-circle"></i> Add New Strategy
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Strategy Configuration -->
+    <div class="col-lg-8">
+        <!-- RSI Strategy Settings -->
+        <div id="rsi" class="card strategy-settings">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-sliders"></i>
+                    RSI Divergence Configuration
+                </h5>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="rsiEnabled" checked>
+                    <label class="form-check-label" for="rsiEnabled">Enabled</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="post" id="rsiForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="strategy" value="rsi_divergence">
+                    
+                    <h6 class="border-bottom pb-2 mb-3">Indicator Parameters</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">RSI Period</label>
+                            <input type="number" class="form-control" name="rsi_period" value="14" min="5" max="50">
+                            <small class="text-muted">Standard: 14</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">RSI Overbought</label>
+                            <input type="number" class="form-control" name="rsi_overbought" value="70" min="60" max="90">
+                            <small class="text-muted">Standard: 70</small>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">RSI Oversold</label>
+                            <input type="number" class="form-control" name="rsi_oversold" value="30" min="10" max="40">
+                            <small class="text-muted">Standard: 30</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Divergence Lookback</label>
+                            <input type="number" class="form-control" name="divergence_lookback" value="5" min="3" max="15">
+                            <small class="text-muted">Candles to check</small>
+                        </div>
+                    </div>
+                    
+                    <h6 class="border-bottom pb-2 mb-3 mt-4">Risk Management</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Position Size (%)</label>
+                            <input type="number" class="form-control" name="position_size" value="2" min="0.1" max="10" step="0.1">
+                            <small class="text-muted">Percentage of portfolio</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Stop Loss (%)</label>
+                            <input type="number" class="form-control" name="stop_loss" value="2" min="0.5" max="10" step="0.1">
+                            <small class="text-muted">Distance from entry</small>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Take Profit (%)</label>
+                            <input type="number" class="form-control" name="take_profit" value="4" min="1" max="20" step="0.1">
+                            <small class="text-muted">Target profit level</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Max Open Positions</label>
+                            <input type="number" class="form-control" name="max_positions" value="3" min="1" max="10">
+                            <small class="text-muted">Concurrent trades</small>
+                        </div>
+                    </div>
+                    
+                    <h6 class="border-bottom pb-2 mb-3 mt-4">Trading Rules</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Minimum Confidence (%)</label>
+                            <input type="number" class="form-control" name="min_confidence" value="70" min="50" max="95" step="5">
+                            <small class="text-muted">Signal confidence threshold</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Timeframe</label>
+                            <select class="form-select" name="timeframe">
+                                <option value="5m">5 minutes</option>
+                                <option value="15m">15 minutes</option>
+                                <option value="1h" selected>1 hour</option>
+                                <option value="4h">4 hours</option>
+                                <option value="1d">1 day</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label">Symbols</label>
+                            <select class="form-select" name="symbols" multiple size="4">
+                                <option value="BTCUSDT" selected>BTCUSDT</option>
+                                <option value="ETHUSDT" selected>ETHUSDT</option>
+                                <option value="SOLUSDT">SOLUSDT</option>
+                                <option value="BNBUSDT">BNBUSDT</option>
+                                <option value="ADAUSDT">ADAUSDT</option>
+                                <option value="DOGEUSDT">DOGEUSDT</option>
+                            </select>
+                            <small class="text-muted">Hold Ctrl/Cmd to select multiple</small>
+                        </div>
+                    </div>
+                    
+                    <h6 class="border-bottom pb-2 mb-3 mt-4">Advanced Options</h6>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="trailing_stop" id="trailingStop">
+                        <label class="form-check-label" for="trailingStop">
+                            Enable Trailing Stop Loss
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="partial_close" id="partialClose">
+                        <label class="form-check-label" for="partialClose">
+                            Enable Partial Position Closing
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="only_market_hours" id="marketHours">
+                        <label class="form-check-label" for="marketHours">
+                            Trade Only During Market Hours
+                        </label>
+                    </div>
+                    
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save Configuration
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetForm('rsiForm')">
+                            <i class="bi bi-arrow-clockwise"></i> Reset to Defaults
+                        </button>
+                        <button type="button" class="btn btn-outline-info">
+                            <i class="bi bi-play-circle"></i> Test Strategy
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Additional strategy configurations would follow the same pattern -->
+        <!-- For brevity, using similar structure for other strategies -->
+    </div>
+</div>
+
+<!-- Global Settings Section -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-shield-check"></i>
+                    Global Risk Settings
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post" id="globalSettingsForm">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Maximum Daily Loss (%)</label>
+                            <input type="number" class="form-control" name="max_daily_loss" value="5" min="1" max="20" step="0.5">
+                            <small class="text-muted">Stop trading if reached</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Maximum Portfolio Risk (%)</label>
+                            <input type="number" class="form-control" name="max_portfolio_risk" value="10" min="5" max="30" step="1">
+                            <small class="text-muted">Total exposure limit</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Daily Trade Limit</label>
+                            <input type="number" class="form-control" name="daily_trade_limit" value="20" min="1" max="100">
+                            <small class="text-muted">Maximum trades per day</small>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="emergency_stop" id="emergencyStop" checked>
+                                <label class="form-check-label" for="emergencyStop">
+                                    <strong>Enable Emergency Stop</strong> - Automatically pause all trading if severe market volatility detected
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-circle"></i> Save Global Settings
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Strategy selection
+document.querySelectorAll('[data-strategy]').forEach(link => {
+    link.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        // Update active state
+        document.querySelectorAll('[data-strategy]').forEach(l => l.classList.remove('active'));
+        this.classList.add('active');
+        
+        // Show corresponding strategy settings
+        const strategyId = this.getAttribute('data-strategy');
+        document.querySelectorAll('.strategy-settings').forEach(s => s.style.display = 'none');
+        const targetSettings = document.getElementById(strategyId);
+        if (targetSettings) {
+            targetSettings.style.display = 'block';
+        }
+    });
+});
+
+// Form submission handlers
+document.querySelectorAll('form[id$="Form"]').forEach(form => {
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const submitBtn = this.querySelector('[type="submit"]');
+        window.fksTrading.setButtonLoading(submitBtn, true);
+        
+        const formData = new FormData(this);
+        
+        // TODO: Submit to backend
+        setTimeout(() => {
+            window.fksTrading.showToast('Settings saved successfully!', 'success');
+            window.fksTrading.setButtonLoading(submitBtn, false);
+        }, 1000);
+    });
+});
+
+// Reset form to defaults
+function resetForm(formId) {
+    if (window.fksTrading.confirmAction('Reset all settings to defaults?', () => {
+        document.getElementById(formId).reset();
+        window.fksTrading.showToast('Settings reset to defaults', 'info');
+    }));
+}
+
+// Initialize - hide all strategy settings except first
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.strategy-settings').forEach((s, idx) => {
+        if (idx > 0) s.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}

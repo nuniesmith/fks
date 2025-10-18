@@ -23,21 +23,22 @@ Once ready, this file should import and initialize the actual SDK provided under
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
 import os
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
 class RithmicConfig:
-    username: Optional[str] = None
-    password: Optional[str] = None
-    appkey: Optional[str] = None
-    system: Optional[str] = None  # e.g., "Rithmic Paper Trading"
+    username: str | None = None
+    password: str | None = None
+    appkey: str | None = None
+    system: str | None = None  # e.g., "Rithmic Paper Trading"
     mock: bool = False
 
     @classmethod
-    def from_env(cls) -> "RithmicConfig":
+    def from_env(cls) -> RithmicConfig:
         return cls(
             username=os.getenv("RITHMIC_USERNAME"),
             password=os.getenv("RITHMIC_PASSWORD"),
@@ -50,7 +51,7 @@ class RithmicConfig:
 class RithmicClient:
     """Minimal interface for future R Protocol connectivity."""
 
-    def __init__(self, config: Optional[RithmicConfig] = None):
+    def __init__(self, config: RithmicConfig | None = None):
         self.config = config or RithmicConfig.from_env()
         self._connected = False
 
@@ -74,7 +75,7 @@ class RithmicClient:
         symbol: str,
         interval: str = "1d",
         limit: int = 500,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Return OHLCV records.
         In mock mode, this should be replaced by fallback data in the caller.

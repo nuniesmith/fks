@@ -7,7 +7,9 @@ configurable origins, methods, and headers, and proper handling of preflight req
 
 import os
 import re
-from typing import Any, Callable, Dict, List, Optional, Pattern, Set, Union
+from collections.abc import Callable
+from re import Pattern
+from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request, Response
@@ -33,18 +35,18 @@ class CORSMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        allow_origins: List[str] = None,
-        allow_origin_regex: Optional[str] = None,
-        allow_methods: List[str] = None,
-        allow_headers: List[str] = None,
+        allow_origins: list[str] = None,
+        allow_origin_regex: str | None = None,
+        allow_methods: list[str] = None,
+        allow_headers: list[str] = None,
         allow_credentials: bool = False,
-        expose_headers: List[str] = None,
+        expose_headers: list[str] = None,
         max_age: int = 600,
         allow_all_origins: bool = False,
         preflight_response_class: type = PlainTextResponse,
         vary_header: bool = True,
         log_cors_requests: bool = True,
-        environment: Optional[str] = None,
+        environment: str | None = None,
     ):
         """
         Initialize CORS middleware.
@@ -116,7 +118,7 @@ class CORSMiddleware(BaseHTTPMiddleware):
                 "CORS configured to allow all origins - ensure this is intentional"
             )
 
-    def _process_origins(self, origins: List[str]) -> Set[str]:
+    def _process_origins(self, origins: list[str]) -> set[str]:
         """
         Process and validate origin configurations.
 
@@ -156,7 +158,7 @@ class CORSMiddleware(BaseHTTPMiddleware):
 
         return processed
 
-    def _compile_origin_regex(self, pattern: Optional[str]) -> Optional[Pattern]:
+    def _compile_origin_regex(self, pattern: str | None) -> Pattern | None:
         """
         Compile origin regex pattern.
 
@@ -175,7 +177,7 @@ class CORSMiddleware(BaseHTTPMiddleware):
             logger.error(f"Invalid origin regex pattern '{pattern}': {e}")
             return None
 
-    def _process_headers(self, headers: List[str]) -> Set[str]:
+    def _process_headers(self, headers: list[str]) -> set[str]:
         """
         Process and normalize header names.
 
@@ -229,12 +231,9 @@ class CORSMiddleware(BaseHTTPMiddleware):
             return True
 
         # Check regex pattern
-        if self.allow_origin_regex and self.allow_origin_regex.match(origin):
-            return True
+        return bool(self.allow_origin_regex and self.allow_origin_regex.match(origin))
 
-        return False
-
-    def _get_cors_headers(self, origin: str, request_method: str) -> Dict[str, str]:
+    def _get_cors_headers(self, origin: str, request_method: str) -> dict[str, str]:
         """
         Get CORS headers for a response.
 
@@ -273,7 +272,7 @@ class CORSMiddleware(BaseHTTPMiddleware):
 
     def _get_preflight_headers(
         self, origin: str, request_method: str, request_headers: str
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Get headers for preflight response.
 
@@ -421,7 +420,7 @@ class CORSMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """
         Get CORS middleware statistics.
 
@@ -454,7 +453,7 @@ class CORSMiddleware(BaseHTTPMiddleware):
 def setup_cors(
     app: FastAPI,
     environment: str = None,
-    allow_origins: List[str] = None,
+    allow_origins: list[str] = None,
     allow_credentials: bool = None,
     **kwargs,
 ) -> CORSMiddleware:
@@ -504,7 +503,7 @@ def setup_cors(
                 allow_origins
                 or [
                     "https://app.fkstrading.xyz",
-                    "https://api.fkstrading.xyz", 
+                    "https://api.fkstrading.xyz",
                     "https://data.fkstrading.xyz",
                     "http://localhost:3000",
                     "http://localhost:8080",
@@ -535,7 +534,7 @@ def setup_cors(
 
 
 def create_cors_middleware(
-    allow_origins: List[str] = None,
+    allow_origins: list[str] = None,
     allow_origin_regex: str = None,
     allow_credentials: bool = False,
     **kwargs,

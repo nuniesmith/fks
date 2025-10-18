@@ -60,13 +60,13 @@ class Tick(BaseClass):
     timestamp: datetime
     price: float
     volume: float
-    side: Optional[Literal["buy", "sell"]] = None
-    trade_id: Optional[str] = None
+    side: Literal["buy", "sell"] | None = None
+    trade_id: str | None = None
     source: str = "unknown"
-    buyer_order_id: Optional[str] = None
-    seller_order_id: Optional[str] = None
-    is_market_maker: Optional[bool] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    buyer_order_id: str | None = None
+    seller_order_id: str | None = None
+    is_market_maker: bool | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """Validate tick data after initialization"""
@@ -110,7 +110,7 @@ class Tick(BaseClass):
         """
         return self.side == "sell"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert the tick to a dictionary.
 
@@ -138,10 +138,10 @@ class Tick(BaseClass):
             "is_market_maker",
         ]
 
-        for field in optional_fields:
-            value = getattr(self, field)
+        for field_name in optional_fields:
+            value = getattr(self, field_name)
             if value is not None:
-                result[field] = value
+                result[field_name] = value
 
         # Add metadata
         result.update(self.metadata)
@@ -149,7 +149,7 @@ class Tick(BaseClass):
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Tick":
+    def from_dict(cls, data: dict[str, Any]) -> "Tick":
         """
         Create a Tick instance from a dictionary.
 
@@ -194,15 +194,15 @@ class Tick(BaseClass):
                     data_copy["timestamp"] = datetime.now()
 
         # Ensure all numeric fields are converted properly
-        for field in ["price", "volume"]:
-            if field in data_copy and data_copy[field] is not None:
+        for field_name in ["price", "volume"]:
+            if field_name in data_copy and data_copy[field_name] is not None:
                 try:
-                    data_copy[field] = float(data_copy[field])
+                    data_copy[field_name] = float(data_copy[field_name])
                 except (ValueError, TypeError):
                     logger.warning(
-                        f"Invalid {field} value: {data_copy[field]}, setting to 0"
+                        f"Invalid {field_name} value: {data_copy[field_name]}, setting to 0"
                     )
-                    data_copy[field] = 0.0
+                    data_copy[field_name] = 0.0
 
         # Extract metadata (any fields not in core_fields)
         metadata = {k: v for k, v in data_copy.items() if k not in core_fields}

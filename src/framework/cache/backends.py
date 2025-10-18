@@ -35,12 +35,12 @@ class CacheBackend(ABC):
         self.stats = CacheStats()
 
     @abstractmethod
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from the cache."""
         pass
 
     @abstractmethod
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """Set a value in the cache."""
         pass
 
@@ -60,11 +60,11 @@ class CacheBackend(ABC):
         pass
 
     @abstractmethod
-    async def keys(self, pattern: str = "*") -> List[str]:
+    async def keys(self, pattern: str = "*") -> list[str]:
         """Get all keys matching a pattern."""
         pass
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         return self.stats.to_dict()
 
@@ -76,14 +76,14 @@ class MemoryBackend(CacheBackend):
         self,
         default_ttl: int = 300,
         max_size: int = 1000,
-        max_bytes: Optional[int] = None,
+        max_bytes: int | None = None,
     ):
         super().__init__(default_ttl, max_size)
         self._cache = AsyncCache[Any](
             default_ttl=default_ttl, max_size=max_size, max_bytes=max_bytes
         )
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from the memory cache."""
         result = await self._cache.get(key)
         if result is not None:
@@ -92,7 +92,7 @@ class MemoryBackend(CacheBackend):
             self.stats.record_miss()
         return result
 
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """Set a value in the memory cache."""
         await self._cache.set(key, value, ttl or self.default_ttl)
 
@@ -109,7 +109,7 @@ class MemoryBackend(CacheBackend):
         result = await self._cache.get(key)
         return result is not None
 
-    async def keys(self, pattern: str = "*") -> List[str]:
+    async def keys(self, pattern: str = "*") -> list[str]:
         """Get all keys from the memory cache."""
         import fnmatch
 
@@ -118,7 +118,7 @@ class MemoryBackend(CacheBackend):
             return all_keys
         return [key for key in all_keys if fnmatch.fnmatch(key, pattern)]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get combined statistics from both backends."""
         memory_stats = self._cache.get_stats()
         base_stats = super().get_stats()
@@ -179,7 +179,7 @@ class RedisBackend(CacheBackend):
         """Create prefixed key."""
         return f"{self.key_prefix}{key}"
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from Redis."""
         try:
             redis_client = await self._get_redis()
@@ -197,7 +197,7 @@ class RedisBackend(CacheBackend):
             self.stats.record_miss()
             return None
 
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """Set a value in Redis."""
         try:
             redis_client = await self._get_redis()
@@ -244,7 +244,7 @@ class RedisBackend(CacheBackend):
             logger.error(f"Redis exists error for key {key}: {e}")
             return False
 
-    async def keys(self, pattern: str = "*") -> List[str]:
+    async def keys(self, pattern: str = "*") -> list[str]:
         """Get all keys matching a pattern from Redis."""
         try:
             redis_client = await self._get_redis()
@@ -309,7 +309,7 @@ class FileBackend(CacheBackend):
     async def _deserialize_from_file(self, file_path: Path) -> Any:
         """Read and deserialize value from file."""
         if self.serializer == "json":
-            async with aiofiles.open(file_path, "r") as f:
+            async with aiofiles.open(file_path) as f:
                 content = await f.read()
                 return json.loads(content)
         elif self.serializer == "pickle":
@@ -319,7 +319,7 @@ class FileBackend(CacheBackend):
         else:
             raise ValueError(f"Unsupported serializer: {self.serializer}")
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get a value from file cache."""
         file_path = self._get_file_path(key)
         meta_path = self._get_meta_path(key)
@@ -332,7 +332,7 @@ class FileBackend(CacheBackend):
                     return None
 
                 # Read metadata
-                async with aiofiles.open(meta_path, "r") as f:
+                async with aiofiles.open(meta_path) as f:
                     meta_content = await f.read()
                     metadata = json.loads(meta_content)
 
@@ -354,7 +354,7 @@ class FileBackend(CacheBackend):
             self.stats.record_miss()
             return None
 
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """Set a value in file cache."""
         file_path = self._get_file_path(key)
         meta_path = self._get_meta_path(key)
@@ -424,7 +424,7 @@ class FileBackend(CacheBackend):
         result = await self.get(key)
         return result is not None
 
-    async def keys(self, pattern: str = "*") -> List[str]:
+    async def keys(self, pattern: str = "*") -> list[str]:
         """Get all keys from file cache."""
         import fnmatch
 
@@ -432,7 +432,7 @@ class FileBackend(CacheBackend):
         try:
             for meta_path in self.cache_dir.glob("*.meta"):
                 try:
-                    async with aiofiles.open(meta_path, "r") as f:
+                    async with aiofiles.open(meta_path) as f:
                         content = await f.read()
                         metadata = json.loads(content)
                         key = metadata["key"]
@@ -461,7 +461,7 @@ class LayeredBackend(CacheBackend):
         self.l1 = l1_backend  # Fast layer (usually memory)
         self.l2 = l2_backend  # Persistent layer (Redis/File)
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get value from L1 first, then L2."""
         # Try L1 first
         value = await self.l1.get(key)
@@ -480,7 +480,7 @@ class LayeredBackend(CacheBackend):
         self.stats.record_miss()
         return None
 
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """Set value in both layers."""
         ttl = ttl or self.default_ttl
 
@@ -510,7 +510,7 @@ class LayeredBackend(CacheBackend):
 
         return await self.l2.exists(key)
 
-    async def keys(self, pattern: str = "*") -> List[str]:
+    async def keys(self, pattern: str = "*") -> list[str]:
         """Get keys from both layers (deduplicated)."""
         l1_keys, l2_keys = await asyncio.gather(
             self.l1.keys(pattern), self.l2.keys(pattern), return_exceptions=True
@@ -524,7 +524,7 @@ class LayeredBackend(CacheBackend):
 
         return list(all_keys)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get combined statistics from both layers."""
         return {
             "layered": super().get_stats(),

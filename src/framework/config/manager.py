@@ -25,7 +25,7 @@ class PathManager:
         self.legacy_ml_results_path = self.legacy_ml_base_path / "ml_results"
         self.legacy_ml_models_path = self.legacy_ml_results_path / "models"
 
-    def create_path_config(self, paths_config: Dict[str, str]) -> PathConfig:
+    def create_path_config(self, paths_config: dict[str, str]) -> PathConfig:
         """Create a PathConfig object from configuration."""
         # Get base output directory
         base_output_dir = self._resolve_path(
@@ -64,7 +64,7 @@ class PathManager:
 
         return path_config
 
-    def _resolve_path(self, path: Union[str, Path]) -> Path:
+    def _resolve_path(self, path: str | Path) -> Path:
         """Resolve a path relative to base directory if not absolute."""
         path = Path(path)
         if not path.is_absolute():
@@ -72,7 +72,7 @@ class PathManager:
         return path
 
     def _resolve_config_path(
-        self, paths_config: Dict[str, str], key: str, default: Path
+        self, paths_config: dict[str, str], key: str, default: Path
     ) -> Path:
         """Resolve a path from configuration or use default."""
         if key in paths_config:
@@ -281,7 +281,7 @@ class FKSConfigManager:
 
     def __init__(
         self,
-        config_path: Optional[Union[str, Path]] = None,
+        config_path: str | Path | None = None,
         watch_for_changes: bool = True,
         env_prefix: str = "FKS_",
     ):
@@ -338,7 +338,7 @@ class FKSConfigManager:
 
         return config
 
-    def load_with_overlays(self, overlays: List[Union[str, Path]]) -> Config:
+    def load_with_overlays(self, overlays: list[str | Path]) -> Config:
         """
         Load configuration with additional overlay files.
 

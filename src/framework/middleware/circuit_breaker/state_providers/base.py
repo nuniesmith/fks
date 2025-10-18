@@ -3,10 +3,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Generic, List, Optional, TypeVar, Union
 
 # Type variable for generic state types
-T = TypeVar("T", bound=Dict[str, Any])
+T = TypeVar("T", bound=dict[str, Any])
 
 
-class StateProvider(ABC, Generic[T]):
+class StateProvider[T: dict[str, Any]](ABC):
     """
     Abstract base class for state persistence providers.
 
@@ -41,7 +41,7 @@ class StateProvider(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def retrieve_state(self, key: str) -> Optional[T]:
+    def retrieve_state(self, key: str) -> T | None:
         """
         Retrieve the circuit breaker state.
 
@@ -86,7 +86,7 @@ class StateProvider(ABC, Generic[T]):
         """
         raise NotImplementedError("Delete not implemented for this provider")
 
-    def update_state(self, key: str, updates: Dict[str, Any]) -> bool:
+    def update_state(self, key: str, updates: dict[str, Any]) -> bool:
         """
         Update parts of the state for the given key.
 
@@ -111,7 +111,7 @@ class StateProvider(ABC, Generic[T]):
         state.update(updates)
         return self.persist_state(key, state)
 
-    def list_keys(self, prefix: str = "") -> List[str]:
+    def list_keys(self, prefix: str = "") -> list[str]:
         """
         List all keys with the given prefix.
 
@@ -181,7 +181,7 @@ class StateProvider(ABC, Generic[T]):
             return False
 
     @staticmethod
-    def serialize(state: Dict[str, Any]) -> str:
+    def serialize(state: dict[str, Any]) -> str:
         """
         Serialize the state to a string.
 
@@ -197,7 +197,7 @@ class StateProvider(ABC, Generic[T]):
         return json.dumps(state)
 
     @staticmethod
-    def deserialize(data: Union[str, bytes]) -> Dict[str, Any]:
+    def deserialize(data: str | bytes) -> dict[str, Any]:
         """
         Deserialize the state from a string or bytes.
 

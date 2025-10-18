@@ -1,10 +1,12 @@
 import json
 import time
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, Union
 
 import backoff
-from core import StateProvider
 from loguru import logger
+
+from core import StateProvider
 
 
 class RedisStateProvider(StateProvider):
@@ -72,7 +74,7 @@ class RedisStateProvider(StateProvider):
         """Create a full key with namespace."""
         return f"{self.namespace}{key}" if self.namespace else key
 
-    def serialize(self, data: Dict[str, Any]) -> str:
+    def serialize(self, data: dict[str, Any]) -> str:
         """
         Serialize data to a string for storage in Redis.
 
@@ -84,7 +86,7 @@ class RedisStateProvider(StateProvider):
         """
         return json.dumps(data)
 
-    def deserialize(self, data: Union[str, bytes]) -> Dict[str, Any]:
+    def deserialize(self, data: str | bytes) -> dict[str, Any]:
         """
         Deserialize data from Redis into a dictionary.
 
@@ -99,7 +101,7 @@ class RedisStateProvider(StateProvider):
         return json.loads(data)
 
     @backoff.on_exception(backoff.expo, (ConnectionError, TimeoutError), max_tries=3)
-    def persist_state(self, key: str, state: Dict[str, Any]) -> bool:
+    def persist_state(self, key: str, state: dict[str, Any]) -> bool:
         """
         Persist the circuit breaker state to Redis.
 
@@ -132,7 +134,7 @@ class RedisStateProvider(StateProvider):
             return False
 
     @backoff.on_exception(backoff.expo, (ConnectionError, TimeoutError), max_tries=3)
-    def retrieve_state(self, key: str) -> Optional[Dict[str, Any]]:
+    def retrieve_state(self, key: str) -> dict[str, Any] | None:
         """
         Retrieve the circuit breaker state from Redis.
 
@@ -185,7 +187,7 @@ class RedisStateProvider(StateProvider):
             return False
 
     @backoff.on_exception(backoff.expo, (ConnectionError, TimeoutError), max_tries=3)
-    def update_state(self, key: str, updates: Dict[str, Any]) -> bool:
+    def update_state(self, key: str, updates: dict[str, Any]) -> bool:
         """
         Update parts of the state for the given key.
 
@@ -286,7 +288,7 @@ class RedisStateProvider(StateProvider):
             return False
 
     @backoff.on_exception(backoff.expo, (ConnectionError, TimeoutError), max_tries=3)
-    def list_keys(self, prefix: str = "") -> List[str]:
+    def list_keys(self, prefix: str = "") -> list[str]:
         """
         List all keys with the given prefix.
 
@@ -394,21 +396,21 @@ class RedisStateProvider(StateProvider):
 
     # Different Redis client implementations
 
-    def _set_json(self, key: str, value: Dict[str, Any]) -> bool:
+    def _set_json(self, key: str, value: dict[str, Any]) -> bool:
         """Set method for Redis clients with JSON support."""
         return bool(self.redis_client.json().set(key, "$", value))
 
-    def _get_json(self, key: str) -> Optional[Dict[str, Any]]:
+    def _get_json(self, key: str) -> dict[str, Any] | None:
         """Get method for Redis clients with JSON support."""
         result = self.redis_client.json().get(key)
         return result
 
-    def _set_regular(self, key: str, value: Dict[str, Any]) -> bool:
+    def _set_regular(self, key: str, value: dict[str, Any]) -> bool:
         """Set method for regular Redis clients."""
         serialized = self.serialize(value)
         return bool(self.redis_client.set(key, serialized))
 
-    def _get_regular(self, key: str) -> Optional[Dict[str, Any]]:
+    def _get_regular(self, key: str) -> dict[str, Any] | None:
         """Get method for regular Redis clients."""
         result = self.redis_client.get(key)
         if result is None:
@@ -419,7 +421,7 @@ class RedisStateProvider(StateProvider):
         """Delete method for regular Redis clients."""
         return self.redis_client.delete(key)
 
-    def _scan_regular(self, pattern: str) -> List[str]:
+    def _scan_regular(self, pattern: str) -> list[str]:
         """Scan method for regular Redis clients."""
         keys = []
         cursor = 0
@@ -432,7 +434,7 @@ class RedisStateProvider(StateProvider):
                 break
         return keys
 
-    def _scan_cluster(self, pattern: str) -> List[str]:
+    def _scan_cluster(self, pattern: str) -> list[str]:
         """Scan method for Redis Cluster clients."""
         keys = []
         # For Redis Cluster, we need to scan each master node

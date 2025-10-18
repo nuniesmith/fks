@@ -56,7 +56,7 @@ class LoggingConfig:
     format: str = (
         "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}"
     )
-    file_path: Optional[str] = None
+    file_path: str | None = None
     rotation: str = "10 MB"
     retention: str = "30 days"
     console_enabled: bool = True
@@ -81,12 +81,12 @@ class APIConfig:
     debug: bool = False
     reload: bool = False
     workers: int = 1
-    cors_origins: List[str] = field(default_factory=lambda: ["*"])
-    cors_methods: List[str] = field(
+    cors_origins: list[str] = field(default_factory=lambda: ["*"])
+    cors_methods: list[str] = field(
         default_factory=lambda: ["GET", "POST", "PUT", "DELETE"]
     )
-    cors_headers: List[str] = field(default_factory=lambda: ["*"])
-    rate_limit: Optional[str] = None
+    cors_headers: list[str] = field(default_factory=lambda: ["*"])
+    rate_limit: str | None = None
     timeout: int = 30
 
     def get_base_url(self) -> str:
@@ -101,7 +101,7 @@ class RedisConfig:
     host: str = "localhost"
     port: int = 6379
     database: int = 0
-    password: Optional[str] = None
+    password: str | None = None
     ssl: bool = False
     max_connections: int = 10
     socket_timeout: int = 5
@@ -119,7 +119,7 @@ class MLConfig:
     """Machine learning configuration model."""
 
     model_type: str = "lstm"
-    features: List[str] = field(default_factory=list)
+    features: list[str] = field(default_factory=list)
     target: str = "close"
     sequence_length: int = 60
     batch_size: int = 32
@@ -130,7 +130,7 @@ class MLConfig:
     early_stopping_patience: int = 10
     model_checkpoint: bool = True
     tensorboard_logs: bool = True
-    random_seed: Optional[int] = 42
+    random_seed: int | None = 42
 
 
 @dataclass
@@ -201,7 +201,7 @@ class MonitoringConfig:
     health_endpoint: str = "/health"
     prometheus_enabled: bool = False
     grafana_enabled: bool = False
-    alert_webhook_url: Optional[str] = None
+    alert_webhook_url: str | None = None
     performance_monitoring: bool = True
     error_tracking: bool = True
 
@@ -211,18 +211,18 @@ class Config:
     """Main configuration container with typed access to all subsystems."""
 
     # Core configuration data
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
 
     # Typed configuration sections
-    paths: Optional[PathConfig] = None
-    database: Optional[DatabaseConfig] = None
-    logging: Optional[LoggingConfig] = None
-    api: Optional[APIConfig] = None
-    redis: Optional[RedisConfig] = None
-    ml: Optional[MLConfig] = None
-    trading: Optional[TradingConfig] = None
-    security: Optional[SecurityConfig] = None
-    monitoring: Optional[MonitoringConfig] = None
+    paths: PathConfig | None = None
+    database: DatabaseConfig | None = None
+    logging: LoggingConfig | None = None
+    api: APIConfig | None = None
+    redis: RedisConfig | None = None
+    ml: MLConfig | None = None
+    trading: TradingConfig | None = None
+    security: SecurityConfig | None = None
+    monitoring: MonitoringConfig | None = None
 
     # Metadata
     environment: Environment = Environment.DEVELOPMENT
@@ -254,13 +254,13 @@ class Config:
 
         target[keys[-1]] = value
 
-    def update(self, other: Dict[str, Any]) -> None:
+    def update(self, other: dict[str, Any]) -> None:
         """Deep update configuration with another dictionary."""
         self._deep_update(self.data, other)
         self._update_typed_configs()
 
     def _deep_update(
-        self, base_dict: Dict[str, Any], update_dict: Dict[str, Any]
+        self, base_dict: dict[str, Any], update_dict: dict[str, Any]
     ) -> None:
         """Recursively update nested dictionaries."""
         for key, value in update_dict.items():
@@ -298,7 +298,7 @@ class Config:
 
                     logging.warning(f"Failed to create {key} config: {e}")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""
         result = self.data.copy()
 
@@ -315,12 +315,11 @@ class Config:
         ]
         for config_name in typed_configs:
             config_obj = getattr(self, config_name)
-            if config_obj:
-                if hasattr(config_obj, "__dict__"):
-                    result[config_name] = {
-                        k: str(v) if isinstance(v, Path) else v
-                        for k, v in config_obj.__dict__.items()
-                    }
+            if config_obj and hasattr(config_obj, "__dict__"):
+                result[config_name] = {
+                    k: str(v) if isinstance(v, Path) else v
+                    for k, v in config_obj.__dict__.items()
+                }
 
         # Add paths if available
         if self.paths:
@@ -354,7 +353,7 @@ class Config:
         """Check if running in testing environment."""
         return self.environment == Environment.TESTING
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """Validate configuration and return list of errors."""
         errors = []
 
@@ -374,9 +373,8 @@ class Config:
                 errors.append("Database name is required")
 
         # Validate API configuration
-        if self.api:
-            if self.api.port < 1 or self.api.port > 65535:
-                errors.append("API port must be between 1 and 65535")
+        if self.api and (self.api.port < 1 or self.api.port > 65535):
+            errors.append("API port must be between 1 and 65535")
 
         # Validate ML configuration
         if self.ml:
@@ -392,8 +390,8 @@ class Config:
 class ConfigSource:
     """Configuration source metadata."""
 
-    path: Optional[Path] = None
-    format: Optional[ConfigFormat] = None
+    path: Path | None = None
+    format: ConfigFormat | None = None
     priority: int = 0
     required: bool = False
     watch: bool = False
@@ -417,8 +415,8 @@ class ValidationResult:
     """Configuration validation result."""
 
     is_valid: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     def add_error(self, message: str) -> None:
         """Add validation error."""

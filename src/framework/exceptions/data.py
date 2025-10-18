@@ -16,9 +16,9 @@ class DataException(FrameworkException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new data exception.
@@ -46,10 +46,10 @@ class DataSourceException(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        source_name: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        source_name: str | None = None,
     ):
         """
         Initialize a new data source exception.
@@ -66,10 +66,7 @@ class DataSourceException(DataException):
         if source_name:
             details["source"] = source_name
 
-        if source_name:
-            message = message or f"Error from data source: {source_name}"
-        else:
-            message = message or "Data source error"
+        message = message or f"Error from data source: {source_name}" if source_name else message or "Data source error"
 
         super().__init__(message=message, code=code, details=details)
 
@@ -86,11 +83,11 @@ class DataSourceNotFoundError(DataSourceException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        source_name: Optional[str] = None,
-        source_type: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        source_name: str | None = None,
+        source_type: str | None = None,
     ):
         """
         Initialize a new data source not found exception.
@@ -139,10 +136,10 @@ class DataValidationException(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        validation_errors: Optional[Dict[str, Any]] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        validation_errors: dict[str, Any] | None = None,
     ):
         """
         Initialize a new data validation exception.
@@ -175,10 +172,10 @@ class DataProcessingException(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        processor_name: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        processor_name: str | None = None,
     ):
         """
         Initialize a new data processing exception.
@@ -215,10 +212,10 @@ class DataStorageException(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        storage_type: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        storage_type: str | None = None,
     ):
         """
         Initialize a new data storage exception.
@@ -235,10 +232,7 @@ class DataStorageException(DataException):
         if storage_type:
             details["storage_type"] = storage_type
 
-        if storage_type:
-            message = message or f"Error in {storage_type} storage"
-        else:
-            message = message or "Data storage error"
+        message = message or f"Error in {storage_type} storage" if storage_type else message or "Data storage error"
 
         super().__init__(message=message, code=code, details=details)
 
@@ -250,11 +244,11 @@ class DataNotFoundError(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        data_type: Optional[str] = None,
-        data_id: Optional[Union[str, int]] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        data_type: str | None = None,
+        data_id: str | int | None = None,
     ):
         """
         Initialize a new data not found exception.
@@ -291,11 +285,11 @@ class InsufficientDataException(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        required: Optional[int] = None,
-        available: Optional[int] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        required: int | None = None,
+        available: int | None = None,
     ):
         """
         Initialize a new insufficient data exception.
@@ -338,9 +332,9 @@ class DataInconsistencyError(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new data inconsistency exception.
@@ -370,9 +364,9 @@ class CacheError(DataException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new cache error.
@@ -405,11 +399,11 @@ class DatabaseError(DataStorageException):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        db_type: Optional[str] = None,
-        sql: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        db_type: str | None = None,
+        sql: str | None = None,
     ):
         """
         Initialize a new database error.
@@ -442,12 +436,12 @@ class DatabaseConnectionError(DatabaseError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        db_type: Optional[str] = None,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        db_type: str | None = None,
+        host: str | None = None,
+        port: int | None = None,
     ):
         """
         Initialize a new database connection error.
@@ -487,12 +481,12 @@ class DatabaseQueryError(DatabaseError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        db_type: Optional[str] = None,
-        sql: Optional[str] = None,
-        params: Optional[List] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        db_type: str | None = None,
+        sql: str | None = None,
+        params: list | None = None,
     ):
         """
         Initialize a new database query error.
@@ -529,7 +523,7 @@ class DatabaseQueryError(DatabaseError):
         return sql
 
     @staticmethod
-    def _sanitize_params(params: List) -> List:
+    def _sanitize_params(params: list) -> list:
         """Sanitize query parameters to remove potential sensitive information."""
         # This is a simple sanitization - in production you might want more sophisticated filtering
         return ["***" if isinstance(p, str) and len(p) > 20 else p for p in params]
@@ -542,10 +536,10 @@ class DatabaseTransactionError(DatabaseError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        db_type: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        db_type: str | None = None,
     ):
         """
         Initialize a new database transaction error.
@@ -569,12 +563,12 @@ class DatabaseConstraintViolationError(DatabaseError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        db_type: Optional[str] = None,
-        constraint: Optional[str] = None,
-        table: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        db_type: str | None = None,
+        constraint: str | None = None,
+        table: str | None = None,
     ):
         """
         Initialize a new database constraint violation error.
@@ -616,10 +610,10 @@ class DatabaseDeadlockError(DatabaseError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        db_type: Optional[str] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        db_type: str | None = None,
     ):
         """
         Initialize a new database deadlock error.
@@ -643,11 +637,11 @@ class DatabaseTimeoutError(DatabaseError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        db_type: Optional[str] = None,
-        timeout_seconds: Optional[float] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
+        db_type: str | None = None,
+        timeout_seconds: float | None = None,
     ):
         """
         Initialize a new database timeout error.
@@ -683,9 +677,9 @@ class DatabaseConfigurationError(DatabaseError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
-        code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        message: str | None = None,
+        code: str | None = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new database configuration error.

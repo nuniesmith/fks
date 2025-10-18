@@ -31,9 +31,9 @@ if HAS_SQLALCHEMY:
 
 # Engine and session tracking
 _engine_lock = threading.RLock()
-_engines: Dict[str, Any] = {}
-_session_factories: Dict[str, Any] = {}
-_active_sessions: List[Any] = []
+_engines: dict[str, Any] = {}
+_session_factories: dict[str, Any] = {}
+_active_sessions: list[Any] = []
 
 
 def init_engine(
@@ -94,7 +94,7 @@ def init_engine(
             return None
 
 
-def get_engine(engine_name: str = "default") -> Optional[Any]:
+def get_engine(engine_name: str = "default") -> Any | None:
     """
     Get a SQLAlchemy engine by name.
 
@@ -108,7 +108,7 @@ def get_engine(engine_name: str = "default") -> Optional[Any]:
         return _engines.get(engine_name)
 
 
-def get_session(engine_name: str = "default") -> Optional[Any]:
+def get_session(engine_name: str = "default") -> Any | None:
     """
     Get a SQLAlchemy session.
 
@@ -154,7 +154,7 @@ def close_session(session: Any) -> bool:
         return False
 
 
-def shutdown_engine(engine_name: Optional[str] = None) -> bool:
+def shutdown_engine(engine_name: str | None = None) -> bool:
     """
     Shutdown SQLAlchemy engine(s).
 

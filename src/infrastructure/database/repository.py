@@ -6,30 +6,16 @@ implementing the repository pattern for consistent data access.
 """
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-)
+from typing import Any, Dict, Generic, List, Optional, Tuple, Type, TypeVar, Union
 from uuid import UUID
 
-from framework.exceptions.data import (
-    DatabaseError,
-    DatabaseQueryError,
-    DataNotFoundError,
-    DataValidationException,
-)
 from infrastructure.persistence.database.base import Database
 from loguru import logger
 from pydantic import BaseModel
+
+from framework.exceptions.data import DatabaseError, DatabaseQueryError, DataNotFoundError, DataValidationException
 
 # Generic type for models
 T = TypeVar("T", bound=BaseModel)
@@ -81,7 +67,7 @@ class QueryFilter:
         self._params.extend(params)
         return self
 
-    def add_in(self, field: str, values: List[Any]) -> "QueryFilter":
+    def add_in(self, field: str, values: list[Any]) -> "QueryFilter":
         """
         Add an IN condition to the filter.
 
@@ -100,7 +86,7 @@ class QueryFilter:
         self._params.extend(values)
         return self
 
-    def build(self) -> Tuple[str, List[Any]]:
+    def build(self) -> tuple[str, list[Any]]:
         """
         Build the WHERE clause and parameters.
 
@@ -123,7 +109,7 @@ class Pagination:
         self,
         page: int = 1,
         page_size: int = 50,
-        order_by: Optional[str] = None,
+        order_by: str | None = None,
         order_dir: str = "ASC",
     ):
         """
@@ -142,7 +128,7 @@ class Pagination:
             order_dir.upper() if order_dir.upper() in ["ASC", "DESC"] else "ASC"
         )
 
-    def get_limit_offset(self) -> Tuple[int, int]:
+    def get_limit_offset(self) -> tuple[int, int]:
         """
         Get the LIMIT and OFFSET values for SQL.
 
@@ -170,12 +156,12 @@ class Pagination:
         return f"ORDER BY {safe_order_by} {self.order_dir}"
 
 
-class PaginatedResult(Generic[T]):
+class PaginatedResult[T: BaseModel]:
     """
     Result of a paginated query.
     """
 
-    def __init__(self, items: List[T], total: int, page: int, page_size: int):
+    def __init__(self, items: list[T], total: int, page: int, page_size: int):
         """
         Initialize paginated result.
 
@@ -207,7 +193,7 @@ class PaginatedResult(Generic[T]):
         """Get the previous page number or 1 if at the beginning."""
         return max(self.page - 1, 1)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "items": [
@@ -225,7 +211,7 @@ class PaginatedResult(Generic[T]):
         }
 
 
-class BaseRepository(Generic[T, ID]):
+class BaseRepository[T: BaseModel, ID: (str, int, UUID)]:
     """
     Base repository for data access operations.
 
@@ -236,8 +222,8 @@ class BaseRepository(Generic[T, ID]):
     def __init__(
         self,
         db: Database,
-        model_cls: Type[T],
-        table_name: Optional[str] = None,
+        model_cls: type[T],
+        table_name: str | None = None,
         id_field: str = "id",
         timestamps: bool = True,
         created_at_field: str = "created_at",
@@ -268,7 +254,7 @@ class BaseRepository(Generic[T, ID]):
 
         _logger.debug(f"Initialized repository for {self.table_name}")
 
-    async def get_by_id(self, id: ID) -> Optional[T]:
+    async def get_by_id(self, id: ID) -> T | None:
         """
         Get a record by ID.
 
@@ -300,7 +286,7 @@ class BaseRepository(Generic[T, ID]):
                 details={"id": id, "error": str(e)},
             )
 
-    async def find_one(self, filter: QueryFilter) -> Optional[T]:
+    async def find_one(self, filter: QueryFilter) -> T | None:
         """
         Find a single record matching the filter.
 
@@ -336,8 +322,8 @@ class BaseRepository(Generic[T, ID]):
 
     async def find_all(
         self,
-        filter: Optional[QueryFilter] = None,
-        pagination: Optional[Pagination] = None,
+        filter: QueryFilter | None = None,
+        pagination: Pagination | None = None,
     ) -> PaginatedResult[T]:
         """
         Find all records matching the filter with pagination.
@@ -392,7 +378,7 @@ class BaseRepository(Generic[T, ID]):
                 details={"error": str(e)},
             )
 
-    async def create(self, data: Union[T, Dict[str, Any]]) -> T:
+    async def create(self, data: T | dict[str, Any]) -> T:
         """
         Create a new record.
 
@@ -462,7 +448,7 @@ class BaseRepository(Generic[T, ID]):
                     details={"error": str(e)},
                 )
 
-    async def update(self, id: ID, data: Union[T, Dict[str, Any]]) -> T:
+    async def update(self, id: ID, data: T | dict[str, Any]) -> T:
         """
         Update an existing record.
 
@@ -514,7 +500,7 @@ class BaseRepository(Generic[T, ID]):
                 return existing
 
             # Build query
-            set_clauses = [f"{field} = %s" for field in filtered_data.keys()]
+            set_clauses = [f"{field} = %s" for field in filtered_data]
             set_clause = ", ".join(set_clauses)
             values = list(filtered_data.values())
             values.append(id)  # Add ID for WHERE clause
@@ -584,7 +570,7 @@ class BaseRepository(Generic[T, ID]):
                 details={"id": id, "error": str(e)},
             )
 
-    async def count(self, filter: Optional[QueryFilter] = None) -> int:
+    async def count(self, filter: QueryFilter | None = None) -> int:
         """
         Count records matching the filter.
 
@@ -645,8 +631,8 @@ class BaseRepository(Generic[T, ID]):
             )
 
     async def execute_raw(
-        self, query: str, params: List[Any] = []
-    ) -> List[Dict[str, Any]]:
+        self, query: str, params: list[Any] = None
+    ) -> list[dict[str, Any]]:
         """
         Execute a raw SQL query.
 
@@ -663,6 +649,8 @@ class BaseRepository(Generic[T, ID]):
         Raises:
             DatabaseError: If a database error occurs
         """
+        if params is None:
+            params = []
         try:
             params = params or []
 
@@ -673,7 +661,7 @@ class BaseRepository(Generic[T, ID]):
                 if cursor.description:
                     columns = [col[0] for col in cursor.description]
                     rows = cursor.fetchall()
-                    return [dict(zip(columns, row)) for row in rows]
+                    return [dict(zip(columns, row, strict=False)) for row in rows]
 
                 return []
 
@@ -685,7 +673,7 @@ class BaseRepository(Generic[T, ID]):
                 sql=query,
             )
 
-    def _row_to_model(self, row: Dict[str, Any]) -> T:
+    def _row_to_model(self, row: dict[str, Any]) -> T:
         """
         Convert a database row to a model instance.
 

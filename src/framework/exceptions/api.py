@@ -25,8 +25,8 @@ class ApiException(FrameworkException):
         self,
         message: str = "",
         code: str = "API_ERROR",
-        details: Optional[Dict[str, Any]] = None,
-        status_code: Optional[int] = None,
+        details: dict[str, Any] | None = None,
+        status_code: int | None = None,
     ):
         """
         Initialize a new API exception.
@@ -54,7 +54,7 @@ class ApiClientError(ApiException):
         self,
         message: str = "",
         code: str = "CLIENT_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize a new client error.
@@ -81,8 +81,8 @@ class ApiTimeoutError(ApiException):
         self,
         message: str = "",
         code: str = "TIMEOUT_ERROR",
-        details: Optional[Dict[str, Any]] = None,
-        timeout_duration: Optional[Union[int, float]] = None,
+        details: dict[str, Any] | None = None,
+        timeout_duration: int | float | None = None,
     ):
         """
         Initialize the timeout error.
@@ -114,8 +114,8 @@ class ApiRateLimitError(ApiException):
         self,
         message: str = "",
         code: str = "RATE_LIMIT",
-        details: Optional[Dict[str, Any]] = None,
-        retry_after: Optional[int] = None,
+        details: dict[str, Any] | None = None,
+        retry_after: int | None = None,
     ):
         """
         Initialize a new rate limit exception.
@@ -147,8 +147,8 @@ class ApiCircuitOpenError(ApiException):
         self,
         message: str = "",
         code: str = "CIRCUIT_OPEN",
-        details: Optional[Dict[str, Any]] = None,
-        retry_after: Optional[Union[int, float]] = None,
+        details: dict[str, Any] | None = None,
+        retry_after: int | float | None = None,
     ):
         """
         Initialize the circuit open error.
@@ -180,8 +180,8 @@ class ApiValidationError(ApiException):
         self,
         message: str = "",
         code: str = "VALIDATION_ERROR",
-        details: Optional[Dict[str, Any]] = None,
-        validation_errors: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
+        validation_errors: dict[str, Any] | None = None,
     ):
         """
         Initialize the validation error.
@@ -213,7 +213,7 @@ class ApiAuthenticationError(ApiException):
         self,
         message: str = "",
         code: str = "AUTHENTICATION_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize the authentication error.
@@ -240,7 +240,7 @@ class ApiConnectionError(ApiException):
         self,
         message: str = "",
         code: str = "CONNECTION_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize the connection error.
@@ -267,7 +267,7 @@ class ApiResponseError(ApiException):
         self,
         message: str = "",
         code: str = "RESPONSE_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize the response error.
@@ -294,7 +294,7 @@ class SecurityError(ApiException):
         self,
         message: str = "",
         code: str = "SECURITY_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize the security error.
@@ -321,7 +321,7 @@ class ConfigurationError(ApiException):
         self,
         message: str = "",
         code: str = "CONFIGURATION_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize the configuration error.
@@ -349,7 +349,7 @@ class ValueError(ApiException):
         self,
         message: str = "",
         code: str = "VALUE_ERROR",
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         """
         Initialize the value error.
@@ -381,8 +381,8 @@ class SourceUnavailableError(ApiException):
         self,
         message: str = "",
         code: str = "SOURCE_UNAVAILABLE",
-        details: Optional[Dict[str, Any]] = None,
-        source_name: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        source_name: str | None = None,
     ):
         """
         Initialize the source unavailable error.
@@ -423,8 +423,8 @@ class CircuitOpenError(ApiException):
         self,
         message: str = "",
         code: str = "CIRCUIT_OPEN",
-        details: Optional[Dict[str, Any]] = None,
-        service_name: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        service_name: str | None = None,
     ):
         """
         Initialize the circuit open error.
@@ -466,8 +466,8 @@ class ClientNotFoundError(ApiException):
         self,
         message: str = "",
         code: str = "CLIENT_NOT_FOUND",
-        details: Optional[Dict[str, Any]] = None,
-        client_id: Optional[str] = None,
+        details: dict[str, Any] | None = None,
+        client_id: str | None = None,
     ):
         """
         Initialize the client not found error.

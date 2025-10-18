@@ -27,7 +27,7 @@ class ExchangeAdapterInterface(ABC):
         side: str,
         quantity: float,
         order_type: str = "market",
-        price: Optional[float] = None,
+        price: float | None = None,
     ) -> dict:
         """
         Place an order on the exchange.
@@ -57,7 +57,7 @@ class ExchangeAdapterInterface(ABC):
         pass  # Implementation will be provided by concrete adapters
 
     @abstractmethod
-    def get_open_orders(self, symbol: Optional[str] = None) -> list:
+    def get_open_orders(self, symbol: str | None = None) -> list:
         """
         Retrieve a list of open orders.
 

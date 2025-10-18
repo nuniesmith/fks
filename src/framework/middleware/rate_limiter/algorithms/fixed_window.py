@@ -35,7 +35,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
         """Calculate the start time of the current window."""
         return int(current_time // self.time_window) * self.time_window
 
-    def _get_client_data(self, client_id: str) -> Dict[str, Any]:
+    def _get_client_data(self, client_id: str) -> dict[str, Any]:
         """Get or initialize fixed window data for a client."""
         if client_id not in self._client_data:
             current_time = time.time()
@@ -48,7 +48,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
         return self._client_data[client_id]
 
     def _reset_window_if_needed(
-        self, client_data: Dict[str, Any], current_time: float
+        self, client_data: dict[str, Any], current_time: float
     ) -> bool:
         """Reset the window if we've moved to a new time window."""
         current_window_start = self._get_current_window_start(current_time)
@@ -65,7 +65,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
         client_data = self._get_client_data(client_id)
 
         # Reset window if needed
-        window_reset = self._reset_window_if_needed(client_data, current_time)
+        self._reset_window_if_needed(client_data, current_time)
         self._update_last_seen(client_id, current_time)
 
         # Check if we're under the limit
@@ -78,10 +78,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
         reset_time = window_end
 
         # Calculate retry_after
-        if allowed:
-            retry_after = 0.0
-        else:
-            retry_after = max(0.0, reset_time - current_time)
+        retry_after = 0.0 if allowed else max(0.0, reset_time - current_time)
 
         return RateLimitResult(
             allowed=allowed,
@@ -106,7 +103,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
 
         return False
 
-    def get_window_info(self, client_id: str) -> Dict[str, Any]:
+    def get_window_info(self, client_id: str) -> dict[str, Any]:
         """
         Get detailed window information for a client.
 
@@ -129,10 +126,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
 
             # Calculate current rate
             time_elapsed = current_time - window_start
-            if time_elapsed > 0:
-                current_rate = client_data["count"] / time_elapsed
-            else:
-                current_rate = 0.0
+            current_rate = client_data["count"] / time_elapsed if time_elapsed > 0 else 0.0
 
             return {
                 "client_id": client_id,
@@ -146,7 +140,7 @@ class FixedWindowAlgorithm(RateLimitAlgorithm):
                 "current_rate_per_second": current_rate,
             }
 
-    def get_global_window_info(self) -> Dict[str, Any]:
+    def get_global_window_info(self) -> dict[str, Any]:
         """
         Get information about the current global window.
 

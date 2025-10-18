@@ -20,11 +20,11 @@ class PolygonS3Client(BaseClient):
 
     def __init__(
         self,
-        access_key_id: Optional[str] = None,
-        secret_access_key: Optional[str] = None,
-        s3_endpoint: Optional[str] = None,
-        bucket: Optional[str] = None,
-        metrics: Optional[Any] = None,
+        access_key_id: str | None = None,
+        secret_access_key: str | None = None,
+        s3_endpoint: str | None = None,
+        bucket: str | None = None,
+        metrics: Any | None = None,
     ) -> None:
         """
         Initialize the PolygonS3Client.
@@ -55,7 +55,7 @@ class PolygonS3Client(BaseClient):
             f"Initialized PolygonS3Client for bucket: {self.bucket} at {self.s3_endpoint}"
         )
 
-    def fetch_file(self, key: str, file_format: str = "csv") -> Optional[pd.DataFrame]:
+    def fetch_file(self, key: str, file_format: str = "csv") -> pd.DataFrame | None:
         """
         Fetch a file from the specified S3 bucket and return its content as a pandas DataFrame.
         """
@@ -172,9 +172,7 @@ class PolygonS3Client(BaseClient):
             return data
         return pd.DataFrame(data)
 
-    def get(
-        self, key: str, file_format: str = "csv", **kwargs
-    ) -> Optional[pd.DataFrame]:
+    def get(self, key: str, file_format: str = "csv", **kwargs) -> pd.DataFrame | None:
         """
         Standardized get method to match the BaseClient interface.
         """
@@ -198,7 +196,7 @@ except ValueError as e:
 # Pydantic model for endpoint payload (if needed)
 class FetchFilePayload(BaseModel):
     key: str
-    file_format: Optional[str] = "csv"
+    file_format: str | None = "csv"
 
 
 @router.get("/health", summary="Check S3 connection health")

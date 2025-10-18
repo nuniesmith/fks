@@ -10,11 +10,12 @@ import asyncio
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
     from loguru import logger
@@ -26,10 +27,7 @@ except ImportError:
 from .initialization import CORE_COMPONENTS
 from .initialization import initialize as init_system
 from .lifespan import ApplicationLifecycle, get_app_lifecycle
-from .teardown import (
-    emergency_shutdown,
-    get_teardown_state,
-)
+from .teardown import emergency_shutdown, get_teardown_state
 from .teardown import teardown as teardown_system
 
 
@@ -62,14 +60,14 @@ class LifecycleContext:
 
     phase: LifecyclePhase = LifecyclePhase.UNINITIALIZED
     state: LifecycleState = LifecycleState.HEALTHY
-    start_time: Optional[datetime] = None
-    last_state_change: Optional[datetime] = None
-    initialization_context: Dict[str, Any] = field(default_factory=dict)
-    components: Dict[str, Any] = field(default_factory=dict)
-    services: List[Any] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    metrics: Dict[str, Any] = field(default_factory=dict)
+    start_time: datetime | None = None
+    last_state_change: datetime | None = None
+    initialization_context: dict[str, Any] = field(default_factory=dict)
+    components: dict[str, Any] = field(default_factory=dict)
+    services: list[Any] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    metrics: dict[str, Any] = field(default_factory=dict)
 
     def update_phase(self, new_phase: LifecyclePhase):
         """Update the current phase and timestamp."""
@@ -112,7 +110,7 @@ class LifecycleEvent:
     event_type: LifecycleEventType
     timestamp: datetime
     context: LifecycleContext
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
 
 
 class LifecycleManager:
@@ -125,8 +123,8 @@ class LifecycleManager:
 
     def __init__(
         self,
-        config_path: Optional[str] = None,
-        components: Optional[List[str]] = None,
+        config_path: str | None = None,
+        components: list[str] | None = None,
         auto_recovery: bool = True,
         health_check_interval: float = 30.0,
     ):
@@ -153,7 +151,7 @@ class LifecycleManager:
         self._shutdown_event = threading.Event()
 
         # Event hooks
-        self._event_handlers: Dict[LifecycleEventType, List[Callable]] = {
+        self._event_handlers: dict[LifecycleEventType, list[Callable]] = {
             event_type: [] for event_type in LifecycleEventType
         }
 
@@ -161,8 +159,8 @@ class LifecycleManager:
         self.app_lifecycle = get_app_lifecycle()
 
         # Background tasks
-        self._health_check_task: Optional[asyncio.Task] = None
-        self._background_tasks: Set[asyncio.Task] = set()
+        self._health_check_task: asyncio.Task | None = None
+        self._background_tasks: set[asyncio.Task] = set()
 
         # Recovery state
         self._recovery_attempts = 0
@@ -199,7 +197,7 @@ class LifecycleManager:
             except Exception as e:
                 logger.error(f"Event handler for {event_type.value} failed: {e}")
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """
         Get the current status of the lifecycle manager.
 
@@ -232,9 +230,9 @@ class LifecycleManager:
 
     def initialize(
         self,
-        config_path: Optional[str] = None,
-        components: Optional[List[str]] = None,
-        additional_config: Optional[Dict[str, Any]] = None,
+        config_path: str | None = None,
+        components: list[str] | None = None,
+        additional_config: dict[str, Any] | None = None,
     ) -> bool:
         """
         Initialize the application synchronously.
@@ -279,7 +277,7 @@ class LifecycleManager:
                     self.context.components = init_context.get("components", {})
 
                     # Register components with app lifecycle if they have start/stop methods
-                    for name, component in self.context.components.items():
+                    for _name, component in self.context.components.items():
                         if (
                             component
                             and hasattr(component, "start")
@@ -319,9 +317,9 @@ class LifecycleManager:
 
     async def async_initialize(
         self,
-        config_path: Optional[str] = None,
-        components: Optional[List[str]] = None,
-        additional_config: Optional[Dict[str, Any]] = None,
+        config_path: str | None = None,
+        components: list[str] | None = None,
+        additional_config: dict[str, Any] | None = None,
     ) -> bool:
         """
         Initialize the application asynchronously.
@@ -581,7 +579,7 @@ class LifecycleManager:
 
         emergency_shutdown()
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the system.
 
@@ -625,7 +623,7 @@ class LifecycleManager:
 
         while not self._shutdown_event.is_set():
             try:
-                health_data = self.health_check()
+                self.health_check()
 
                 # Check for degraded health and attempt recovery if enabled
                 if (
@@ -643,7 +641,7 @@ class LifecycleManager:
                     asyncio.Event().wait(), timeout=self.health_check_interval
                 )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Expected timeout, continue loop
                 continue
             except asyncio.CancelledError:

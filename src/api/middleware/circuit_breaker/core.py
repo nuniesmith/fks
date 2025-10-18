@@ -1,8 +1,9 @@
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from loguru import logger
 
@@ -10,12 +11,7 @@ from .config import CircuitBreakerConfig
 
 # Internal imports - updated to use new structure
 from .enums import CircuitState
-from .exceptions import (
-    CircuitExecutionError,
-    CircuitOpenError,
-    CircuitTimeoutError,
-    StateProviderError,
-)
+from .exceptions import CircuitExecutionError, CircuitOpenError, CircuitTimeoutError, StateProviderError
 from .metrics import CircuitMetrics
 from .state_providers import MemoryStateProvider, StateProvider
 from .utils import log_execution, safe_execute
@@ -42,7 +38,7 @@ class CircuitBreaker:
     Allows for both in-memory state tracking and external persistence.
     """
 
-    _instances: Dict[str, "CircuitBreaker"] = {}
+    _instances: dict[str, "CircuitBreaker"] = {}
     _lock = threading.RLock()  # Class-level lock for thread safety
 
     @classmethod
@@ -87,7 +83,7 @@ class CircuitBreaker:
                 del cls._instances[name]
 
     @classmethod
-    def list_instances(cls) -> List[str]:
+    def list_instances(cls) -> list[str]:
         """
         Get a list of all circuit breaker instance names.
 
@@ -100,8 +96,8 @@ class CircuitBreaker:
     def __init__(
         self,
         name: str,
-        config: Optional[CircuitBreakerConfig] = None,
-        state_provider: Optional[StateProvider] = None,
+        config: CircuitBreakerConfig | None = None,
+        state_provider: StateProvider | None = None,
     ):
         """
         Initialize a new CircuitBreaker.
@@ -141,7 +137,7 @@ class CircuitBreaker:
         self.metrics = CircuitMetrics()
 
         # State change notification hooks
-        self.state_change_hooks: List[
+        self.state_change_hooks: list[
             Callable[[str, CircuitState, CircuitState], None]
         ] = []
 
@@ -155,7 +151,7 @@ class CircuitBreaker:
         )
 
     def _setup_state_provider(
-        self, state_provider: Optional[StateProvider]
+        self, state_provider: StateProvider | None
     ) -> StateProvider:
         """
         Set up the appropriate state provider based on configuration.
@@ -242,7 +238,7 @@ class CircuitBreaker:
         except Exception as e:
             self._log("error", f"Error restoring circuit breaker state: {e}")
 
-    def _restore_metrics(self, metrics_data: Dict[str, Any]) -> None:
+    def _restore_metrics(self, metrics_data: dict[str, Any]) -> None:
         """
         Restore metrics from stored state.
 
@@ -550,7 +546,7 @@ class CircuitBreaker:
     def _on_failure(
         self,
         failure_type: str = "transient",
-        original_exception: Optional[Exception] = None,
+        original_exception: Exception | None = None,
     ) -> None:
         """
         Handle failed execution.
@@ -637,7 +633,7 @@ class CircuitBreaker:
             )
             self._persist_state()
 
-    def get_metrics(self) -> Dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """
         Get circuit breaker metrics and status information.
 
@@ -686,7 +682,7 @@ class CircuitBreaker:
         """Check if the circuit is half-open."""
         return self.state == CircuitState.HALF_OPEN
 
-    def health_check(self) -> Dict[str, Any]:
+    def health_check(self) -> dict[str, Any]:
         """
         Perform a health check on the circuit breaker.
 

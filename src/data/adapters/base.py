@@ -19,6 +19,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Any, Dict, Optional, Protocol
 
+from data.app_logging import get_logger
+from data.config import get_settings
+from data.exceptions import DataFetchError
+
 
 class HTTPClient(Protocol):
     def __call__(

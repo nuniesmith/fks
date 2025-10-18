@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from core.exceptions import DataFetchError  # type: ignore
 
+from .base import APIAdapter
+
 # Import circuit breaker and rate limiter
 from framework.middleware.circuit_breaker import CircuitBreaker
 from framework.middleware.circuit_breaker.config import CircuitBreakerConfig

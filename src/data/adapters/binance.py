@@ -5,6 +5,11 @@ from typing import Any, Dict, List, Optional
 from .base import APIAdapter, get_env_any
 from core.exceptions import DataFetchError  # type: ignore
 
+# Import circuit breaker and rate limiter
+from framework.middleware.circuit_breaker import CircuitBreaker
+from framework.middleware.circuit_breaker.config import CircuitBreakerConfig
+from framework.middleware.rate_limiter import RateLimiter
+
 # Import asset registry
 try:
     from core.registry import AssetType, get_asset
@@ -23,6 +28,33 @@ class BinanceAdapter(APIAdapter):
     futures_base_url = "https://fapi.binance.com"
     base_url = futures_base_url  # Default to futures for backward compatibility
     rate_limit_per_sec = 10  # conservative (Binance allows more, we keep low)
+    
+    def __init__(self, *args, **kwargs):
+        """Initialize Binance adapter with circuit breaker and rate limiter."""
+        super().__init__(*args, **kwargs)
+        
+        # Configure circuit breaker for Binance API
+        cb_config = CircuitBreakerConfig(
+            failure_threshold=3,  # Open circuit after 3 failures
+            reset_timeout=60,     # Try again after 60 seconds
+            success_threshold=2,  # Close circuit after 2 successes
+            timeout=30,           # Request timeout
+            track_metrics=True
+        )
+        self.circuit_breaker = CircuitBreaker(
+            name=f"{self.name}_api",
+            config=cb_config
+        )
+        
+        # Configure rate limiter (10 requests per second)
+        self.rate_limiter = RateLimiter(
+            max_requests=10,
+            time_window=1,  # 1 second window
+            algorithm="token_bucket",
+            policy="wait",
+            max_wait_time=5.0,
+            name=f"{self.name}_rate_limit"
+        )
 
     def _build_request(self, **kwargs):  # noqa: D401
         symbol: str = kwargs.get("symbol", "BTCUSDT")
@@ -57,6 +89,22 @@ class BinanceAdapter(APIAdapter):
         headers: Dict[str, str] | None = None
         return base_url + path, params, headers
 
+    def fetch(self, **kwargs) -> Dict[str, Any]:
+        """Override fetch to add circuit breaker and rate limiter protection."""
+        # Acquire rate limit token before making request
+        self.rate_limiter.acquire()
+        
+        # Execute fetch with circuit breaker protection
+        try:
+            return self.circuit_breaker.execute(self._fetch_internal, **kwargs)
+        except Exception as e:
+            # Circuit breaker will handle failures, we just re-raise
+            raise
+    
+    def _fetch_internal(self, **kwargs) -> Dict[str, Any]:
+        """Internal fetch implementation called by circuit breaker."""
+        return super().fetch(**kwargs)
+
     def _normalize(self, raw: Any, *, request_kwargs: Dict[str, Any]) -> Dict[str, Any]:  # noqa: D401
         if not isinstance(raw, list):  # Unexpected shape
             raise DataFetchError(self.name, f"unexpected payload type: {type(raw)}")
@@ -81,6 +129,14 @@ class BinanceAdapter(APIAdapter):
             except Exception as e:  # pragma: no cover - skip malformed row
                 continue
         return {"provider": self.name, "data": data, "request": request_kwargs}
+    
+    def get_circuit_metrics(self) -> Dict[str, Any]:
+        """Get circuit breaker metrics for monitoring."""
+        return self.circuit_breaker.get_metrics()
+    
+    def get_rate_limit_stats(self) -> Dict[str, Any]:
+        """Get rate limiter statistics."""
+        return self.rate_limiter.get_stats()
 
 
 __all__ = ["BinanceAdapter"]

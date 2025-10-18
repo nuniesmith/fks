@@ -759,6 +759,13 @@ __all__ = [
     "FEE_RATE",
     "RISK_PER_TRADE",
     "DATABASE_URL",
+    "REDIS_HOST",
+    "REDIS_PORT",
+    "REDIS_DB",
+    "WS_PING_INTERVAL",
+    "WS_PING_TIMEOUT",
+    "DISCORD_WEBHOOK_URL",
+    "OPENAI_API_KEY",
 ]
 
 
@@ -798,3 +805,16 @@ DATABASE_URL = os.environ.get(
     'DATABASE_URL',
     'postgresql://postgres:postgres@db:5432/trading_db'
 )
+
+# Redis Configuration (for backward compatibility)
+REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
+REDIS_DB = int(os.environ.get('REDIS_DB', '0'))
+
+# WebSocket Configuration (for backward compatibility)
+WS_PING_INTERVAL = 20  # seconds
+WS_PING_TIMEOUT = 10  # seconds
+
+# External Service Configuration (for backward compatibility)
+DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')

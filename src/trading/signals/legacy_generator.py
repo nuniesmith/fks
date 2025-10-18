@@ -3,7 +3,7 @@
 import pandas as pd
 import talib
 
-from config import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
+from framework.config.constants import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
 from data import get_current_price
 
 def get_current_signal(df_prices, best_params, account_size, risk_per_trade=RISK_PER_TRADE):

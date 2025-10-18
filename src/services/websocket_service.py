@@ -14,7 +14,7 @@ import websockets
 import pytz
 from redis import Redis
 
-from config import SYMBOLS, REDIS_HOST, REDIS_PORT, REDIS_DB, WS_RECONNECT_DELAY, WS_PING_INTERVAL
+from framework.config.constants import SYMBOLS, REDIS_HOST, REDIS_PORT, REDIS_DB, WS_RECONNECT_DELAY, WS_PING_INTERVAL
 from cache import redis_client
 
 # Setup logging

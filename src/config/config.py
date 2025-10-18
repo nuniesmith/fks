@@ -1,19 +1,28 @@
 # src/config.py
+"""
+Legacy config module - Re-exports from framework.config.constants for backward compatibility.
+
+MIGRATION NOTE: This module is deprecated. Import directly from framework.config.constants instead:
+    from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE, etc.
+"""
 
 import os
 from dotenv import load_dotenv
 
+# Import core trading constants from framework
+from framework.config.constants import (
+    SYMBOLS,
+    MAINS, 
+    ALTS,
+    FEE_RATE,
+    RISK_PER_TRADE,
+    DATABASE_URL,
+    TIMEFRAMES,
+)
+
 load_dotenv()
 
-# Constants
-MAINS = ['BTCUSDT', 'ETHUSDT']  # Main fkss to hold long term
-ALTS = ['SOLUSDT', 'AVAXUSDT', 'SUIUSDT']  # Alt coins
-SYMBOLS = MAINS + ALTS
-
-# Timeframes to track
-TIMEFRAMES = ['1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M']
-
-# Binance API timeframe mapping
+# Binance API timeframe mapping (legacy compatibility)
 BINANCE_INTERVALS = {
     '1m': '1m',
     '5m': '5m',
@@ -26,13 +35,9 @@ BINANCE_INTERVALS = {
     '1M': '1M'
 }
 
-# Historical data settings
+# Historical data settings (legacy compatibility)
 HISTORICAL_DAYS = 730  # 2 years of data
 MAX_CANDLES_PER_REQUEST = 1000  # Binance API limit
-
-# Trading settings
-FEE_RATE = 0.001  # 0.1% transaction fee
-RISK_PER_TRADE = 0.01  # 1% risk per trade
 
 # External services
 DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
@@ -40,13 +45,12 @@ DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 # OpenAI API for RAG
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 
-# Database config
-DB_USER = os.getenv('DB_USER', 'user')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
+# Database config (legacy - use DATABASE_URL from framework.config.constants instead)
+DB_USER = os.getenv('DB_USER', 'postgres')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 DB_HOST = os.getenv('DB_HOST', 'db')
 DB_PORT = os.getenv('DB_PORT', '5432')
-DB_NAME = os.getenv('DB_NAME', 'fks_db')
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DB_NAME = os.getenv('DB_NAME', 'trading_db')
 
 # Redis config
 REDIS_HOST = os.getenv('REDIS_HOST', 'redis')

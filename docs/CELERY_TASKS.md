@@ -2,12 +2,13 @@
 
 ## Overview
 
-This document describes all 16 production-ready Celery tasks implemented for automated trading operations. Each task is designed with proper error handling, retry logic, and comprehensive logging.
+This document describes all 17 production-ready Celery tasks implemented for automated trading operations. Each task is designed with proper error handling, retry logic, and comprehensive logging.
 
 **Implementation Date:** October 2025  
-**Total Lines:** 1,541 lines  
+**Total Lines:** 1,997 lines  
 **Test Coverage:** 556 unit tests + 161 integration tests  
-**Status:** ✅ COMPLETE
+**Status:** ✅ COMPLETE - RAG Integration Added
+**RAG Tasks:** 3 tasks use FKS Intelligence for AI-powered recommendations
 
 ---
 
@@ -84,39 +85,93 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 
 ### Phase 2: Signal Generation & Analysis
 
-#### 4. `generate_signals_task`
-**Purpose:** Generate trading signals using technical indicators (RSI, MACD, Bollinger Bands)  
+#### 4. `generate_signals_task` 🤖 RAG-POWERED
+**Purpose:** Generate trading signals using RAG-powered FKS Intelligence for optimal recommendations  
 **Schedule:** Every 15 minutes  
 **Parameters:**
 - `account_id` (int, optional): Account ID for signal generation
 - `timeframe` (str): Timeframe for analysis (default: '1h')
 
 **Features:**
-- Uses optimized strategy parameters from database
-- Analyzes multiple symbols simultaneously
-- Generates BUY/HOLD signals with trade suggestions
-- Sends Discord notifications for BUY signals
-- Includes entry prices, stop loss, and take profit levels
+- **RAG Intelligence Integration**: Uses `IntelligenceOrchestrator` to analyze historical data
+- Queries RAG knowledge base for past performance and patterns
+- Generates recommendations based on account balance and available cash
+- Includes confidence scores and risk assessment from AI analysis
+- Falls back to legacy technical indicator method if RAG unavailable
+- Sends Discord notifications for BUY signals (includes method used)
 
-**Signal Output:**
+**RAG-Enhanced Output:**
 ```python
 {
     'status': 'success',
     'signal': 'BUY',
+    'method': 'rag',  # or 'legacy'
+    'account_balance': 10000.00,
+    'available_cash': 8500.00,
     'suggestions': [
         {
             'symbol': 'BTCUSDT',
-            'action': 'BUY LIMIT',
-            'price': 43250.00,
-            'quantity': 0.25,
-            'sl': 41500.00,
-            'tp': 46000.00
+            'action': 'BUY',
+            'position_size_usd': 170.00,  # 2% risk
+            'reasoning': 'Based on historical performance...',
+            'risk_assessment': 'medium',
+            'confidence': 0.85,
+            'entry_points': [43200, 43000],
+            'stop_loss': 41500
         }
-    ]
+    ],
+    'rag_signals': {
+        'BTCUSDT': { /* detailed RAG analysis */ }
+    }
 }
 ```
 
-#### 5. `update_indicators_task`
+#### 5. `generate_daily_rag_signals_task` 🤖 RAG-POWERED (NEW)
+**Purpose:** Primary daily RAG intelligence task for all configured symbols  
+**Schedule:** Daily at 8 AM  
+**Parameters:**
+- `symbols` (list, optional): List of symbols to analyze. If None, uses all SYMBOLS
+- `min_confidence` (float): Minimum confidence threshold (0-1, default: 0.7)
+
+**Features:**
+- **Primary RAG Task**: Main daily signal generation using FKS Intelligence
+- Uses `IntelligenceOrchestrator.get_daily_signals()` for comprehensive analysis
+- Analyzes all symbols based on historical data in RAG knowledge base
+- Filters recommendations by confidence threshold
+- Sends Discord notifications for high-confidence signals (top 5)
+- Returns structured daily signals with confidence scores
+
+**Daily Signals Output:**
+```python
+{
+    'status': 'success',
+    'date': '2025-10-18',
+    'method': 'rag',
+    'signals': {
+        'BTCUSDT': {
+            'action': 'BUY',
+            'recommendation': 'Based on historical patterns...',
+            'confidence': 0.85,
+            'sources_used': 12,
+            'timestamp': '2025-10-18T08:00:00'
+        },
+        'ETHUSDT': {
+            'action': 'HOLD',
+            'recommendation': 'Current indicators suggest...',
+            'confidence': 0.62,
+            'sources_used': 8
+        }
+    },
+    'high_confidence_count': 3,
+    'high_confidence_signals': [ /* signals above threshold */ ],
+    'min_confidence': 0.7
+}
+```
+
+**Use Case:**
+This is the primary task for generating daily trading recommendations. Run it each morning to get AI-powered insights for the trading day ahead.
+
+#### 6. `update_indicators_task`
 **Purpose:** Calculate and cache technical indicators for all symbols  
 **Schedule:** Every 30 minutes  
 **Parameters:**
@@ -136,7 +191,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 - Stores in IndicatorsCache table for fast retrieval
 - Enables rapid signal generation without recalculation
 
-#### 6. `analyze_risk_task`
+#### 7. `analyze_risk_task`
 **Purpose:** Perform comprehensive risk assessment on portfolios  
 **Schedule:** Every 30 minutes  
 **Parameters:**
@@ -158,7 +213,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 
 ### Phase 3: Trading Execution & Monitoring
 
-#### 7. `run_backtest_task`
+#### 8. `run_backtest_task`
 **Purpose:** Execute strategy backtests on historical data  
 **Schedule:** Daily at midnight  
 **Parameters:**
@@ -179,24 +234,45 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 - Win Rate
 - Total Trades
 
-#### 8. `optimize_portfolio_task`
-**Purpose:** RAG-powered portfolio optimization and rebalancing recommendations  
+#### 9. `optimize_portfolio_task` 🤖 RAG-POWERED
+**Purpose:** RAG-powered portfolio optimization using historical performance analysis  
 **Schedule:** Daily at 6 AM  
 **Parameters:**
 - `account_id` (int, optional): Account ID to optimize
 
 **Features:**
-- Analyzes current portfolio allocation
-- Compares to target allocation (50% mains, 50% alts)
-- Generates rebalancing recommendations
-- Calculates required trade amounts
-- Only recommends when difference > 5%
+- **RAG Intelligence Integration**: Uses `IntelligenceOrchestrator.optimize_portfolio()`
+- Analyzes historical backtests and trading performance via RAG knowledge base
+- Provides AI-driven allocation recommendations based on past results
+- Includes portfolio-level advice from RAG insights
+- Falls back to simple market cap allocation (50% mains, 50% alts) if RAG unavailable
+- Generates rebalancing recommendations with reasoning
 
-**Target Allocation:**
-- Main coins (BTC, ETH, BNB): 50% total (16.67% each)
-- Alt coins: 50% total (divided equally)
+**RAG-Enhanced Output:**
+```python
+{
+    'status': 'success',
+    'method': 'rag',  # or 'legacy'
+    'total_value': 12500.00,
+    'current_allocation': { /* current positions */ },
+    'recommendations': [
+        {
+            'symbol': 'BTCUSDT',
+            'action': 'BUY',
+            'current_allocation': 15.5,
+            'target_allocation': 25.0,
+            'amount': 1187.50,
+            'reasoning': 'Historical performance shows...',
+            'risk_assessment': 'low',
+            'confidence': 0.82
+        }
+    ],
+    'portfolio_advice': 'Based on backtests, increase BTC allocation...',
+    'rebalance_needed': True
+}
+```
 
-#### 9. `rebalance_portfolio_task`
+#### 10. `rebalance_portfolio_task`
 **Purpose:** Execute portfolio rebalancing trades  
 **Schedule:** On-demand (not scheduled)  
 **Parameters:**
@@ -209,7 +285,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 - Logs all rebalancing operations
 - Sends Discord notification with summary
 
-#### 10. `check_stop_loss_task`
+#### 11. `check_stop_loss_task`
 **Purpose:** Monitor positions for stop loss triggers  
 **Schedule:** Every 5 minutes (CRITICAL)  
 **Parameters:**
@@ -226,7 +302,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 
 ### Phase 4: Metrics & Reporting
 
-#### 11. `calculate_metrics_task`
+#### 12. `calculate_metrics_task`
 **Purpose:** Calculate comprehensive performance metrics  
 **Schedule:** Daily at 11 PM  
 **Parameters:**
@@ -244,7 +320,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 
 **Uses:** Balance history and trade records for accurate calculations
 
-#### 12. `generate_report_task`
+#### 13. `generate_report_task`
 **Purpose:** Generate comprehensive trading reports  
 **Schedule:**
 - Daily at 11:30 PM
@@ -262,7 +338,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 
 **Delivery:** Discord webhook with formatted summary
 
-#### 13. `validate_strategies_task`
+#### 14. `validate_strategies_task`
 **Purpose:** Validate trading strategies against recent market data  
 **Schedule:** Daily at 1 AM  
 **Parameters:**
@@ -282,7 +358,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 
 ### Phase 5: Data Management & Notifications
 
-#### 14. `fetch_news_task`
+#### 15. `fetch_news_task`
 **Purpose:** Fetch and ingest market news for sentiment analysis  
 **Schedule:** Every hour  
 **Parameters:**
@@ -291,7 +367,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 **Status:** Placeholder implementation ready for API integration
 **Future:** Will integrate with CoinGecko, CryptoCompare, or similar news APIs
 
-#### 15. `archive_old_data_task`
+#### 16. `archive_old_data_task`
 **Purpose:** Archive or delete old data to maintain database performance  
 **Schedule:** Daily at 3 AM  
 **Parameters:**
@@ -303,7 +379,7 @@ result = sync_market_data_task.delay(symbol='BTCUSDT', timeframe='15m', limit=10
 - Currently counts records (non-destructive)
 - Future: Will move to cold storage or delete
 
-#### 16. `send_notifications_task`
+#### 17. `send_notifications_task`
 **Purpose:** Send notifications via Discord and other channels  
 **Schedule:** On-demand (called by other tasks)  
 **Parameters:**

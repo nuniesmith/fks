@@ -4,10 +4,13 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
+from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView
 
 
@@ -253,4 +256,205 @@ class CustomLogoutView(LogoutView):
         return super().dispatch(request, *args, **kwargs)
 
 
-# More views will be added during migration from React
+class SignalsView(LoginRequiredMixin, TemplateView):
+    """Trading signals view."""
+
+    template_name = "pages/signals.html"
+    login_url = "/login/"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # TODO: Fetch real signals from database/Celery tasks
+        context["active_signals"] = 12
+        context["avg_confidence"] = 78.5
+        context["signal_win_rate"] = 68.3
+        context["signal_total_profit"] = 8450.00
+
+        # Mock signal data
+        context["signals"] = [
+            {
+                "timestamp": "2 mins ago",
+                "symbol": "BTCUSDT",
+                "signal_type": "BUY",
+                "strategy": "RSI Divergence",
+                "entry_price": 43100.00,
+                "target": 43800.00,
+                "stop_loss": 42700.00,
+                "confidence": 85,
+                "status": "ACTIVE",
+                "status_color": "primary",
+            },
+            {
+                "timestamp": "5 mins ago",
+                "symbol": "ETHUSDT",
+                "signal_type": "SELL",
+                "strategy": "MACD Crossover",
+                "entry_price": 2250.50,
+                "target": 2200.00,
+                "stop_loss": 2280.00,
+                "confidence": 72,
+                "status": "ACTIVE",
+                "status_color": "primary",
+            },
+            {
+                "timestamp": "12 mins ago",
+                "symbol": "SOLUSDT",
+                "signal_type": "BUY",
+                "strategy": "Breakout",
+                "entry_price": 98.30,
+                "target": 102.00,
+                "stop_loss": 96.50,
+                "confidence": 90,
+                "status": "EXECUTED",
+                "status_color": "success",
+            },
+        ]
+
+        return context
+
+
+class BacktestView(LoginRequiredMixin, TemplateView):
+    """Backtest results view."""
+
+    template_name = "pages/backtest.html"
+    login_url = "/login/"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # TODO: Fetch real backtest results from database
+
+        # Mock backtest result data
+        context["backtest_result"] = {
+            "total_return": 15.3,
+            "win_rate": 68.5,
+            "winning_trades": 137,
+            "total_trades": 200,
+            "losing_trades": 63,
+            "sharpe_ratio": 1.85,
+            "max_drawdown": 12.5,
+            "avg_win": 345.20,
+            "avg_loss": 142.50,
+            "profit_factor": 2.42,
+            "recovery_factor": 4.8,
+            "expectancy": 185.50,
+            "strategy_name": "RSI Divergence",
+            "symbol": "BTCUSDT",
+            "timeframe": "1h",
+            "initial_capital": 10000.00,
+            "final_equity": 11530.00,
+            "commission": 0.1,
+            "slippage": 0.05,
+            "duration": "90 days",
+            "trades": [
+                {
+                    "date": "2024-01-15",
+                    "type": "LONG",
+                    "type_color": "success",
+                    "entry": 42000,
+                    "exit": 42500,
+                    "pnl": 500,
+                    "pnl_percent": 1.19,
+                    "duration": "4h",
+                },
+                {
+                    "date": "2024-01-16",
+                    "type": "SHORT",
+                    "type_color": "danger",
+                    "entry": 42800,
+                    "exit": 42300,
+                    "pnl": 500,
+                    "pnl_percent": 1.17,
+                    "duration": "6h",
+                },
+            ],
+        }
+
+        return context
+
+
+class SettingsView(LoginRequiredMixin, TemplateView):
+    """Strategy settings view."""
+
+    template_name = "pages/settings.html"
+    login_url = "/login/"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # TODO: Fetch actual strategy configurations from database
+        return context
+
+
+# API Views - Migrated from FastAPI routes
+
+
+@require_http_methods(["GET"])
+def api_health_check(request):
+    """Health check endpoint (migrated from FastAPI)."""
+    return JsonResponse(
+        {
+            "status": "healthy",
+            "service": "fks-django-api",
+            "version": "1.0.0",
+            "timestamp": "2025-10-18T00:00:00Z",
+        }
+    )
+
+
+@require_http_methods(["GET"])
+@login_required
+def api_performance(request):
+    """Performance metrics endpoint (migrated from FastAPI)."""
+    # TODO: Fetch real performance data from database
+    return JsonResponse(
+        {
+            "total_pnl": 12450.50,
+            "total_trades": 200,
+            "win_rate": 0.685,
+            "profit_factor": 2.42,
+            "sharpe_ratio": 1.85,
+            "max_drawdown": -125.75,
+            "last_updated": "2025-10-18T00:00:00Z",
+        }
+    )
+
+
+@require_http_methods(["GET"])
+@login_required
+def api_signals(request):
+    """Current signals endpoint (migrated from FastAPI)."""
+    # TODO: Fetch real signals from Celery/database
+    signals = [
+        {
+            "symbol": "BTCUSDT",
+            "direction": "LONG",
+            "confidence": 0.85,
+            "entry": 43100.00,
+            "stop_loss": 42700.00,
+            "target": 43800.00,
+            "timestamp": "2025-10-18T00:00:00Z",
+        },
+        {
+            "symbol": "ETHUSDT",
+            "direction": "SHORT",
+            "confidence": 0.72,
+            "entry": 2250.50,
+            "stop_loss": 2280.00,
+            "target": 2200.00,
+            "timestamp": "2025-10-18T00:00:00Z",
+        },
+    ]
+    return JsonResponse({"signals": signals})
+
+
+@require_http_methods(["GET"])
+@login_required
+def api_assets(request):
+    """Assets endpoint (migrated from FastAPI)."""
+    # TODO: Fetch from trading configuration
+    assets = [
+        {"symbol": "BTCUSDT", "name": "Bitcoin", "type": "crypto"},
+        {"symbol": "ETHUSDT", "name": "Ethereum", "type": "crypto"},
+        {"symbol": "SOLUSDT", "name": "Solana", "type": "crypto"},
+        {"symbol": "BNBUSDT", "name": "Binance Coin", "type": "crypto"},
+    ]
+    return JsonResponse({"assets": assets})

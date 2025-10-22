@@ -12,11 +12,12 @@ ROOT_DIR = Path(__file__).parent.parent
 SRC_DIR = ROOT_DIR / "src"
 sys.path.insert(0, str(SRC_DIR))
 
-# Django setup
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "web.django.settings")
-
-import django
-django.setup()
+# Django setup - only for integration tests
+# Unit tests should not require Django
+if os.environ.get("REQUIRE_DJANGO", "false").lower() == "true":
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "web.django.settings")
+    import django
+    django.setup()
 
 
 @pytest.fixture

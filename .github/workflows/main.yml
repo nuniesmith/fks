@@ -99,16 +99,18 @@ jobs:
         python-version: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.python_version)) || fromJSON('["3.10", "3.11", "3.12", "3.13"]') }}
     services:
       postgres:
-        image: timescale/timescaledb:latest-postgresql-16
+        image: timescale/timescaledb:latest-pg16
         env:
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
       redis:
-        image: redis
+        image: redis:7-alpine
         ports:
           - 6379:6379
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -317,16 +319,18 @@ jobs:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.action == 'update-project-status' || contains(inputs.action, 'update-project-status')))
     services:
       postgres:
-        image: timescale/timescaledb:latest-postgresql-16
+        image: timescale/timescaledb:latest-pg16
         env:
           POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
       redis:
-        image: redis
+        image: redis:7-alpine
         ports:
           - 6379:6379
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
         with:

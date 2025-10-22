@@ -40,11 +40,10 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER")
 
           echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
-          echo "issue_data=$ISSUE_DATA" >> $GITHUB_OUTPUT
 
-          # Extract key information
-          TITLE=$(echo "$ISSUE_DATA" | jq -r '.title')
-          BODY=$(echo "$ISSUE_DATA" | jq -r '.body')
+          # Extract key information using jq
+          TITLE=$(echo "$ISSUE_DATA" | jq -r '.title // "Unknown Title"')
+          BODY=$(echo "$ISSUE_DATA" | jq -r '.body // ""')
           AREA=$(echo "$BODY" | grep -A 1 "Implementation Area" | tail -n 1 | sed 's/^- //' | sed 's/^.*: //' || echo "General")
           PHASES=$(echo "$BODY" | grep -A 1 "Number of Phases" | tail -n 1 | sed 's/^- //' | sed 's/".*"/ /' | cut -d' ' -f1 || echo "6-10")
 
@@ -57,7 +56,6 @@ jobs:
         run: |
           AREA="${{ steps.issue.outputs.area }}"
           PHASE_COUNT="${{ steps.issue.outputs.phases }}"
-          ISSUE_BODY="${{ steps.issue.outputs.issue_data }}"
 
           # Determine number of phases based on selection
           case "$PHASE_COUNT" in

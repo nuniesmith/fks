@@ -37,104 +37,104 @@ websockets>=15.0.1
 aiohttp>=3.13.1
 
 # Data Science & ML
-pandas>=2.3.3
-numpy>=2.3.4
-scipy>=1.16.2
-scikit-learn>=1.7.2
-torch>=2.9.0
-torchvision>=0.24.0
-hmmlearn>=0.3.3
-joblib>=1.5.2
-xgboost>=3.1.0
-lightgbm>=4.6.0
+pandas>=2.2.0  # 2.3.x requires Python 3.11+
+numpy>=1.26.0,<2.0  # 2.x has compatibility issues
+scipy>=1.13.0
+scikit-learn>=1.5.0
+torch>=2.4.0
+torchvision>=0.19.0
+hmmlearn>=0.3.2
+joblib>=1.4.0
+xgboost>=2.1.0
+lightgbm>=4.5.0
 
 # Technical Analysis
-TA-Lib>=0.6.7
+TA-Lib>=0.4.28  # 0.6.x doesn't exist
 
 # Crypto/Finance
-ccxt>=4.5.11
-yfinance>=0.2.66
+ccxt>=4.4.0
+yfinance>=0.2.48
 
 # AI/ML Libraries
-autots>=0.6.21
-prophet>=1.1.7
-statsmodels>=0.14.5
+autots>=0.6.15
+prophet>=1.1.5
+statsmodels>=0.14.2
 
 # LLM & Chatbot
-openai>=2.5.0
-google-generativeai>=0.8.5
-anthropic>=0.71.0
+openai>=1.54.0
+google-generativeai>=0.8.3
+anthropic>=0.39.0
 
 # RAG & Document Processing
-langchain>=1.0.0
-langchain-community>=0.4
-langchain-openai>=1.0.0
-faiss-cpu>=1.12.0
-sentence-transformers>=5.1.1
-chromadb>=1.2.0
-pgvector>=0.4.1
-tiktoken>=0.12.0
+langchain>=0.3.0
+langchain-community>=0.3.0
+langchain-openai>=0.2.0
+faiss-cpu>=1.8.0
+sentence-transformers>=3.3.0
+chromadb>=0.5.0
+pgvector>=0.3.5
+tiktoken>=0.8.0
 
 # Local LLM Support (CUDA)
-llama-cpp-python>=0.3.16
-ollama>=0.6.0
-transformers>=4.57.1
-accelerate>=1.10.1
-bitsandbytes>=0.48.1
+llama-cpp-python>=0.2.90
+ollama>=0.4.0
+transformers>=4.46.0
+accelerate>=1.0.0
+bitsandbytes>=0.44.0
 
 # Document Parsing
-pypdf>=6.1.1
-PyMuPDF>=1.26.5
-python-docx>=1.2.0
+pypdf>=5.1.0
+PyMuPDF>=1.24.0
+python-docx>=1.1.2
 openpyxl>=3.1.5
 
 # Optimization
-optuna>=4.5.0
-optuna-dashboard>=0.19.0
+optuna>=4.0.0
+optuna-dashboard>=0.16.0
 
 # Visualization
-matplotlib>=3.10.7
+matplotlib>=3.9.0
 seaborn>=0.13.2
-plotly>=6.3.1
-streamlit>=1.50.0
+plotly>=5.24.0
+streamlit>=1.40.0
 
 # Utils
-requests>=2.32.5
-pytz>=2025.2
+requests>=2.32.3
+pytz>=2024.2
 python-dateutil>=2.9.0.post0
-psutil>=7.1.0
+psutil>=6.1.0
 
 # Monitoring & Observability
-prometheus-client>=0.23.1
-django-prometheus>=2.4.1
+prometheus-client>=0.21.0
+django-prometheus>=2.3.1
 
 # Testing
-pytest>=8.4.2
-pytest-django>=4.11.1
-pytest-cov>=7.0.0
-pytest-asyncio>=1.2.0
-pytest-mock>=3.15.1
-faker>=37.11.0
-factory-boy>=3.3.3
+pytest>=8.3.0
+pytest-django>=4.9.0
+pytest-cov>=6.0.0
+pytest-asyncio>=0.24.0
+pytest-mock>=3.14.0
+faker>=30.8.0
+factory-boy>=3.3.1
 
 # Code Quality
-black>=25.9.0
-flake8>=7.3.0
-isort>=7.0.0
-pylint>=4.0.1
-mypy>=1.18.2
+black>=24.10.0
+flake8>=7.1.0
+isort>=5.13.0
+pylint>=3.3.0
+mypy>=1.13.0
 
 # Monitoring & Logging
-loguru>=0.7.3
-sentry-sdk>=2.42.0
-django-debug-toolbar>=6.0.0
-django-extensions>=4.1
+loguru>=0.7.2
+sentry-sdk>=2.18.0
+django-debug-toolbar>=4.4.0
+django-extensions>=3.2.3
 
 # Security
 django-ratelimit>=4.1.0
 django-axes>=8.0.0
 
 # Development
-ipython>=9.6.0
+ipython>=8.29.0
 jupyter>=1.1.1
-notebook>=7.4.7
+notebook>=7.2.0

@@ -174,21 +174,15 @@ jobs:
           ## Implementation Notes
           [Add specific implementation details, code changes, or considerations]"
 
-            # Convert comma-separated labels to JSON array
-            LABELS_JSON=$(echo "$LABELS" | jq -R 'split(",")')
+            # Create issue using GitHub CLI
+            NEW_ISSUE_URL=$(gh issue create \
+              --title "$TITLE" \
+              --body "$ISSUE_BODY" \
+              --label "$LABELS" \
+              --repo "${{ github.repository }}")
 
-            # Create issue via API
-            RESPONSE=$(curl -s -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              -d "{
-                \"title\": \"$TITLE\",
-                \"body\": \"$ISSUE_BODY\",
-                \"labels\": $LABELS_JSON
-              }" \
-              "https://api.github.com/repos/${{ github.repository }}/issues")
-
-            NEW_ISSUE_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
+            # Extract issue number from URL
+            NEW_ISSUE_NUMBER=$(echo "$NEW_ISSUE_URL" | grep -o '#[0-9]*' | tr -d '#')
             echo "Created issue #$NEW_ISSUE_NUMBER: $TITLE"
           done
 

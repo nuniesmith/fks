@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from core.database import Session, Trade, Position, Document
+from core.database.models import Session, Trade, Position, Document
 from web.rag.intelligence import FKSIntelligence
 
 

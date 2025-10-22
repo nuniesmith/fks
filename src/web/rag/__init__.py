@@ -28,11 +28,11 @@ Usage:
     )
 """
 
-from rag.document_processor import DocumentProcessor, create_processor
-from rag.embeddings import EmbeddingsService, create_embeddings_service
-from rag.ingestion import DataIngestionPipeline, create_ingestion_pipeline
-from rag.intelligence import FKSIntelligence, create_intelligence
-from rag.retrieval import RetrievalService, create_retrieval_service
+from web.rag.document_processor import DocumentProcessor, create_processor
+from web.rag.embeddings import EmbeddingsService, create_embeddings_service
+from web.rag.ingestion import DataIngestionPipeline, create_ingestion_pipeline
+from web.rag.intelligence import FKSIntelligence, create_intelligence
+from web.rag.retrieval import RetrievalService, create_retrieval_service
 
 __all__ = [
     "FKSIntelligence",

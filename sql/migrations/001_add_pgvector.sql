@@ -1,12 +1,29 @@
 -- Migration to add pgvector extension for RAG system
--- Run this after initial database setup
+-- Run this after 000_create_rag_tables.sql
 
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- Add vector column to document_chunks if not exists
--- Note: This is handled by SQLAlchemy, but kept for reference
--- ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS embedding vector(1536);
+-- Convert embedding column from FLOAT[] to vector type
+-- First, we need to handle the conversion for existing data
+DO $$
+BEGIN
+    -- Check if the column exists and is not already vector type
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'document_chunks' 
+        AND column_name = 'embedding'
+        AND data_type != 'USER-DEFINED'
+    ) THEN
+        -- For new installs, directly change to vector type
+        -- Dimension can be 384 (MiniLM) or 1536 (OpenAI)
+        -- We'll use 1536 as default and embeddings service will handle dimension
+        ALTER TABLE document_chunks 
+        ALTER COLUMN embedding TYPE vector(1536) USING embedding::vector;
+        
+        RAISE NOTICE 'Converted embedding column to vector(1536) type';
+    END IF;
+END $$;
 
 -- Create index for vector similarity search using HNSW (Hierarchical Navigable Small World)
 -- This index provides fast approximate nearest neighbor search

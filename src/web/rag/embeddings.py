@@ -7,11 +7,10 @@ import os
 from typing import Any, Dict, List, Optional
 
 import numpy as np
-from database import Session
 from openai import OpenAI
 from sqlalchemy import text
 
-from core.database import Session
+from core.database.models import Session
 from framework.config.constants import OPENAI_API_KEY
 
 

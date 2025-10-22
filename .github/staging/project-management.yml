@@ -31,7 +31,9 @@ env:
 jobs:
   manage-project:
     name: Manage GitHub Project
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     permissions:
       contents: read
       issues: write

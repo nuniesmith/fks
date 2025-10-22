@@ -51,27 +51,23 @@ env:
 jobs:
   notify-start:
     name: Notify Workflow Start
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     steps:
       - name: Send Discord notification
-        uses: sarisia/actions-status-discord@v1
+        uses: tsickert/discord-webhook@v2.0.0
         if: always()
         with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: ${{ job.status }}
-          title: "🚀 CI/CD Pipeline Started"
-          description: |
-            **Repository:** ${{ github.repository }}
-            **Branch:** ${{ github.ref_name }}
-            **Event:** ${{ github.event_name }}
-            **Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})
-            **Author:** ${{ github.actor }}
-          color: 0x0099ff
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
           username: FKS CI/CD Bot
+          embeds: '[{"title": "🚀 CI/CD Pipeline Started", "description": "**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Event:** ${{ github.event_name }}\n**Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})\n**Author:** ${{ github.actor }}", "color": 39423}]'
 
   label-pr:
     name: Label Pull Request
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
     permissions:
       contents: read
@@ -126,23 +122,19 @@ jobs:
           title: "🏷️ PR Auto-Labeled"
           description: |
             **PR:** #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}
-            **Author:** ${{ github.actor }}
-            **New Labels:** ${{ steps.labeler.outputs.new-labels }}
-            **All Labels:** ${{ steps.labeler.outputs.all-labels }}
-          color: 0x4CAF50
+      - name: Notify labels
+        if: steps.labeler.outputs.new-labels != ''
+        uses: tsickert/discord-webhook@v2.0.0
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
           username: FKS CI/CD Bot
-
-
-  test:
-    name: Run Tests (Python ${{ matrix.python-version }} on ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    needs: [notify-start]
-    if: ${{ !inputs.skip_tests }}
-    strategy:
+          embeds: '[{"title": "🏷️ PR Auto-Labeled", "description": "**PR:** #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}\n**Author:** ${{ github.actor }}\n**New Labels:** ${{ steps.labeler.outputs.new-labels }}\n**All Labels:** ${{ steps.labeler.outputs.all-labels }}", "color": 5000268}]'
       fail-fast: false  # Continue testing other versions if one fails
       matrix:
         python-version: ['3.11', '3.12', '3.13']
-        os: [ubuntu-latest]
+        os: 
+          - freddy
+          - ubuntu-latest
         include:
           # Add Windows testing for main Python version
           - python-version: '3.13'
@@ -322,17 +314,13 @@ jobs:
           color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
           username: FKS CI/CD Bot
 
-  lint:
-    name: Code Quality
-    runs-on: ubuntu-latest
-    needs: [notify-start, label-pr]
-    # Skip if only documentation changed
-    if: |
-      always() && 
-      needs.notify-start.result == 'success' &&
-      (github.event_name != 'pull_request' || !contains(needs.label-pr.outputs.all-labels, 'documentation'))
-    
-    steps:
+      - name: Notify test results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🧪 Test Results", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
       - name: Checkout code
         uses: actions/checkout@v4
       
@@ -400,21 +388,17 @@ jobs:
 
   security:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     needs: [notify-start, label-pr]
-    # Always run on security-related changes, otherwise only on push to main/develop
-    if: |
-      always() && 
-      needs.notify-start.result == 'success' &&
-      (contains(needs.label-pr.outputs.all-labels, 'security') || 
-       github.event_name == 'push' || 
-       github.event_name == 'workflow_dispatch')
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
+      - name: Notify lint results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🔍 Code Quality Check", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -495,7 +479,9 @@ jobs:
 
   docker:
     name: Build Docker Image
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     needs: [test, lint, label-pr]
     # Skip docker build on docs-only or WIP PRs
     if: |
@@ -503,19 +489,13 @@ jobs:
       needs.test.result == 'success' &&
       needs.lint.result == 'success' &&
       !contains(needs.label-pr.outputs.all-labels, 'wip') &&
-      (github.event_name != 'pull_request' || contains(needs.label-pr.outputs.all-labels, 'docker'))
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        if: github.event_name != 'pull_request'
+      - name: Notify security scan results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
         with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🔒 Security Scan", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_API_TOKEN }}
       
@@ -567,7 +547,9 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     needs: [docker]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -580,20 +562,13 @@ jobs:
       
       - name: Extract version from tag
         id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
-      
-      - name: Generate release notes
-        id: notes
-        run: |
-          # Get previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          
-          # Generate changelog
-          if [ -n "$PREV_TAG" ]; then
-            echo "## Changes since $PREV_TAG" > release_notes.md
+      - name: Notify Docker build results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🐳 Docker Build", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Tags:** ${{ steps.meta.outputs.tags }}\n**Pushed:** ${{ github.event_name != \'pull_request\' }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
             echo "" >> release_notes.md
             git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges >> release_notes.md
           else
@@ -636,7 +611,9 @@ jobs:
 
   update-dns:
     name: Update Cloudflare DNS
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     needs: [docker]
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
     
@@ -655,21 +632,13 @@ jobs:
             echo "ENVIRONMENT=staging" >> $GITHUB_OUTPUT
             echo "DOMAIN=staging.fkstrading.xyz" >> $GITHUB_OUTPUT
             echo "SERVER_IP=${{ secrets.STAGING_IP }}" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Update DNS A record for apex domain
-        id: update-apex
-        run: |
-          # Get Zone ID if not provided as secret
-          ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
-          
-          # List existing DNS records
-          RECORD_ID=$(curl -s -X GET \
-            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=A&name=${{ steps.env.outputs.DOMAIN }}" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
-          
-          if [ -z "$RECORD_ID" ]; then
+      - name: Notify release
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🎉 New Release Published", "description": "**Version:** v${{ steps.version.outputs.version }}\n**Tag:** ${{ steps.version.outputs.tag }}\n**Repository:** ${{ github.repository }}\n**Released by:** ${{ github.actor }}\n\n[View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }})", "color": 10233456}]'
             # Create new A record
             echo "Creating new A record for ${{ steps.env.outputs.DOMAIN }}"
             RESPONSE=$(curl -s -X POST \
@@ -831,7 +800,9 @@ jobs:
   
   notify-completion:
     name: Notify Workflow Completion
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     needs: [test, lint, security, docker, create-release, update-dns]
     if: always()
     steps:
@@ -859,20 +830,13 @@ jobs:
       - name: Generate summary
         run: |
           echo "### 🎯 Pipeline Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Security | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker | ${{ needs.docker.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Release | ${{ needs.create-release.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| DNS Update | ${{ needs.update-dns.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Overall Status:** ${{ steps.status.outputs.status }}" >> $GITHUB_STEP_SUMMARY
-      
-      - name: Send Discord notification
-        uses: sarisia/actions-status-discord@v1
+      - name: Notify deployment results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🚀 Deployment Complete", "description": "**Status:** ${{ job.status }}\n**Environment:** ${{ steps.env.outputs.ENVIRONMENT }}\n**Domain:** ${{ steps.env.outputs.DOMAIN }}\n**IP Address:** ${{ steps.env.outputs.SERVER_IP }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           status: ${{ steps.status.outputs.status }}
@@ -892,4 +856,9 @@ jobs:
             • Release: ${{ needs.create-release.result }}
             • Deployment: ${{ needs.update-dns.result }}
           color: ${{ steps.status.outputs.status == 'success' && 0x00ff00 || steps.status.outputs.status == 'cancelled' && 0xffff00 || 0xff0000 }}
+          username: FKS CI/CD Bot      - name: Send Discord notification
+        uses: tsickert/discord-webhook@v2.0.0
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
           username: FKS CI/CD Bot
+          embeds: '[{"title": "✅ CI/CD Pipeline Completed", "description": "**Overall Status:** ${{ steps.status.outputs.status }}\n**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})\n**Triggered by:** ${{ github.actor }}\n\n**Job Results:**\n• Tests: ${{ needs.test.result }}\n• Lint: ${{ needs.lint.result }}\n• Security: ${{ needs.security.result }}\n• Docker: ${{ needs.docker.result }}\n• Release: ${{ needs.create-release.result }}\n• Deployment: ${{ needs.update-dns.result }}", "color": ${{ steps.status.outputs.status == "success" ? 65280 : steps.status.outputs.status == "cancelled" ? 16776960 : 16711680 }}}]'

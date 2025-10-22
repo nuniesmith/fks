@@ -27,7 +27,9 @@ on:
 jobs:
   notify:
     name: Send Notification
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     steps:
       - name: Send Discord notification
         uses: sarisia/actions-status-discord@v1

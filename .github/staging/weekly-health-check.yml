@@ -15,7 +15,9 @@ on:
 jobs:
   health-check:
     name: Analyze Project Health
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     permissions:
       contents: write
       pull-requests: write

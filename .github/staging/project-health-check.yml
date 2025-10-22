@@ -12,7 +12,9 @@ on:
 
 jobs:
   analyze:
-    runs-on: ubuntu-latest
+    runs-on: 
+      - freddy
+      - ubuntu-latest
     
     steps:
     - uses: actions/checkout@v4

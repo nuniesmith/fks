@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 from web.rag.intelligence import FKSIntelligence, create_intelligence
-from core.database import Session
+from core.database.models import Session
 
 
 class IntelligenceOrchestrator:

@@ -7,7 +7,7 @@ Supports both OpenAI API and local CUDA-accelerated models.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from core.database import Session, Document, DocumentChunk, QueryHistory
+from core.database.models import Session, Document, DocumentChunk, QueryHistory
 from web.rag.document_processor import DocumentProcessor
 from web.rag.embeddings import EmbeddingsService
 from web.rag.retrieval import RetrievalService

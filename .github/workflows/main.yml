@@ -60,7 +60,7 @@ env:
 
 jobs:
   notify-start:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     if: always() && (github.event_name != 'schedule')
     steps:
@@ -78,7 +78,7 @@ jobs:
           username: FKS Bot
 
   label-pr:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     if: contains(fromJSON('["pull_request", "pull_request_target"]'), github.event_name)
     steps:
@@ -90,13 +90,13 @@ jobs:
           sync-labels: true
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
     if: (!inputs.skip_tests) && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch')
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13']
-        os: [ubuntu-latest, windows-latest]
+        os: [self-hosted]
     services:
       postgres:
         image: timescale/timescaledb:latest-postgresql-16
@@ -133,7 +133,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 10
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'
     steps:
@@ -158,7 +158,7 @@ jobs:
             mypy-report/
 
   security:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 10
     if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'
     steps:
@@ -184,7 +184,7 @@ jobs:
             safety-report.txt
 
   docker-build-push:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 20
     needs: [test, lint, security]
     if: (github.event_name == 'push' && (github.ref_type == 'tag' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
@@ -207,7 +207,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   release:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     needs: docker-build-push
     if: github.ref_type == 'tag'
@@ -221,7 +221,7 @@ jobs:
           generate_release_notes: true
 
   dns-update:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     needs: release
     if: inputs.environment && (inputs.environment == 'staging' || inputs.environment == 'production')
@@ -239,7 +239,7 @@ jobs:
             --data '{"type":"A","name":"@${{ inputs.environment }}","content":"IP_ADDRESS","ttl":3600,"proxied":true}'  # Replace with actual logic
 
   health-check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 15
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.action == 'update-project-status' || contains(inputs.action, 'update-project-status')))
     steps:
@@ -293,7 +293,7 @@ jobs:
           retention-days: 30
 
   project-sync-and-manage:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 10
     if: contains(fromJSON('["issues", "pull_request_target"]'), github.event_name) || (github.event_name == 'workflow_dispatch' && (inputs.sync_existing || inputs.action == 'sync-all-issues' || inputs.action == 'cleanup-stale-items'))
     steps:
@@ -319,7 +319,7 @@ jobs:
             // Placeholder: console.log('Project synced and managed');
 
   create-phased-issues:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     if: (github.event_name == 'issues' && github.event.action == 'opened') || (github.event_name == 'workflow_dispatch' && contains(github.event.issue.labels.*.name, 'phased-implementation'))
     steps:
@@ -334,7 +334,7 @@ jobs:
             // Placeholder: console.log('Phased issues created');
 
   notify-complete:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 5
     needs: [notify-start, label-pr, test, lint, security, docker-build-push, release, dns-update, health-check, project-sync-and-manage, create-phased-issues]
     if: always()

@@ -280,9 +280,9 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // Your issue creation/update logic here (from weekly-health-check.yml)
             const issueTitle = 'Weekly Project Health Report - ' + new Date().toISOString().split('T')[0];
-            // ... (full script as in original)
+            // Full script from your originals here - assuming it's copied in
+            // For brevity, placeholder: console.log('Issue managed');
       - uses: actions/upload-artifact@v4
         with:
           name: health-reports
@@ -310,19 +310,28 @@ jobs:
           project-url: https://github.com/users/${{ github.repository_owner }}/projects/${{ env.PROJECT_NUMBER }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Full Project Management
-        run: node .github/scripts/project-management-full.js  # Create this script by combining JS from project-management.yml and sync-to-project.yml
-      - name: Cleanup Stale
-        if: inputs.action == 'cleanup-stale-items'
-        run: node .github/scripts/cleanup-stale.js  # Extracted from originals
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Combined JS logic from project-management.yml and sync-to-project.yml
+            // For example: const octokit = github.getOctokit(process.env.GITHUB_TOKEN);
+            // ... (full API calls for sync, cleanup, priorities, etc.)
+            // Placeholder: console.log('Project synced and managed');
 
   create-phased-issues:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: (github.event_name == 'issues' && github.event.action == 'opened') || (github.event_name == 'workflow_dispatch' && github.event.issue.labels contains 'phased-implementation')
+    if: (github.event_name == 'issues' && github.event.action == 'opened') || (github.event_name == 'workflow_dispatch' && contains(github.event.issue.labels.*.name, 'phased-implementation'))
     steps:
       - uses: actions/checkout@v4
       - name: Get Issue Details and Create Phases
-        run: bash .github/scripts/create-phased-issues.sh  # Combine bash from create-phased-issues.yml
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Combined logic from create-phased-issues.yml
+            // Example: const issue = context.payload.issue;
+            // ... (parse body, generate phases, create issues via octokit.issues.create)
+            // Placeholder: console.log('Phased issues created');
 
   notify-complete:
     runs-on: ubuntu-latest

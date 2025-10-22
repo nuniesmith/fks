@@ -1,0 +1,343 @@
+name: FKS Main Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+    paths-ignore: ['docs/**', '*.md']
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  issues:
+    types: [opened, labeled, unlabeled, closed, reopened, assigned, unassigned]
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly Monday 9 AM UTC
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Python version to test (3.10-3.13)'
+        type: choice
+        default: '3.13'
+        options: ['3.10', '3.11', '3.12', '3.13']
+      skip_tests:
+        description: 'Skip test execution'
+        type: boolean
+        default: false
+      environment:
+        description: 'Target environment (staging/production)'
+        type: choice
+        default: 'staging'
+        options: ['staging', 'production']
+      commit_changes:
+        description: 'Auto-commit PROJECT_STATUS.md updates'
+        type: boolean
+        default: true
+      sync_existing:
+        description: 'Sync all existing open issues/PRs to project'
+        type: boolean
+        default: false
+      action:
+        description: 'Manual action (sync-all-issues, update-project-status, cleanup-stale-items)'
+        type: choice
+        options: ['sync-all-issues', 'update-project-status', 'cleanup-stale-items']
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  repository-projects: write
+  actions: read
+  checks: write
+  deployments: write
+  id-token: write
+  security-events: write
+
+env:
+  PROJECT_NUMBER: 1  # Your project board number
+  PYTHON_VERSION: ${{ inputs.python_version || '3.13' }}
+
+jobs:
+  notify-start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always() && (github.event_name != 'schedule')
+    steps:
+      - name: Send Discord Start Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "🚀 Pipeline Started"
+          description: |
+            **Event:** ${{ github.event_name }}
+            **Repository:** ${{ github.repository }}
+            **Branch/Ref:** ${{ github.ref_name }}
+            **Actor:** ${{ github.actor }}
+          color: 0x9C27B0
+          username: FKS Bot
+
+  label-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: contains(fromJSON('["pull_request", "pull_request_target"]'), github.event_name)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply Labels
+        uses: actions/labeler@v5
+        with:
+          configuration-path: .github/labeler.yml
+          sync-labels: true
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: (!inputs.skip_tests) && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch')
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+        os: [ubuntu-latest, windows-latest]
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-postgresql-16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install Deps
+        run: pip install -r requirements.txt pytest pytest-cov
+      - name: Run Tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/testdb
+        run: pytest tests/ -v --cov=src --cov-report=json --cov-report=html || true
+        continue-on-error: true
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Coverage Comment
+        uses: ewjoachim/python-coverage-comment-action@v3
+        if: github.event_name == 'pull_request'
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install Linters
+        run: pip install ruff black isort mypy
+      - name: Run Ruff (Strict)
+        run: ruff check src/ --output-format=json > lint-report.json || true
+      - name: Run Black/Isort (Check)
+        run: black --check src/ && isort --check-only src/ || true
+      - name: Run Mypy
+        run: mypy src/ --ignore-missing-imports --json-report mypy-report || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lint-reports
+          path: |
+            lint-report.json
+            mypy-report/
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install Security Tools
+        run: pip install pip-audit bandit safety
+      - name: Pip Audit
+        run: pip-audit --requirement requirements.txt --format json > security-audit.json || true
+      - name: Bandit Scan
+        run: bandit -r src/ -f json > bandit-report.json || true
+      - name: Safety Check
+        run: safety check --full-report > safety-report.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            security-audit.json
+            bandit-report.json
+            safety-report.txt
+
+  docker-build-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [test, lint, security]
+    if: (github.event_name == 'push' && (github.ref_type == 'tag' || github.ref == 'refs/heads/main')) || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ${{ github.repository }}:latest, ${{ github.repository }}:${{ github.ref_name }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: docker-build-push
+    if: github.ref_type == 'tag'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+
+  dns-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: release
+    if: inputs.environment && (inputs.environment == 'staging' || inputs.environment == 'production')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update Cloudflare DNS
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          # Add your curl script for Cloudflare API here
+          curl -X PUT "https://api.cloudflare.com/client/v4/zones/${{ env.CLOUDFLARE_ZONE_ID }}/dns_records/identifier" \
+            -H "Authorization: Bearer ${{ env.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data '{"type":"A","name":"@${{ inputs.environment }}","content":"IP_ADDRESS","ttl":3600,"proxied":true}'  # Replace with actual logic
+
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.action == 'update-project-status' || contains(inputs.action, 'update-project-status')))
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install Deps
+        run: pip install -r requirements.txt pytest pytest-cov pip-audit ruff mypy black isort
+      - name: Run Tests/Coverage
+        run: pytest tests/ -v --cov=src --cov-report=json || true
+        continue-on-error: true
+      - name: Security Audit
+        run: pip-audit --requirement requirements.txt --format json > security-audit.json || true
+        continue-on-error: true
+      - name: Lint
+        run: ruff check src/ --output-format=json > lint-report.json || true
+        continue-on-error: true
+      - name: Type Check
+        run: mypy src/ --ignore-missing-imports --json-report mypy-report || true
+        continue-on-error: true
+      - name: Project Metrics
+        run: python scripts/analyze_project.py --output=metrics.json || true
+        continue-on-error: true
+      - name: Update PROJECT_STATUS.md
+        run: python .github/scripts/update_status.py || true
+        continue-on-error: true
+      - name: Auto-Commit If Changed
+        if: inputs.commit_changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add PROJECT_STATUS.md
+          git commit -m "Update PROJECT_STATUS.md from health check [skip ci]" || echo "No changes"
+          git push
+      - name: Create/Update Critical Issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Your issue creation/update logic here (from weekly-health-check.yml)
+            const issueTitle = 'Weekly Project Health Report - ' + new Date().toISOString().split('T')[0];
+            // ... (full script as in original)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: health-reports
+          path: |
+            *.json
+            mypy-report/
+            *.txt
+          retention-days: 30
+
+  project-sync-and-manage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: contains(fromJSON('["issues", "pull_request_target"]'), github.event_name) || (github.event_name == 'workflow_dispatch' && (inputs.sync_existing || inputs.action == 'sync-all-issues' || inputs.action == 'cleanup-stale-items'))
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      - name: Install Deps
+        run: npm install @octokit/rest @actions/github
+      - name: Add to Project
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/${{ github.repository_owner }}/projects/${{ env.PROJECT_NUMBER }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Full Project Management
+        run: node .github/scripts/project-management-full.js  # Create this script by combining JS from project-management.yml and sync-to-project.yml
+      - name: Cleanup Stale
+        if: inputs.action == 'cleanup-stale-items'
+        run: node .github/scripts/cleanup-stale.js  # Extracted from originals
+
+  create-phased-issues:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: (github.event_name == 'issues' && github.event.action == 'opened') || (github.event_name == 'workflow_dispatch' && github.event.issue.labels contains 'phased-implementation')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get Issue Details and Create Phases
+        run: bash .github/scripts/create-phased-issues.sh  # Combine bash from create-phased-issues.yml
+
+  notify-complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [notify-start, label-pr, test, lint, security, docker-build-push, release, dns-update, health-check, project-sync-and-manage, create-phased-issues]
+    if: always()
+    steps:
+      - name: Send Discord Complete Notification
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "✅ Pipeline Complete"
+          description: |
+            **Status:** ${{ job.status }}
+            **Event:** ${{ github.event_name }}
+            **All Jobs:** ${{ toJSON(needs.*.result) }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS Bot

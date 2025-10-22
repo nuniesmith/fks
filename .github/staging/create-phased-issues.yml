@@ -246,7 +246,7 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments"
 
       - name: Notify phased issue creation
-        uses: sarisia/actions-status-discord@v1
+        uses: sarisia/actions-status-discord
         if: always()
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}

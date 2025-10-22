@@ -3,14 +3,14 @@
 # Multi-Language Codebase Analysis Script
 # Creates detailed reports on file structure, summaries, and optional contents/linting.
 # Supports Python, Rust, C#, JS/TS, Java, Go, etc.
-# Usage: ./analyze_codebase.sh [options] <directory_path>
+# Usage: ./analyze_multi_codebase.sh [options] <directory_path>
 # Options:
 #   --full                 Generate full file contents report (optional)
 #   --lint                 Run language-specific linters and generate lint_report.txt
 #   --output=DIR           Specify output directory (defaults to timestamped)
 #   --exclude=DIR1,DIR2    Comma-separated directories to exclude (e.g., shared,backup)
 #   --skip-shared          Skip the 'shared/' directory
-#   --type=KIND            Non-interactive analysis kind (numeric or alias: all|python|rust|csharp|jsts|mdtxt|shbash|docker|github)
+#   --type=KIND            Non-interactive analysis kind (numeric or alias: all|python|rust|csharp|jsts|mdtxt|shbash|docker)
 #   --analyze-type=KIND    Alias for --type
 #   (env overrides) ANALYZE_TYPE / ANALYZE_CHOICE / ANALYZE_KIND
 #   --help                 Show this help message
@@ -32,8 +32,8 @@ while [[ $# -gt 0 ]]; do
         --output=*) OUTPUT_DIR="${1#*=}"; shift ;;
         --exclude=*) EXCLUDE_LIST="${1#*=}"; shift ;;
         --skip-shared) SKIP_SHARED=1; shift ;;
-        --type=*) TYPE_CHOICE="${1#*=}"; shift ;;
-        --analyze-type=*) TYPE_CHOICE="${1#*=}"; shift ;;
+    --type=*) TYPE_CHOICE="${1#*=}"; shift ;;
+    --analyze-type=*) TYPE_CHOICE="${1#*=}"; shift ;;
         --help) echo "Usage: $0 [options] <directory_path>"; echo "Options: --full, --lint, --output=DIR, --exclude=DIR1,DIR2, --skip-shared, --help"; exit 0 ;;
         *) TARGET_DIR="$1"; shift ;;
     esac
@@ -66,9 +66,11 @@ else
     echo "6. mdtxt - Markdown and text files"
     echo "7. shbash - Shell/bash scripts, Makefiles, Dockerfiles, and docker-compose files"
     echo "8. docker - Dockerfiles, docker-compose files, and .env files"
-    echo "9. github - GitHub specific files (md, txt, yml, yaml for actions and docs)"
-    # Interactive read; default to 1 (all) if no input
-    read -r ANALYZE_INPUT || ANALYZE_INPUT="1"
+    # Interactive read (may exit early under set -e if EOF); guard with || true
+    if ! read -r ANALYZE_INPUT; then
+        echo "No input provided and no --type specified." >&2
+        exit 1
+    fi
 fi
 
 # Map numbered input to type
@@ -81,7 +83,6 @@ case "$ANALYZE_INPUT" in
     6|mdtxt) ANALYZE_TYPE="mdtxt" ;;
     7|shbash) ANALYZE_TYPE="shbash" ;;
     8|docker) ANALYZE_TYPE="docker" ;;
-    9|github) ANALYZE_TYPE="github" ;;
     *)
         echo "Invalid choice: $ANALYZE_INPUT" >&2
         exit 1
@@ -142,11 +143,6 @@ case "$ANALYZE_TYPE" in
     docker)
         FILTER_EXT=""
         ADDITIONAL_GREP="|Dockerfile$|docker-compose\.yml$|docker-compose\.yaml$|\.env$"
-        DO_OTHER=1
-        ;;
-    github)
-        FILTER_EXT="md|txt|yml|yaml"
-        ADDITIONAL_GREP=""
         DO_OTHER=1
         ;;
 esac
@@ -262,23 +258,19 @@ eval "$FILTERED_FIND" >> "$SUMMARY_REPORT"
 # File counts by extension (filtered), including files without extensions
 echo "" >> "$SUMMARY_REPORT"
 echo "File count by type/extension:" >> "$SUMMARY_REPORT"
-eval "$FILTERED_FIND" | while read -r file; do
-    ext="${file##*.}"
-    if [ "$ext" = "$file" ]; then
-        echo "no_ext"
+eval "$FILTERED_FIND | while read -r file; do
+    ext=\"\${file##*.}\"
+    if [ \"\$ext\" = \"\$file\" ]; then
+        echo \"no_ext\"
     else
-        echo "$ext"
+        echo \"\$ext\"
     fi
-done | sort | uniq -c | sort -nr >> "$SUMMARY_REPORT"
+done | sort | uniq -c | sort -nr" >> "$SUMMARY_REPORT"
 
 # Total/Avg size (filtered)
-total_files=$(eval "$FILTERED_FIND" | wc -l)
-total_size=$(eval "$FILTERED_FIND" | xargs -I {} stat -c%s "{}" 2>/dev/null | awk '{sum+=$1} END {print sum}')
-if [ "$total_files" -eq 0 ]; then
-    avg_size=0
-else
-    avg_size=$((total_size / total_files))
-fi
+total_files=$(eval "$FILTERED_FIND | wc -l")
+total_size=$(eval "$FILTERED_FIND | xargs -I {} stat -c%s \"{}\" 2>/dev/null | awk '{sum+=\$1} END {print sum}'")
+avg_size=$((total_size / total_files)) 2>/dev/null || avg_size=0
 echo "Total files: $total_files | Total size: $total_size bytes | Avg size: $avg_size bytes" >> "$SUMMARY_REPORT"
 
 # Empties/Small (filtered)
@@ -402,22 +394,7 @@ if [ $DO_GO -eq 1 ]; then
     fi
 fi
 
-# GitHub Specific Analysis
-if [ "$ANALYZE_TYPE" = "github" ]; then
-    echo "" >> "$SUMMARY_REPORT"
-    echo "GITHUB SPECIFIC ANALYSIS:" >> "$SUMMARY_REPORT"
-    workflows_count=$(find "$TARGET_DIR/workflows" -type f \( -name "*.yml" -o -name "*.yaml" \) 2>/dev/null | wc -l)
-    echo "GitHub Actions workflows count: $workflows_count" >> "$SUMMARY_REPORT"
-    if [ -d "$TARGET_DIR/ISSUE_TEMPLATE" ]; then
-        issue_templates=$(find "$TARGET_DIR/ISSUE_TEMPLATE" -type f 2>/dev/null | wc -l)
-        echo "Issue templates count: $issue_templates" >> "$SUMMARY_REPORT"
-    fi
-    if [ -f "$TARGET_DIR/FUNDING.yml" ]; then echo "Funding.yml found" >> "$SUMMARY_REPORT"; fi
-    if [ -f "$TARGET_DIR/dependabot.yml" ]; then echo "Dependabot.yml found" >> "$SUMMARY_REPORT"; fi
-    if [ -f "$TARGET_DIR/CODEOWNERS" ]; then echo "CODEOWNERS found" >> "$SUMMARY_REPORT"; fi
-fi
-
-# Programming patterns analysis (skip for non-code types like mdtxt, shbash, docker, github unless all)
+# Programming patterns analysis (skip for non-code types like mdtxt, shbash, docker unless all)
 if [ $DO_OTHER -eq 0 ]; then
     echo "" >> "$SUMMARY_REPORT"
     echo "PROGRAMMING PATTERNS ANALYSIS:" >> "$SUMMARY_REPORT"
@@ -470,10 +447,8 @@ if [ $LINT -eq 1 ]; then
     # Rust
     if [ $DO_RUST -eq 1 ] && command -v rustfmt &> /dev/null && [ "$rust_files" -gt 0 ]; then
         echo "Rust (rustfmt):" >> "$LINT_REPORT"
-        find "$TARGET_DIR" -name '*.rs' -exec rustfmt --check {} + >> "$LINT_REPORT" 2>&1 || true
-        if command -v cargo &> /dev/null && [ -f "$TARGET_DIR/Cargo.toml" ]; then
-            (cd "$TARGET_DIR" && cargo clippy -- -D warnings >> "$LINT_REPORT" 2>&1 || true)
-        fi
+        rustfmt --check "$TARGET_DIR"/*.rs >> "$LINT_REPORT" 2>&1 || true
+        if command -v cargo-clippy &> /dev/null; then cargo clippy -- -D warnings >> "$LINT_REPORT" 2>&1 || true; fi
     fi
     # C#
     if [ $DO_CSHARP -eq 1 ] && command -v dotnet &> /dev/null && [ "$csharp_files" -gt 0 ]; then
@@ -488,12 +463,12 @@ if [ $LINT -eq 1 ]; then
     # Java
     if [ $DO_JAVA -eq 1 ] && [ -f checkstyle.jar ] && [ "$java_files" -gt 0 ]; then
         echo "Java (Checkstyle):" >> "$LINT_REPORT"
-        java -jar checkstyle.jar -c /google_checks.xml $(find "$TARGET_DIR" -name '*.java') >> "$LINT_REPORT" 2>&1 || true
+        java -jar checkstyle.jar -c /google_checks.xml "$TARGET_DIR"/*.java >> "$LINT_REPORT" 2>&1 || true
     fi
     # Go
     if [ $DO_GO -eq 1 ] && command -v gofmt &> /dev/null && [ "$go_files" -gt 0 ]; then
         echo "Go (gofmt):" >> "$LINT_REPORT"
-        gofmt -l $(find "$TARGET_DIR" -name '*.go') >> "$LINT_REPORT" 2>&1 || true
+        gofmt -l "$TARGET_DIR"/*.go >> "$LINT_REPORT" 2>&1 || true
     fi
 fi
 

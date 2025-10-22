@@ -148,6 +148,14 @@ jobs:
           esac
 
           # Create issues for each phase
+          echo "Testing GitHub CLI..."
+          TEST_ISSUE_URL=$(gh issue create \
+            --title "Test Phase Issue" \
+            --body "Testing phased issue creation" \
+            --label "test,🚀 phase-1" \
+            --repo "${{ github.repository }}")
+          echo "Test issue created: $TEST_ISSUE_URL"
+
           echo "$PHASES_JSON" | jq -c '.[]' | while read -r phase; do
             TITLE=$(echo "$phase" | jq -r '.title')
             DESCRIPTION=$(echo "$phase" | jq -r '.description')

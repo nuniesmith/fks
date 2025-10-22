@@ -170,6 +170,9 @@ jobs:
           ## Implementation Notes
           [Add specific implementation details, code changes, or considerations]"
 
+            # Convert comma-separated labels to JSON array
+            LABELS_JSON=$(echo "$LABELS" | jq -R 'split(",")')
+
             # Create issue via API
             RESPONSE=$(curl -s -X POST \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
@@ -177,7 +180,7 @@ jobs:
               -d "{
                 \"title\": \"$TITLE\",
                 \"body\": \"$ISSUE_BODY\",
-                \"labels\": [\"${LABELS}\"]
+                \"labels\": $LABELS_JSON
               }" \
               "https://api.github.com/repos/${{ github.repository }}/issues")
 

@@ -184,6 +184,9 @@ jobs:
               }" \
               "https://api.github.com/repos/${{ github.repository }}/issues")
 
+            # Debug: output response
+            echo "API Response: $RESPONSE"
+
             NEW_ISSUE_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
             echo "Created issue #$NEW_ISSUE_NUMBER: $TITLE"
           done

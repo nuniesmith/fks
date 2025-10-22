@@ -89,7 +89,11 @@ jobs:
                 {"title": "Phase 5: Trading Signal Integration", "description": "Connect RAG to trading signal generation", "labels": ["🚀 phase-5", "rag", "trading"]},
                 {"title": "Phase 6: Performance Optimization", "description": "Optimize RAG query performance and caching", "labels": ["🚀 phase-6", "rag", "performance"]},
                 {"title": "Phase 7: Advanced Reasoning", "description": "Add advanced reasoning and multi-query capabilities", "labels": ["🚀 phase-7", "rag", "ai"]},
-                {"title": "Phase 8: Monitoring & Analytics", "description": "Add comprehensive monitoring for RAG system", "labels": ["🚀 phase-8", "rag", "monitoring"]}
+                {"title": "Phase 8: Monitoring & Analytics", "description": "Add comprehensive monitoring for RAG system", "labels": ["🚀 phase-8", "rag", "monitoring"]},
+                {"title": "Phase 9: Evaluation Framework", "description": "Implement RAG evaluation and quality metrics", "labels": ["🚀 phase-9", "rag", "evaluation"]},
+                {"title": "Phase 10: Multi-Modal Integration", "description": "Add support for charts, graphs, and visual data in RAG", "labels": ["🚀 phase-10", "rag", "multimodal"]},
+                {"title": "Phase 11: Real-time Adaptation", "description": "Enable RAG to adapt to real-time market conditions", "labels": ["🚀 phase-11", "rag", "realtime"]},
+                {"title": "Phase 12: Production Deployment", "description": "Deploy RAG system to production with monitoring", "labels": ["🚀 phase-12", "rag", "deployment"]}
               ]'
               ;;
             "Celery Ecosystem & Tasks")
@@ -183,9 +187,6 @@ jobs:
                 \"labels\": $LABELS_JSON
               }" \
               "https://api.github.com/repos/${{ github.repository }}/issues")
-
-            # Debug: output response
-            echo "API Response: $RESPONSE"
 
             NEW_ISSUE_NUMBER=$(echo "$RESPONSE" | jq -r '.number')
             echo "Created issue #$NEW_ISSUE_NUMBER: $TITLE"

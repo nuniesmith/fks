@@ -271,7 +271,7 @@ class Document(Base):
     source = Column(String(255))  # file path, url, or source identifier
     symbol = Column(String(20))  # related trading pair
     timeframe = Column(String(10))  # related timeframe
-    metadata = Column(JSONB)  # additional context (strategy name, metrics, etc.)
+    doc_metadata = Column(JSONB)  # additional context (strategy name, metrics, etc.) - renamed from 'metadata' to avoid SQLAlchemy conflict
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
     updated_at = Column(
         DateTime(timezone=True),
@@ -303,7 +303,7 @@ class DocumentChunk(Base):
     content = Column(Text, nullable=False)
     embedding = Column(ARRAY(Float))  # pgvector will be used via raw SQL
     token_count = Column(Integer)
-    metadata = Column(JSONB)  # chunk-specific metadata
+    chunk_metadata = Column(JSONB)  # chunk-specific metadata - renamed from 'metadata' to avoid SQLAlchemy conflict
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
 
     # Relationships
@@ -351,7 +351,7 @@ class TradingInsight(Base):
         String(50)
     )  # 'technical', 'fundamental', 'risk_management', 'psychology'
     tags = Column(ARRAY(String))
-    metadata = Column(JSONB)
+    insight_metadata = Column(JSONB)  # renamed from 'metadata' to avoid SQLAlchemy conflict
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(TIMEZONE))
     updated_at = Column(
         DateTime(timezone=True),

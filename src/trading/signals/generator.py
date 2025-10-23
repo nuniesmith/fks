@@ -9,7 +9,7 @@ Enhanced with RAG-powered AI recommendations for optimal signal generation.
 import pandas as pd
 import talib
 from typing import Optional, Dict, Any, Tuple, List
-from data.api.binance import get_current_price
+from data.adapters.binance import BinanceAdapter
 
 from framework.config.constants import ALTS, MAINS, RISK_PER_TRADE, SYMBOLS
 
@@ -61,7 +61,9 @@ def get_current_signal(
     closes = pd.DataFrame(
         {sym.split("USDT")[0]: df_prices[sym]["close"] for sym in SYMBOLS}
     )
-    current_prices = {sym: get_current_price(sym) for sym in SYMBOLS}
+    # TODO: Implement get_current_price in BinanceAdapter
+    # For now, use latest close price from df_prices
+    current_prices = {sym: df_prices[sym]["close"].iloc[-1] for sym in SYMBOLS}
 
     norm_closes = closes / closes.iloc[0]
     index_price = norm_closes.mean(axis=1)

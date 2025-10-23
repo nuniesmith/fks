@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import pytz
-from database import (
+from core.database.models import (
     Account,
     BalanceHistory,
     IndicatorsCache,

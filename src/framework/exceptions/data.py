@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from framework.common.exceptions.base import FrameworkException
+from framework.exceptions.base import FrameworkException
 
 
 class DataException(FrameworkException):

@@ -7,7 +7,7 @@ API error scenarios, inheriting from a base ApiException class.
 
 from typing import Any, Dict, Optional, Union
 
-from framework.common.exceptions.base import FrameworkException
+from framework.exceptions.base import FrameworkException
 
 
 class ApiException(FrameworkException):

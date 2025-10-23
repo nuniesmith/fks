@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional, Union
 from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from framework.common.exceptions.base import BaseException, FrameworkException
+from framework.exceptions.base import BaseException, FrameworkException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("app.exceptions")

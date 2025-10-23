@@ -15,7 +15,10 @@ import os
 from collections.abc import Callable
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import FastAPI
+try:
+    from fastapi import FastAPI
+except ImportError:
+    FastAPI = None  # FastAPI not required for Django apps
 
 # Import core middleware classes
 from .auth import authenticate_user, create_access_token, decode_token, get_auth_token

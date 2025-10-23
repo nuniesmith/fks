@@ -76,11 +76,11 @@ class FKSIntelligence:
         self,
         content: str,
         doc_type: str,
-        title: str | None = None,
-        symbol: str | None = None,
-        timeframe: str | None = None,
+        title: Optional[str] = None,
+        symbol: Optional[str] = None,
+        timeframe: Optional[str] = None,
         metadata: dict[str, Any] | None = None,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> int:
         """
         Ingest a document into the knowledge base.
@@ -160,10 +160,10 @@ class FKSIntelligence:
     def query(
         self,
         question: str,
-        symbol: str | None = None,
+        symbol: Optional[str] = None,
         doc_types: list[str] | None = None,
         top_k: int = 5,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> dict[str, Any]:
         """
         Query the knowledge base and generate a response.
@@ -253,8 +253,8 @@ class FKSIntelligence:
     def suggest_strategy(
         self,
         symbol: str,
-        market_condition: str | None = None,
-        session: Session | None = None,
+        market_condition: Optional[str] = None,
+        session: Optional[Session] = None,
     ) -> dict[str, Any]:
         """
         Suggest trading strategy based on historical data.
@@ -283,7 +283,7 @@ class FKSIntelligence:
         )
 
     def analyze_past_trades(
-        self, symbol: str | None = None, session: Session | None = None
+        self, symbol: Optional[str] = None, session: Optional[Session] = None
     ) -> dict[str, Any]:
         """
         Analyze past trading performance.
@@ -312,7 +312,7 @@ class FKSIntelligence:
         self,
         symbol: str,
         current_indicators: dict[str, float],
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> dict[str, Any]:
         """
         Explain a trading signal based on historical context.

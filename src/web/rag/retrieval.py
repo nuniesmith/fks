@@ -13,7 +13,7 @@ from web.rag.embeddings import EmbeddingsService
 class RetrievalService:
     """Retrieve relevant context for RAG queries"""
 
-    def __init__(self, embeddings_service: EmbeddingsService | None = None):
+    def __init__(self, embeddings_service: Optional[EmbeddingsService] = None):
         """
         Initialize retrieval service.
 
@@ -27,7 +27,7 @@ class RetrievalService:
         query: str,
         top_k: int = 5,
         filters: dict[str, Any] | None = None,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Retrieve relevant context for a query.
@@ -58,10 +58,10 @@ class RetrievalService:
     def retrieve_trading_insights(
         self,
         query: str,
-        symbol: str | None = None,
-        category: str | None = None,
+        symbol: Optional[str] = None,
+        category: Optional[str] = None,
         limit: int = 5,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Retrieve curated trading insights.
@@ -120,10 +120,10 @@ class RetrievalService:
 
     def retrieve_recent_signals(
         self,
-        symbol: str | None = None,
+        symbol: Optional[str] = None,
         days: int = 7,
         limit: int = 10,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Retrieve recent trading signals from knowledge base.
@@ -178,11 +178,11 @@ class RetrievalService:
 
     def retrieve_backtest_results(
         self,
-        strategy: str | None = None,
-        symbol: str | None = None,
-        min_return: float | None = None,
+        strategy: Optional[str] = None,
+        symbol: Optional[str] = None,
+        min_return: Optional[float] = None,
         limit: int = 5,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Retrieve backtest results from knowledge base.
@@ -339,7 +339,7 @@ class RetrievalService:
 
 # Convenience function
 def create_retrieval_service(
-    embeddings_service: EmbeddingsService | None = None,
+    embeddings_service: Optional[EmbeddingsService] = None,
 ) -> RetrievalService:
     """Create retrieval service with embeddings service"""
     return RetrievalService(embeddings_service=embeddings_service)

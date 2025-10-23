@@ -23,7 +23,7 @@ class ModelBackend(Enum):
 class LocalEmbeddings:
     """Generate embeddings using local models with CUDA acceleration"""
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2", device: str | None = None):
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2", device: Optional[str] = None):
         """
         Initialize local embeddings service.
 
@@ -210,7 +210,7 @@ class LocalLLM:
             print(f"Error loading model: {e}")
             raise
 
-    def generate(self, prompt: str, system_prompt: str | None = None, **kwargs) -> str:
+    def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
         """
         Generate text completion.
 
@@ -229,7 +229,7 @@ class LocalLLM:
         elif self.backend == ModelBackend.LLAMACPP:
             return self._generate_llamacpp(prompt, system_prompt, **kwargs)
 
-    def _generate_ollama(self, prompt: str, system_prompt: str | None, **kwargs) -> str:
+    def _generate_ollama(self, prompt: str, system_prompt: Optional[str], **kwargs) -> str:
         """Generate using Ollama"""
         messages = []
 
@@ -254,7 +254,7 @@ class LocalLLM:
             return f"Error generating response: {e}"
 
     def _generate_transformers(
-        self, prompt: str, system_prompt: str | None, **kwargs
+        self, prompt: str, system_prompt: Optional[str], **kwargs
     ) -> str:
         """Generate using transformers"""
         # Format prompt with system message if provided
@@ -280,7 +280,7 @@ class LocalLLM:
         return response
 
     def _generate_llamacpp(
-        self, prompt: str, system_prompt: str | None, **kwargs
+        self, prompt: str, system_prompt: Optional[str], **kwargs
     ) -> str:
         """Generate using llama.cpp"""
         # Format with system prompt if provided

@@ -143,7 +143,7 @@ class EmbeddingsService:
         return embeddings
 
     def store_chunk_embedding(
-        self, chunk_id: int, embedding: list[float], session: Session | None = None
+        self, chunk_id: int, embedding: list[float], session: Optional[Session] = None
     ) -> bool:
         """
         Store embedding for a document chunk using pgvector.
@@ -194,8 +194,8 @@ class EmbeddingsService:
         query_embedding: list[float],
         limit: int = 5,
         similarity_threshold: float = 0.7,
-        filters: dict[str, Any] | None = None,
-        session: Session | None = None,
+        filters: Optional[dict[str, Any]] = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Perform semantic search using cosine similarity.
@@ -289,7 +289,7 @@ class EmbeddingsService:
                 session.close()
 
     def find_similar_chunks(
-        self, chunk_id: int, limit: int = 5, session: Session | None = None
+        self, chunk_id: int, limit: int = 5, session: Optional[Session] = None
     ) -> list[dict[str, Any]]:
         """
         Find similar chunks to a given chunk.

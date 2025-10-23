@@ -36,7 +36,7 @@ SECRET_KEY = os.getenv(
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = os.getenv(
-    "ALLOWED_HOSTS", "localhost,127.0.0.1,desktop-win,fkstrading.xyz,www.fkstrading.xyz"
+    "ALLOWED_HOSTS", "localhost,127.0.0.1,desktop-win,web,fkstrading.xyz,www.fkstrading.xyz"
 ).split(",")
 
 # Proxy configuration for Nginx

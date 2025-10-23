@@ -14,7 +14,7 @@ from web.rag.intelligence import FKSIntelligence
 class DataIngestionPipeline:
     """Automated pipeline for ingesting trading data into RAG knowledge base"""
 
-    def __init__(self, intelligence: FKSIntelligence | None = None):
+    def __init__(self, intelligence: Optional[FKSIntelligence] = None):
         """
         Initialize ingestion pipeline.
 
@@ -24,7 +24,7 @@ class DataIngestionPipeline:
         self.intelligence = intelligence or FKSIntelligence()
 
     def ingest_completed_trade(
-        self, trade_id: int, session: Session | None = None
+        self, trade_id: int, session: Optional[Session] = None
     ) -> int | None:
         """
         Ingest a completed trade into knowledge base.
@@ -82,7 +82,7 @@ class DataIngestionPipeline:
                 session.close()
 
     def ingest_backtest_result(
-        self, backtest_data: dict[str, Any], session: Session | None = None
+        self, backtest_data: dict[str, Any], session: Optional[Session] = None
     ) -> int | None:
         """
         Ingest backtest results into knowledge base.
@@ -128,7 +128,7 @@ class DataIngestionPipeline:
             return None
 
     def ingest_signal(
-        self, signal_data: dict[str, Any], session: Session | None = None
+        self, signal_data: dict[str, Any], session: Optional[Session] = None
     ) -> int | None:
         """
         Ingest trading signal into knowledge base.
@@ -168,7 +168,7 @@ class DataIngestionPipeline:
         symbol: str,
         timeframe: str,
         metadata: dict[str, Any] | None = None,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> int | None:
         """
         Ingest market analysis into knowledge base.
@@ -202,7 +202,7 @@ class DataIngestionPipeline:
             return None
 
     def batch_ingest_recent_trades(
-        self, days: int = 30, session: Session | None = None
+        self, days: int = 30, session: Optional[Session] = None
     ) -> int:
         """
         Batch ingest recent completed trades.

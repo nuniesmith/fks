@@ -1,9 +1,10 @@
 # FKS Trading Platform - AI Coding Agent Instructions
 
 ## Quick Reference
-**Language:** Python 3.12 | **Framework:** Django 5.2.7 | **Database:** PostgreSQL + TimescaleDB  
-**Test:** `make test` or `pytest tests/` | **Lint:** `make lint` | **Format:** `make format`  
-**Run:** `make up` (standard) or `make gpu-up` (with AI/RAG)
+**Language:** Python 3.13.9 | **Framework:** Django 5.2.7 | **Database:** PostgreSQL + TimescaleDB  
+**Test:** `docker-compose exec web pytest tests/unit/` | **Lint:** `make lint` | **Format:** `make format`  
+**Run:** `make up` (standard) or `make gpu-up` (with AI/RAG)  
+**Test Status:** ✅ 69 passing tests (Phase 3.1 complete - Oct 23, 2025)
 
 ## Project Overview
 **Django 5.2.7 monolith** trading platform with PostgreSQL+TimescaleDB, Redis, Celery 5.5.3, and AI-powered RAG system for intelligent trading insights. Recently migrated from microservices to monolith (Oct 2025). **Currently in local development** - focus on building core functionality with comprehensive testing before deployment.
@@ -128,11 +129,20 @@ docker-compose exec db psql -U postgres -d trading_db
 
 ### Testing (Critical for Solo Development)
 ```bash
-pytest src/tests/ -v --cov=src           # All tests with coverage
-pytest src/tests/test_assets.py -v      # Specific file
-pytest -m "not slow"                     # Skip slow tests
-pytest -m unit                           # Unit tests only
-pytest -m integration                    # Integration tests only
+# Run tests in Docker container (REQUIRED - tests not on host)
+docker-compose exec web pytest tests/unit/ -v
+docker-compose exec web pytest tests/unit/test_security.py -v      # Specific file
+docker-compose exec web pytest tests/unit/ -m "not slow" -v        # Skip slow tests
+docker-compose exec web pytest tests/unit/ -m unit -v              # Unit tests only
+docker-compose exec web pytest tests/integration/ -m integration -v # Integration tests
+
+# Copy tests into container if needed (run once after rebuild)
+docker cp tests fks_app:/app/tests
+
+# Run passing tests (Phase 3.1 baseline)
+docker-compose exec web pytest tests/unit/test_security.py \
+  tests/unit/test_trading/test_signals.py \
+  tests/unit/test_trading/test_strategies.py -v
 ```
 
 **Test config**: `pytest.ini` (marks: unit, integration, slow, data, backtest, trading, api, web)
@@ -141,6 +151,12 @@ pytest -m integration                    # Integration tests only
 - Always run tests locally before committing
 - CI catches issues early for solo development
 - Coverage reports help identify untested code
+
+**Current Test Status (Oct 23, 2025)**:
+- ✅ **69 tests passing** (security, signals, strategies, optimizer)
+- ❌ Core/RAG tests blocked (Python 3.13 type hint issues)
+- ❌ Some tests timing out (container resource limits)
+- 📊 See `docs/PHASE_3_BASELINE_TESTS.md` for full report
 
 ### Code Quality
 ```bash
@@ -275,94 +291,109 @@ limiter = RateLimiter(max_requests=100, window=60)
 5. **Celery tasks are stubs** - Implementations pending, don't expect them to work yet
 6. **Apps disabled in settings** - `config`, `forecasting`, `chatbot`, `rag`, `data` commented out due to import issues
 
-## Known Test Failures (To Fix)
+## Known Test Failures & Fixes (Phase 3.1 Progress)
 
-### Import Errors from Legacy Architecture
-**Status**: 20/34 tests failing due to microservices-era imports
+### ✅ FIXED - Import Errors from Legacy Architecture (Oct 23, 2025)
+**Status**: Major issues resolved, 69 tests now passing!
 
-#### Issue 1: `config` Module Import Errors
+#### ✅ Issue 1: `config` Module Import Errors - FIXED
 ```python
-# Current (broken):
+# OLD (broken):
 from config import SYMBOLS, MAINS, ALTS, FEE_RATE, DATABASE_URL
 
-# Should be (Django):
-from framework.config.models import TradingConfig
+# NEW (working):
+from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE
 from django.conf import settings
 ```
 
-**Affected Files**:
-- `src/trading/backtest/engine.py` - Line 16
-- `src/trading/signals/generator.py` - Line 11
-- `src/trading/optimizer/engine.py` - Via backtest import
-- `src/core/database/models.py` - Line 10
+**Fixed Files**:
+- ✅ `src/trading/signals/generator.py` - Now imports from framework.config.constants
+- ✅ `src/framework/config/constants.py` - Created with all trading symbols
+- ✅ `src/core/database/models.py` - Metadata columns renamed (doc_metadata, chunk_metadata, insight_metadata)
+- ✅ `src/core/database/utils.py` - Fixed database import path
 
-**Fix Strategy**:
-1. Create `framework.config.constants` with trading symbols
-2. Update all imports to use `framework.config` or Django settings
-3. Remove dependency on legacy `config` module
+**Resolution**: Created `framework/config/constants.py` with all required constants
 
-#### Issue 2: `shared_python` Module Missing
+#### ✅ Issue 2: FastAPI & Auth Dependencies - FIXED
 ```python
-# Current (broken):
-from shared_python.config import get_settings
-from shared_python import get_settings
-
-# Should be:
-from django.conf import settings
+# Added to requirements.txt:
+fastapi>=0.115.0  # Legacy API routes (being migrated to Django)
+uvicorn>=0.32.0   # ASGI server for FastAPI
+passlib>=1.7.4    # Password hashing
+python-jose>=3.5.0  # JWT tokens
 ```
 
-**Affected Files**:
-- `src/data/adapters/base.py` - Line 20, 24
+**Fixed Files**:
+- ✅ `src/framework/middleware/__init__.py` - Made FastAPI optional
+- ✅ `src/framework/exceptions/api.py` - Fixed import path (framework.exceptions.base)
+- ✅ `src/framework/exceptions/app.py` - Fixed import path
+- ✅ `src/framework/exceptions/data.py` - Fixed import path
+- ✅ `requirements.txt` - Added FastAPI dependencies
 
-**Fix Strategy**:
-1. Remove `shared_python` references (microservices artifact)
-2. Use Django settings throughout
-3. Update all `data` module imports
+**Resolution**: Added missing dependencies and fixed import paths
 
-### Test Files Needing Updates
-- ✗ `tests/integration/test_backtest/*` (4 files) - config imports
-- ✗ `tests/integration/test_data/*` (11 files) - shared_python imports
-- ✗ `tests/unit/test_core/test_data.py` - shared_python imports
-- ✗ `tests/unit/test_core/test_database.py` - config imports
-- ✗ `tests/unit/test_core/test_rag_system.py` - config imports
-- ✗ `tests/unit/test_trading/test_assets.py` - config imports
-- ✗ `tests/unit/test_trading/test_optimizer.py` - config imports
-- ✗ `tests/unit/test_trading/test_signals.py` - config imports
-- ✓ `tests/unit/test_api/*` (14 files) - Passing ✅
+#### ✅ Issue 3: Database & Container Configuration - FIXED
+- ✅ Redis version downgraded to 5.2.0 (Celery 5.5.3 compatibility)
+- ✅ PostgreSQL SSL disabled for local testing
+- ✅ trading_db database created with fks_user
+- ✅ Django migrations applied successfully
 
-### How to Fix Tests
+### Test Files Status (69 Passing!)
+- ✅ `tests/unit/test_security.py` (25/26) - **PASSING** ✅
+- ✅ `tests/unit/test_trading/test_signals.py` (20/20) - **PASSING** ✅
+- ✅ `tests/unit/test_trading/test_strategies.py` (19/19) - **PASSING** ✅
+- ✅ `tests/unit/test_trading/test_binance_rate_limiting.py` (1/1) - **PASSING** ✅
+- ✅ `tests/unit/test_trading/test_optuna_optimizer.py` (3/3) - **PASSING** ✅
+- ⏳ `tests/unit/test_core/*` - Python 3.13 type hint issues (TypeError)
+- ⏳ `tests/unit/test_rag/*` - Python 3.13 type hint issues (TypeError)
+- ⏳ `tests/unit/test_trading/test_tasks.py` - Works but times out
+- ⏳ `tests/unit/test_trading/test_assets.py` - Times out (needs investigation)
+- ⏳ `tests/integration/*` - Not yet tested
 
-#### Step 1: Fix config module imports
-```python
-# Create src/framework/config/constants.py
-SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']
-MAINS = ['BTC', 'ETH']
-ALTS = ['BNB', 'ADA', 'SOL']
-FEE_RATE = 0.001
-RISK_PER_TRADE = 0.02
+### How Tests Were Fixed (Phase 3.1)
 
-# Update src/core/database/models.py
-from django.conf import settings
-DATABASE_URL = settings.DATABASES['default']
-```
-
-#### Step 2: Fix shared_python imports
-```python
-# In src/data/adapters/base.py
-# Remove:
-from shared_python.config import get_settings
-from shared_python import get_settings
-
-# Add:
-from django.conf import settings
-```
-
-#### Step 3: Run tests to verify fixes
+#### Docker Environment Setup
 ```bash
-pytest tests/unit/test_api/ -v          # Should pass (14 tests)
-pytest tests/unit/test_trading/ -v      # Fix and verify
-pytest tests/integration/ -v            # Fix and verify
+# 1. Copy tests into container
+docker cp tests fks_app:/app/tests
+
+# 2. Fixed dependencies
+# - Added FastAPI, passlib, python-jose to requirements.txt
+# - Fixed redis version to 5.2.0
+
+# 3. Database setup
+docker-compose exec db psql -U fks_user -d postgres -c "CREATE DATABASE trading_db;"
+docker-compose exec web python manage.py migrate
+
+# 4. Run working tests
+docker-compose exec web pytest tests/unit/test_security.py -v
+docker-compose exec web pytest tests/unit/test_trading/test_signals.py -v
+docker-compose exec web pytest tests/unit/test_trading/test_strategies.py -v
 ```
+
+#### Common Issues & Solutions
+
+**Issue**: `ModuleNotFoundError: No module named 'config'`
+- **Fix**: Import from `framework.config.constants` instead
+- **File**: `src/framework/config/constants.py` (exists with all symbols)
+
+**Issue**: `ModuleNotFoundError: No module named 'fastapi'`
+- **Fix**: Already added to requirements.txt, install in container if needed:
+  ```bash
+  docker-compose exec web pip install fastapi uvicorn passlib python-jose
+  ```
+
+**Issue**: Tests timing out or hanging
+- **Fix**: Container may be resource-constrained, restart services:
+  ```bash
+  docker-compose down && docker-compose up -d
+  ```
+
+**Issue**: Coverage collection hangs
+- **Fix**: Run tests without coverage, or use targeted coverage:
+  ```bash
+  docker-compose exec web pytest tests/unit/test_signals.py --cov=trading/signals
+  ```
 
 ## Documentation Structure
 

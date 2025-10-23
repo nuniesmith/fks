@@ -445,22 +445,172 @@ pytest tests/integration/ -v            # Fix and verify
 - **Test evidence**: Include test output or screenshots demonstrating changes
 - **Breaking changes**: Clearly document any breaking changes in PR description
 
+## Development Philosophy & Approach
+
+### Core Principles
+1. **Start Manual, Then Automate** - Verify functionality manually in development before automating
+2. **Dynamic Growth** - System adapts to user capital ($100 conservative → $1M aggressive strategies)
+3. **Emotional Safeguards** - Provide "hand-holding" through rule-based guidance and visualizations
+4. **Test-Driven Development** - Write tests before implementation
+5. **Incremental Progress** - Small, focused changes over large rewrites
+
+### Intelligence Evolution Strategy
+The FKS Intelligence system is designed to:
+- **Watch Over Everything** - Monitor trades, positions, balances, and market conditions
+- **Learn Daily** - Optimize strategies based on historical performance and current portfolio state
+- **Grow With User** - Scale complexity and sophistication based on available capital
+- **Mitigate Emotions** - Use probabilistic models (Markov chains, RL) for objective decision-making
+
+### Multi-Account Architecture
+Support multiple account types with isolated states:
+- **Personal Accounts** - Daily spending via crypto cards (Shakepay, Netcoins, Crypto.com)
+- **Prop Firm Accounts** - Leveraged API trading for income scaling (FXIFY, Topstep)
+- **Long-Term Accounts** - Stable banking for wealth preservation (Canadian banks via open banking APIs)
+- **Profit Split Logic** - 50% to long-term accounts, 50% to crypto for trading/expenses (default $1000/month)
+
+## Enhanced Development Priorities
+
+### Phase 1: Immediate Fixes (Weeks 1-4; High Urgency)
+**Goal**: Stabilize core, unblock development
+
+1. **Security Hardening** (3 hrs total)
+   - Generate secure passwords for all services
+   - Configure django-axes and django-ratelimit
+   - Enable DB SSL, run pip-audit
+   - **Priority**: Run before any deployment
+
+2. **Fix Import/Test Failures** (11 hrs total)
+   - Create `framework.config.constants` with trading symbols
+   - Migrate all legacy imports to Django patterns
+   - Fix 20 failing tests to reach 34/34 passing
+   - Add GitHub Action for automated testing
+   - **Priority**: Blocks all other development
+
+3. **Code Cleanup** (5 hrs total)
+   - Review/flesh out/delete 25+ empty files
+   - Merge legacy duplicates (engine.py variants)
+   - Run black/isort/flake8 for style consistency
+   - **Priority**: After import fixes
+
+### Phase 2: Core Development (Weeks 5-10; High Impact)
+**Goal**: Complete migration, implement features
+
+1. **Celery Task Implementation** (25-30 hrs; phased)
+   - Market data sync from Binance (4 hrs)
+   - Signal generation with technical indicators (6 hrs)
+   - Backtesting execution (8 hrs)
+   - Portfolio optimization with RAG (10 hrs)
+   - Configure Beat schedule for automation
+   - **Priority**: Foundation for trading functionality
+
+2. **RAG System Completion** (14 hrs)
+   - Document processor for chunking (3 hrs)
+   - Embeddings with GPU fallback (2 hrs)
+   - Semantic search via pgvector (3 hrs)
+   - Intelligence orchestrator with Ollama (4 hrs)
+   - Auto-ingestion pipeline via Celery (2 hrs)
+   - **Priority**: Enables AI-powered recommendations
+
+3. **Markov Chain Integration** (8 hrs)
+   - Basic Markov model for trading states (3 hrs)
+   - Decision logic with risk management (2 hrs)
+   - Layer AI models for daily optimization (3 hrs)
+   - **Priority**: Probabilistic foundation for decisions
+
+4. **Web UI/API Migration** (9 hrs)
+   - Complete Bootstrap templates (3 hrs)
+   - Migrate FastAPI routes to Django (4 hrs)
+   - Implement health dashboard (2 hrs)
+   - **Priority**: User-facing features
+
+### Phase 3: Testing & QA (Weeks 7-12; Parallel with Phase 2)
+**Goal**: Achieve 80%+ coverage
+
+1. **Expand Tests** (9 hrs)
+   - RAG unit tests with mocked components (3 hrs)
+   - Celery integration tests (4 hrs)
+   - Performance benchmarks (2 hrs)
+   - **Priority**: Run after each feature implementation
+
+2. **CI/CD Setup** (3 hrs)
+   - GitHub Action for Docker build/tests/lint (2 hrs)
+   - Integrate analyze script for auto-reporting (1 hr)
+   - **Priority**: Automates quality checks
+
+### Phase 4: Account Integration (Weeks 9-11; Medium Priority)
+**Goal**: Support multiple account types
+
+1. **Personal Accounts** (4 hrs)
+   - API wrappers for Shakepay, Netcoins, Crypto.com
+   - Balance checks and transfers
+   - Manual funding prompts in dev
+
+2. **Prop Firm Integration** (5 hrs)
+   - Support for FXIFY, Topstep APIs
+   - Automated trade execution
+   - Profit stacking logic
+
+3. **Long-Term Banking** (4 hrs)
+   - Open banking APIs (RBC, Scotiabank via Flinks)
+   - 50/50 profit split automation
+   - Secure encrypted transfers
+
+### Phase 5: Visualization & Monitoring (Weeks 10-12)
+**Goal**: Dynamic diagrams and metrics
+
+1. **Mermaid.js Integration** (5 hrs)
+   - Install and configure in Django templates
+   - Generate dynamic workflow diagrams
+   - Visualize Markov states, profit splits, account flows
+   - **Priority**: Emotional hand-holding through visuals
+
+2. **Rust Monitoring Wrapper** (8 hrs; optional)
+   - Spawn Django processes from Rust binary
+   - Collect system/app metrics
+   - Prometheus exporter for unified monitoring
+   - **Priority**: Advanced monitoring for production
+
+### Phase 6: Advanced Features (Weeks 13+; Future)
+**Goal**: Production readiness and scaling
+
+1. **Multi-Container Architecture** (12 hrs)
+   - Split into fks_app, fks_gpu, fks_api, fks_web, fks_data
+   - Docker Compose orchestration
+   - GPU passthrough for AI tasks
+
+2. **Deployment Readiness** (9 hrs)
+   - Tailscale VPN configuration
+   - Prometheus alerts
+   - VPS deployment with security hardening
+
 ## Next Steps for AI Agent
 
-When working on this codebase, prioritize:
-1. **Fix test imports** - Update legacy `config` and `shared_python` imports to Django patterns
-2. **FKS Intelligence tasks** - Implement Celery tasks in `src/trading/tasks.py` for RAG-powered recommendations
-3. **Web UI development** - Create templates, forms, and views for user interface
-4. **Test coverage** - Write comprehensive tests for all new functionality (aim for 80%+)
-5. **Django migration** - Convert remaining FastAPI routes to Django views
-6. **RAG integration** - Connect trading logic to RAG system for intelligent insights
+When working on this codebase, prioritize in this order:
 
-Avoid:
-- Production deployment concerns (not ready yet)
+### Immediate Actions (This Week)
+1. **Fix test imports** - Update legacy `config` and `shared_python` imports to Django patterns
+2. **Security hardening** - Generate secure passwords, configure rate limiting, run pip-audit
+3. **Code cleanup** - Remove empty files, merge duplicates
+
+### Near-Term Focus (Next 2-4 Weeks)
+4. **Celery tasks** - Implement market data sync, signal generation, backtesting
+5. **RAG integration** - Complete document processing, embeddings, intelligence orchestrator
+6. **Markov chains** - Add probabilistic trading logic with AI optimization
+7. **Test coverage** - Write comprehensive tests for all new functionality (aim for 80%+)
+
+### Medium-Term Goals (1-3 Months)
+8. **Web UI development** - Create templates, forms, and views for user interface
+9. **Account integration** - Support personal, prop firm, and long-term accounts
+10. **Visualization** - Add Mermaid diagrams for workflow mapping
+11. **Multi-user states** - Isolate user data with PostgreSQL, encrypted backups
+
+### Avoid
+- Production deployment (not ready yet - focus on local dev)
 - NinjaTrader integration (future feature)
-- Modifying `framework/` without analysis (26 external imports - high risk)
+- Modifying `framework/` without explicit analysis (26 external imports - high risk)
 - Implementing features without tests (violates TDD approach)
 - Large, unfocused PRs (keep changes small and surgical)
+- Hardcoding secrets or sensitive data
 
 ## Test Status Summary
 

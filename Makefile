@@ -114,6 +114,16 @@ security:
 	bandit -r src/ -f json -o bandit-report.json
 	safety check --json
 
+verify-imports:
+	@echo "Verifying import patterns..."
+	chmod +x scripts/verify_imports.sh
+	./scripts/verify_imports.sh
+
+security-audit:
+	@echo "Running security audit..."
+	chmod +x scripts/security_audit.sh
+	docker-compose exec web bash -c "./scripts/security_audit.sh"
+
 # Database operations
 migrate:
 	@echo "Running migrations..."

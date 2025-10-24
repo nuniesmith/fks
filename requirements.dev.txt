@@ -51,7 +51,7 @@ xgboost>=2.1.0
 lightgbm>=4.5.0
 
 # Technical Analysis
-TA-Lib>=0.4.28  # 0.6.x doesn't exist
+TA-Lib>=0.6.8
 
 # Crypto/Finance
 ccxt>=4.4.0

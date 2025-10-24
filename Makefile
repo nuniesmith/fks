@@ -175,7 +175,6 @@ clean:
 clean-logs:
 	@echo "Cleaning logs..."
 	rm -rf logs/*/*.log
-	rm -rf src/logs/*.log
 
 # Deployment
 deploy-staging:

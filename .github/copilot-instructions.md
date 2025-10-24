@@ -1,61 +1,133 @@
 # FKS Trading Platform - AI Coding Agent Instructions
 
 ## Quick Reference
-**Language:** Python 3.13.9 | **Framework:** Django 5.2.7 | **Database:** PostgreSQL + TimescaleDB  
-**Test:** `docker-compose exec web pytest tests/unit/` | **Lint:** `make lint` | **Format:** `make format`  
-**Run:** `make up` (standard) or `make gpu-up` (with AI/RAG)  
-**Test Status:** ✅ 69 passing tests (Phase 3.1 complete - Oct 23, 2025)
+**Architecture:** 8-Service Microservices | **Main Stack:** Python 3.13 + FastAPI + Django  
+**Database:** PostgreSQL + TimescaleDB + pgvector | **AI/ML:** PyTorch + Ollama (local LLM)  
+**Test:** `docker-compose exec fks_api pytest tests/` | **Lint:** `make lint` | **Format:** `make format`  
+**Run:** `make up` (standard 8 services) or `make gpu-up` (with Ollama LLM + GPU ML)  
+**Current Status:** ✅ Architecture documented, AI strategy planned (Oct 24, 2025)
 
 ## Project Overview
-**Django 5.2.7 monolith** trading platform with PostgreSQL+TimescaleDB, Redis, Celery 5.5.3, and AI-powered RAG system for intelligent trading insights. Recently migrated from microservices to monolith (Oct 2025). **Currently in local development** - focus on building core functionality with comprehensive testing before deployment.
+**FKS Main** is the **orchestrator and monitoring hub** for an **8-service microservices architecture**. It provides centralized authentication, service registry, health monitoring, and Celery Beat scheduling for the entire trading ecosystem.
 
-### Current Phase: Local Development & Testing
-- **Goal**: Build working FKS Intelligence system with RAG to generate optimal trading signals
-- **Priority**: Django migration, web UI development, comprehensive test coverage, GitHub Actions CI
-- **Status**: Core models exist, tasks are stubs, web interface needs HTML/CSS work
-- **Not Yet**: Production deployment, NinjaTrader integration (post-working app)
+### Architecture: Multi-Repo Microservices (October 2025)
+FKS uses **Git submodules** under `repo/` for each microservice, with FKS Main as the orchestration layer.
+
+**8 Core Services**:
+1. **fks_main** (This Repo, Port 8000) - Orchestrator, service registry, health monitoring, Celery Beat
+2. **fks_api** (Port 8001) - Thin API gateway with routing, auth, rate limiting
+3. **fks_app** (Port 8002) - ALL business logic: strategies, signals, portfolio optimization
+4. **fks_data** (Port 8003) - Always-on data collection with CCXT, TimescaleDB storage
+5. **fks_execution** (Port 8004) - Rust execution engine, ONLY service that talks to exchanges
+6. **fks_ninja** (Port 8005) - C# .NET bridge to NinjaTrader 8 for prop firm futures
+7. **fks_ai** (Port 8006) - GPU-accelerated ML/RAG: local LLM (Ollama), regime detection, forecasting
+8. **fks_web** (Port 3001) - Django/Vite web UI with Bootstrap 5 templates
+
+### Current Phase: Architecture Planning & Documentation
+- **Status**: Phase 1 Complete ✅ - Architecture documented, AI strategy planned
+- **Priority**: Submodule setup, Dockerfiles, CI/CD workflows, integration testing
+- **Next**: Create microservice repositories, implement core functionality
+- **Not Yet**: Live trading, production deployment (focus on paper trading first)
 
 ## Architecture Essentials
 
-### Django App Structure (`src/`)
-The codebase uses **directory-based Django apps** under `src/`:
-- `authentication/` - User auth with API keys, session tracking, rate limiting
-- `core/` - Base models (Account, Trade, Position) and database utilities
-- `trading/` - Trading strategies, signals, backtesting, Celery tasks
-- `api/` - REST API routes using FastAPI (legacy, being migrated)
-- `web/` - Django templates, views, forms (Bootstrap 5 UI)
-- `framework/` - **64 files, 928KB** of reusable abstractions (circuit breaker, rate limiter, exceptions, services, config, caching, lifecycle, metrics). **NEVER modify without explicit analysis** - heavily imported across codebase.
+### 8-Service Microservices Overview
 
-**Django settings path**: `src/web/django/settings.py`  
-**URL routing**: `src/web/django/urls.py`  
-**Celery config**: `src/web/django/celery.py`  
-**Entry point**: `src/manage.py`
-
-### Service Architecture (docker-compose.yml)
-```yaml
-nginx (80/443) → web (Django+Gunicorn:8000)
-                 ├── db (TimescaleDB+pgvector:5432)
-                 ├── redis (6379) → celery_worker/celery_beat
-                 ├── pgadmin (5050)
-                 └── flower (5555)
+**Data Flow**:
+```
+Market Data: Exchanges → fks_data (collect) → TimescaleDB/Redis → fks_app (query)
+Signal Execution: fks_app (signal) → fks_execution (order) → Exchange
+AI/ML: fks_app (request) → fks_ai (GPU inference/RAG) → fks_app (prediction)
+External API: Client → fks_api (auth) → fks_app (logic) → fks_api (response)
+NinjaTrader: fks_app (signal) → fks_ninja (bridge) → NinjaTrader 8 → Prop Firm
 ```
 
-**GPU stack** (`docker-compose.gpu.yml`): Adds `rag_service` (8001) + `ollama` (11434) for local LLM.
+**Service Responsibilities**:
 
-### Database Models
-- **Core**: `src/core/database/models.py` - SQLAlchemy models with TimescaleDB hypertables
-- **Django**: Apps define Django ORM models (e.g., `authentication/models.py`, `trading/models.py`)
-- **Dual ORM**: Legacy SQLAlchemy coexists with Django ORM during migration
+1. **fks_main** (Orchestrator - This Repository):
+   - Service registry and health monitoring (every 2 minutes)
+   - Centralized authentication (delegates to fks_api)
+   - Celery Beat scheduler for periodic tasks
+   - **NO business logic, NO exchange communication, NO data storage**
 
-### Celery Tasks
-Located in `src/trading/tasks.py`. Use `@shared_task` decorator. Tasks are **currently stubs** - implementations needed for:
-- Market data sync from Binance
-- Signal generation (RSI, MACD, Bollinger Bands, etc.)
-- Backtesting execution
-- Position updates and portfolio rebalancing
-- RAG-powered intelligence queries
+2. **fks_api** (Gateway - `repo/api/`):
+   - Route requests to fks_app, fks_data, fks_execution
+   - JWT auth and API key validation
+   - Rate limiting and throttling
+   - **Pure gateway pattern - NO domain logic**
 
-Beat schedule in `src/web/django/celery.py` is commented out until implementations complete.
+3. **fks_app** (Business Logic - `repo/app/`):
+   - Strategy development and backtesting
+   - Signal generation (RSI, MACD, Bollinger Bands)
+   - Portfolio optimization with Optuna
+   - Queries fks_ai for ML predictions and RAG insights
+   - **ALL trading intelligence lives here**
+
+4. **fks_ai** (ML/RAG - `repo/ai/`):
+   - Local LLM inference with Ollama/llama.cpp (CUDA)
+   - RAG system with pgvector semantic search
+   - Embeddings (sentence-transformers + OpenAI fallback)
+   - Document processing and chunking
+   - **Regime detection**, **LLM strategy generation**, **forecasting**
+   - Zero-cost AI inference (no API fees)
+
+5. **fks_data** (Data Collection - `repo/data/`):
+   - Continuous market data collection (CCXT + Binance)
+   - TimescaleDB hypertables for time-series storage
+   - Redis caching for fast queries
+   - **Other services query fks_data, NEVER exchanges directly**
+
+6. **fks_execution** (Execution Engine - `repo/execution/`):
+   - Rust-based high-performance order execution
+   - **ONLY service that talks to exchanges/brokers**
+   - Order lifecycle management with FSM
+   - Position tracking and updates
+
+7. **fks_ninja** (NinjaTrader Bridge - `repo/ninja/`):
+   - C# .NET bridge to NinjaTrader 8
+   - Forward signals from fks_app to NT8
+   - Support prop firm accounts (FXIFY, Topstep)
+
+8. **fks_web** (Web UI - `repo/web/`):
+   - Dashboard, strategies, signals, portfolio views
+   - Bootstrap 5 templates with Mermaid diagrams
+   - **All data fetched via fks_api** (no direct DB queries)
+   - Real-time updates with WebSocket
+
+### FKS Main Repository Structure (Orchestrator Only)
+
+```
+fks/  (THIS REPOSITORY)
+├── docker-compose.yml         # 8-service orchestration
+├── docker-compose.gpu.yml     # GPU overrides for fks_ai (Ollama)
+├── requirements.txt           # Python dependencies (orchestrator)
+├── Makefile                   # Development commands
+│
+├── repo/                      # Git submodules (microservices)
+│   ├── api/                  # fks_api service
+│   ├── app/                  # fks_app service
+│   ├── ai/                   # fks_ai service (GPU ML/RAG)
+│   ├── data/                 # fks_data service
+│   ├── execution/            # fks_execution service (Rust)
+│   ├── ninja/                # fks_ninja service (.NET)
+│   └── web/                  # fks_web service (Django UI)
+│
+├── src/                       # FKS Main Django app (orchestrator)
+│   ├── monitor/              # Service registry & health checks
+│   ├── authentication/       # Centralized auth
+│   └── web/django/           # Django settings, Celery config
+│
+├── docs/                      # Documentation
+│   ├── AI_STRATEGY_INTEGRATION.md      # 5-phase AI implementation plan (12 weeks)
+│   ├── CRYPTO_REGIME_BACKTESTING.md    # Regime detection research (13 weeks)
+│   ├── TRANSFORMER_TIME_SERIES.md      # Transformer forecasting guide
+│   ├── ARCHITECTURE.md                  # Detailed architecture
+│   └── SERVICE_CLEANUP_PLAN.md          # Migration plan
+│
+├── monitoring/                # Prometheus/Grafana config
+├── sql/                       # TimescaleDB init scripts
+└── tests/                     # Orchestrator tests only
+```
 
 ## FKS Intelligence System (RAG-Powered)
 
@@ -262,93 +334,180 @@ limiter = RateLimiter(max_requests=100, window=60)
 
 ## Current Development Priorities
 
-### 1. FKS Intelligence Implementation
-- **Goal**: RAG-powered system to generate optimal trading signals daily
-- **Tracks**: All trades, positions, account balance, available cash
-- **Optimizes**: Strategy parameters based on current portfolio state
-- **Tasks to implement**: Signal generation, backtesting, portfolio analysis
+### Immediate: Architecture & Infrastructure (Weeks 1-4)
 
-### 2. Django Migration & Web UI
-- **Templates**: Build out HTML pages in `src/web/templates/`
-- **Styling**: Bootstrap 5 CSS for responsive design
-- **Forms**: Create Django forms for user input
-- **Views**: Connect templates to business logic
-- **URLs**: Register routes in `src/web/urls.py`
+**1. Submodule Setup & Repository Creation**
+- Create GitHub repositories for all 8 microservices
+- Initialize git submodules in `repo/` directory
+- Set up basic README.md for each service with:
+  - Service purpose and responsibilities
+  - Tech stack (FastAPI/Django/Rust/.NET)
+  - API endpoints and data flow
+  - Dependencies and environment setup
 
-### 3. Testing & CI/CD
-- **Write tests first**: TDD approach for new features
-- **Run locally**: `pytest` before every commit
-- **GitHub Actions**: Automatic test runs on push/PR
-- **Coverage**: Track with `--cov` flag, aim for >80%
-- **Marks**: Use pytest marks (unit, integration, slow) to organize tests
+**2. Dockerfile Creation**
+- `repo/api/`: Python 3.13 + FastAPI + uvicorn
+- `repo/app/`: Python 3.13 + FastAPI + TA-Lib + Optuna
+- `repo/ai/`: Python 3.13 + PyTorch + CUDA + Ollama + sentence-transformers
+- `repo/data/`: Python 3.13 + FastAPI + CCXT + TimescaleDB client
+- `repo/execution/`: Rust + Actix-web/Axum + exchange APIs
+- `repo/ninja/`: .NET 8 + NinjaTrader SDK
+- `repo/web/`: Python 3.13 + Django + Vite + Bootstrap 5
+
+**3. CI/CD Workflows**
+- GitHub Actions for each microservice:
+  - Run tests (pytest/cargo test/dotnet test)
+  - Linting (ruff/clippy/dotnet format)
+  - Coverage reporting
+  - Docker image builds
+- Integration testing workflow for full stack
+
+**4. Service Health Monitoring**
+- Implement health check endpoints in all services
+- Configure Prometheus exporters
+- Set up Grafana dashboards for service metrics
+- Test service-to-service communication
+
+### Near-Term: AI Strategy Implementation (Weeks 5-16)
+
+**Phase 1: Data Foundation** (2 weeks)
+- Extend fks_data with EODHD API for fundamentals
+- Feature engineering: log returns, 21d vol, 5d momentum
+- TimescaleDB fundamentals hypertable
+- Redis caching for engineered features
+
+**Phase 2: DL Regime Detection** (3-4 weeks)
+- Implement VAE in fks_ai (PyTorch)
+- Implement Transformer classifier (16-day sequences)
+- Training pipeline with Celery tasks
+- API endpoints: `/ai/regime`, `/ai/train-regime-model`
+- **Expected Results**: Sharpe 5-11 in calm regimes
+
+**Phase 3: LLM Strategy Generation** (3 weeks)
+- Prompt engineering framework for Ollama
+- Strategy validation and parsing
+- Backtest integration with fks_app
+- API endpoint: `/ai/generate-strategy`
+- **Expected Results**: 60%+ profitable strategies
+
+**Phase 4: Integration & Orchestration** (2 weeks)
+- Regime-aware position sizing in fks_app
+- Celery Beat scheduling (regime updates every 15m)
+- Grafana monitoring dashboards
+- Web UI enhancements for regime visualization
+
+**Phase 5: Validation & Optimization** (2 weeks)
+- Historical backtests (2-year BTC data)
+- Walk-forward validation
+- Hyperparameter tuning with Optuna
+- Paper trading deployment
+
+### Medium-Term: Crypto Regime Research (Weeks 5-17)
+
+**Phase 1: Baseline GMM** (2 weeks)
+- Gaussian Mixture Model regime classifier
+- Backtest on BTC 2013-2022 data
+- **Target**: 80-100% PNL, Sharpe 4.5-5.5
+
+**Phase 2: VAE + Transformer** (3 weeks)
+- Nonlinear latent space with VAE
+- Temporal sequences with Transformer
+- **Target**: 90-110% PNL, Sharpe 5.5-6.5
+
+**Phase 3: Ensemble Models** (2 weeks)
+- Random Forest and Bagging classifiers
+- **Target**: 100-120% PNL, Sharpe 6.5-7.5 (backtest)
+- **Expected Forward**: 30-50% PNL, Sharpe 4-8
+
+**Phase 4: Walk-Forward Testing** (2 weeks)
+- 12-month rolling window validation
+- Monthly retraining automation
+- Compare backtest vs. walk-forward vs. forward
+
+**Phase 5: Paper Trading** (4 weeks)
+- Deploy on Binance Testnet
+- Monitor real-world performance
+- **Target**: Real Sharpe >2.5 (vs. buy-hold 1.5)
+
+### Long-Term: Testing & Production (Weeks 13+)
+
+**Testing & QA**
+- Comprehensive unit tests for all services
+- Integration tests for service communication
+- End-to-end tests for trading workflows
+- Load testing for high-frequency scenarios
+- Coverage target: 80%+ across all services
+
+**Production Readiness**
+- Security hardening (secrets management, SSL/TLS)
+- Deployment automation with Docker Compose
+- Monitoring and alerting setup
+- Backup and disaster recovery
+- Multi-account support (personal, prop firm, banking)
 
 ## Common Pitfalls
 
-1. **Don't modify `framework/` without Phase 9D analysis** - 26 external imports across codebase
-2. **Check both ORMs** - Django ORM and SQLAlchemy coexist during migration
-3. **GPU commands differ** - Use `docker-compose -f docker-compose.yml -f docker-compose.gpu.yml` for RAG/LLM
-4. **Session IDs in settings** - Django uses `web.django` namespace, not `fks_project`
-5. **Celery tasks are stubs** - Implementations pending, don't expect them to work yet
-6. **Apps disabled in settings** - `config`, `forecasting`, `chatbot`, `rag`, `data` commented out due to import issues
+1. **Don't bypass fks_execution** - ONLY service that talks to exchanges/brokers directly
+2. **Don't query exchanges directly** - Use fks_data service for all market data
+3. **GPU commands differ** - Use `make gpu-up` (combines docker-compose.yml + docker-compose.gpu.yml)
+4. **Submodule updates** - Run `git submodule update --init --recursive` after pulling
+5. **Service dependencies** - Check docker-compose.yml `depends_on` before starting services
+6. **Cross-service imports** - Each service is independent, communicate via HTTP APIs only
+7. **GPU requirements** - Need CUDA 12.2+, nvidia-docker2, 8GB VRAM for fks_ai/Ollama
+8. **Regime detection expectations** - Expect 50-70% degradation from backtest to forward test
 
-## Known Test Failures & Fixes (Phase 3.1 Progress)
+## Test Status & Known Issues (Phase 3.1 - Oct 23, 2025)
 
-### ✅ FIXED - Import Errors from Legacy Architecture (Oct 23, 2025)
-**Status**: Major issues resolved, 69 tests now passing!
+### Current Test Results
+- ✅ **69 tests passing** across security, signals, strategies, optimizer
+- ✅ Core trading logic validated (RSI, MACD, Bollinger Bands, portfolio optimization)
+- ✅ Security features working (JWT auth, password hashing, rate limiting)
+- ⏳ Some tests blocked by Python 3.13 type hint issues (non-critical)
 
-#### ✅ Issue 1: `config` Module Import Errors - FIXED
-```python
-# OLD (broken):
-from config import SYMBOLS, MAINS, ALTS, FEE_RATE, DATABASE_URL
+### Passing Test Suites
+- ✅ `tests/unit/test_security.py` (25/26) - Auth, JWT, password validation
+- ✅ `tests/unit/test_trading/test_signals.py` (20/20) - Technical indicators
+- ✅ `tests/unit/test_trading/test_strategies.py` (19/19) - Strategy generation
+- ✅ `tests/unit/test_trading/test_binance_rate_limiting.py` (1/1) - Rate limiting
+- ✅ `tests/unit/test_trading/test_optuna_optimizer.py` (3/3) - Portfolio optimization
 
-# NEW (working):
-from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE
-from django.conf import settings
-```
+### Microservices Testing Strategy
+Each microservice should have its own test suite in its repository:
 
-**Fixed Files**:
-- ✅ `src/trading/signals/generator.py` - Now imports from framework.config.constants
-- ✅ `src/framework/config/constants.py` - Created with all trading symbols
-- ✅ `src/core/database/models.py` - Metadata columns renamed (doc_metadata, chunk_metadata, insight_metadata)
-- ✅ `src/core/database/utils.py` - Fixed database import path
+**fks_main** (This Repo):
+- Unit tests: Service registry, health monitoring, Celery Beat scheduling
+- Integration tests: Service discovery, auth delegation
 
-**Resolution**: Created `framework/config/constants.py` with all required constants
+**fks_api** (repo/api/):
+- Unit tests: Routing logic, JWT validation, rate limiting
+- Integration tests: Proxy requests to fks_app, fks_data
 
-#### ✅ Issue 2: FastAPI & Auth Dependencies - FIXED
-```python
-# Added to requirements.txt:
-fastapi>=0.115.0  # Legacy API routes (being migrated to Django)
-uvicorn>=0.32.0   # ASGI server for FastAPI
-passlib>=1.7.4    # Password hashing
-python-jose>=3.5.0  # JWT tokens
-```
+**fks_app** (repo/app/):
+- Unit tests: Strategy logic, signal generation, portfolio optimization
+- Integration tests: Queries to fks_data, fks_ai
+- Backtesting validation: Historical performance tests
 
-**Fixed Files**:
-- ✅ `src/framework/middleware/__init__.py` - Made FastAPI optional
-- ✅ `src/framework/exceptions/api.py` - Fixed import path (framework.exceptions.base)
-- ✅ `src/framework/exceptions/app.py` - Fixed import path
-- ✅ `src/framework/exceptions/data.py` - Fixed import path
-- ✅ `requirements.txt` - Added FastAPI dependencies
+**fks_ai** (repo/ai/):
+- Unit tests: Embeddings, VAE, Transformer, LLM prompts
+- Integration tests: Ollama communication, pgvector queries
+- Model tests: Regime detection accuracy, strategy generation quality
 
-**Resolution**: Added missing dependencies and fixed import paths
+**fks_data** (repo/data/):
+- Unit tests: CCXT wrappers, TimescaleDB queries, Redis caching
+- Integration tests: Data collection pipelines, feature engineering
 
-#### ✅ Issue 3: Database & Container Configuration - FIXED
-- ✅ Redis version downgraded to 5.2.0 (Celery 5.5.3 compatibility)
-- ✅ PostgreSQL SSL disabled for local testing
-- ✅ trading_db database created with fks_user
-- ✅ Django migrations applied successfully
+**fks_execution** (repo/execution/):
+- Unit tests: Order FSM, position tracking (Rust)
+- Integration tests: Exchange API communication (paper trading)
 
-### Test Files Status (69 Passing!)
-- ✅ `tests/unit/test_security.py` (25/26) - **PASSING** ✅
-- ✅ `tests/unit/test_trading/test_signals.py` (20/20) - **PASSING** ✅
-- ✅ `tests/unit/test_trading/test_strategies.py` (19/19) - **PASSING** ✅
-- ✅ `tests/unit/test_trading/test_binance_rate_limiting.py` (1/1) - **PASSING** ✅
-- ✅ `tests/unit/test_trading/test_optuna_optimizer.py` (3/3) - **PASSING** ✅
-- ⏳ `tests/unit/test_core/*` - Python 3.13 type hint issues (TypeError)
-- ⏳ `tests/unit/test_rag/*` - Python 3.13 type hint issues (TypeError)
-- ⏳ `tests/unit/test_trading/test_tasks.py` - Works but times out
-- ⏳ `tests/unit/test_trading/test_assets.py` - Times out (needs investigation)
-- ⏳ `tests/integration/*` - Not yet tested
+**fks_ninja** (repo/ninja/):
+- Unit tests: NT8 bridge logic (.NET)
+- Integration tests: NinjaTrader 8 AT Interface
+
+**fks_web** (repo/web/):
+- Unit tests: Django views, forms, template rendering
+- Integration tests: API calls to fks_api
+- E2E tests: Full user workflows (Selenium/Playwright)
 
 ### How Tests Were Fixed (Phase 3.1)
 
@@ -397,43 +556,47 @@ docker-compose exec web pytest tests/unit/test_trading/test_strategies.py -v
 
 ## Documentation Structure
 
-- `README.md` - Main project overview
+- `README.md` - Main project overview (8-service architecture, GPU setup)
 - `QUICKREF.md` - Quick command reference
 - `docs/ARCHITECTURE.md` - Detailed architecture (668 lines)
+- `docs/AI_STRATEGY_INTEGRATION.md` - Comprehensive 5-phase AI plan (1000+ lines)
+- `docs/CRYPTO_REGIME_BACKTESTING.md` - Research analysis with empirical results (1000+ lines)
+- `docs/TRANSFORMER_TIME_SERIES.md` - Transformer forecasting guide
 - `docs/CLEANUP_PLAN.md` - Doc consolidation roadmap (111 docs → 15-20)
 - `scripts/README.md` - Script system documentation
 
 ## Key Files to Reference
 
-- **Django Config**: `src/web/django/settings.py` (311 lines)
-- **URL Routes**: `src/web/django/urls.py`
-- **Models**: `src/core/database/models.py` (SQLAlchemy), `src/authentication/models.py` (Django)
-- **Celery**: `src/web/django/celery.py`, `src/trading/tasks.py`
-- **Docker**: `docker-compose.yml` (257 lines), `docker-compose.gpu.yml` (173 lines)
-- **Makefile**: Development commands (239 lines)
-- **Testing**: `pytest.ini`, `tests/unit/test_trading/test_assets.py`
+- **Orchestrator Config**: `src/web/django/settings.py` (Django for FKS Main)
+- **Docker Orchestration**: `docker-compose.yml` (8 services), `docker-compose.gpu.yml` (GPU overrides)
+- **AI Strategy Plans**: `docs/AI_STRATEGY_INTEGRATION.md`, `docs/CRYPTO_REGIME_BACKTESTING.md`
+- **Celery**: `src/web/django/celery.py` (Beat scheduler), `src/trading/tasks.py` (task definitions)
+- **Models**: `src/core/database/models.py` (shared models)
+- **Makefile**: Development commands (`make up`, `make gpu-up`, `make logs`)
+- **Testing**: `pytest.ini`, `tests/unit/test_trading/` (69 passing tests)
 
 ## When Making Changes
 
 ### Pre-Development Checklist
-1. **Check Django app registration** - Verify app in `INSTALLED_APPS` before importing
-2. **Review existing tests** - Understand test patterns before adding new code
-3. **Check imports** - Ensure no circular dependencies with framework layer
+1. **Identify target service** - Determine which microservice needs changes (fks_main, fks_api, fks_app, fks_ai, fks_data, fks_execution, fks_ninja, fks_web)
+2. **Review service boundaries** - Ensure changes respect service responsibilities (no business logic in fks_api, no DB queries in fks_web)
+3. **Check existing tests** - Understand test patterns before adding new code
+4. **Verify submodules** - Run `git submodule update --init --recursive` if working with repo/
 
 ### Development Workflow
 1. **Write tests first** - TDD approach, create test cases before implementation
 2. **Implement changes** - Follow existing code patterns and conventions
-3. **Run tests frequently** - `pytest tests/` after each logical change
+3. **Run tests frequently** - `docker-compose exec <service> pytest tests/` after each logical change
 4. **Validate syntax** - `make lint` to check for style issues
 5. **Format code** - `make format` to apply consistent formatting
 
 ### Post-Development Checklist
 1. **Run migrations** - `make migrate` after model changes
-2. **Test locally** - Use `make up` + `make logs` to verify services
-3. **Full test suite** - Run complete test suite: `pytest tests/ -v --cov=src`
+2. **Test locally** - Use `make up` or `make gpu-up` + `make logs` to verify services
+3. **Full test suite** - Run complete test suite for affected service
 4. **Check coverage** - Ensure new code has adequate test coverage (>80%)
-5. **Update docs** - If changing architecture or adding major features
-6. **Verify no regressions** - Ensure existing functionality still works
+5. **Update docs** - If changing architecture, API contracts, or adding major features
+6. **Verify no regressions** - Ensure existing functionality still works across all dependent services
 
 ### Code Style & Quality
 - **Formatting**: Use Black (line length 100) and isort for imports
@@ -619,38 +782,38 @@ Support multiple account types with isolated states:
 When working on this codebase, prioritize in this order:
 
 ### Immediate Actions (This Week)
-1. **Fix test imports** - Update legacy `config` and `shared_python` imports to Django patterns
-2. **Security hardening** - Generate secure passwords, configure rate limiting, run pip-audit
-3. **Code cleanup** - Remove empty files, merge duplicates
+1. **Complete submodule setup** - Create GitHub repositories for all 8 microservices
+2. **Create Dockerfiles** - Implement Dockerfiles for each service (api, app, ai, data, execution, ninja, web)
+3. **Test GPU stack** - Validate Ollama + fks_ai service with `make gpu-up`
 
 ### Near-Term Focus (Next 2-4 Weeks)
-4. **Celery tasks** - Implement market data sync, signal generation, backtesting
-5. **RAG integration** - Complete document processing, embeddings, intelligence orchestrator
-6. **Markov chains** - Add probabilistic trading logic with AI optimization
-7. **Test coverage** - Write comprehensive tests for all new functionality (aim for 80%+)
+4. **AI Strategy Phase 1** - Data Foundation (EODHD API, fundamentals table, feature engineering)
+5. **Service health monitoring** - Implement health checks and Prometheus metrics for all services
+6. **Integration testing** - Test service-to-service communication (fks_app → fks_data → fks_execution)
+7. **Test coverage** - Write comprehensive tests for each microservice (aim for 80%+)
 
 ### Medium-Term Goals (1-3 Months)
-8. **Web UI development** - Create templates, forms, and views for user interface
-9. **Account integration** - Support personal, prop firm, and long-term accounts
-10. **Visualization** - Add Mermaid diagrams for workflow mapping
-11. **Multi-user states** - Isolate user data with PostgreSQL, encrypted backups
+8. **AI Strategy Phase 2** - DL Regime Detection (VAE + Transformer models in fks_ai)
+9. **AI Strategy Phase 3** - LLM Strategy Generation (Ollama prompt engineering)
+10. **Web UI development** - fks_web Django templates with Bootstrap 5 and Mermaid diagrams
+11. **Crypto regime research** - Implement GMM baseline, ensemble models, walk-forward testing
 
 ### Avoid
-- Production deployment (not ready yet - focus on local dev)
-- NinjaTrader integration (future feature)
-- Modifying `framework/` without explicit analysis (26 external imports - high risk)
+- Production deployment (not ready yet - focus on local dev and paper trading)
+- Bypassing fks_execution (ONLY service that talks to exchanges)
+- Cross-service imports (services must communicate via HTTP APIs only)
 - Implementing features without tests (violates TDD approach)
 - Large, unfocused PRs (keep changes small and surgical)
 - Hardcoding secrets or sensitive data
 
 ## Test Status Summary
 
-- ✅ **14 passing** - `tests/unit/test_api/*` (API routes working)
-- ❌ **20 failing** - Import errors from microservices migration
-- 🎯 **Goal**: Fix imports, get to 34/34 passing tests
+- ✅ **69 passing** - Security, signals, strategies, optimizer (Phase 3.1 complete)
+- ⏳ **Some blocked** - Python 3.13 type hint issues (non-critical)
+- 🎯 **Goal**: Expand test coverage to all microservices (80%+ each)
 
-**Current Test Results**: 14 passing / 34 total (41% pass rate)  
-**Target**: 34 passing / 34 total (100% pass rate)
+**Current Test Results**: 69 passing tests (FKS Main orchestrator)  
+**Target**: 80%+ coverage across all 8 microservices
 
 ## Troubleshooting for Copilot Agent
 
@@ -658,13 +821,13 @@ When working on this codebase, prioritize in this order:
 
 **Import Errors (config, shared_python)**
 - **Problem**: Legacy microservices imports failing
-- **Solution**: Use `from framework.config` or `from django.conf import settings`
-- **See**: "Known Test Failures" section above for detailed fix strategy
+- **Solution**: Use `from framework.config.constants` instead
+- **See**: "Test Status & Known Issues" section above for detailed patterns
 
-**Django App Not Found**
-- **Problem**: `ModuleNotFoundError` or `AppNotFound`
-- **Solution**: Verify app is in `INSTALLED_APPS` in `src/web/django/settings.py`
-- **Check**: Some apps are intentionally disabled (see "Common Pitfalls" #6)
+**Service Communication Errors**
+- **Problem**: `ConnectionRefusedError` or service not found
+- **Solution**: Verify service is running (`docker-compose ps`) and health check passing
+- **Check**: Use service name from docker-compose.yml (e.g., `http://fks_api:8001` not `http://localhost:8001`)
 
 **Circular Import Errors**
 - **Problem**: `ImportError: cannot import name 'X' from partially initialized module`
@@ -698,5 +861,5 @@ When working on this codebase, prioritize in this order:
 - **Tests**: Run specific test files to isolate issues: `pytest tests/unit/test_X.py -v`
 
 ---
-*Generated: October 2025 | Based on Django 5.2.7 monolith migration | Status: Phase 9 Complete (90%)*  
-*Last Updated: 2025-10-18 | Copilot Instructions v2.0*
+*Generated: October 2025 | Based on 8-Service Microservices Architecture | Status: Architecture Documented (AI Strategy Planned)*  
+*Last Updated: 2025-10-24 | Copilot Instructions v3.0*

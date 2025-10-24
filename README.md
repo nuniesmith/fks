@@ -1,5 +1,7 @@
 # Advanced FKS Trading Platform
 
+[![Tests](https://github.com/nuniesmith/fks/actions/workflows/tests.yml/badge.svg)](https://github.com/nuniesmith/fks/actions/workflows/tests.yml)
+
 A sophisticated **Django 5.2.7 monolith** trading application with PostgreSQL + TimescaleDB, Redis caching, Celery 5.5.3 async tasks, comprehensive backtesting, and **AI-powered RAG system with local LLM support**.
 
 > **Architecture**: Migrated from microservices to Django monolith (October 2025)  

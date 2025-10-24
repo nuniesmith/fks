@@ -1,0 +1,84 @@
+# Coverage.py configuration for FKS Trading Platform
+
+[run]
+# Source code directories to measure
+source = 
+    authentication
+    core
+    trading
+    framework
+    web
+    api
+    services
+
+# Files to omit from coverage
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */migrations/*
+    */venv/*
+    */env/*
+    */.venv/*
+    */site-packages/*
+    manage.py
+    */django/wsgi.py
+    */django/asgi.py
+
+# Parallel mode for concurrent test runs
+parallel = False
+
+# Branch coverage
+branch = True
+
+[report]
+# Precision for coverage percentage
+precision = 2
+
+# Show missing lines
+show_missing = True
+
+# Lines to exclude from coverage reporting
+exclude_lines =
+    # Standard pragmas
+    pragma: no cover
+    
+    # Don't complain about missing debug-only code
+    def __repr__
+    def __str__
+    
+    # Don't complain if tests don't hit defensive assertion code
+    raise AssertionError
+    raise NotImplementedError
+    
+    # Don't complain if non-runnable code isn't run
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+    
+    # Don't complain about abstract methods
+    @abstractmethod
+    @abc.abstractmethod
+    
+    # Don't complain about overload definitions
+    @overload
+    @typing.overload
+    
+    # Don't complain about protocol definitions
+    @runtime_checkable
+    class .*\bProtocol\):
+    @typing.runtime_checkable
+
+# Fail if coverage is below this threshold
+fail_under = 40
+
+[html]
+# HTML report output directory
+directory = htmlcov
+
+# Title for HTML report
+title = FKS Trading Platform Coverage Report
+
+[xml]
+# XML output for CI/CD integration
+output = coverage.xml

@@ -1,0 +1,18 @@
+[submodule "repo/api"]
+	path = repo/api
+	url = https://github.com/nuniesmith/fks_api.git
+[submodule "repo/data"]
+	path = repo/data
+	url = https://github.com/nuniesmith/fks_data.git
+[submodule "repo/execution"]
+	path = repo/execution
+	url = https://github.com/nuniesmith/fks_execution.git
+[submodule "repo/ninja"]
+	path = repo/ninja
+	url = https://github.com/nuniesmith/fks_ninja.git
+[submodule "repo/app"]
+	path = repo/app
+	url = https://github.com/nuniesmith/fks_app.git
+[submodule "repo/data1"]
+	path = repo/data1
+	url = https://github.com/nuniesmith/fks_data

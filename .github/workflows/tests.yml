@@ -70,12 +70,15 @@ jobs:
         EOF
     
     - name: Run migrations
-      run: python manage.py migrate --noinput
+      run: |
+        export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
+        python manage.py migrate --noinput
       env:
         DATABASE_URL: postgresql://fks_user:fks_password@localhost:5432/trading_db
     
     - name: Run tests
       run: |
+        export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
         pytest tests/unit/test_security.py \
           tests/unit/test_trading/test_signals.py \
           tests/unit/test_trading/test_strategies.py \

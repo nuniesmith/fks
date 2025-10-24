@@ -1,0 +1,87 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Create .env file
+      run: |
+        cat > .env << EOF
+        # Django settings
+        DEBUG=True
+        SECRET_KEY=test-secret-key-for-ci-only-not-secure
+        ALLOWED_HOSTS=localhost,127.0.0.1,web
+        
+        # Database
+        DATABASE_URL=postgresql://fks_user:fks_password@db:5432/trading_db
+        POSTGRES_USER=fks_user
+        POSTGRES_PASSWORD=fks_password
+        POSTGRES_DB=trading_db
+        POSTGRES_SSL_ENABLED=off
+        
+        # Redis
+        REDIS_URL=redis://redis:6379/0
+        CELERY_BROKER_URL=redis://redis:6379/0
+        CELERY_RESULT_BACKEND=redis://redis:6379/0
+        
+        # API Keys (empty for tests)
+        BINANCE_API_KEY=
+        BINANCE_API_SECRET=
+        OPENAI_API_KEY=
+        EOF
+    
+    - name: Build Docker containers
+      run: docker-compose build web celery_worker
+    
+    - name: Start services
+      run: docker-compose up -d db redis web
+    
+    - name: Wait for database
+      run: |
+        timeout=60
+        until docker-compose exec -T db pg_isready -U fks_user -d trading_db; do
+          echo "Waiting for database..."
+          sleep 2
+          timeout=$((timeout - 2))
+          if [ $timeout -le 0 ]; then
+            echo "Database failed to start"
+            docker-compose logs db
+            exit 1
+          fi
+        done
+    
+    - name: Run migrations
+      run: docker-compose exec -T web python manage.py migrate --noinput
+    
+    - name: Run tests
+      run: |
+        docker-compose exec -T web pytest tests/unit/test_security.py \
+          tests/unit/test_trading/test_signals.py \
+          tests/unit/test_trading/test_strategies.py \
+          tests/unit/test_trading/test_binance_rate_limiting.py \
+          tests/unit/test_trading/test_optuna_optimizer.py \
+          -v --tb=short --color=yes
+    
+    - name: Show logs on failure
+      if: failure()
+      run: |
+        echo "=== Web logs ==="
+        docker-compose logs web
+        echo "=== Database logs ==="
+        docker-compose logs db
+        echo "=== Redis logs ==="
+        docker-compose logs redis
+    
+    - name: Cleanup
+      if: always()
+      run: docker-compose down -v

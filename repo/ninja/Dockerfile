@@ -1,7 +1,7 @@
-# Multi-stage Dockerfile extending shared .NET template
+# Multi-stage Dockerfile for .NET 8.0 (NinjaTrader 8 compatibility)
 
-# Build stage - extends shared .NET template
-FROM shared/dotnet:9.0 AS build
+# Build stage
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 
 WORKDIR /src
 
@@ -18,8 +18,8 @@ RUN --mount=type=cache,target=/root/.nuget/packages \
     dotnet build src/FKS.csproj -c Release -o /app/publish \
     --no-restore --verbosity minimal
 
-# Runtime stage - using ASP.NET runtime
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+# Runtime stage - using ASP.NET 8.0 runtime (NinjaTrader 8 compatibility)
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 
 WORKDIR /app
 

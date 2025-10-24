@@ -13,7 +13,7 @@ from web.rag.local_llm import LocalEmbeddings, LocalLLM, check_cuda_availability
 from web.rag.embeddings import EmbeddingsService
 from web.rag.retrieval import RetrievalService
 from web.rag.intelligence import FKSIntelligence
-from web.rag.ingestion import IngestionPipeline
+from web.rag.ingestion import DataDataIngestionPipeline
 
 
 @pytest.fixture(scope="module")
@@ -348,12 +348,12 @@ class TestFKSIntelligence:
             pytest.skip(f"RAG query failed: {e}")
 
 
-class TestIngestionPipeline:
-    """Test IngestionPipeline for data ingestion."""
+class TestDataIngestionPipeline:
+    """Test DataIngestionPipeline for data ingestion."""
 
     def test_create_pipeline(self, test_db):
         """Test creating ingestion pipeline."""
-        pipeline = IngestionPipeline(session=test_db, use_local=True)
+        pipeline = DataIngestionPipeline(session=test_db, use_local=True)
         
         assert pipeline.session == test_db
         assert pipeline.processor is not None
@@ -361,7 +361,7 @@ class TestIngestionPipeline:
 
     def test_ingest_signal(self, test_db):
         """Test ingesting trading signal."""
-        pipeline = IngestionPipeline(session=test_db, use_local=True)
+        pipeline = DataIngestionPipeline(session=test_db, use_local=True)
         
         signal_data = {
             'id': 1,
@@ -381,7 +381,7 @@ class TestIngestionPipeline:
 
     def test_ingest_backtest(self, test_db):
         """Test ingesting backtest result."""
-        pipeline = IngestionPipeline(session=test_db, use_local=True)
+        pipeline = DataIngestionPipeline(session=test_db, use_local=True)
         
         backtest_data = {
             'id': 1,
@@ -400,7 +400,7 @@ class TestIngestionPipeline:
 
     def test_ingest_completed_trade(self, test_db):
         """Test ingesting completed trade."""
-        pipeline = IngestionPipeline(session=test_db, use_local=True)
+        pipeline = DataIngestionPipeline(session=test_db, use_local=True)
         
         trade_data = {
             'id': 1,
@@ -428,7 +428,7 @@ class TestRAGIntegration:
         """Test complete RAG workflow from ingestion to query."""
         try:
             # 1. Create pipeline
-            pipeline = IngestionPipeline(session=test_db, use_local=True)
+            pipeline = DataIngestionPipeline(session=test_db, use_local=True)
             
             # 2. Ingest data
             signal = {

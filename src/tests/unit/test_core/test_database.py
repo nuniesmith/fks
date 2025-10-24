@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from core.database.models import Base, Account, Position, Trade, BalanceHistory, Strategy
+from core.database.models import Base, Account, Position, Trade, BalanceHistory, StrategyParameters
 
 
 @pytest.fixture(scope='function')
@@ -279,7 +279,7 @@ class TestStrategyModel:
     
     def test_create_strategy(self, session):
         """Test creating a strategy"""
-        strategy = Strategy(
+        strategy = StrategyParameters(
             name='momentum_strategy',
             parameters={'M': 20, 'threshold': 0.02},
             status='active',
@@ -290,7 +290,7 @@ class TestStrategyModel:
         session.commit()
         
         # Retrieve and verify
-        retrieved = session.query(Strategy).first()
+        retrieved = session.query(StrategyParameters).first()
         assert retrieved is not None
         assert retrieved.name == 'momentum_strategy'
         assert retrieved.parameters['M'] == 20
@@ -299,7 +299,7 @@ class TestStrategyModel:
     
     def test_strategy_metadata(self, session):
         """Test strategy metadata field"""
-        strategy = Strategy(
+        strategy = StrategyParameters(
             name='mean_reversion',
             parameters={'lookback': 50},
             strategy_metadata={'author': 'system', 'version': '1.0'}
@@ -308,7 +308,7 @@ class TestStrategyModel:
         session.add(strategy)
         session.commit()
         
-        retrieved = session.query(Strategy).first()
+        retrieved = session.query(StrategyParameters).first()
         assert retrieved.strategy_metadata['author'] == 'system'
         assert retrieved.strategy_metadata['version'] == '1.0'
 

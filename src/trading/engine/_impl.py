@@ -40,8 +40,8 @@ def _custom_endpoints():  # noqa: C901
         urls = _service_urls()
 
         def _ollama_generate(
-            prompt: str, model: str | None = None, timeout_sec: float = 8.0
-        ) -> str | None:
+            prompt: str, model: Optional[str] = None, timeout_sec: float = 8.0
+        ) -> Optional[str]:
             try:
                 model_name = model or os.getenv("OLLAMA_MODEL", "gpt-oss:20b")
                 r = requests.post(
@@ -158,7 +158,7 @@ def _custom_endpoints():  # noqa: C901
 
 
 def start_engine(
-    service_name: str | None = None, service_port: int | str | None = None
+    service_name: Optional[str] = None, service_port: Optional[int | str] = None
 ):
     if service_name:
         os.environ["ENGINE_SERVICE_NAME"] = str(service_name)
@@ -171,7 +171,7 @@ def start_engine(
 
 
 def start_template_service(
-    service_name: str | None = None, service_port: int | str | None = None
+    service_name: Optional[str] = None, service_port: Optional[int | str] = None
 ):
     if service_name:
         os.environ["ENGINE_SERVICE_NAME"] = str(service_name)

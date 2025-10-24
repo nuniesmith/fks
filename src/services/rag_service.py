@@ -152,8 +152,8 @@ Provide a detailed, professional answer:"""
         query: str,
         top_k: int = 5,
         similarity_threshold: float = 0.6,
-        filters: dict[str, Any] | None = None,
-        session: Session | None = None,
+        filters: Optional[dict[str, Any]] = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Query knowledge base using pgvector cosine similarity.
@@ -183,7 +183,7 @@ Provide a detailed, professional answer:"""
         return results
 
     def augment_prompt_with_context(
-        self, query: str, top_k: int = 5, filters: dict[str, Any] | None = None
+        self, query: str, top_k: int = 5, filters: Optional[dict[str, Any]] = None
     ) -> tuple[str, list[dict[str, Any]]]:
         """
         Retrieve context and augment prompt for generation.
@@ -231,9 +231,9 @@ Provide a detailed, professional answer:"""
         self,
         query: str,
         top_k: int = 5,
-        filters: dict[str, Any] | None = None,
+        filters: Optional[dict[str, Any]] = None,
         include_sources: bool = True,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> dict[str, Any]:
         """
         Query using full RAG pipeline with LangChain.
@@ -344,7 +344,7 @@ Provide a detailed, professional answer:"""
     def suggest_strategy(
         self,
         symbol: str,
-        market_condition: str | None = None,
+        market_condition: Optional[str] = None,
         risk_level: str = "medium",
     ) -> dict[str, Any]:
         """
@@ -392,7 +392,7 @@ Provide a detailed, professional answer:"""
         pnl: float,
         strategy: str,
         market_condition: str,
-        notes: str | None = None,
+        notes: Optional[str] = None,
     ) -> int:
         """
         Store trade outcome as learning feedback.
@@ -504,7 +504,7 @@ Conclusion: {"Strong performance" if metrics.get('win_rate', 0) > 0.6 else "Need
         top_k: int = 10,
         semantic_weight: float = 0.7,
         keyword_weight: float = 0.3,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Hybrid search combining semantic and keyword matching.
@@ -639,7 +639,7 @@ Conclusion: {"Strong performance" if metrics.get('win_rate', 0) > 0.6 else "Need
         answer: str,
         num_sources: int,
         response_time: float,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ):
         """Log query for analytics and improvement"""
         should_close = False
@@ -666,7 +666,7 @@ Conclusion: {"Strong performance" if metrics.get('win_rate', 0) > 0.6 else "Need
                 session.close()
 
     def get_query_analytics(
-        self, days: int = 7, session: Session | None = None
+        self, days: int = 7, session: Optional[Session] = None
     ) -> dict[str, Any]:
         """
         Get query analytics for monitoring and improvement.

@@ -45,8 +45,8 @@ class OptimizationService:
 
     def __init__(
         self,
-        rag_service: RAGService | None = None,
-        feedback_service: FeedbackService | None = None,
+        rag_service: Optional[RAGService] = None,
+        feedback_service: Optional[FeedbackService] = None,
     ):
         """
         Initialize optimization service.
@@ -131,7 +131,7 @@ class OptimizationService:
         parameters: list[str],
         n_trials: int = 100,
         use_rag_ranges: bool = True,
-        custom_ranges: dict | None = None,
+        custom_ranges: Optional[dict] = None,
         direction: str = "maximize",
         metric: str = "sharpe_ratio",
     ) -> dict[str, Any]:
@@ -373,7 +373,7 @@ These parameters should be validated with out-of-sample backtesting before live 
         }
 
     def get_optimization_history(
-        self, strategy: str | None = None, symbol: str | None = None, limit: int = 10
+        self, strategy: Optional[str] = None, symbol: Optional[str] = None, limit: int = 10
     ) -> list[dict[str, Any]]:
         """
         Get historical optimization results.
@@ -408,8 +408,8 @@ These parameters should be validated with out-of-sample backtesting before live 
 
 # Factory function
 def create_optimization_service(
-    rag_service: RAGService | None = None,
-    feedback_service: FeedbackService | None = None,
+    rag_service: Optional[RAGService] = None,
+    feedback_service: Optional[FeedbackService] = None,
 ) -> OptimizationService:
     """
     Create optimization service instance.

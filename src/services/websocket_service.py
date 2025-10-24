@@ -64,7 +64,7 @@ class BinanceWebSocketClient:
             self.update_connection_status("disconnected", str(e))
             return False
 
-    def update_connection_status(self, status: str, error: str | None = None):
+    def update_connection_status(self, status: str, error: Optional[str] = None):
         """Update WebSocket connection status in Redis"""
         status_data = {
             "status": status,
@@ -199,7 +199,7 @@ class PriceAggregator:
     def __init__(self, redis_client: Redis):
         self.redis = redis_client
 
-    def get_live_price(self, symbol: str) -> dict | None:
+    def get_live_price(self, symbol: str) -> Optional[dict]:
         """Get live price for a symbol from Redis"""
         try:
             key = f"live_price:{symbol}"
@@ -221,8 +221,8 @@ class PriceAggregator:
         return prices
 
     def calculate_market_index(
-        self, base_prices: dict[str, float] | None = None
-    ) -> float | None:
+        self, base_prices: Optional[dict[str, float]] = None
+    ) -> Optional[float]:
         """
         Calculate normalized market index
 

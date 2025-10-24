@@ -64,11 +64,11 @@ class BaseStrategy(ABC):
         self.metrics = StrategyMetrics(strategy_id=strategy_id)
 
     @abstractmethod
-    async def analyze(self, market_data: MarketData) -> TradingSignal | None:
+    async def analyze(self, market_data: MarketData) -> Optional[TradingSignal]:
         """Analyze market data and generate signal"""
         pass
 
-    async def process(self, event: MarketEvent) -> TradingSignal | None:
+    async def process(self, event: MarketEvent) -> Optional[TradingSignal]:
         """Process event with pre/post processing"""
         # Pre-process
         if not await self.should_process(event):

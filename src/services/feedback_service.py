@@ -49,7 +49,7 @@ class FeedbackService:
     Implements a retention loop that improves strategy selection over time.
     """
 
-    def __init__(self, rag_service: RAGService | None = None):
+    def __init__(self, rag_service: Optional[RAGService] = None):
         """
         Initialize feedback service.
 
@@ -70,8 +70,8 @@ class FeedbackService:
         pnl_pct: float,
         market_condition: str,
         timeframe: str,
-        indicators: dict[str, float] | None = None,
-        notes: str | None = None,
+        indicators: Optional[dict[str, float]] = None,
+        notes: Optional[str] = None,
     ) -> int:
         """
         Log a completed trade for learning.
@@ -179,7 +179,7 @@ for this setup. Consider {'repeating' if pnl > 0 else 'avoiding'} similar entrie
         metrics: dict[str, Any],
         parameters: dict[str, Any],
         insights: str,
-        trades_data: list[dict] | None = None,
+        trades_data: Optional[list[dict]] = None,
     ) -> int:
         """
         Log backtest results for strategy evaluation.
@@ -289,7 +289,7 @@ Win rate: {win_rate:.1%}, Profit Factor: {profit_factor:.2f}, Sharpe Ratio: {sha
         return doc_id
 
     def analyze_strategy_performance(
-        self, strategy: str, lookback_days: int = 90, session: Session | None = None
+        self, strategy: str, lookback_days: int = 90, session: Optional[Session] = None
     ) -> dict[str, Any]:
         """
         Analyze historical performance of a strategy using RAG.
@@ -361,7 +361,7 @@ Win rate: {win_rate:.1%}, Profit Factor: {profit_factor:.2f}, Sharpe Ratio: {sha
         }
 
     def learn_from_losses(
-        self, symbol: str | None = None, lookback_days: int = 30
+        self, symbol: Optional[str] = None, lookback_days: int = 30
     ) -> dict[str, Any]:
         """
         Analyze losing trades to identify patterns and avoid future losses.
@@ -443,8 +443,8 @@ Win rate: {win_rate:.1%}, Profit Factor: {profit_factor:.2f}, Sharpe Ratio: {sha
         category: str,
         content: str,
         impact: float,
-        metadata: dict | None = None,
-        session: Session | None = None,
+        metadata: Optional[dict] = None,
+        session: Optional[Session] = None,
     ):
         """Store curated trading insight for quick retrieval"""
         should_close = False
@@ -472,10 +472,10 @@ Win rate: {win_rate:.1%}, Profit Factor: {profit_factor:.2f}, Sharpe Ratio: {sha
 
     def get_recent_insights(
         self,
-        symbol: str | None = None,
-        category: str | None = None,
+        symbol: Optional[str] = None,
+        category: Optional[str] = None,
         limit: int = 10,
-        session: Session | None = None,
+        session: Optional[Session] = None,
     ) -> list[dict[str, Any]]:
         """
         Get recent high-impact trading insights.
@@ -530,7 +530,7 @@ Win rate: {win_rate:.1%}, Profit Factor: {profit_factor:.2f}, Sharpe Ratio: {sha
 
 
 # Factory function
-def create_feedback_service(rag_service: RAGService | None = None) -> FeedbackService:
+def create_feedback_service(rag_service: Optional[RAGService] = None) -> FeedbackService:
     """
     Create feedback service instance.
 

@@ -1,1 +1,1 @@
-# Management commands init
+"""Django management commands for authentication app."""

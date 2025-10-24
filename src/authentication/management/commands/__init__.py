@@ -1,1 +1,1 @@
-# Commands directory
+"""Custom management commands package."""

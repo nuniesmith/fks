@@ -45,7 +45,7 @@ from trading.signals.generator import get_current_signal
 
 # RAG Intelligence imports
 try:
-    from web.rag.orchestrator import IntelligenceOrchestrator
+    from src.rag.orchestrator import IntelligenceOrchestrator
     RAG_AVAILABLE = True
 except ImportError:
     logger.warning("RAG system not available - using legacy signal generation")
@@ -1823,7 +1823,7 @@ def ingest_recent_trades(days: int = 7):
         Number of trades ingested
     """
     try:
-        from web.rag.ingestion import DataIngestionPipeline
+        from src.rag.ingestion import DataIngestionPipeline
         from core.database import Session
         
         logger.info(f"Starting ingestion of trades from last {days} days")
@@ -1854,7 +1854,7 @@ def ingest_signal(signal_data: dict):
         Document ID if successful, None otherwise
     """
     try:
-        from web.rag.ingestion import DataIngestionPipeline
+        from src.rag.ingestion import DataIngestionPipeline
         from core.database import Session
         
         logger.info(f"Ingesting signal for {signal_data.get('symbol', 'unknown')}")
@@ -1890,7 +1890,7 @@ def ingest_backtest_result(backtest_data: dict):
         Document ID if successful, None otherwise
     """
     try:
-        from web.rag.ingestion import DataIngestionPipeline
+        from src.rag.ingestion import DataIngestionPipeline
         from core.database import Session
         
         strategy = backtest_data.get('strategy_name', 'unknown')
@@ -1928,7 +1928,7 @@ def ingest_completed_trade(trade_id: int):
         Document ID if successful, None otherwise
     """
     try:
-        from web.rag.ingestion import DataIngestionPipeline
+        from src.rag.ingestion import DataIngestionPipeline
         from core.database import Session
         
         logger.info(f"Ingesting completed trade {trade_id}")
@@ -1967,7 +1967,7 @@ def ingest_market_analysis(analysis_text: str, symbol: str, timeframe: str, meta
         Document ID if successful, None otherwise
     """
     try:
-        from web.rag.ingestion import DataIngestionPipeline
+        from src.rag.ingestion import DataIngestionPipeline
         from core.database import Session
         
         logger.info(f"Ingesting market analysis for {symbol} {timeframe}")

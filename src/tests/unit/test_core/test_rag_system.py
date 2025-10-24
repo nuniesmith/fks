@@ -8,12 +8,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from core.database.models import Base, Document, DocumentChunk, QueryHistory
-from web.rag.document_processor import DocumentProcessor
-from web.rag.local_llm import LocalEmbeddings, LocalLLM, check_cuda_availability
-from web.rag.embeddings import EmbeddingsService
-from web.rag.retrieval import RetrievalService
-from web.rag.intelligence import FKSIntelligence
-from web.rag.ingestion import DataDataIngestionPipeline
+from src.rag.document_processor import DocumentProcessor
+from src.rag.local_llm import LocalEmbeddings, LocalLLM, check_cuda_availability
+from src.rag.embeddings import EmbeddingsService
+from src.rag.retrieval import RetrievalService
+from src.rag.intelligence import FKSIntelligence
+from src.rag.ingestion import DataDataIngestionPipeline
 
 
 @pytest.fixture(scope="module")

@@ -6,9 +6,9 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 
-from web.rag.document_processor import DocumentProcessor
-from web.rag.embeddings import EmbeddingsService
-from web.rag.retrieval import RetrievalService
+from src.rag.document_processor import DocumentProcessor
+from src.rag.embeddings import EmbeddingsService
+from src.rag.retrieval import RetrievalService
 
 
 @pytest.mark.benchmark

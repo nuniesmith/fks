@@ -254,6 +254,207 @@ services:
     networks:
       - fks-network
 
+  # FKS Microservices
+  fks_api:
+    build:
+      context: ./repo/api
+      dockerfile: Dockerfile
+    container_name: fks_api
+    expose:
+      - "8001"
+    volumes:
+      - ./repo/api:/app
+      - ./logs/api:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_api
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/2
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_data:
+    build:
+      context: ./repo/data
+      dockerfile: Dockerfile
+    container_name: fks_data
+    expose:
+      - "8002"
+    volumes:
+      - ./repo/data:/app
+      - ./logs/data:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_data
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/3
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_execution:
+    build:
+      context: ./repo/execution
+      dockerfile: Dockerfile
+    container_name: fks_execution
+    expose:
+      - "8003"
+    volumes:
+      - ./repo/execution:/app
+      - ./logs/execution:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_execution
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/4
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - DATA_SERVICE_URL=http://fks_data:8002
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      fks_data:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_ninja:
+    build:
+      context: ./repo/ninja
+      dockerfile: Dockerfile
+    container_name: fks_ninja
+    expose:
+      - "8004"
+    volumes:
+      - ./repo/ninja:/app
+      - ./logs/ninja:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_ninja
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - EXECUTION_SERVICE_URL=http://fks_execution:8003
+      - DATA_SERVICE_URL=http://fks_data:8002
+      - NINJATRADER_HOST=${NINJATRADER_HOST:-localhost}
+      - NINJATRADER_PORT=${NINJATRADER_PORT:-8080}
+    env_file:
+      - .env
+    depends_on:
+      web:
+        condition: service_healthy
+      fks_execution:
+        condition: service_healthy
+      fks_data:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_web_ui:
+    build:
+      context: ./repo/web
+      dockerfile: Dockerfile
+    container_name: fks_web_ui
+    expose:
+      - "3001"
+    volumes:
+      - ./repo/web:/app
+      - ./logs/web_ui:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - NODE_ENV=production
+      - SERVICE_NAME=fks_web_ui
+      - SERVICE_VERSION=1.0.0
+      - VITE_API_URL=http://fks_api:8001
+      - VITE_WS_URL=ws://fks_api:8001/ws
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+    depends_on:
+      web:
+        condition: service_healthy
+      fks_api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
   # Monitoring Stack
   prometheus:
     image: prom/prometheus:latest

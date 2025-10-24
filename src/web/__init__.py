@@ -1,1 +1,0 @@
-"""Web UI app initialization."""

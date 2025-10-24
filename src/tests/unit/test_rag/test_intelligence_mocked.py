@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock, PropertyMock
 from datetime import datetime
 
-from web.rag.intelligence import FKSIntelligence
+from src.rag.intelligence import FKSIntelligence
 
 
 class TestFKSIntelligenceMocked:
@@ -411,7 +411,7 @@ class TestCreateIntelligenceHelper:
     def test_create_intelligence_default(self):
         """Test creating intelligence with default parameters."""
         with patch('web.rag.intelligence.FKSIntelligence') as mock_class:
-            from web.rag.intelligence import create_intelligence
+            from src.rag.intelligence import create_intelligence
             
             create_intelligence()
             
@@ -424,7 +424,7 @@ class TestCreateIntelligenceHelper:
     def test_create_intelligence_custom_params(self):
         """Test creating intelligence with custom parameters."""
         with patch('web.rag.intelligence.FKSIntelligence') as mock_class:
-            from web.rag.intelligence import create_intelligence
+            from src.rag.intelligence import create_intelligence
             
             create_intelligence(
                 use_local=False,

@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime
 
-from web.rag.orchestrator import IntelligenceOrchestrator, create_orchestrator
+from src.rag.orchestrator import IntelligenceOrchestrator, create_orchestrator
 
 
 class TestIntelligenceOrchestrator:

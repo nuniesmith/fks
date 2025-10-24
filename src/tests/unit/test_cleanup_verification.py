@@ -45,7 +45,7 @@ class TestCleanupVerification:
             import api
             import authentication
             import core
-            import web
+            import src
             import infrastructure
             import framework
             

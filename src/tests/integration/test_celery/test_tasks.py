@@ -321,7 +321,7 @@ class TestCeleryPeriodicTasks:
     def test_beat_schedule_exists(self):
         """Test that beat schedule is defined."""
         try:
-            from web.django.celery import app
+            from src.django.celery import app
             
             # Check if beat schedule is configured
             beat_schedule = app.conf.beat_schedule

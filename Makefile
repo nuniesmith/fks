@@ -1,15 +1,29 @@
-.PHONY: help build up down restart logs test lint format clean gpu-up install-dev migrate shell db-shell security-setup security-check
+.PHONY: help build up down restart logs test lint format clean gpu-up install-dev migrate shell db-shell security-setup security-check multi-up multi-down multi-logs multi-build multi-status multi-update multi-health monitor-dashboard register-services
 
 # Default target
 help:
 	@echo "FKS Trading Platform - Available Commands:"
 	@echo ""
+	@echo "=== Core Services ==="
 	@echo "  make build          - Build Docker containers"
 	@echo "  make up             - Start all services"
 	@echo "  make gpu-up         - Start services with GPU support"
 	@echo "  make down           - Stop all services"
 	@echo "  make restart        - Restart all services"
 	@echo "  make logs           - View logs (all services)"
+	@echo ""
+	@echo "=== Multi-Repo Microservices ==="
+	@echo "  make multi-up       - Start all FKS microservices (api, data, execution, ninja, web)"
+	@echo "  make multi-down     - Stop all microservices"
+	@echo "  make multi-logs     - View logs from all microservices"
+	@echo "  make multi-build    - Build all microservice images"
+	@echo "  make multi-status   - Show status of all microservices"
+	@echo "  make multi-update   - Update all Git submodules"
+	@echo "  make multi-health   - Run health check on all services"
+	@echo "  make monitor-dashboard - Open service monitoring dashboard"
+	@echo "  make register-services - Register microservices with monitor"
+	@echo ""
+	@echo "=== Development ==="
 	@echo "  make test           - Run test suite"
 	@echo "  make lint           - Run linters (ruff, mypy, black)"
 	@echo "  make format         - Format code (black, isort)"
@@ -17,11 +31,13 @@ help:
 	@echo "  make migrate        - Run database migrations"
 	@echo "  make shell          - Open Django shell"
 	@echo "  make db-shell       - Open PostgreSQL shell"
-	@echo "  make clean          - Clean up containers, volumes, and caches"
-	@echo "  make setup-rag      - Setup RAG system (pgvector, models)"
-	@echo "  make test-rag       - Test RAG functionality"
+	@echo ""
+	@echo "=== Monitoring & Health ==="
 	@echo "  make health         - Open health dashboard"
 	@echo "  make monitoring     - Open all monitoring UIs"
+	@echo ""
+	@echo "=== Maintenance ==="
+	@echo "  make clean          - Clean up containers, volumes, and caches"
 	@echo "  make security-setup - Generate secure passwords and setup .env"
 	@echo "  make security-check - Verify security configuration"
 	@echo ""
@@ -37,10 +53,92 @@ up:
 	@echo "Services started. Access:"
 	@echo "  - Web App: http://localhost:8000"
 	@echo "  - Health Dashboard: http://localhost:8000/health/dashboard/"
+	@echo "  - Monitor Dashboard: http://localhost:8000/monitor/"
 	@echo "  - Grafana: http://localhost:3000"
 	@echo "  - Prometheus: http://localhost:9090"
 	@echo "  - PgAdmin: http://localhost:5050"
 	@echo "  - Flower: http://localhost:5555"
+
+# Multi-repo microservices operations
+multi-up:
+	@echo "Starting all FKS microservices..."
+	@echo "=== Checking Git submodules ==="
+	@git submodule update --init --recursive || echo "No submodules configured yet"
+	@echo ""
+	@echo "=== Starting services ==="
+	docker-compose up -d web db redis celery_worker
+	@echo "Waiting for core services to be healthy..."
+	@sleep 10
+	docker-compose up -d fks_api fks_data fks_execution fks_ninja fks_web_ui
+	@echo ""
+	@echo "=== Services started ==="
+	@echo "  - FKS Main: http://localhost:8000"
+	@echo "  - FKS API: http://localhost:8001 (internal)"
+	@echo "  - FKS Data: http://localhost:8002 (internal)"
+	@echo "  - FKS Execution: http://localhost:8003 (internal)"
+	@echo "  - FKS Ninja: http://localhost:8004 (internal)"
+	@echo "  - FKS Web UI: http://localhost:3001"
+	@echo "  - Monitor Dashboard: http://localhost:8000/monitor/"
+	@echo ""
+	@echo "Run 'make multi-status' to check service health"
+
+multi-down:
+	@echo "Stopping all microservices..."
+	docker-compose stop fks_api fks_data fks_execution fks_ninja fks_web_ui
+	docker-compose down
+
+multi-logs:
+	@echo "Following logs from all microservices..."
+	docker-compose logs -f fks_api fks_data fks_execution fks_ninja fks_web_ui
+
+multi-build:
+	@echo "Building all microservice images..."
+	@for service in api data execution ninja web; do \
+		if [ -d "repo/$$service" ]; then \
+			echo "=== Building fks_$$service ==="; \
+			docker-compose build fks_$$service; \
+		else \
+			echo "⚠ repo/$$service not found (skipping)"; \
+		fi \
+	done
+	@echo "Build complete!"
+
+multi-status:
+	@echo "=== Microservices Status ==="
+	@docker-compose ps fks_api fks_data fks_execution fks_ninja fks_web_ui 2>/dev/null || echo "No microservices running"
+	@echo ""
+	@echo "=== Health Checks ==="
+	@for service in fks_api:8001 fks_data:8002 fks_execution:8003 fks_ninja:8004 fks_web_ui:3001; do \
+		name=$${service%:*}; \
+		port=$${service#*:}; \
+		echo -n "$$name: "; \
+		docker-compose exec -T web curl -sf http://$$name:$$port/health > /dev/null 2>&1 && echo "✅ Healthy" || echo "❌ Down"; \
+	done
+
+multi-update:
+	@echo "Updating all Git submodules..."
+	@git submodule update --remote --recursive
+	@echo ""
+	@echo "=== Submodule status ==="
+	@git submodule status
+	@echo ""
+	@echo "Updated! Review changes and commit:"
+	@echo "  git add repo/"
+	@echo "  git commit -m 'chore: Update microservices submodules'"
+
+multi-health:
+	@echo "Running health check on all services..."
+	@docker-compose exec web python manage.py shell -c "from monitor.services import HealthCheckService; checker = HealthCheckService(); results = checker.check_all_services(); print(f'Healthy: {results[\"healthy\"]}/{results[\"total\"]}')"
+
+monitor-dashboard:
+	@echo "Opening monitoring dashboard..."
+	@command -v xdg-open >/dev/null 2>&1 && xdg-open http://localhost:8000/monitor/ || \
+	command -v open >/dev/null 2>&1 && open http://localhost:8000/monitor/ || \
+	echo "Please open http://localhost:8000/monitor/ in your browser"
+
+register-services:
+	@echo "Registering microservices with monitor..."
+	@docker-compose exec web python manage.py shell -c "from monitor.services import ServiceDiscoveryService; ServiceDiscoveryService.register_default_services(); print('✅ Services registered')"
 
 gpu-up:
 	@echo "Starting services with GPU support..."

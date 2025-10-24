@@ -108,6 +108,9 @@ pytz>=2024.2
 python-dateutil>=2.9.0.post0
 psutil>=6.1.0
 
+# Mermaid.js Integration (optional for Django ER diagrams)
+django-mermaid>=0.1.0
+
 # Monitoring & Observability
 prometheus-client>=0.21.0
 django-prometheus>=2.3.1

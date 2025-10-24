@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import Mock, patch, MagicMock, call
 import numpy as np
 
-from web.rag.embeddings import EmbeddingsService
+from src.rag.embeddings import EmbeddingsService
 
 
 class TestEmbeddingsServiceMocked:

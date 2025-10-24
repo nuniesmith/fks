@@ -11,7 +11,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from core.database.models import Account, Position, Trade
-from web.db_helpers import (
+from src.db_helpers import (
     get_account_summary,
     get_active_positions,
     get_performance_metrics,

@@ -2,7 +2,7 @@
 Unit tests for RAG DocumentProcessor.
 """
 import pytest
-from web.rag.document_processor import DocumentProcessor, Chunk, create_processor
+from src.rag.document_processor import DocumentProcessor, Chunk, create_processor
 
 
 class TestDocumentProcessor:

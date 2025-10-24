@@ -233,3 +233,116 @@ canvas {
 .border-start-warning {
     border-left: 4px solid var(--fks-warning) !important;
 }
+
+/* ============================================================================
+ * MERMAID DIAGRAMS
+ * ============================================================================ */
+
+/* Mermaid diagram container */
+.mermaid {
+    max-width: 100%;
+    overflow-x: auto;
+    background-color: white;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+}
+
+/* Dark theme support for Mermaid */
+[data-theme="dark"] .mermaid {
+    background-color: #2d2d2d;
+}
+
+/* Mermaid responsive design */
+@media (max-width: 768px) {
+    .mermaid {
+        padding: 1rem;
+        font-size: 0.875rem;
+    }
+}
+
+/* Mermaid diagram scrollbar styling */
+.mermaid::-webkit-scrollbar {
+    height: 8px;
+}
+
+.mermaid::-webkit-scrollbar-track {
+    background: var(--fks-light);
+    border-radius: 4px;
+}
+
+.mermaid::-webkit-scrollbar-thumb {
+    background: var(--fks-primary);
+    border-radius: 4px;
+}
+
+.mermaid::-webkit-scrollbar-thumb:hover {
+    background: #0a58ca;
+}
+
+/* Intelligence Dashboard specific styles */
+.intelligence-card {
+    transition: all 0.3s ease;
+}
+
+.intelligence-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+}
+
+/* Pending signals highlight */
+.table-warning {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+/* Signal approval buttons */
+.btn-group-vertical .btn {
+    margin-bottom: 0.25rem;
+}
+
+.btn-group-vertical .btn:last-child {
+    margin-bottom: 0;
+}
+
+/* Risk level badges */
+.badge.bg-success {
+    background-color: var(--fks-success) !important;
+}
+
+.badge.bg-warning {
+    background-color: var(--fks-warning) !important;
+    color: #000 !important;
+}
+
+.badge.bg-danger {
+    background-color: var(--fks-danger) !important;
+}
+
+/* Opportunity category cards */
+.card-header.bg-success,
+.card-header.bg-primary,
+.card-header.bg-warning {
+    font-weight: 600;
+}
+
+/* Flowchart node styling (Mermaid overrides) */
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node ellipse,
+.mermaid .node polygon {
+    stroke-width: 2px;
+}
+
+/* Notification alerts */
+.alert-warning.border-start-warning {
+    border-left-width: 5px !important;
+}
+
+/* Progress bars for confidence levels */
+.progress {
+    background-color: #e9ecef;
+}
+
+.progress-bar {
+    transition: width 0.6s ease;
+}

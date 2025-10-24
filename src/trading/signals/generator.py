@@ -15,7 +15,7 @@ from framework.config.constants import ALTS, MAINS, RISK_PER_TRADE, SYMBOLS
 
 # RAG Intelligence imports - gracefully degrade if not available
 try:
-    from web.rag.orchestrator import IntelligenceOrchestrator
+    from src.rag.orchestrator import IntelligenceOrchestrator
     RAG_AVAILABLE = True
 except ImportError:
     RAG_AVAILABLE = False

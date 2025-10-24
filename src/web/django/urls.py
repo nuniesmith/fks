@@ -26,6 +26,7 @@ urlpatterns = [
     path("auth/", include("authentication.urls")),  # ✅ Authentication endpoints
     path("api-auth/", include("rest_framework.urls")),  # ✅ DRF browsable API auth
     # App URLs
+    path("monitor/", include("monitor.urls")),  # ✅ Service monitoring
     # path('trading/', include('trading.urls')),
     # path('forecasting/', include('forecasting.urls')),
     # path('chatbot/', include('chatbot.urls')),

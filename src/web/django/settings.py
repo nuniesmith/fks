@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "trading",
     "api",
     "web",
+    "monitor",  # ✅ Service monitoring and health checks
     # 'config',  # Has import issues with loguru, skip for now
     # 'forecasting',
     # 'chatbot',

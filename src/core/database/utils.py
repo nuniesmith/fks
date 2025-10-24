@@ -6,6 +6,9 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import pytz
+from sqlalchemy import and_, desc, func, text
+from sqlalchemy.dialects.postgresql import insert
+
 from core.database.models import (
     Account,
     BalanceHistory,
@@ -17,8 +20,6 @@ from core.database.models import (
     SyncStatus,
     Trade,
 )
-from sqlalchemy import and_, desc, func, text
-from sqlalchemy.dialects.postgresql import insert
 
 from framework.config.constants import SYMBOLS
 

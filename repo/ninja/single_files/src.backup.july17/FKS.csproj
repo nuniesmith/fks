@@ -1,0 +1,224 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Target .NET Framework 4.8 (required for NinjaTrader 8) -->
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>FKS</AssemblyName>
+    <RootNamespace>NinjaTrader.NinjaScript</RootNamespace>
+    <LangVersion>7.3</LangVersion>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>../bin/$(Configuration)/</OutputPath>
+    <DocumentationFile>../bin/$(Configuration)/FKS.xml</DocumentationFile>
+
+    <!-- Project GUID for consistency -->
+    <ProjectGuid>{44387377-FCA2-495F-89D1-B7965E67142F}</ProjectGuid>
+
+    <!-- Disable warnings about missing XML documentation -->
+    <NoWarn>1591</NoWarn>
+
+    <!-- Enable unsafe code if needed for performance optimizations -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Additional properties for NinjaTrader compatibility -->
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>false</Deterministic>
+    <DebugType>portable</DebugType>
+    
+    <!-- External development support -->
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    
+    <!-- Assembly metadata for NT8 compatibility -->
+    <AssemblyTitle>FKS Trading Systems</AssemblyTitle>
+    <AssemblyDescription>Professional Trading System for NinjaTrader 8 - External Development Build</AssemblyDescription>
+    <AssemblyCompany>FKS Trading</AssemblyCompany>
+    <AssemblyProduct>FKS Trading Systems</AssemblyProduct>
+    <AssemblyCopyright>Copyright © FKS Trading 2025</AssemblyCopyright>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <AssemblyFileVersion>1.0.0.0</AssemblyFileVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+    <Optimize>false</Optimize>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <!-- Note: ML files are now included by default EnableDefaultCompileItems setting -->
+  <!-- The SDK automatically includes all .cs files, so we don't need explicit includes -->
+
+  <!-- NinjaTrader References (using relative paths from src/ directory) -->
+  <ItemGroup>
+    <Reference Include="NinjaTrader.Core">
+      <HintPath>../references/NinjaTrader.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NinjaTrader.Custom">
+      <HintPath>../references/NinjaTrader.Custom.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="NinjaTrader.Gui">
+      <HintPath>../references/NinjaTrader.Gui.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- WPF References (required for NinjaTrader UI components) -->
+  <ItemGroup>
+    <Reference Include="PresentationCore">
+      <HintPath>../references/PresentationCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PresentationFramework">
+      <HintPath>../references/PresentationFramework.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml">
+      <HintPath>../references/System.Xaml.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- System References -->
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Net" />
+  </ItemGroup>
+
+  <!-- NuGet Packages - Exclude from output to avoid conflicts with NinjaTrader -->
+  <ItemGroup>
+    <PackageReference Include="System.ValueTuple" Version="4.5.0">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Memory" Version="4.5.5">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    
+    <!-- SharpDX for advanced rendering (used by FKS_Dashboard) -->
+    <PackageReference Include="SharpDX" Version="4.2.0">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <!-- DirectWrite package name may be different - commented out for now -->
+    <!--
+    <PackageReference Include="SharpDX.DirectWrite" Version="4.2.0">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="SharpDX.DXGI" Version="4.2.0">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    -->
+  </ItemGroup>
+
+  <!-- Build Events -->
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Message Text="FKS build completed: $(TargetPath)" Importance="high" />
+    <Message Text="Output directory: $(OutputPath)" Importance="high" />
+  </Target>
+
+  <!-- Enhanced PackageNT8 target for external development -->
+  <Target Name="PackageNT8" DependsOnTargets="Build">
+    <PropertyGroup>
+      <PackageDir>../packages</PackageDir>
+      <PackageVersion>1.0.0</PackageVersion>
+      <PackageName>FKS_TradingSystem_v$(PackageVersion)</PackageName>
+      <TempDir>$(PackageDir)/temp</TempDir>
+    </PropertyGroup>
+
+    <!-- Clean and create package structure -->
+    <RemoveDir Directories="$(TempDir)" />
+    <MakeDir Directories="$(TempDir)" />
+    <MakeDir Directories="$(TempDir)/bin" />
+    <MakeDir Directories="$(TempDir)/bin/Custom" />
+    <MakeDir Directories="$(TempDir)/bin/Custom/Indicators" />
+    <MakeDir Directories="$(TempDir)/bin/Custom/Strategies" />
+    <MakeDir Directories="$(TempDir)/bin/Custom/AddOns" />
+
+    <!-- CRITICAL: Copy compiled DLL to ROOT (required for NT8 import with DLL) -->
+    <Copy SourceFiles="$(OutputPath)FKS.dll" DestinationFiles="$(TempDir)/FKS.dll" Condition="Exists('$(OutputPath)FKS.dll')" />
+    
+    <!-- Also copy DLL to bin folder (standard location) -->
+    <Copy SourceFiles="$(OutputPath)FKS.dll" DestinationFolder="$(TempDir)/bin" Condition="Exists('$(OutputPath)FKS.dll')" />
+    
+    <!-- Copy debug symbols if available -->
+    <Copy SourceFiles="$(OutputPath)FKS.pdb" DestinationFolder="$(TempDir)/bin" Condition="Exists('$(OutputPath)FKS.pdb')" />
+    
+    <!-- Copy XML documentation -->
+    <Copy SourceFiles="$(OutputPath)FKS.xml" DestinationFolder="$(TempDir)/bin" Condition="Exists('$(OutputPath)FKS.xml')" />
+
+    <!-- Copy source files for hybrid approach -->
+    <ItemGroup>
+      <AddOnFiles Include="AddOns/*.cs" />
+      <IndicatorFiles Include="Indicators/*.cs" />
+      <StrategyFiles Include="Strategies/*.cs" />
+    </ItemGroup>
+    
+    <Copy SourceFiles="@(AddOnFiles)" DestinationFolder="$(TempDir)/bin/Custom/AddOns" />
+    <Copy SourceFiles="@(IndicatorFiles)" DestinationFolder="$(TempDir)/bin/Custom/Indicators" />
+    <Copy SourceFiles="@(StrategyFiles)" DestinationFolder="$(TempDir)/bin/Custom/Strategies" />
+
+    <!-- Create AdditionalReferences.txt (CRITICAL for custom DLLs) -->
+    <WriteLinesToFile File="$(TempDir)/AdditionalReferences.txt" Lines="FKS" Overwrite="true" />
+
+    <!-- Copy manifests and info files -->
+    <Copy SourceFiles="../manifest.xml" DestinationFolder="$(TempDir)" Condition="Exists('../manifest.xml')" />
+    <Copy SourceFiles="Info.xml" DestinationFolder="$(TempDir)" Condition="Exists('Info.xml')" />
+
+    <Message Text="✅ Package structure created in $(TempDir)" Importance="high" />
+    <Message Text="📦 DLL placed at root: $(TempDir)/FKS.dll" Importance="high" />
+    <Message Text="📄 AdditionalReferences.txt created for custom DLL support" Importance="high" />
+  </Target>
+
+  <!-- Enhanced build target with validation -->
+  <Target Name="ValidatedBuild" DependsOnTargets="Build">
+    <Message Text="🔍 Validating build output..." Importance="high" />
+    
+    <!-- Check if DLL was created -->
+    <Error Condition="!Exists('$(OutputPath)FKS.dll')" Text="❌ FKS.dll was not created. Build failed." />
+    
+    <!-- Get DLL info -->
+    <ItemGroup>
+      <DllInfo Include="$(OutputPath)FKS.dll" />
+    </ItemGroup>
+    
+    <Message Text="✅ FKS.dll created successfully" Importance="high" />
+    <Message Text="📁 Location: $(OutputPath)FKS.dll" Importance="high" />
+  </Target>
+
+</Project>

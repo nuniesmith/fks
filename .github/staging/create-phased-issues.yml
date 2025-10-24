@@ -1,0 +1,262 @@
+name: Create Phased Issues
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to process for phased implementation'
+        required: true
+        type: string
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  create-issues:
+    name: Create Phased Implementation Issues
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    if: |
+      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, '🚀 phased-implementation')) ||
+      github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get issue details
+        id: issue
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ISSUE_NUMBER="${{ inputs.issue_number }}"
+          else
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          fi
+
+          # Get issue data
+          ISSUE_DATA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER")
+
+          echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+          # Extract key information using jq
+          TITLE=$(echo "$ISSUE_DATA" | jq -r '.title // "Unknown Title"')
+          BODY=$(echo "$ISSUE_DATA" | jq -r '.body // ""')
+          AREA=$(echo "$BODY" | grep -A 1 "Implementation Area" | tail -n 1 | sed 's/^- //' | sed 's/^.*: //' || echo "General")
+          PHASES=$(echo "$BODY" | grep -A 1 "Number of Phases" | tail -n 1 | sed 's/^- //' | sed 's/".*"/ /' | cut -d' ' -f1 || echo "6-10")
+
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "area=$AREA" >> $GITHUB_OUTPUT
+          echo "phases=$PHASES" >> $GITHUB_OUTPUT
+
+      - name: Generate phase breakdown and create issues
+        run: |
+          ISSUE_NUMBER="${{ steps.issue.outputs.issue_number }}"
+          AREA="${{ steps.issue.outputs.area }}"
+          PHASE_COUNT="${{ steps.issue.outputs.phases }}"
+
+          # Determine number of phases based on selection
+          case "$PHASE_COUNT" in
+            "3-5")
+              NUM_PHASES=4
+              ;;
+            "6-10")
+              NUM_PHASES=8
+              ;;
+            "11-15")
+              NUM_PHASES=12
+              ;;
+            "16+")
+              NUM_PHASES=16
+              ;;
+            *)
+              NUM_PHASES=8
+              ;;
+          esac
+
+          echo "Creating $NUM_PHASES phased issues for: $AREA"
+
+          # Generate phases based on area
+          case "$AREA" in
+            "FKS Intelligence / RAG System")
+              PHASES_JSON='[
+                {"title": "Phase 1: RAG Foundation Setup", "description": "Set up basic RAG infrastructure with vector database and embeddings", "labels": ["🚀 phase-1", "rag", "setup"]},
+                {"title": "Phase 2: Document Processing Pipeline", "description": "Create document ingestion and processing for trading data", "labels": ["🚀 phase-2", "rag", "data-processing"]},
+                {"title": "Phase 3: Basic Query Interface", "description": "Implement basic RAG query functionality", "labels": ["🚀 phase-3", "rag", "api"]},
+                {"title": "Phase 4: Intelligence Orchestrator", "description": "Build orchestrator for coordinating RAG queries", "labels": ["🚀 phase-4", "rag", "orchestrator"]},
+                {"title": "Phase 5: Trading Signal Integration", "description": "Connect RAG to trading signal generation", "labels": ["🚀 phase-5", "rag", "trading"]},
+                {"title": "Phase 6: Performance Optimization", "description": "Optimize RAG query performance and caching", "labels": ["🚀 phase-6", "rag", "performance"]},
+                {"title": "Phase 7: Advanced Reasoning", "description": "Add advanced reasoning and multi-query capabilities", "labels": ["🚀 phase-7", "rag", "ai"]},
+                {"title": "Phase 8: Monitoring & Analytics", "description": "Add comprehensive monitoring for RAG system", "labels": ["🚀 phase-8", "rag", "monitoring"]},
+                {"title": "Phase 9: Evaluation Framework", "description": "Implement RAG evaluation and quality metrics", "labels": ["🚀 phase-9", "rag", "evaluation"]},
+                {"title": "Phase 10: Multi-Modal Integration", "description": "Add support for charts, graphs, and visual data in RAG", "labels": ["🚀 phase-10", "rag", "multimodal"]},
+                {"title": "Phase 11: Real-time Adaptation", "description": "Enable RAG to adapt to real-time market conditions", "labels": ["🚀 phase-11", "rag", "realtime"]},
+                {"title": "Phase 12: Production Deployment", "description": "Deploy RAG system to production with monitoring", "labels": ["🚀 phase-12", "rag", "deployment"]}
+              ]'
+              ;;
+            "Celery Ecosystem & Tasks")
+              PHASES_JSON='[
+                {"title": "Phase 1: Celery Infrastructure", "description": "Set up Celery with Redis broker and result backend", "labels": ["🚀 phase-1", "celery", "infrastructure"]},
+                {"title": "Phase 2: Basic Task Structure", "description": "Create base task classes and error handling", "labels": ["🚀 phase-2", "celery", "tasks"]},
+                {"title": "Phase 3: Market Data Tasks", "description": "Implement OHLCV data fetching and storage tasks", "labels": ["🚀 phase-3", "celery", "market-data"]},
+                {"title": "Phase 4: Signal Generation Tasks", "description": "Create technical analysis signal generation tasks", "labels": ["🚀 phase-4", "celery", "signals"]},
+                {"title": "Phase 5: Backtesting Framework", "description": "Build comprehensive backtesting task system", "labels": ["🚀 phase-5", "celery", "backtesting"]},
+                {"title": "Phase 6: Portfolio Management", "description": "Implement position tracking and rebalancing tasks", "labels": ["🚀 phase-6", "celery", "portfolio"]},
+                {"title": "Phase 7: Monitoring & Alerts", "description": "Add task monitoring, retries, and alerting", "labels": ["🚀 phase-7", "celery", "monitoring"]},
+                {"title": "Phase 8: Advanced Scheduling", "description": "Implement complex task scheduling and dependencies", "labels": ["🚀 phase-8", "celery", "scheduling"]}
+              ]'
+              ;;
+            "Web UI / Django Templates")
+              PHASES_JSON='[
+                {"title": "Phase 1: Django Template Setup", "description": "Set up basic Django template structure and Bootstrap 5", "labels": ["🚀 phase-1", "web", "templates"]},
+                {"title": "Phase 2: Base Layout & Navigation", "description": "Create base layout, navigation, and responsive design", "labels": ["🚀 phase-2", "web", "layout"]},
+                {"title": "Phase 3: Dashboard Views", "description": "Build main dashboard with trading overview", "labels": ["🚀 phase-3", "web", "dashboard"]},
+                {"title": "Phase 4: Trading Interface", "description": "Create trading signal and position management UI", "labels": ["🚀 phase-4", "web", "trading"]},
+                {"title": "Phase 5: Real-time Updates", "description": "Add WebSocket/real-time data updates", "labels": ["🚀 phase-5", "web", "realtime"]},
+                {"title": "Phase 6: Admin Interface", "description": "Build Django admin customizations", "labels": ["🚀 phase-6", "web", "admin"]},
+                {"title": "Phase 7: User Authentication UI", "description": "Create login, registration, and profile pages", "labels": ["🚀 phase-7", "web", "auth"]},
+                {"title": "Phase 8: Mobile Optimization", "description": "Optimize UI for mobile devices", "labels": ["🚀 phase-8", "web", "mobile"]}
+              ]'
+              ;;
+            "Testing Infrastructure")
+              PHASES_JSON='[
+                {"title": "Phase 1: Test Framework Setup", "description": "Configure pytest, coverage, and test structure", "labels": ["🚀 phase-1", "testing", "framework"]},
+                {"title": "Phase 2: Unit Test Foundation", "description": "Create unit tests for core utilities and models", "labels": ["🚀 phase-2", "testing", "unit"]},
+                {"title": "Phase 3: API Testing", "description": "Build comprehensive API endpoint tests", "labels": ["🚀 phase-3", "testing", "api"]},
+                {"title": "Phase 4: Integration Tests", "description": "Create database and service integration tests", "labels": ["🚀 phase-4", "testing", "integration"]},
+                {"title": "Phase 5: Trading Logic Tests", "description": "Test signal generation and trading algorithms", "labels": ["🚀 phase-5", "testing", "trading"]},
+                {"title": "Phase 6: Performance Testing", "description": "Add load and performance test suites", "labels": ["🚀 phase-6", "testing", "performance"]},
+                {"title": "Phase 7: E2E Test Automation", "description": "Implement end-to-end user journey tests", "labels": ["🚀 phase-7", "testing", "e2e"]},
+                {"title": "Phase 8: CI/CD Test Integration", "description": "Integrate tests into CI/CD with quality gates", "labels": ["🚀 phase-8", "testing", "ci"]}
+              ]'
+              ;;
+            *)
+              # Generic phases for other areas
+              PHASES_JSON='[
+                {"title": "Phase 1: Requirements & Planning", "description": "Gather requirements and create detailed implementation plan", "labels": ["🚀 phase-1", "planning"]},
+                {"title": "Phase 2: Foundation Setup", "description": "Set up basic infrastructure and dependencies", "labels": ["🚀 phase-2", "setup"]},
+                {"title": "Phase 3: Core Implementation", "description": "Implement core functionality", "labels": ["🚀 phase-3", "core"]},
+                {"title": "Phase 4: Integration", "description": "Integrate with existing systems", "labels": ["🚀 phase-4", "integration"]},
+                {"title": "Phase 5: Testing & Validation", "description": "Comprehensive testing and validation", "labels": ["🚀 phase-5", "testing"]},
+                {"title": "Phase 6: Optimization", "description": "Performance optimization and refinement", "labels": ["🚀 phase-6", "optimization"]},
+                {"title": "Phase 7: Documentation", "description": "Complete documentation and user guides", "labels": ["🚀 phase-7", "documentation"]},
+                {"title": "Phase 8: Deployment & Monitoring", "description": "Deploy and set up monitoring", "labels": ["🚀 phase-8", "deployment"]}
+              ]'
+              ;;
+          esac
+
+          # Create issues for each phase
+          echo "Testing GitHub CLI..."
+          TEST_ISSUE_URL=$(gh issue create \
+            --title "Test Phase Issue" \
+            --body "Testing phased issue creation" \
+            --label "test,🚀 phase-1" \
+            --repo "${{ github.repository }}")
+          echo "Test issue created: $TEST_ISSUE_URL"
+
+          echo "$PHASES_JSON" | jq -c '.[]' | while read -r phase; do
+            TITLE=$(echo "$phase" | jq -r '.title')
+            DESCRIPTION=$(echo "$phase" | jq -r '.description')
+            LABELS=$(echo "$phase" | jq -r '.labels | join(",")')
+
+            # Create the issue
+            ISSUE_BODY="## Phase Description
+          $DESCRIPTION
+
+          ## Parent Issue
+          Part of phased implementation: #${ISSUE_NUMBER}
+
+          ## Dependencies
+          - Requires completion of previous phases
+          - Blocked by: [List any specific dependencies]
+
+          ## Acceptance Criteria
+          - [ ] Phase objectives completed
+          - [ ] Code reviewed and approved
+          - [ ] Tests passing
+          - [ ] Documentation updated
+          - [ ] No regressions introduced
+
+          ## Implementation Notes
+          [Add specific implementation details, code changes, or considerations]"
+
+            # Create issue using GitHub CLI
+            NEW_ISSUE_URL=$(gh issue create \
+              --title "$TITLE" \
+              --body "$ISSUE_BODY" \
+              --label "$LABELS" \
+              --repo "${{ github.repository }}")
+
+            # Extract issue number from URL
+            NEW_ISSUE_NUMBER=$(echo "$NEW_ISSUE_URL" | grep -o '#[0-9]*' | tr -d '#')
+            echo "Created issue #$NEW_ISSUE_NUMBER: $TITLE"
+          done
+
+      - name: Update parent issue
+        run: |
+          ISSUE_NUMBER="${{ steps.issue.outputs.issue_number }}"
+          AREA="${{ steps.issue.outputs.area }}"
+          PHASE_COUNT="${{ steps.issue.outputs.phases }}"
+
+          # Determine number of phases based on selection
+          case "$PHASE_COUNT" in
+            "3-5")
+              NUM_PHASES=4
+              ;;
+            "6-10")
+              NUM_PHASES=8
+              ;;
+            "11-15")
+              NUM_PHASES=12
+              ;;
+            "16+")
+              NUM_PHASES=16
+              ;;
+            *)
+              NUM_PHASES=8
+              ;;
+          esac
+
+          # Add comment to parent issue
+          COMMENT="## 🚀 Phased Implementation Created
+
+          **Generated $NUM_PHASES implementation phases** for this feature request.
+
+          ### Next Steps:
+          1. Review the created phase issues
+          2. Adjust priorities and assignments as needed
+          3. Start with Phase 1 implementation
+          4. Use the project board to track progress
+
+          ### Phase Management:
+          - Each phase has specific acceptance criteria
+          - Phases are designed to be completed sequentially
+          - All phases must pass before closing this parent issue
+
+          The phased issues have been automatically added to the project board for tracking."
+
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            -d "{\"body\": \"$COMMENT\"}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/$ISSUE_NUMBER/comments"
+
+      - name: Notify phased issue creation
+        uses: sarisia/actions-status-discord
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🚀 Phased Issues Created"
+          description: |
+            **Parent Issue:** #${{ steps.issue.outputs.issue_number }}
+            **Area:** ${{ steps.issue.outputs.area }}
+            **Phases Created:** 8
+
+            Implementation phases have been automatically generated and added to the project board.
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS Issue Bot

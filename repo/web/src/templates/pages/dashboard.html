@@ -1,0 +1,368 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Trading Dashboard - FKS Trading Platform{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>
+            <i class="bi bi-speedometer2"></i>
+            Trading Dashboard
+        </h2>
+        <p class="text-muted">Real-time trading metrics and market analysis</p>
+    </div>
+</div>
+
+<!-- Key Metrics -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">Total Profit</h6>
+                        <h3 class="mb-0">${{ total_profit|default:"12,450.00"|floatformat:2 }}</h3>
+                        <small><i class="bi bi-arrow-up"></i> +15.3% this month</small>
+                    </div>
+                    <i class="bi bi-cash-stack fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">Win Rate</h6>
+                        <h3 class="mb-0">{{ win_rate|default:"68.5" }}%</h3>
+                        <small>Last 100 trades</small>
+                    </div>
+                    <i class="bi bi-graph-up fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">Active Positions</h6>
+                        <h3 class="mb-0">{{ active_positions|default:"5" }}</h3>
+                        <small>${{ active_positions_value|default:"45,230" }} total</small>
+                    </div>
+                    <i class="bi bi-bar-chart fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2">Sharpe Ratio</h6>
+                        <h3 class="mb-0">{{ sharpe_ratio|default:"1.85" }}</h3>
+                        <small>Risk-adjusted return</small>
+                    </div>
+                    <i class="bi bi-shield-check fs-1 opacity-50"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <!-- Price Chart -->
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    Price Chart - {{ symbol|default:"BTCUSDT" }}
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary active" data-timeframe="1h">1H</button>
+                    <button type="button" class="btn btn-outline-secondary" data-timeframe="4h">4H</button>
+                    <button type="button" class="btn btn-outline-secondary" data-timeframe="1d">1D</button>
+                    <button type="button" class="btn btn-outline-secondary" data-timeframe="1w">1W</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="priceChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Portfolio Distribution -->
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-pie-chart"></i>
+                    Portfolio Distribution
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="portfolioChart"></canvas>
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span><i class="bi bi-circle-fill text-primary"></i> BTC</span>
+                        <strong>35%</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span><i class="bi bi-circle-fill text-success"></i> ETH</span>
+                        <strong>28%</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span><i class="bi bi-circle-fill text-warning"></i> SOL</span>
+                        <strong>15%</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span><i class="bi bi-circle-fill text-info"></i> Others</span>
+                        <strong>22%</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Performance & Signals Row -->
+<div class="row mb-4">
+    <!-- Performance Chart -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-bar-chart-line"></i>
+                    Performance Metrics
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="performanceChart" height="60"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Signals -->
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-broadcast"></i>
+                    Recent Trading Signals
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    {% for signal in recent_signals %}
+                    <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">
+                                    {% if signal.type == 'BUY' %}
+                                        <span class="badge bg-success">BUY</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">SELL</span>
+                                    {% endif %}
+                                    {{ signal.symbol }}
+                                </h6>
+                                <small class="text-muted">
+                                    {{ signal.strategy }} • Confidence: {{ signal.confidence }}%
+                                </small>
+                            </div>
+                            <div class="text-end">
+                                <div class="fw-bold">${{ signal.price }}</div>
+                                <small class="text-muted">{{ signal.time_ago }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                        No recent signals
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="#" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-arrow-right"></i> View All Signals
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Trades Table -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-check"></i>
+                    Active Trades
+                </h5>
+                <button class="btn btn-sm btn-success">
+                    <i class="bi bi-plus-circle"></i> New Trade
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th>Entry Price</th>
+                                <th>Current Price</th>
+                                <th>P&L</th>
+                                <th>P&L %</th>
+                                <th>Size</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trade in active_trades %}
+                            <tr>
+                                <td><strong>{{ trade.symbol }}</strong></td>
+                                <td>
+                                    {% if trade.type == 'LONG' %}
+                                        <span class="badge bg-success">LONG</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">SHORT</span>
+                                    {% endif %}
+                                </td>
+                                <td>${{ trade.entry_price }}</td>
+                                <td>${{ trade.current_price }}</td>
+                                <td class="{% if trade.pnl > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    ${{ trade.pnl }}
+                                </td>
+                                <td class="{% if trade.pnl_percent > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ trade.pnl_percent }}%
+                                </td>
+                                <td>{{ trade.size }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-x-circle"></i> Close
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">
+                                    No active trades. <a href="#">Start trading</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Price Chart
+const priceCtx = document.getElementById('priceChart').getContext('2d');
+const priceChart = new Chart(priceCtx, {
+    type: 'line',
+    data: {
+        labels: {{ price_labels|safe }},
+        datasets: [{
+            label: 'Price',
+            data: {{ price_data|safe }},
+            borderColor: 'rgb(75, 192, 192)',
+            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+            tension: 0.1
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: false
+            }
+        }
+    }
+});
+
+// Portfolio Distribution Chart
+const portfolioCtx = document.getElementById('portfolioChart').getContext('2d');
+const portfolioChart = new Chart(portfolioCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['BTC', 'ETH', 'SOL', 'Others'],
+        datasets: [{
+            data: [35, 28, 15, 22],
+            backgroundColor: [
+                'rgb(13, 110, 253)',
+                'rgb(25, 135, 84)',
+                'rgb(255, 193, 7)',
+                'rgb(13, 202, 240)'
+            ]
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Performance Chart
+const perfCtx = document.getElementById('performanceChart').getContext('2d');
+const perfChart = new Chart(perfCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        datasets: [{
+            label: 'Daily P&L',
+            data: {{ daily_pnl|safe }},
+            backgroundColor: function(context) {
+                const value = context.parsed.y;
+                return value >= 0 ? 'rgba(25, 135, 84, 0.7)' : 'rgba(220, 53, 69, 0.7)';
+            }
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Timeframe buttons
+document.querySelectorAll('[data-timeframe]').forEach(button => {
+    button.addEventListener('click', function() {
+        document.querySelectorAll('[data-timeframe]').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        // TODO: Fetch new data for selected timeframe
+        console.log('Loading', this.dataset.timeframe, 'data');
+    });
+});
+</script>
+{% endblock %}

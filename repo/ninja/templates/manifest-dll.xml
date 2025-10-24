@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NinjaScriptManifest SchemaVersion="1.0" xmlns="http://www.ninjatrader.com/NinjaScript">
+  <Assemblies>
+    <Assembly>
+      <FullName>FKS, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null</FullName>
+      <ExportedTypes>
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_AI</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_AO</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_Dashboard</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_PythonBridge</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Strategies.FKS_Strategy</ExportedType>
+      </ExportedTypes>
+    </Assembly>
+  </Assemblies>
+  <NinjaScriptCollection>
+    <Indicators>
+      <Indicator>
+        <TypeName>FKS_AI</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_AI</FullTypeName>
+        <DisplayName>FKS AI</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_AO</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_AO</FullTypeName>
+        <DisplayName>FKS AO</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_Dashboard</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_Dashboard</FullTypeName>
+        <DisplayName>FKS Info</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_PythonBridge</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_PythonBridge</FullTypeName>
+        <DisplayName>FKS Python Bridge</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+    </Indicators>
+    <Strategies>
+      <Strategy>
+        <TypeName>FKS_Strategy</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Strategies.FKS_Strategy</FullTypeName>
+        <DisplayName>FKS Strategy</DisplayName>
+        <Group>FKS</Group>
+      </Strategy>
+    </Strategies>
+  </NinjaScriptCollection>
+  <Files>
+    <!-- Compiled Assembly -->
+    <File>
+      <n>FKS.dll</n>
+      <Path></Path>
+    </File>
+  </Files>
+</NinjaScriptManifest>

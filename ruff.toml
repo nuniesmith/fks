@@ -1,0 +1,85 @@
+# Ruff configuration for FKS Trading Platform
+# https://docs.astral.sh/ruff/
+
+# Target Python 3.13
+target-version = "py313"
+
+# Set line length
+line-length = 120
+
+# Enable specific rule sets
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "F403",  # star imports (commonly used in __init__.py files)
+    "F401",  # unused imports in __init__.py files
+    "UP035", # deprecated typing imports (Dict, List, Type) - phase out gradually
+    "B904",  # raise without from in except - fastapi/legacy pattern
+    "B008",  # function call in default argument - fastapi dependency pattern
+    "SIM105", # suppressible-exception - contextlib.suppress not always clearer
+    "SIM108", # if-else-block-instead-of-if-exp - ternary not always clearer
+    "SIM102", # collapsible-if - nested ifs can be more readable
+    "SIM117", # multiple-with-statements - single context managers clearer
+    "UP045", # non-pep604-annotation-optional - Optional[] is clear and widely used
+    "UP007", # non-pep604-annotation-union - Union[] is clear and widely used
+    "B027",  # empty-method-without-abstract-decorator - abstract base classes pattern
+    "N818",  # error-suffix-on-exception-name - naming convention preference
+    "N801",  # invalid-class-name - legacy code with specific naming
+    "N806",  # non-lowercase-variable-in-function - constants in functions
+    "N803",  # invalid-argument-name - legacy code compatibility
+]
+
+# Exclude specific files and directories
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "*.pyc",
+    ".mypy_cache",
+    ".pytest_cache",
+    "*.egg-info",
+    "build",
+    "dist",
+    "migrations",
+    "node_modules",
+]
+
+# Per-file ignores
+[lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]  # Allow unused imports and star imports in __init__.py
+"src/__init__.py" = ["F401", "F403"]
+"*/migrations/*.py" = ["E501", "F401"]  # Ignore line length and unused imports in migrations
+"tests/*.py" = ["F401", "F811"]  # Allow some flexibility in tests
+"src/data/adapters/base.py" = ["F821"]  # Known legacy import issues - documented in copilot-instructions
+"src/data/bars.py" = ["F821"]  # Known legacy import issues - documented in copilot-instructions
+"src/config/__init__.py" = ["E402"]  # Intentional import ordering for dynamic configuration
+"src/api/middleware/rate_limiter/__init__.py" = ["E402"]  # Intentional late imports for cleanup setup
+"src/framework/config/__init__.py" = ["E402"]  # Intentional import ordering for dynamic configuration
+"src/framework/middleware/rate_limiter/__init__.py" = ["E402"]  # Intentional late imports for cleanup setup
+"src/infrastructure/external/data_providers/manager.py" = ["E402"]  # Intentional import ordering for FastAPI integration
+
+# Formatting options
+[format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# Isort settings
+[lint.isort]
+known-first-party = ["src"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

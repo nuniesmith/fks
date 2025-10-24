@@ -1,0 +1,24 @@
+# Include base requirements
+-r requirements.txt
+
+# GPU-Specific Deep Learning (CUDA-enabled versions)
+# Note: Install PyTorch with CUDA separately using:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# Commenting out to avoid pip install errors
+# torch>=2.8.0  # CUDA-enabled PyTorch (install separately)
+# torchvision>=0.23.0  # CUDA-enabled torchvision (install separately)
+
+# GPU-Accelerated ML Libraries
+xgboost>=3.0.5  # GPU support via CUDA
+lightgbm>=4.0.0  # GPU support via CUDA
+
+# Local LLM Support (CUDA-optimized)
+llama-cpp-python>=0.2.0  # CUDA-enabled build
+transformers>=4.47.0  # GPU acceleration
+accelerate>=1.2.0  # GPU memory optimization
+bitsandbytes>=0.45.0  # CUDA quantization
+
+# RAG with GPU acceleration
+# Note: faiss-gpu doesn't support Python 3.13 yet, use faiss-cpu (still fast) or build from source
+# faiss-gpu>=1.7.2  # Not available for Python 3.13
+sentence-transformers>=5.1.1  # Uses GPU when available

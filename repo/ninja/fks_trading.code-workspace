@@ -1,0 +1,146 @@
+{
+    "folders": [
+        {
+            "name": "FKS NinjaTrader Project",
+            "path": "."
+        }
+    ],
+    "settings": {
+        "omnisharp.enabled": true,
+        "omnisharp.path": "latest",
+        "omnisharp.useModernNet": false,
+        "omnisharp.enableEditorConfigSupport": true,
+        "omnisharp.enableRoslynAnalyzers": true,
+        "omnisharp.enableDecompilationSupport": true,
+        "dotnet.defaultSolution": "FKS.sln",
+        "files.exclude": {
+            "**/bin": true,
+            "**/obj": true,
+            "**/.vs": true,
+            "**/packages": true
+        },
+        "search.exclude": {
+            "**/bin": true,
+            "**/obj": true,
+            "**/packages": true,
+            "**/*.dll": true
+        },
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "always"
+        },
+        "csharp.semanticHighlighting.enabled": true,
+        "csharp.suppressHiddenDiagnostics": false,
+        "csharp.showOmnisharpLogOnError": true,
+        "csharp.maxProjectFileCountForDiagnosticAnalysis": 1000,
+        "files.associations": {
+            "*.cs": "csharp"
+        },
+        "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
+        "dotnet.formatting.organizeImportsOnFormat": true
+    },
+    "tasks": {
+        "version": "1.0.0",
+        "tasks": [
+            {
+                "label": "build",
+                "command": "dotnet",
+                "type": "process",
+                "args": [
+                    "build",
+                    "${workspaceFolder}/src/FKS.csproj"
+                ],
+                "options": {
+                    "cwd": "${workspaceFolder}"
+                },
+                "group": {
+                    "kind": "build",
+                    "isDefault": true
+                },
+                "presentation": {
+                    "echo": true,
+                    "reveal": "silent",
+                    "focus": false,
+                    "panel": "shared",
+                    "showReuseMessage": true,
+                    "clear": false
+                },
+                "problemMatcher": "$msCompile"
+            },
+            {
+                "label": "clean",
+                "command": "dotnet",
+                "type": "process",
+                "args": [
+                    "clean",
+                    "${workspaceFolder}/src/FKS.csproj"
+                ],
+                "options": {
+                    "cwd": "${workspaceFolder}"
+                },
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "silent",
+                    "focus": false,
+                    "panel": "shared"
+                },
+                "problemMatcher": "$msCompile"
+            },
+            {
+                "label": "restore",
+                "command": "dotnet",
+                "type": "process",
+                "args": [
+                    "restore",
+                    "${workspaceFolder}/src/FKS.csproj"
+                ],
+                "options": {
+                    "cwd": "${workspaceFolder}"
+                },
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "silent",
+                    "focus": false,
+                    "panel": "shared"
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "package-nt8",
+                "command": "dotnet",
+                "type": "process",
+                "args": [
+                    "build",
+                    "${workspaceFolder}/src/FKS.csproj",
+                    "-t:PackageNT8"
+                ],
+                "options": {
+                    "cwd": "${workspaceFolder}"
+                },
+                "group": "build",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "shared"
+                },
+                "problemMatcher": "$msCompile"
+            }
+        ]
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": []
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-dotnettools.csharp",
+            "ms-dotnettools.vscode-dotnet-runtime",
+            "ms-vscode.powershell",
+            "ms-vscode.vscode-json",
+            "redhat.vscode-xml"
+        ]
+    }
+}

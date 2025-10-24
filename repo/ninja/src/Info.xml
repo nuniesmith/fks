@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NinjaTrader>
+  <Export>
+    <Name>FKS Trading Systems</Name>
+    <Version>8.1.3.1</Version>
+    <Description>Professional Trading System for NinjaTrader 8</Description>
+    <Author>FKS Trading Systems</Author>
+    <Copyright>Copyright © FKS Trading Systems 2025</Copyright>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <MinNinjaTraderVersion>8.1.0.0</MinNinjaTraderVersion>
+    <CustomAssembly>FKS</CustomAssembly>
+  </Export>
+</NinjaTrader>

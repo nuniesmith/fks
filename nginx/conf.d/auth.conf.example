@@ -1,0 +1,71 @@
+# Authentication configuration for protected endpoints
+# This file should be included in the main nginx conf
+
+# Auth request configuration for Django-backed authentication
+location /auth/validate {
+    internal;
+    proxy_pass http://django/api/auth/validate-session;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header X-Original-URI $request_uri;
+    proxy_set_header X-Original-Method $request_method;
+}
+
+# Admin area - Django auth + optional basic auth
+location /admin/ {
+    # Option 1: Only Django authentication
+    # auth_request /auth/validate;
+    
+    # Option 2: Basic auth + Django authentication (most secure)
+    auth_basic "Admin Area";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    
+    proxy_pass http://django;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# Flower (Celery monitoring) - Basic auth required
+location /flower/ {
+    auth_basic "Celery Monitoring";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    
+    rewrite ^/flower/(.*)$ /$1 break;
+    proxy_pass http://flower;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_redirect off;
+}
+
+# PgAdmin - Basic auth (since it's exposed on port 5050)
+# Note: This is typically accessed directly, but can be proxied
+location /pgadmin/ {
+    auth_basic "Database Admin";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    
+    proxy_pass http://fks_pgadmin:80/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Script-Name /pgadmin;
+}
+
+# Protected API endpoints - Require authentication
+location /api/v1/protected/ {
+    # Validate Django session or API key
+    if ($http_x_api_key = "") {
+        # No API key, check Django session
+        auth_request /auth/validate;
+    }
+    
+    proxy_pass http://django;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}

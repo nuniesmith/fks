@@ -1,0 +1,864 @@
+name: FKS CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags: [ 'v*' ]  # Trigger on version tags
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'docker/**'
+      - 'requirements*.txt'
+      - '.github/workflows/**'
+      - '!docs/**'  # Ignore docs-only changes
+  pull_request:
+    branches: [ main, develop ]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'scripts/docs/**'
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+    inputs:
+      python_version:
+        description: 'Python version to test'
+        required: false
+        default: '3.13'
+        type: choice
+        options:
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'Target environment'
+        required: false
+        type: choice
+        default: 'staging'
+        options:
+          - 'staging'
+          - 'production'
+
+env:
+  PYTHON_VERSION: ${{ inputs.python_version || '3.13' }}
+
+jobs:
+  notify-start:
+    name: Notify Workflow Start
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    steps:
+      - name: Send Discord notification
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🚀 CI/CD Pipeline Started", "description": "**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Event:** ${{ github.event_name }}\n**Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})\n**Author:** ${{ github.actor }}", "color": 39423}]'
+
+  label-pr:
+    name: Label Pull Request
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    outputs:
+      all-labels: ${{ steps.labeler.outputs.all-labels }}
+      new-labels: ${{ steps.labeler.outputs.new-labels }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Apply labels
+        id: labeler
+        uses: actions/labeler@v5
+        with:
+          sync-labels: true  # Remove labels if files no longer match
+          configuration-path: .github/labeler.yml
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get PR labels
+        id: pr-labels
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "All labels: ${{ steps.labeler.outputs.all-labels }}"
+          echo "New labels: ${{ steps.labeler.outputs.new-labels }}"
+      
+      - name: Check for framework changes
+        if: contains(steps.labeler.outputs.all-labels, 'framework')
+        run: |
+          echo "::warning::⚠️ Framework layer modified! This requires Phase 9D analysis due to 26 external imports."
+          echo "### ⚠️ Framework Changes Detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The framework layer has been modified. This is critical because:" >> $GITHUB_STEP_SUMMARY
+          echo "- 64 files (928KB) of reusable abstractions" >> $GITHUB_STEP_SUMMARY
+          echo "- 26+ external imports across the codebase" >> $GITHUB_STEP_SUMMARY
+          echo "- Requires thorough analysis before merging" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Check for breaking changes
+        if: contains(steps.labeler.outputs.all-labels, 'breaking')
+        run: |
+          echo "::warning::⚠️ Breaking changes detected! Major review required."
+          echo "### ⚠️ Breaking Changes Detected" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This PR contains potentially breaking changes that require careful review." >> $GITHUB_STEP_SUMMARY
+      
+      - name: Notify labels
+        if: steps.labeler.outputs.new-labels != ''
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "🏷️ PR Auto-Labeled"
+          description: |
+            **PR:** #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}
+      - name: Notify labels
+        if: steps.labeler.outputs.new-labels != ''
+        uses: tsickert/discord-webhook@v2.0.0
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🏷️ PR Auto-Labeled", "description": "**PR:** #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}\n**Author:** ${{ github.actor }}\n**New Labels:** ${{ steps.labeler.outputs.new-labels }}\n**All Labels:** ${{ steps.labeler.outputs.all-labels }}", "color": 5000268}]'
+      fail-fast: false  # Continue testing other versions if one fails
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+        os: 
+          - freddy
+          - ubuntu-latest
+        include:
+          # Add Windows testing for main Python version
+          - python-version: '3.13'
+            os: windows-latest
+          # Test older Python on Ubuntu only
+          - python-version: '3.10'
+            os: ubuntu-latest
+    
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_trading_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements.gpu.txt
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio pytest-django
+      
+      - name: Create log directories
+        shell: bash
+        run: |
+          mkdir -p logs/{celery,gunicorn,nginx,postgres,rag,redis,web}
+          mkdir -p /app/logs || sudo mkdir -p /app/logs || true
+          chmod -R 777 logs || true
+      
+      - name: Setup pgvector extension
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d test_trading_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
+      
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_trading_db
+          TESTING: "true"
+        run: |
+          python manage.py migrate || echo "Migrations skipped"
+      
+      - name: Run unit tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_trading_db
+          REDIS_URL: redis://localhost:6379/0
+          TESTING: "true"
+          DJANGO_SETTINGS_MODULE: web.django.settings
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml --cov-report=html -m "not slow"
+      
+      - name: Run slow tests (Python 3.13 only)
+        if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_trading_db
+          REDIS_URL: redis://localhost:6379/0
+          TESTING: "true"
+          DJANGO_SETTINGS_MODULE: web.django.settings
+        run: |
+          pytest tests/ -v -m "slow"
+      
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella-py${{ matrix.python-version }}-${{ matrix.os }}
+          fail_ci_if_error: false
+      
+      - name: Generate coverage summary
+        if: matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+        run: |
+          echo "## 📊 Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract coverage percentage from coverage.xml
+          COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(f\"{float(root.attrib['line-rate']) * 100:.1f}\")" 2>/dev/null || echo "N/A")
+          
+          echo "**Overall Coverage**: ${COVERAGE}% (Target: 80%+)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📁 Full HTML report available in artifacts" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.13' && matrix.os == 'ubuntu-latest'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Parse coverage.xml to get percentage
+            const xml = fs.readFileSync('coverage.xml', 'utf8');
+            const match = xml.match(/line-rate="([0-9.]+)"/);
+            const coverage = match ? (parseFloat(match[1]) * 100).toFixed(1) : 'N/A';
+            
+            // Get test results from pytest
+            const summary = `## 🧪 Test Results & Coverage
+            
+            **Test Coverage**: ${coverage}% (Target: 80%+)
+            **Python Version**: ${{ matrix.python-version }}
+            **OS**: ${{ matrix.os }}
+            
+            ${coverage < 80 ? '⚠️ Coverage below target threshold' : '✅ Coverage meets target'}
+            
+            📊 View detailed coverage report in workflow artifacts
+            `;
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Test Results & Coverage')
+            );
+            
+            // Update or create comment
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: summary
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: summary
+              });
+            }
+      
+      - name: Notify test results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🧪 Test Results"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
+
+      - name: Notify test results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🧪 Test Results", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install linting tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy black isort
+      
+      - name: Run ruff (strict)
+        run: |
+          echo "## 🔍 Ruff Linting Results" >> $GITHUB_STEP_SUMMARY
+          ruff check src/ --output-format=github --exit-zero > ruff-results.txt || true
+          cat ruff-results.txt >> $GITHUB_STEP_SUMMARY
+          # Fail only on critical errors (E, F rules)
+          if grep -E "^src/.*: (E[0-9]|F[0-9])" ruff-results.txt; then
+            echo "❌ Critical lint errors found"
+            exit 1
+          fi
+        continue-on-error: false
+      
+      - name: Run black (informational)
+        run: |
+          echo "## 🎨 Black Formatting Check" >> $GITHUB_STEP_SUMMARY
+          black --check src/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "⚠️ Formatting issues found (non-blocking)" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+      
+      - name: Run isort (informational)
+        run: |
+          echo "## 📦 Import Sorting Check" >> $GITHUB_STEP_SUMMARY
+          isort --check-only src/ >> $GITHUB_STEP_SUMMARY 2>&1 || echo "⚠️ Import sorting issues found (non-blocking)" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+      
+      - name: Run mypy (informational)
+        run: |
+          echo "## 🔎 Type Checking Results" >> $GITHUB_STEP_SUMMARY
+          mypy src/ --ignore-missing-imports >> $GITHUB_STEP_SUMMARY 2>&1 || echo "⚠️ Type checking issues found (non-blocking)" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+      
+      - name: Upload lint reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-reports
+          path: |
+            ruff-results.txt
+      
+      - name: Notify lint results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🔍 Code Quality Check"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
+
+  security:
+    name: Security Scan
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    needs: [notify-start, label-pr]
+      - name: Notify lint results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🔍 Code Quality Check", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install security tools
+        run: |
+          pip install bandit safety pip-audit
+      
+      - name: Run pip-audit (dependency vulnerabilities)
+        run: |
+          echo "## 🔐 Dependency Security Audit" >> $GITHUB_STEP_SUMMARY
+          pip-audit --requirement requirements.txt --format json --output pip-audit-report.json || true
+          pip-audit --requirement requirements.txt --format markdown >> $GITHUB_STEP_SUMMARY || echo "✅ No known vulnerabilities found" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+      
+      - name: Run bandit (code security)
+        run: |
+          echo "## 🔍 Code Security Scan (Bandit)" >> $GITHUB_STEP_SUMMARY
+          bandit -r src/ -f json -o bandit-report.json || true
+          bandit -r src/ -f screen >> $GITHUB_STEP_SUMMARY 2>&1 || echo "⚠️ Security issues found in code" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+      
+      - name: Run safety check (legacy)
+        run: |
+          echo "## 🛡️ Safety Check (Deprecated)" >> $GITHUB_STEP_SUMMARY
+          safety check --json --output safety-report.json || true
+          safety check || echo "Note: safety check is deprecated, use pip-audit" >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+      
+      - name: Generate security summary
+        run: |
+          echo "## 📊 Security Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Count vulnerabilities from pip-audit
+          if [ -f pip-audit-report.json ]; then
+            VULN_COUNT=$(jq '.vulnerabilities | length' pip-audit-report.json 2>/dev/null || echo "0")
+            echo "- **Dependency Vulnerabilities**: $VULN_COUNT" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Count issues from bandit
+          if [ -f bandit-report.json ]; then
+            BANDIT_COUNT=$(jq '.results | length' bandit-report.json 2>/dev/null || echo "0")
+            echo "- **Code Security Issues**: $BANDIT_COUNT" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📁 Full reports available in workflow artifacts" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            pip-audit-report.json
+            bandit-report.json
+            safety-report.json
+      
+      - name: Notify security scan results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🔒 Security Scan"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
+
+  docker:
+    name: Build Docker Image
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    needs: [test, lint, label-pr]
+    # Skip docker build on docs-only or WIP PRs
+    if: |
+      always() &&
+      needs.test.result == 'success' &&
+      needs.lint.result == 'success' &&
+      !contains(needs.label-pr.outputs.all-labels, 'wip') &&
+      - name: Notify security scan results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🔒 Security Scan", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_API_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.DOCKER_REPOSITORY }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+          labels: |
+            org.opencontainers.image.title=FKS Trading Platform
+            org.opencontainers.image.description=AI-powered Django trading platform
+            org.opencontainers.image.vendor=FKS Trading
+            org.opencontainers.image.licenses=MIT
+      
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_REPOSITORY }}:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_REPOSITORY }}:buildcache,mode=max
+      
+      - name: Notify Docker build results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🐳 Docker Build"
+          description: |
+            **Status:** ${{ job.status }}
+            **Branch:** ${{ github.ref_name }}
+            **Tags:** ${{ steps.meta.outputs.tags }}
+            **Pushed:** ${{ github.event_name != 'pull_request' }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    needs: [docker]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Extract version from tag
+        id: version
+      - name: Notify Docker build results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🐳 Docker Build", "description": "**Status:** ${{ job.status }}\n**Branch:** ${{ github.ref_name }}\n**Tags:** ${{ steps.meta.outputs.tags }}\n**Pushed:** ${{ github.event_name != \'pull_request\' }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
+            echo "" >> release_notes.md
+            git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges >> release_notes.md
+          else
+            echo "## Initial Release" > release_notes.md
+            echo "" >> release_notes.md
+            echo "First stable release of FKS Trading Platform" >> release_notes.md
+          fi
+          
+          echo "" >> release_notes.md
+          echo "## Docker Images" >> release_notes.md
+          echo "- \`${{ secrets.DOCKER_REPOSITORY }}:${{ steps.version.outputs.version }}\`" >> release_notes.md
+          echo "- \`${{ secrets.DOCKER_REPOSITORY }}:latest\`" >> release_notes.md
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release v${{ steps.version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'rc') || contains(steps.version.outputs.version, 'beta') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Notify release
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "🎉 New Release Published"
+          description: |
+            **Version:** v${{ steps.version.outputs.version }}
+            **Tag:** ${{ steps.version.outputs.tag }}
+            **Repository:** ${{ github.repository }}
+            **Released by:** ${{ github.actor }}
+            
+            [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }})
+          color: 0x9C27B0
+          username: FKS CI/CD Bot
+
+  update-dns:
+    name: Update Cloudflare DNS
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    needs: [docker]
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set environment variables
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "ENVIRONMENT=production" >> $GITHUB_OUTPUT
+            echo "DOMAIN=fkstrading.xyz" >> $GITHUB_OUTPUT
+            echo "SERVER_IP=${{ secrets.PRODUCTION_IP }}" >> $GITHUB_OUTPUT
+          else
+            echo "ENVIRONMENT=staging" >> $GITHUB_OUTPUT
+            echo "DOMAIN=staging.fkstrading.xyz" >> $GITHUB_OUTPUT
+            echo "SERVER_IP=${{ secrets.STAGING_IP }}" >> $GITHUB_OUTPUT
+      - name: Notify release
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🎉 New Release Published", "description": "**Version:** v${{ steps.version.outputs.version }}\n**Tag:** ${{ steps.version.outputs.tag }}\n**Repository:** ${{ github.repository }}\n**Released by:** ${{ github.actor }}\n\n[View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }})", "color": 10233456}]'
+            # Create new A record
+            echo "Creating new A record for ${{ steps.env.outputs.DOMAIN }}"
+            RESPONSE=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "${{ steps.env.outputs.DOMAIN }}",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          else
+            # Update existing A record
+            echo "Updating A record for ${{ steps.env.outputs.DOMAIN }}"
+            RESPONSE=$(curl -s -X PUT \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "${{ steps.env.outputs.DOMAIN }}",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          fi
+          
+          # Check if successful
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Failed to update DNS record"
+            echo "$RESPONSE" | jq '.'
+            exit 1
+          fi
+          
+          echo "DNS record updated successfully"
+          echo "$RESPONSE" | jq '.result'
+      
+      - name: Update DNS A record for www subdomain
+        id: update-www
+        if: steps.env.outputs.ENVIRONMENT == 'production'
+        run: |
+          ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
+          WWW_DOMAIN="www.${{ steps.env.outputs.DOMAIN }}"
+          
+          # List existing DNS records
+          RECORD_ID=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=A&name=${WWW_DOMAIN}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
+          
+          if [ -z "$RECORD_ID" ]; then
+            # Create new A record
+            echo "Creating new A record for ${WWW_DOMAIN}"
+            RESPONSE=$(curl -s -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "'${WWW_DOMAIN}'",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          else
+            # Update existing A record
+            echo "Updating A record for ${WWW_DOMAIN}"
+            RESPONSE=$(curl -s -X PUT \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${RECORD_ID}" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              --data '{
+                "type": "A",
+                "name": "'${WWW_DOMAIN}'",
+                "content": "${{ steps.env.outputs.SERVER_IP }}",
+                "ttl": 300,
+                "proxied": true,
+                "comment": "Managed by GitHub Actions - ${{ steps.env.outputs.ENVIRONMENT }}"
+              }')
+          fi
+          
+          # Check if successful
+          SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "Failed to update www DNS record"
+            echo "$RESPONSE" | jq '.'
+            exit 1
+          fi
+          
+          echo "WWW DNS record updated successfully"
+          echo "$RESPONSE" | jq '.result'
+      
+      - name: Verify DNS propagation
+        run: |
+          echo "Waiting for DNS propagation..."
+          sleep 15
+          
+          # Check DNS resolution
+          RESOLVED_IP=$(dig +short ${{ steps.env.outputs.DOMAIN }} @1.1.1.1 | tail -n1)
+          echo "Resolved IP: $RESOLVED_IP"
+          echo "Expected IP: ${{ steps.env.outputs.SERVER_IP }}"
+          
+          if [ "$RESOLVED_IP" != "${{ steps.env.outputs.SERVER_IP }}" ]; then
+            echo "Warning: DNS not yet propagated (expected ${{ steps.env.outputs.SERVER_IP }}, got $RESOLVED_IP)"
+            echo "This is normal for Cloudflare proxied records. Checking Cloudflare API..."
+            
+            # Verify via Cloudflare API
+            ZONE_ID="${{ secrets.CLOUDFLARE_ZONE_ID }}"
+            API_RECORD=$(curl -s -X GET \
+              "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?type=A&name=${{ steps.env.outputs.DOMAIN }}" \
+              -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+              -H "Content-Type: application/json" | jq -r '.result[0].content')
+            
+            echo "Cloudflare API shows: $API_RECORD"
+            
+            if [ "$API_RECORD" == "${{ steps.env.outputs.SERVER_IP }}" ]; then
+              echo "✓ DNS record correctly configured in Cloudflare"
+            else
+              echo "✗ DNS record mismatch in Cloudflare"
+              exit 1
+            fi
+          else
+            echo "✓ DNS propagated successfully"
+          fi
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "### DNS Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ steps.env.outputs.ENVIRONMENT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Domain**: ${{ steps.env.outputs.DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **IP Address**: ${{ steps.env.outputs.SERVER_IP }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Apex Record**: ${{ steps.update-apex.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **WWW Record**: ${{ steps.update-www.outcome || 'skipped' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "DNS records have been updated in Cloudflare." >> $GITHUB_STEP_SUMMARY
+      
+      - name: Notify deployment results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "🚀 Deployment Complete"
+          description: |
+            **Status:** ${{ job.status }}
+            **Environment:** ${{ steps.env.outputs.ENVIRONMENT }}
+            **Domain:** ${{ steps.env.outputs.DOMAIN }}
+            **IP Address:** ${{ steps.env.outputs.SERVER_IP }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS CI/CD Bot
+  
+  notify-completion:
+    name: Notify Workflow Completion
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    needs: [test, lint, security, docker, create-release, update-dns]
+    if: always()
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [[ "${{ needs.test.result }}" == "failure" ]] || \
+             [[ "${{ needs.lint.result }}" == "failure" ]] || \
+             [[ "${{ needs.security.result }}" == "failure" ]] || \
+             [[ "${{ needs.docker.result }}" == "failure" ]] || \
+             [[ "${{ needs.create-release.result }}" == "failure" ]] || \
+             [[ "${{ needs.update-dns.result }}" == "failure" ]]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          elif [[ "${{ needs.test.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.lint.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.security.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.docker.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.create-release.result }}" == "cancelled" ]] || \
+               [[ "${{ needs.update-dns.result }}" == "cancelled" ]]; then
+            echo "status=cancelled" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Generate summary
+        run: |
+          echo "### 🎯 Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+      - name: Notify deployment results
+        uses: tsickert/discord-webhook@v2.0.0
+        if: always()
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "🚀 Deployment Complete", "description": "**Status:** ${{ job.status }}\n**Environment:** ${{ steps.env.outputs.ENVIRONMENT }}\n**Domain:** ${{ steps.env.outputs.DOMAIN }}\n**IP Address:** ${{ steps.env.outputs.SERVER_IP }}", "color": ${{ job.status == "success" ? 65280 : 16711680 }}}]'
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ steps.status.outputs.status }}
+          title: "✅ CI/CD Pipeline Completed"
+          description: |
+            **Overall Status:** ${{ steps.status.outputs.status }}
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})
+            **Triggered by:** ${{ github.actor }}
+            
+            **Job Results:**
+            • Tests: ${{ needs.test.result }}
+            • Lint: ${{ needs.lint.result }}
+            • Security: ${{ needs.security.result }}
+            • Docker: ${{ needs.docker.result }}
+            • Release: ${{ needs.create-release.result }}
+            • Deployment: ${{ needs.update-dns.result }}
+          color: ${{ steps.status.outputs.status == 'success' && 0x00ff00 || steps.status.outputs.status == 'cancelled' && 0xffff00 || 0xff0000 }}
+          username: FKS CI/CD Bot      - name: Send Discord notification
+        uses: tsickert/discord-webhook@v2.0.0
+        with:
+          webhook_url: ${{ secrets.DISCORD_WEBHOOK }}
+          username: FKS CI/CD Bot
+          embeds: '[{"title": "✅ CI/CD Pipeline Completed", "description": "**Overall Status:** ${{ steps.status.outputs.status }}\n**Repository:** ${{ github.repository }}\n**Branch:** ${{ github.ref_name }}\n**Commit:** [${{ github.sha }}](${{ github.event.head_commit.url }})\n**Triggered by:** ${{ github.actor }}\n\n**Job Results:**\n• Tests: ${{ needs.test.result }}\n• Lint: ${{ needs.lint.result }}\n• Security: ${{ needs.security.result }}\n• Docker: ${{ needs.docker.result }}\n• Release: ${{ needs.create-release.result }}\n• Deployment: ${{ needs.update-dns.result }}", "color": ${{ steps.status.outputs.status == "success" ? 65280 : steps.status.outputs.status == "cancelled" ? 16776960 : 16711680 }}}]'

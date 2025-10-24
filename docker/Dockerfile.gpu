@@ -1,0 +1,73 @@
+# GPU-enabled Dockerfile for RAG/LLM services
+FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.13 \
+    python3-pip \
+    python3.13-dev \
+    build-essential \
+    curl \
+    wget \
+    git \
+    libpq-dev \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symlinks for python
+RUN ln -sf /usr/bin/python3.13 /usr/bin/python && \
+    ln -sf /usr/bin/pip3 /usr/bin/pip
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA support
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Install CUDA-accelerated packages
+RUN pip install --no-cache-dir \
+    accelerate>=1.2.0 \
+    bitsandbytes>=0.45.0 \
+    sentence-transformers>=5.1.1 \
+    transformers>=4.47.0 \
+    xformers
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.gpu.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.gpu.txt
+
+# Install Ollama (optional - can also run as separate service)
+RUN curl -fsSL https://ollama.com/install.sh | sh
+
+# Copy application code (contents of src to /app)
+COPY src/ /app/
+
+# Create log directories
+RUN mkdir -p /var/log/rag /var/log/gunicorn /app/logs
+
+# Health check script
+COPY <<EOF /usr/local/bin/healthcheck.sh
+#!/bin/bash
+curl -f http://localhost:8001/health || exit 1
+EOF
+
+RUN chmod +x /usr/local/bin/healthcheck.sh
+
+# Expose ports
+EXPOSE 8001 11434
+
+# Default command (can be overridden)
+CMD ["python", "-m", "src.rag.server"]

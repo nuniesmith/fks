@@ -1,0 +1,162 @@
+# FKS Strategy Commission-Optimized Settings
+# For $5 Round-Trip Commission on $150k Account
+
+=== CORE PARAMETER RECOMMENDATIONS ===
+
+Signal Quality Threshold: 0.72 (raised from 0.65)
+- Higher threshold ensures only premium signals
+- Reduces false signals that eat into profits with commissions
+
+Volume Threshold: 1.35 (raised from 1.2)
+- Stronger volume confirmation reduces failed breakouts
+- Essential for commission-heavy environment
+
+Max Daily Trades: 6 (reduced from 10)
+- Quality over quantity approach
+- At $5 RT commission, 6 trades = $30 daily commission cost
+- Need $30+ average profit per trade minimum
+
+=== POSITION SIZING OPTIMIZATION ===
+
+Base Contracts: 1
+Max Contracts: 4 (reduced from 5)
+- More conservative to ensure each trade has sufficient profit potential
+
+Minimum Profit Target: 10 ticks ($100 for GC)
+- Ensures each trade covers $5 commission + $95 profit minimum
+- Filters out low-profit-potential setups
+
+ATR Stop Multiplier: 1.8 (tightened from 2.0)
+- Reduces risk per trade while maintaining effectiveness
+- Commission cost becomes smaller percentage of total risk
+
+ATR Target Multiplier: 2.2 (increased from 1.5)
+- Larger profit targets to justify commission cost
+- Minimum 2.2:1.8 = 1.22:1 reward-to-risk ratio
+
+=== TIME OPTIMIZATION ===
+
+Start Hour: 8 (London/NY overlap)
+End Hour: 14 (avoid late-day chop)
+- Focus on highest-probability time windows
+- Reduces low-quality signals during slow periods
+
+=== ENHANCED SIGNAL FILTERS ===
+
+Require Higher Timeframe Confirmation: TRUE
+- Reduces false signals significantly
+- Worth the extra confirmation for commission environment
+
+Disable Shorts During Uptrend: TRUE
+- Shorts have lower success rate in your backtests
+- Avoid fighting the trend with commission headwinds
+
+Max Consecutive Short Losses: 2 (reduced from 3)
+- Faster shutdown of short strategies if not working
+- Prevents commission bleed from repeated short failures
+
+=== ASSET-SPECIFIC OPTIMIZATIONS ===
+
+GOLD (GC):
+- Signal Quality: 0.70 (your most reliable market)
+- Max Contracts: 4
+- Preferred setups: 1, 3, 6, 8 (highest win rates)
+
+NASDAQ (NQ):
+- Signal Quality: 0.75 (higher due to volatility)
+- Max Contracts: 3
+- Avoid during earnings seasons
+
+S&P 500 (ES):
+- Signal Quality: 0.72
+- Max Contracts: 4
+- Most consistent performer
+
+CRUDE OIL (CL):
+- Signal Quality: 0.78 (highest due to volatility)
+- Max Contracts: 2
+- Avoid Wed 10:30 AM inventory reports
+
+BITCOIN (BTC):
+- Signal Quality: 0.80 (highest threshold)
+- Max Contracts: 2
+- Weekend trading only with extra confirmation
+
+=== RISK MANAGEMENT ADJUSTMENTS ===
+
+Daily Loss Limit: $1,200 (reduced from $1,500)
+- Accounts for commission costs in loss calculations
+- Preserves capital for next day's trading
+
+Daily Profit Target: $2,500 (increased from $2,250)
+- Higher target to account for commission drag
+- Better risk-adjusted returns
+
+=== BACKTESTING RECOMMENDATIONS ===
+
+Include Commission in Backtests: $5 per round-trip
+- Use realistic commission costs
+- Adjust for slippage: 0.25 ticks average
+
+Minimum Backtest Period: 6 months
+- Longer periods account for commission impact
+- Include various market conditions
+
+Expected Performance with Commissions:
+- Win Rate: 58-62% (vs 60-65% without commissions)
+- Average Profit per Trade: $125+ (vs $100+ without)
+- Monthly Return: 12-18% (vs 15-20% without)
+- Sharpe Ratio: 1.4+ (vs 1.5+ without)
+
+=== OPTIMAL SETUP PRIORITY ===
+
+1. Multi-Timeframe Momentum Alignment (Setup 8)
+2. Manipulation Candle (Setup 6)
+3. EMA9 + VWAP Breakout (Setup 1)
+4. Pivot Zone Reversal (Setup 5)
+5. VWAP Rejection (Setup 3)
+6. Support/Resistance + AO (Setup 4)
+7. Breakout Retest (Setup 10)
+8. Volume Price Analysis (Setup 7)
+9. Gap Fill (Setup 9) - Use sparingly
+
+=== HEIKEN ASHI ADJUSTMENTS ===
+
+Signal Quality Boost: 1.05x (for strong HA patterns)
+Volume Requirement: 1.4x (vs 1.2x for regular bars)
+Body Size Minimum: 0.6x ATR (larger bodies required)
+
+=== COMMISSION CALCULATION EXAMPLES ===
+
+Scenario 1: 4 trades per day, 50% win rate
+- 2 wins × $150 = $300
+- 2 losses × $75 = $150
+- Gross profit: $150
+- Commission: 4 × $5 = $20
+- Net profit: $130
+
+Scenario 2: 6 trades per day, 65% win rate
+- 4 wins × $175 = $700
+- 2 losses × $90 = $180
+- Gross profit: $520
+- Commission: 6 × $5 = $30
+- Net profit: $490
+
+=== MONITORING METRICS ===
+
+Track these commission-specific metrics:
+- Net profit per trade (after commissions)
+- Commission as % of gross profit (target <10%)
+- Break-even win rate (accounting for commissions)
+- Average trade duration (longer = better commission efficiency)
+
+=== DEPLOYMENT CHECKLIST ===
+
+1. Set commission to $5 in NinjaTrader
+2. Use optimized parameters above
+3. Enable higher timeframe confirmation
+4. Monitor first week carefully
+5. Adjust if commission ratio exceeds 15% of gross profit
+
+Remember: In a commission environment, fewer, higher-quality trades 
+are always better than many marginal trades.

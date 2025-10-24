@@ -1,0 +1,406 @@
+name: Project Management Automation
+
+on:
+  issues:
+    types: [opened, labeled, unlabeled, closed, reopened, assigned, unassigned]
+  pull_request:
+    types: [opened, closed, reopened, ready_for_review]
+  pull_request_target:
+    types: [opened, closed, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Manual action to perform'
+        required: true
+        type: choice
+        options:
+          - sync-all-issues
+          - update-project-status
+          - cleanup-stale-items
+      project_number:
+        description: 'GitHub Project number (optional)'
+        required: false
+        type: string
+        default: '1'
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  manage-project:
+    name: Manage GitHub Project
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+      repository-projects: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for project management
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install project management dependencies
+        run: |
+          npm install @octokit/rest @actions/github
+
+      - name: Get project information
+        id: project
+        run: |
+          # Get the first project (Kanban board) for this repository
+          PROJECT_INFO=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/projects" | jq -r '.[0] // empty')
+
+          if [ -z "$PROJECT_INFO" ]; then
+            echo "No projects found. Creating default Kanban project..."
+            # Create a new project if none exists
+            PROJECT_RESPONSE=$(curl -s -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              -d '{
+                "name": "FKS Development Kanban",
+                "body": "Kanban board for FKS Trading Platform development with impact/urgency scoring",
+                "private": false
+              }' \
+              "https://api.github.com/repos/${{ github.repository }}/projects")
+
+            PROJECT_ID=$(echo "$PROJECT_RESPONSE" | jq -r '.id')
+            PROJECT_NUMBER=$(echo "$PROJECT_RESPONSE" | jq -r '.number')
+          else
+            PROJECT_ID=$(echo "$PROJECT_INFO" | jq -r '.id')
+            PROJECT_NUMBER=$(echo "$PROJECT_INFO" | jq -r '.number')
+          fi
+
+          echo "project_id=$PROJECT_ID" >> $GITHUB_OUTPUT
+          echo "project_number=$PROJECT_NUMBER" >> $GITHUB_OUTPUT
+
+          # Get project columns
+          COLUMNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/projects/$PROJECT_ID/columns")
+
+          echo "columns=$COLUMNS" >> $GITHUB_OUTPUT
+
+      - name: Ensure project columns exist
+        run: |
+          PROJECT_ID="${{ steps.project.outputs.project_id }}"
+          COLUMNS="${{ steps.project.outputs.columns }}"
+
+          # Expected columns for Kanban board
+          declare -a EXPECTED_COLUMNS=("Backlog" "Ready" "In Progress" "Review" "Done")
+
+          for COLUMN_NAME in "${EXPECTED_COLUMNS[@]}"; do
+            # Check if column exists
+            COLUMN_ID=$(echo "$COLUMNS" | jq -r ".[] | select(.name == \"$COLUMN_NAME\") | .id")
+
+            if [ -z "$COLUMN_ID" ]; then
+              echo "Creating column: $COLUMN_NAME"
+              curl -s -X POST \
+                -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                -d "{\"name\": \"$COLUMN_NAME\"}" \
+                "https://api.github.com/projects/$PROJECT_ID/columns"
+            else
+              echo "Column $COLUMN_NAME already exists (ID: $COLUMN_ID)"
+            fi
+          done
+
+      - name: Calculate issue priority score
+        id: priority
+        if: github.event_name == 'issues' || github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+        run: |
+          # Extract impact and urgency from issue/PR body or labels
+          ISSUE_BODY=""
+          ISSUE_LABELS=""
+
+          if [ "${{ github.event_name }}" == "issues" ]; then
+            ISSUE_BODY="${{ github.event.issue.body }}"
+            ISSUE_LABELS="${{ toJSON(github.event.issue.labels.*.name) }}"
+          elif [ "${{ github.event_name }}" == "pull_request" ] || [ "${{ github.event_name }}" == "pull_request_target" ]; then
+            ISSUE_BODY="${{ github.event.pull_request.body }}"
+            ISSUE_LABELS="${{ toJSON(github.event.pull_request.labels.*.name) }}"
+          fi
+
+          # Calculate impact score (1-5) based on labels and content
+          IMPACT_SCORE=3  # Default medium impact
+
+          # Check for critical/high impact indicators
+          if echo "$ISSUE_LABELS" | grep -q "🔴 critical\|🔴 bug\|security"; then
+            IMPACT_SCORE=5
+          elif echo "$ISSUE_LABELS" | grep -q "✨ feature\|enhancement\|P0\|P1"; then
+            IMPACT_SCORE=4
+          elif echo "$ISSUE_LABELS" | grep -q "P2\|🧹 tech-debt"; then
+            IMPACT_SCORE=2
+          elif echo "$ISSUE_LABELS" | grep -q "P3\|documentation"; then
+            IMPACT_SCORE=1
+          fi
+
+          # Check body for impact keywords
+          if echo "$ISSUE_BODY" | grep -i -q "block\|critical\|urgent\|emergency"; then
+            IMPACT_SCORE=$((IMPACT_SCORE + 1))
+          fi
+
+          # Calculate urgency score (1-5) based on content and labels
+          URGENCY_SCORE=3  # Default medium urgency
+
+          # Check for urgency indicators
+          if echo "$ISSUE_LABELS" | grep -q "🔴 critical\|🔴 bug\|security\|P0"; then
+            URGENCY_SCORE=5
+          elif echo "$ISSUE_BODY" | grep -i -q "asap\|urgent\|deadline\|block"; then
+            URGENCY_SCORE=4
+          elif echo "$ISSUE_LABELS" | grep -q "P1"; then
+            URGENCY_SCORE=4
+          elif echo "$ISSUE_LABELS" | grep -q "P2"; then
+            URGENCY_SCORE=2
+          elif echo "$ISSUE_LABELS" | grep -q "P3"; then
+            URGENCY_SCORE=1
+          fi
+
+          # Calculate overall priority score (1-25, higher = more important)
+          PRIORITY_SCORE=$((IMPACT_SCORE * URGENCY_SCORE))
+
+          echo "impact_score=$IMPACT_SCORE" >> $GITHUB_OUTPUT
+          echo "urgency_score=$URGENCY_SCORE" >> $GITHUB_OUTPUT
+          echo "priority_score=$PRIORITY_SCORE" >> $GITHUB_OUTPUT
+
+          # Determine initial column based on priority and type
+          if [ "${{ github.event_name }}" == "issues" ]; then
+            if [ $PRIORITY_SCORE -ge 15 ]; then
+              echo "initial_column=Ready" >> $GITHUB_OUTPUT
+            else
+              echo "initial_column=Backlog" >> $GITHUB_OUTPUT
+            fi
+          else
+            # PRs go to Review column
+            echo "initial_column=Review" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Add issue/PR to project board
+        if: (github.event_name == 'issues' && github.event.action == 'opened') || (github.event_name == 'pull_request' && github.event.action == 'opened') || (github.event_name == 'pull_request_target' && github.event.action == 'opened')
+        run: |
+          PROJECT_ID="${{ steps.project.outputs.project_id }}"
+          INITIAL_COLUMN="${{ steps.priority.outputs.initial_column }}"
+          PRIORITY_SCORE="${{ steps.priority.outputs.priority_score }}"
+          IMPACT_SCORE="${{ steps.priority.outputs.impact_score }}"
+          URGENCY_SCORE="${{ steps.priority.outputs.urgency_score }}"
+
+          # Get column ID for initial column
+          COLUMN_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/projects/$PROJECT_ID/columns" | \
+            jq -r ".[] | select(.name == \"$INITIAL_COLUMN\") | .id")
+
+          if [ -n "$COLUMN_ID" ]; then
+            # Add to project
+            ISSUE_URL=""
+            if [ "${{ github.event_name }}" == "issues" ]; then
+              ISSUE_URL="${{ github.event.issue.html_url }}"
+            else
+              ISSUE_URL="${{ github.event.pull_request.html_url }}"
+            fi
+
+            curl -s -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              -d "{\"content_url\": \"$ISSUE_URL\"}" \
+              "https://api.github.com/projects/columns/$COLUMN_ID/cards"
+
+            echo "Added item to $INITIAL_COLUMN column"
+          fi
+
+      - name: Update project status based on events
+        run: |
+          PROJECT_ID="${{ steps.project.outputs.project_id }}"
+          EVENT_NAME="${{ github.event_name }}"
+          EVENT_ACTION="${{ github.event.action }}"
+
+          echo "Processing $EVENT_NAME $EVENT_ACTION event"
+
+          # Handle different event types
+          case "$EVENT_NAME" in
+            "issues")
+              case "$EVENT_ACTION" in
+                "closed")
+                  echo "Issue closed - would move to Done column"
+                  ;;
+                "reopened")
+                  echo "Issue reopened - would move to Ready column"
+                  ;;
+                "labeled")
+                  echo "Issue labeled: ${{ github.event.label.name }}"
+                  ;;
+              esac
+              ;;
+            "pull_request"|"pull_request_target")
+              case "$EVENT_ACTION" in
+                "closed")
+                  if [ "${{ github.event.pull_request.merged }}" == "true" ]; then
+                    echo "PR merged - would move to Done column"
+                  else
+                    echo "PR closed - would move to Backlog column"
+                  fi
+                  ;;
+                "reopened")
+                  echo "PR reopened - would move to Review column"
+                  ;;
+                "ready_for_review")
+                  echo "PR ready for review - would move to Review column"
+                  ;;
+              esac
+              ;;
+          esac
+
+      - name: Sync all open issues (manual trigger)
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'sync-all-issues'
+        run: |
+          PROJECT_ID="${{ steps.project.outputs.project_id }}"
+
+          echo "Syncing all open issues to project board..."
+
+          # Get all open issues
+          ISSUES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open" | \
+            jq -c '.[]')
+
+          echo "$ISSUES" | while read -r issue; do
+            ISSUE_NUMBER=$(echo "$issue" | jq -r '.number')
+            ISSUE_URL=$(echo "$issue" | jq -r '.html_url')
+            ISSUE_LABELS=$(echo "$issue" | jq -r '.labels[].name' | tr '\n' ',')
+
+            # Check if already in project
+            PROJECT_CARDS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/projects/$PROJECT_ID/columns" | \
+              jq -c '.[]' | while read -r column; do
+                COLUMN_ID=$(echo "$column" | jq -r '.id')
+                curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/projects/columns/$COLUMN_ID/cards" | \
+                  jq -c '.[]'
+              done)
+
+            IN_PROJECT=$(echo "$PROJECT_CARDS" | jq -r ".content_url" | grep -c "$ISSUE_URL" || true)
+
+            if [ "$IN_PROJECT" -eq 0 ]; then
+              # Calculate priority and add to appropriate column
+              PRIORITY_SCORE=$(calculate_priority "$issue")
+              if [ $PRIORITY_SCORE -ge 15 ]; then
+                TARGET_COLUMN="Ready"
+              else
+                TARGET_COLUMN="Backlog"
+              fi
+
+              COLUMN_ID=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/projects/$PROJECT_ID/columns" | \
+                jq -r ".[] | select(.name == \"$TARGET_COLUMN\") | .id")
+
+              if [ -n "$COLUMN_ID" ]; then
+                curl -s -X POST \
+                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                  -H "Accept: application/vnd.github+json" \
+                  -d "{\"content_url\": \"$ISSUE_URL\"}" \
+                  "https://api.github.com/projects/columns/$COLUMN_ID/cards"
+                echo "Added issue #$ISSUE_NUMBER to $TARGET_COLUMN"
+              fi
+            fi
+          done
+
+      - name: Cleanup stale items (manual trigger)
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'cleanup-stale-items'
+        run: |
+          PROJECT_ID="${{ steps.project.outputs.project_id }}"
+
+          echo "Cleaning up stale project items..."
+
+          # Get all project cards
+          COLUMNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/projects/$PROJECT_ID/columns")
+
+          echo "$COLUMNS" | jq -c '.[]' | while read -r column; do
+            COLUMN_ID=$(echo "$column" | jq -r '.id')
+            COLUMN_NAME=$(echo "$column" | jq -r '.name')
+
+            # Skip Done column
+            if [ "$COLUMN_NAME" != "Done" ]; then
+              CARDS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/projects/columns/$COLUMN_ID/cards")
+
+              echo "$CARDS" | jq -c '.[]' | while read -r card; do
+                CARD_ID=$(echo "$card" | jq -r '.id')
+                CONTENT_URL=$(echo "$card" | jq -r '.content_url')
+
+                if [ -n "$CONTENT_URL" ]; then
+                  # Check if issue/PR still exists and is open
+                  if ! curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                    -H "Accept: application/vnd.github+json" \
+                    "$CONTENT_URL" | jq -e '.state == "open"' > /dev/null; then
+                    # Remove stale card
+                    curl -s -X DELETE \
+                      -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                      -H "Accept: application/vnd.github+json" \
+                      "https://api.github.com/projects/columns/cards/$CARD_ID"
+                    echo "Removed stale card from $COLUMN_NAME"
+                  fi
+                fi
+              done
+            fi
+          done
+
+      - name: Update project status summary
+        run: |
+          PROJECT_ID="${{ steps.project.outputs.project_id }}"
+
+          # Get project statistics
+          COLUMNS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/projects/$PROJECT_ID/columns")
+
+          echo "### 📊 Project Status Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          TOTAL_ISSUES=0
+          echo "$COLUMNS" | jq -c '.[]' | while read -r column; do
+            COLUMN_ID=$(echo "$column" | jq -r '.id')
+            COLUMN_NAME=$(echo "$column" | jq -r '.name')
+
+            CARD_COUNT=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/projects/columns/$COLUMN_ID/cards" | jq '. | length')
+
+            echo "- **$COLUMN_NAME**: $CARD_COUNT items" >> $GITHUB_STEP_SUMMARY
+            TOTAL_ISSUES=$((TOTAL_ISSUES + CARD_COUNT))
+          done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Total Active Items**: $TOTAL_ISSUES" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify project changes
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "📋 Project Board Updated"
+          description: |
+            **Event:** ${{ github.event_name }} ${{ github.event.action }}
+            **Repository:** ${{ github.repository }}
+            **Triggered by:** ${{ github.actor }}
+
+            ${{ github.event_name == 'issues' && format('**Issue:** #{0} - {1}', github.event.issue.number, github.event.issue.title) || '' }}
+            ${{ github.event_name == 'pull_request' && format('**PR:** #{0} - {1}', github.event.pull_request.number, github.event.pull_request.title) || '' }}
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS Project Bot

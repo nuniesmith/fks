@@ -1,0 +1,126 @@
+name: 🚀 Phased Implementation
+description: Create phased GitHub issues for systematic implementation
+title: "[PHASE] "
+labels: ["🚀 phased-implementation", "enhancement"]
+assignees:
+  - nuniesmith
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Phased Implementation Request
+        Use this template to create systematic, phased GitHub issues for complex features or improvements.
+        
+        **This will generate 10-15 focused issues** with proper dependencies and implementation phases.
+        
+  - type: dropdown
+    id: implementation_area
+    attributes:
+      label: Implementation Area
+      description: What major area needs phased implementation?
+      options:
+        - FKS Intelligence / RAG System
+        - Celery Ecosystem & Tasks
+        - Web UI / Django Templates
+        - Testing Infrastructure
+        - CI/CD Pipeline
+        - Database Optimization
+        - API Modernization
+        - Security Hardening
+        - Performance Monitoring
+        - Documentation System
+    validations:
+      required: true
+  
+  - type: textarea
+    id: current_state
+    attributes:
+      label: Current State
+      description: What's already implemented and working?
+      placeholder: |
+        - Basic Django setup complete
+        - Core models exist
+        - Some Celery tasks stubbed
+    validations:
+      required: true
+  
+  - type: textarea
+    id: target_state
+    attributes:
+      label: Target State
+      description: What should be fully working after all phases?
+      placeholder: |
+        - Complete FKS Intelligence system
+        - All trading signals automated
+        - Full web UI with real-time updates
+        - 80%+ test coverage
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: total_phases
+    attributes:
+      label: Number of Phases
+      description: How many implementation phases are needed?
+      options:
+        - "3-5 phases (Small feature)"
+        - "6-10 phases (Medium feature)"
+        - "11-15 phases (Large feature)"
+        - "16+ phases (Major system)"
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Overall Impact Score (1-5)
+      description: How important is this implementation to the project?
+      options:
+        - "5 - Critical: Core business functionality"
+        - "4 - High: Major feature for user experience"
+        - "3 - Medium: Important improvement"
+        - "2 - Low: Nice-to-have enhancement"
+        - "1 - Minimal: Optional improvement"
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Overall Urgency Score (1-5)
+      description: How soon should this implementation begin?
+      options:
+        - "5 - Critical: Start immediately, blocks other work"
+        - "4 - High: Start this sprint"
+        - "3 - Medium: Start next sprint"
+        - "2 - Low: Start when resources available"
+        - "1 - Wish: Start when convenient"
+    validations:
+      required: true
+  
+  - type: textarea
+    id: success_criteria
+    attributes:
+      label: Success Criteria
+      description: How will we know when this phased implementation is complete?
+      placeholder: |
+        - All phases completed and tested
+        - Target functionality fully working
+        - Documentation updated
+        - No regressions introduced
+    validations:
+      required: true
+  
+  - type: textarea
+    id: phase_outline
+    attributes:
+      label: Phase Outline (Optional)
+      description: High-level outline of the phases (will be refined when issues are created)
+      placeholder: |
+        Phase 1: Foundation & Setup
+        Phase 2: Core Implementation
+        Phase 3: Integration & Testing
+        Phase 4: Optimization & Polish
+    validations:
+      required: false

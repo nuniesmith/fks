@@ -1,0 +1,48 @@
+﻿# FKS Strategy Asset Comparison Matrix
+# Generated: 2025-07-13 23:34:04
+
+ASSET VOLATILITY RANKING (Low to High):
+1. Gold (GC) - Most Stable
+2. S&P 500 (ES) - Balanced  
+3. Nasdaq (NQ) - Higher Volatility
+4. Crude Oil (CL) - Very Volatile
+5. Bitcoin (BTC) - Extreme Volatility
+
+OPTIMIZATION PRIORITY ORDER:
+1. Start with Gold (GC) - most predictable
+2. Move to S&P 500 (ES) - good balance
+3. Test Nasdaq (NQ) - higher rewards/risks
+4. Crude Oil (CL) - specialized timing needed
+5. Bitcoin (BTC) - proceed with extreme caution
+
+PARAMETER RANGES SUMMARY:
+Asset | SigQual | Volume | ATRStop | ATRTarget | MaxContracts | MaxTrades
+------|---------|--------|---------|-----------|--------------|----------
+GC    | 0.6-0.75  | 1.1-1.4   | 1.5-2.5    | 1.2-2      | 3-5         | 8-12
+ES    | 0.6-0.75  | 1.1-1.5   | 1.8-2.5    | 1.3-2.2      | 3-4         | 8-12
+NQ    | 0.6-0.8  | 1.1-1.6   | 2-3    | 1.5-2.5      | 2-4         | 8-12
+CL    | 0.6-0.85  | 1.1-1.8   | 2.5-4    | 1.8-3      | 1-3         | 6-10
+BTC    | 0.6-0.9  | 1.1-2   | 3-5    | 2-4      | 1-2         | 6-10
+
+EXPECTED PERFORMANCE TARGETS:
+Asset | WinRate | ProfitFactor | MaxDrawdown | DailyProfit
+------|---------|--------------|-------------|------------
+GC    | 55%+    | 1.4+         | <8%         | $150+
+ES    | 52%+    | 1.3+         | <10%        | $180+  
+NQ    | 50%+    | 1.5+         | <12%        | $200+
+CL    | 48%+    | 1.6+         | <15%        | $120+
+BTC   | 45%+    | 1.8+         | <20%        | $100+
+
+TRADING SESSIONS BY ASSET:
+Gold: 2am-11am EST (London heavy)
+ES/NQ: 3am-12pm EST (London + NY morning) 
+Crude: 3am-11am EST (includes inventory)
+Bitcoin: 6am-4pm EST (avoid weekend chaos)
+
+OPTIMIZATION PHASES:
+Phase 1: Signal Quality + Volume + ATR (Most Critical)
+Phase 2: Position Sizing + Trade Limits
+Phase 3: Time Filters + Session Times
+Phase 4: Risk Management Limits
+
+Remember: Robust parameters that work across conditions > perfect backtests!

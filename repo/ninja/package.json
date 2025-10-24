@@ -1,0 +1,29 @@
+{
+  "name": "fks_development-services",
+  "version": "1.0.0",
+  "description": "Development services for FKS NinjaTrader project",
+  "main": "vscode-proxy.js",
+  "scripts": {
+    "build": "./scripts/build-package.sh --source-only",
+    "build:dll": "./scripts/build-package.sh --dll",
+    "build:both": "./scripts/build-package.sh --both",
+    "build:json": "./scripts/build-package.sh --source-only --json",
+    "clean": "./scripts/clean.sh",
+    "validate": "./scripts/validate.sh",
+    "test": "npm run build && npm run validate build/packages/FKS_TradingSystem_SOURCE_v1.0.0.zip",
+    "start-apis": "bash start-api-servers.sh",
+    "start-all": "bash start-dev-servers.sh",
+    "stop": "bash stop-dev-servers.sh",
+    "setup": "bash setup-and-test.sh",
+    "proxy": "node vscode-proxy.js"
+  },
+  "dependencies": {
+    "express": "5.1.0",
+    "cors": "2.8.5",
+    "http-proxy-middleware": "3.0.5"
+  },
+  "devDependencies": {},
+  "keywords": ["fks", "ninjatrader", "development", "proxy"],
+  "author": "FKS Development Team",
+  "license": "MIT"
+}

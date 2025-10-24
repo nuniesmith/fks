@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NinjaScriptManifest SchemaVersion="1.0" xmlns="http://www.ninjatrader.com/NinjaScript">
+  <NinjaScriptCollection>
+    <Indicators>
+      <Indicator>
+        <TypeName>FKS_AI</TypeName>
+        <AssemblyName>NinjaTrader.Custom</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_AI</FullTypeName>
+        <DisplayName>FKS AI</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_AO</TypeName>
+        <AssemblyName>NinjaTrader.Custom</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_AO</FullTypeName>
+        <DisplayName>FKS AO</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_Dashboard</TypeName>
+        <AssemblyName>NinjaTrader.Custom</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_Dashboard</FullTypeName>
+        <DisplayName>FKS Info</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_PythonBridge</TypeName>
+        <AssemblyName>NinjaTrader.Custom</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_PythonBridge</FullTypeName>
+        <DisplayName>FKS Python Bridge</DisplayName>
+        <Group>FKS</Group>
+      </Indicator>
+    </Indicators>
+    <Strategies>
+      <Strategy>
+        <TypeName>FKS_Strategy</TypeName>
+        <AssemblyName>NinjaTrader.Custom</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Strategies.FKS_Strategy</FullTypeName>
+        <DisplayName>FKS Strategy</DisplayName>
+        <Group>FKS</Group>
+      </Strategy>
+    </Strategies>
+  </NinjaScriptCollection>
+  <Files>
+    <!-- AddOn Source Files -->
+    <File>
+      <n>FKS_Core.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Calculations.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Infrastructure.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Market.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Signals.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <!-- Indicator Source Files -->
+    <File>
+      <n>FKS_AI.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <File>
+      <n>FKS_AO.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <File>
+      <n>FKS_Dashboard.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <File>
+      <n>FKS_PythonBridge.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <!-- Strategy Source Files -->
+    <File>
+      <n>FKS_Strategy.cs</n>
+      <Path>bin\Custom\Strategies</Path>
+    </File>
+  </Files>
+</NinjaScriptManifest>

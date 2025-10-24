@@ -1,0 +1,288 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Home - FKS Trading Platform{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <!-- Hero Section -->
+        <div class="card bg-primary text-white mb-4">
+            <div class="card-body p-4">
+                <h1 class="display-5 fw-bold">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    Welcome to FKS Trading Platform
+                </h1>
+                <p class="lead">{{ user_title|default:"Tax-Smart Apprentice" }} 🇨🇦</p>
+                <div class="row mt-3">
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-trophy fs-2 me-3"></i>
+                            <div>
+                                <small class="text-white-50">Total XP</small>
+                                <h4 class="mb-0">{{ total_xp|default:"2,500" }}</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-cash-stack fs-2 me-3"></i>
+                            <div>
+                                <small class="text-white-50">Expense Coverage</small>
+                                <h4 class="mb-0">{{ expense_coverage|default:"65" }}%</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-shield-check fs-2 me-3"></i>
+                            <div>
+                                <small class="text-white-50">Tax Savings</small>
+                                <h4 class="mb-0">${{ canadian_tax_savings|default:"2,400" }}</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-pie-chart fs-2 me-3"></i>
+                            <div>
+                                <small class="text-white-50">Active Accounts</small>
+                                <h4 class="mb-0">{{ active_accounts|default:"2" }}</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Next Milestone -->
+    <div class="col-lg-4 mb-4">
+        <div class="card border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-flag-fill"></i>
+                    Next Milestone
+                </h5>
+            </div>
+            <div class="card-body">
+                <h6 class="card-title">{{ next_milestone_title|default:"Reach $10K Combined Balance" }}</h6>
+                <p class="card-text text-muted">
+                    {{ next_milestone_description|default:"Achieve $10,000 total across all trading accounts" }}
+                </p>
+                <div class="progress mb-3">
+                    <div class="progress-bar bg-success" role="progressbar" 
+                         style="width: {{ milestone_progress|default:"45" }}%">
+                        {{ milestone_progress|default:"45" }}%
+                    </div>
+                </div>
+                <p class="mb-2">
+                    <strong>Reward:</strong> 
+                    <span class="badge bg-warning text-dark">
+                        <i class="bi bi-star-fill"></i>
+                        {{ milestone_reward|default:"500 XP" }}
+                    </span>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Trading Accounts -->
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-wallet2"></i>
+                    Trading Accounts
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Account</th>
+                                <th>Type</th>
+                                <th>Balance</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for account in trading_accounts %}
+                            <tr>
+                                <td>
+                                    <strong>{{ account.name }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ account.type|upper }}</span>
+                                </td>
+                                <td>
+                                    <strong>${{ account.balance|floatformat:2 }}</strong>
+                                </td>
+                                <td>
+                                    {% if account.status == 'active' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i> Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="bi bi-pause-circle"></i> Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="#" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">
+                                    No trading accounts yet. 
+                                    <a href="#">Add your first account</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Action Sections -->
+<div class="row">
+    <div class="col-12 mb-3">
+        <h3><i class="bi bi-lightning-charge"></i> Quick Actions</h3>
+    </div>
+    
+    <!-- Active Trading -->
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100 shadow-sm hover-lift">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-graph-up text-success"></i>
+                    Active Trading
+                </h5>
+                <p class="card-text text-muted">
+                    Monitor live trades, manage positions, and execute strategies.
+                </p>
+                <div class="d-grid gap-2">
+                    <a href="{% url 'web_app:dashboard' %}" class="btn btn-outline-success">
+                        <i class="bi bi-speedometer2"></i> Go to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Strategy Development -->
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100 shadow-sm hover-lift">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-gear-fill text-primary"></i>
+                    Strategy Development
+                </h5>
+                <p class="card-text text-muted">
+                    Create, test, and optimize trading strategies.
+                </p>
+                <div class="d-grid gap-2">
+                    <a href="#" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-circle"></i> New Strategy
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tax Optimization -->
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card h-100 shadow-sm hover-lift">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-shield-check text-warning"></i>
+                    Tax Optimization 🇨🇦
+                </h5>
+                <p class="card-text text-muted">
+                    Maximize your Canadian tax benefits and savings.
+                </p>
+                <div class="d-grid gap-2">
+                    <a href="#" class="btn btn-outline-warning">
+                        <i class="bi bi-calculator"></i> View Tax Strategy
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Long-Term Sections -->
+<div class="row mt-4">
+    <div class="col-12 mb-3">
+        <h3><i class="bi bi-calendar-check"></i> Long-Term Planning</h3>
+    </div>
+    
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="bi bi-piggy-bank text-info"></i>
+                    Long-term Portfolio
+                </h6>
+                <p class="card-text small text-muted">
+                    TFSA, RRSP & investment accounts
+                </p>
+                <a href="#" class="btn btn-sm btn-outline-info">Manage Portfolio</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card border-warning">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="bi bi-calendar3 text-warning"></i>
+                    Development Calendar
+                </h6>
+                <p class="card-text small text-muted">
+                    Schedule & track development work
+                </p>
+                <a href="#" class="btn btn-sm btn-outline-warning">View Calendar</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 col-md-6 mb-4">
+        <div class="card border-success">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="bi bi-graph-up-arrow text-success"></i>
+                    Financial Goals
+                </h6>
+                <p class="card-text small text-muted">
+                    Track progress toward financial targets
+                </p>
+                <a href="#" class="btn btn-sm btn-outline-success">Set Goals</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hover-lift {
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+    .hover-lift:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,317 @@
+name: Weekly Project Health Check
+
+on:
+  schedule:
+    # Run every Monday at 9 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      commit_changes:
+        description: 'Auto-commit PROJECT_STATUS.md updates'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  health-check:
+    name: Analyze Project Health
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio pytest-django pip-audit ruff mypy black isort
+      
+      - name: Create log directories
+        run: |
+          mkdir -p logs/{celery,gunicorn,nginx,postgres,rag,redis,web}
+          chmod -R 777 logs || true
+      
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: sqlite:///test.db
+          TESTING: "true"
+          DJANGO_SETTINGS_MODULE: web.django.settings
+        run: |
+          pytest tests/ -v --cov=src --cov-report=json --cov-report=html --cov-report=term -m "not slow" || true
+        continue-on-error: true
+      
+      - name: Run security audit
+        run: |
+          pip-audit --requirement requirements.txt --format json --output security-audit.json || true
+          pip-audit --requirement requirements.txt --format markdown > security-audit.md || true
+        continue-on-error: true
+      
+      - name: Run lint check
+        run: |
+          ruff check src/ --output-format=json --output-file lint-report.json || true
+          ruff check src/ --output-format=text > lint-report.txt || true
+        continue-on-error: true
+      
+      - name: Run type check
+        run: |
+          mypy src/ --ignore-missing-imports --json-report mypy-report || true
+        continue-on-error: true
+      
+      - name: Generate project metrics
+        run: |
+          python scripts/analyze_project.py --output=metrics.json --summary > analysis-summary.txt
+        continue-on-error: true
+      
+      - name: Update PROJECT_STATUS.md
+        id: update-status
+        run: |
+          # Run the update script
+          python .github/scripts/update_status.py || echo "Status update failed"
+          
+          # Check if PROJECT_STATUS.md was modified
+          if git diff --quiet PROJECT_STATUS.md; then
+            echo "status_updated=false" >> $GITHUB_OUTPUT
+            echo "No changes to PROJECT_STATUS.md"
+          else
+            echo "status_updated=true" >> $GITHUB_OUTPUT
+            echo "PROJECT_STATUS.md has been updated"
+          fi
+        continue-on-error: true
+      
+      - name: Generate weekly report
+        id: report
+        run: |
+          REPORT_DATE=$(date +"%Y-%m-%d")
+          
+          cat > weekly-report.md << 'EOF'
+          # Weekly Health Check Report - ${REPORT_DATE}
+          
+          ## 📊 Summary
+          
+          **Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          **Branch**: ${{ github.ref_name }}
+          **Commit**: ${{ github.sha }}
+          
+          ## 🧪 Test Results
+          
+          EOF
+          
+          # Add test results if coverage.json exists
+          if [ -f coverage.json ]; then
+            python -c "
+          import json
+          with open('coverage.json') as f:
+              data = json.load(f)
+              coverage = data.get('totals', {}).get('percent_covered', 0)
+              print(f'**Coverage**: {coverage:.1f}%')
+          " >> weekly-report.md || echo "**Coverage**: N/A" >> weekly-report.md
+          fi
+          
+          # Add metrics if available
+          if [ -f metrics.json ]; then
+            echo "" >> weekly-report.md
+            echo "## 📈 Project Metrics" >> weekly-report.md
+            echo "" >> weekly-report.md
+            python -c "
+          import json
+          with open('metrics.json') as f:
+              data = json.load(f)
+              print(f\"**Total Files**: {data['files']['total']}\")
+              print(f\"**Python Files**: {data['code']['python_files']}\")
+              print(f\"**Total Lines**: {data['code']['total_lines']:,}\")
+              print(f\"**Test Files**: {data['tests']['test_files']}\")
+              print(f\"**Tests Passing**: {data['tests']['tests_passed']}/{data['tests']['tests_total']}\")
+              print(f\"**Legacy Import Files**: {data['imports']['files_with_legacy']}\")
+          " >> weekly-report.md || echo "Metrics unavailable" >> weekly-report.md
+          fi
+          
+          # Add security summary
+          if [ -f security-audit.json ]; then
+            echo "" >> weekly-report.md
+            echo "## 🔒 Security" >> weekly-report.md
+            echo "" >> weekly-report.md
+            VULN_COUNT=$(jq '.vulnerabilities | length' security-audit.json 2>/dev/null || echo "0")
+            echo "**Known Vulnerabilities**: $VULN_COUNT" >> weekly-report.md
+          fi
+          
+          # Add lint summary
+          if [ -f lint-report.json ]; then
+            echo "" >> weekly-report.md
+            echo "## 🔍 Code Quality" >> weekly-report.md
+            echo "" >> weekly-report.md
+            LINT_COUNT=$(jq 'length' lint-report.json 2>/dev/null || echo "0")
+            echo "**Lint Issues**: $LINT_COUNT" >> weekly-report.md
+          fi
+          
+          # Add analysis summary
+          if [ -f analysis-summary.txt ]; then
+            echo "" >> weekly-report.md
+            echo "## 📋 Analysis Summary" >> weekly-report.md
+            echo "" >> weekly-report.md
+            echo '```' >> weekly-report.md
+            cat analysis-summary.txt >> weekly-report.md
+            echo '```' >> weekly-report.md
+          fi
+          
+          echo "" >> weekly-report.md
+          echo "---" >> weekly-report.md
+          echo "*This report is automatically generated by GitHub Actions*" >> weekly-report.md
+          
+          # Save report path for next step
+          echo "report_path=weekly-report.md" >> $GITHUB_OUTPUT
+      
+      - name: Commit PROJECT_STATUS.md changes
+        if: |
+          steps.update-status.outputs.status_updated == 'true' &&
+          (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.commit_changes))
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          git add PROJECT_STATUS.md
+          git commit -m "chore: update PROJECT_STATUS.md from weekly health check [skip ci]"
+          git push
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-check-reports-${{ github.run_number }}
+          path: |
+            coverage.json
+            htmlcov/
+            security-audit.json
+            security-audit.md
+            lint-report.json
+            lint-report.txt
+            mypy-report/
+            metrics.json
+            analysis-summary.txt
+            weekly-report.md
+          retention-days: 30
+      
+      - name: Create GitHub Issue for Critical Findings
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Check for critical issues
+            let criticalIssues = [];
+            
+            // Check security vulnerabilities
+            if (fs.existsSync('security-audit.json')) {
+              const security = JSON.parse(fs.readFileSync('security-audit.json', 'utf8'));
+              const vulnCount = security.vulnerabilities ? security.vulnerabilities.length : 0;
+              if (vulnCount > 0) {
+                criticalIssues.push(`🔒 **${vulnCount} security vulnerabilities** found in dependencies`);
+              }
+            }
+            
+            // Check test failures
+            if (fs.existsSync('metrics.json')) {
+              const metrics = JSON.parse(fs.readFileSync('metrics.json', 'utf8'));
+              const passRate = metrics.tests?.pass_rate || 0;
+              if (passRate < 80) {
+                criticalIssues.push(`🧪 **Test pass rate ${passRate}%** is below 80% threshold`);
+              }
+              
+              const legacyImports = metrics.imports?.files_with_legacy || 0;
+              if (legacyImports > 0) {
+                criticalIssues.push(`⚠️ **${legacyImports} files** still have legacy imports`);
+              }
+            }
+            
+            // If there are critical issues, create/update an issue
+            if (criticalIssues.length > 0) {
+              const issueTitle = '🚨 Weekly Health Check - Critical Issues Detected';
+              const issueBody = `# Weekly Health Check Alert
+              
+              **Date**: ${new Date().toISOString().split('T')[0]}
+              **Workflow Run**: https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+              
+              ## Critical Issues Found
+              
+              ${criticalIssues.map(issue => `- ${issue}`).join('\n')}
+              
+              ## Actions Required
+              
+              1. Review the detailed reports in the workflow artifacts
+              2. Address high-priority security vulnerabilities
+              3. Fix failing tests to improve coverage
+              4. Clean up legacy imports blocking test execution
+              
+              ## Resources
+              
+              - [Workflow Artifacts](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+              - [PROJECT_STATUS.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/PROJECT_STATUS.md)
+              - [CI/CD Pipeline](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/workflows/ci-cd.yml)
+              
+              ---
+              *This issue is automatically generated by the Weekly Health Check workflow*
+              `;
+              
+              // Search for existing health check issue
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'health-check,automated'
+              });
+              
+              const existingIssue = issues.find(issue => issue.title === issueTitle);
+              
+              if (existingIssue) {
+                // Update existing issue
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existingIssue.number,
+                  body: issueBody
+                });
+                console.log(`Updated issue #${existingIssue.number}`);
+              } else {
+                // Create new issue
+                const { data: newIssue } = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueTitle,
+                  body: issueBody,
+                  labels: ['health-check', 'automated', 'priority:high']
+                });
+                console.log(`Created issue #${newIssue.number}`);
+              }
+            } else {
+              console.log('✅ No critical issues found');
+            }
+      
+      - name: Send Discord notification
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ job.status }}
+          title: "📊 Weekly Health Check Complete"
+          description: |
+            **Date**: $(date +"%Y-%m-%d")
+            **Status**: ${{ job.status }}
+            **PROJECT_STATUS.md Updated**: ${{ steps.update-status.outputs.status_updated }}
+            
+            View detailed reports in workflow artifacts
+          color: ${{ job.status == 'success' && 0x00ff00 || 0xff0000 }}
+          username: FKS Health Bot

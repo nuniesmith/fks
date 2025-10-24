@@ -1,0 +1,43 @@
+name: Reusable Notification Workflow
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        description: 'Notification title'
+        required: true
+        type: string
+      description:
+        description: 'Notification description'
+        required: true
+        type: string
+      status:
+        description: 'Job status'
+        required: true
+        type: string
+      color:
+        description: 'Embed color (hex without 0x prefix)'
+        required: false
+        type: string
+        default: '0099ff'
+    secrets:
+      DISCORD_WEBHOOK:
+        required: true
+
+jobs:
+  notify:
+    name: Send Notification
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    steps:
+      - name: Send Discord notification
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          status: ${{ inputs.status }}
+          title: ${{ inputs.title }}
+          description: ${{ inputs.description }}
+          color: ${{ inputs.color }}
+          username: FKS CI/CD Bot

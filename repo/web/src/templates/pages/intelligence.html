@@ -1,0 +1,372 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}FKS Intelligence Dashboard - FKS Trading Platform{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>
+            <i class="bi bi-robot"></i>
+            FKS Intelligence System
+        </h2>
+        <p class="text-muted">AI-powered RAG system for optimal daily trading recommendations</p>
+    </div>
+</div>
+
+<!-- System Status Cards -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-primary">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">RAG Status</h6>
+                <h4 class="mb-0">
+                    {% if rag_available %}
+                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> Active</span>
+                    {% else %}
+                        <span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Offline</span>
+                    {% endif %}
+                </h4>
+                <small class="text-muted">Local LLM + GPU</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-success">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Monitored Symbols</h6>
+                <h4 class="mb-0">{{ total_symbols|default:"12" }}</h4>
+                <small class="text-muted">Mains + Alts</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-warning">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Active Strategies</h6>
+                <h4 class="mb-0">{{ active_strategies|default:"3" }}</h4>
+                <small class="text-muted">Scalp, Swing, Long-term</small>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-danger">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Risk Level</h6>
+                <h4 class="mb-0">
+                    <span class="badge bg-{{ risk_level_color|default:'success' }}">
+                        {{ risk_level|default:"LOW" }}
+                    </span>
+                </h4>
+                <small class="text-muted">Current portfolio risk</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FKS Intelligence Flowchart -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-diagram-3"></i>
+                    FKS Intelligence Architecture
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-secondary active" data-theme-mermaid="default">Light</button>
+                    <button type="button" class="btn btn-outline-secondary" data-theme-mermaid="dark">Dark</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="mermaid" id="fksFlowchart">
+graph TB
+    A[FKS Intelligence Core] -->|Monitor| B[Task Oversight]
+    A -->|Analyze| C[Risk Checks]
+    A -->|Optimize| D[Baseline Improvement]
+    
+    B -->|Categorize| E[Opportunity Analysis]
+    C -->|Validate| F[1% Risk Rule]
+    D -->|Focus| G[Quality over Quantity]
+    
+    E -->|Timeframe| H[Scalp/Intraday]
+    E -->|Timeframe| I[Swing Trading]
+    E -->|Timeframe| J[Long-Term Holds]
+    
+    F -->|Pass| K[Prop Firm Accounts]
+    G -->|Improve| L[Strategy Parameters]
+    
+    K -->|Stack| M[Multiple Accounts]
+    M -->|Execute| N[Active Account Trading]
+    
+    N -->|Build| O[Capital Accumulation]
+    O -->|Transfer| P[Crypto Exchange Accounts]
+    P -->|API Control| Q[Automated Trading]
+    
+    H -.->|Signals| N
+    I -.->|Signals| N
+    J -.->|Signals| N
+    
+    Q -->|Feedback| A
+    L -->|Update| A
+    
+    style A fill:#667eea,stroke:#333,stroke-width:3px,color:#fff
+    style K fill:#198754,stroke:#333,stroke-width:2px,color:#fff
+    style P fill:#0dcaf0,stroke:#333,stroke-width:2px,color:#fff
+    style Q fill:#ffc107,stroke:#333,stroke-width:2px,color:#000
+    style F fill:#dc3545,stroke:#333,stroke-width:2px,color:#fff
+                </div>
+                <div class="mt-3">
+                    <h6>System Components:</h6>
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-circle-fill text-primary"></i> <strong>Intelligence Core</strong> - Central RAG-powered orchestration</li>
+                        <li><i class="bi bi-circle-fill text-success"></i> <strong>Prop Firm Integration</strong> - FXIFY, Topstep account stacking</li>
+                        <li><i class="bi bi-circle-fill text-info"></i> <strong>Crypto Exchange</strong> - Binance API automation</li>
+                        <li><i class="bi bi-circle-fill text-warning"></i> <strong>Automated Execution</strong> - API-controlled trades</li>
+                        <li><i class="bi bi-circle-fill text-danger"></i> <strong>Risk Management</strong> - 1% risk per trade validation</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Opportunity Categorization -->
+<div class="row mb-4">
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h6 class="mb-0"><i class="bi bi-lightning"></i> Scalp/Intraday</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>Timeframe:</strong> 5m - 1h</p>
+                <p class="mb-2"><strong>Target:</strong> 0.5% - 2% per trade</p>
+                <p class="mb-2"><strong>Frequency:</strong> Multiple daily</p>
+                <p class="mb-2"><strong>Current Opportunities:</strong> <span class="badge bg-success">{{ scalp_count|default:"3" }}</span></p>
+                <hr>
+                <h6>Strategy Focus:</h6>
+                <ul class="small">
+                    <li>RSI oversold/overbought</li>
+                    <li>MACD crossovers</li>
+                    <li>Volume spikes</li>
+                    <li>Quick profit taking</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0"><i class="bi bi-graph-up"></i> Swing Trading</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>Timeframe:</strong> 4h - 1d</p>
+                <p class="mb-2"><strong>Target:</strong> 3% - 10% per trade</p>
+                <p class="mb-2"><strong>Frequency:</strong> Weekly</p>
+                <p class="mb-2"><strong>Current Opportunities:</strong> <span class="badge bg-primary">{{ swing_count|default:"2" }}</span></p>
+                <hr>
+                <h6>Strategy Focus:</h6>
+                <ul class="small">
+                    <li>Trend following (SMA/EMA)</li>
+                    <li>Support/resistance levels</li>
+                    <li>Fibonacci retracements</li>
+                    <li>Multi-day momentum</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0"><i class="bi bi-hourglass"></i> Long-Term</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>Timeframe:</strong> 1w - 1M</p>
+                <p class="mb-2"><strong>Target:</strong> 20%+ per position</p>
+                <p class="mb-2"><strong>Frequency:</strong> Monthly</p>
+                <p class="mb-2"><strong>Current Opportunities:</strong> <span class="badge bg-warning text-dark">{{ longterm_count|default:"1" }}</span></p>
+                <hr>
+                <h6>Strategy Focus:</h6>
+                <ul class="small">
+                    <li>Fundamental analysis</li>
+                    <li>Market cycle positioning</li>
+                    <li>Accumulation phases</li>
+                    <li>HODLing strong assets</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prop Firm Stacking -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-stack"></i>
+                    Prop Firm Account Stacking
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <h6><i class="bi bi-building"></i> FXIFY Accounts</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Account</th>
+                                        <th>Status</th>
+                                        <th>Balance</th>
+                                        <th>Active</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>FXIFY-001</td>
+                                        <td><span class="badge bg-success">Funded</span></td>
+                                        <td>$10,000</td>
+                                        <td><i class="bi bi-check-circle text-success"></i></td>
+                                    </tr>
+                                    <tr>
+                                        <td>FXIFY-002</td>
+                                        <td><span class="badge bg-warning">Challenge</span></td>
+                                        <td>$5,000</td>
+                                        <td><i class="bi bi-x-circle text-danger"></i></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <h6><i class="bi bi-building"></i> Topstep Accounts</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Account</th>
+                                        <th>Status</th>
+                                        <th>Balance</th>
+                                        <th>Active</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>TOP-001</td>
+                                        <td><span class="badge bg-success">Funded</span></td>
+                                        <td>$50,000</td>
+                                        <td><i class="bi bi-check-circle text-success"></i></td>
+                                    </tr>
+                                    <tr>
+                                        <td>TOP-002</td>
+                                        <td><span class="badge bg-secondary">Pending</span></td>
+                                        <td>$0</td>
+                                        <td><i class="bi bi-x-circle text-danger"></i></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-info mt-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Stacking Strategy:</strong> Send high-confidence signals to all active prop firm accounts simultaneously to maximize profit potential. Capital from funded accounts flows into crypto exchanges for automated API trading.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Intelligence Insights -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-lightbulb"></i>
+                    Recent RAG Insights
+                </h5>
+                <a href="{% url 'web_app:signals' %}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-broadcast"></i> View All Signals
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    {% for insight in recent_insights %}
+                    <div class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">
+                                    <span class="badge bg-{{ insight.category_color }}">{{ insight.category }}</span>
+                                    {{ insight.symbol }}
+                                </h6>
+                                <p class="mb-1 small">{{ insight.recommendation }}</p>
+                                <small class="text-muted">
+                                    Confidence: {{ insight.confidence }}% | 
+                                    Sources: {{ insight.sources }} | 
+                                    {{ insight.time_ago }}
+                                </small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-{{ insight.action_color }}">{{ insight.action }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                        No recent insights. RAG system is generating recommendations...
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Theme switcher for Mermaid diagram
+document.querySelectorAll('[data-theme-mermaid]').forEach(button => {
+    button.addEventListener('click', function() {
+        const theme = this.dataset.themeMermaid;
+        
+        // Update button states
+        document.querySelectorAll('[data-theme-mermaid]').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        // Reinitialize Mermaid with new theme
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: theme,
+            flowchart: { 
+                useMaxWidth: true, 
+                htmlLabels: true,
+                curve: 'basis'
+            },
+            securityLevel: 'loose'
+        });
+        
+        // Reload the diagram
+        const element = document.getElementById('fksFlowchart');
+        const graphDefinition = element.textContent;
+        element.removeAttribute('data-processed');
+        element.innerHTML = graphDefinition;
+        mermaid.init(undefined, element);
+    });
+});
+
+// Auto-refresh insights every 60 seconds
+setInterval(function() {
+    // In production, use AJAX to fetch latest insights
+    console.log('Refreshing RAG insights...');
+}, 60000);
+</script>
+{% endblock %}

@@ -1,0 +1,698 @@
+services:
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: fks_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro  # Basic auth file
+      - ./src/staticfiles:/app/staticfiles:ro
+      - ./src/media:/app/media:ro
+      - ./logs/nginx:/var/log/nginx
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on:
+      web:
+        condition: service_healthy
+      flower:
+        condition: service_started
+    environment:
+      - TZ=America/Toronto
+    restart: unless-stopped
+    networks:
+      - fks-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    container_name: fks_app
+    expose:
+      - "8000"
+    volumes:
+      - ./src:/app
+      - ./logs/web:/app/logs
+    working_dir: /app
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn web.django.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=web.django.settings
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-dev-key-change-in-production}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/1
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      # Session configuration
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-False}
+      - SESSION_COOKIE_HTTPONLY=True
+      - SESSION_COOKIE_SAMESITE=Lax
+      - SESSION_COOKIE_AGE=604800  # 7 days
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: fks_db
+    restart: always
+    environment:
+      TZ: America/Toronto
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-trading_db}
+      # Enable SSL/TLS for production
+      POSTGRES_HOST_AUTH_METHOD: ${POSTGRES_HOST_AUTH_METHOD:-scram-sha-256}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: >
+      postgres -c shared_preload_libraries='timescaledb,vector'
+      -c ssl=${POSTGRES_SSL_ENABLED:-on}
+      -c ssl_cert_file=${POSTGRES_SSL_CERT_FILE:-/var/lib/postgresql/server.crt}
+      -c ssl_key_file=${POSTGRES_SSL_KEY_FILE:-/var/lib/postgresql/server.key}
+      -c password_encryption=scram-sha-256
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fks-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fks_pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      TZ: America/Toronto
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - db
+    networks:
+      - fks-network
+
+  redis:
+    image: redis:7
+    container_name: fks_redis
+    restart: always
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    environment:
+      TZ: America/Toronto
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./logs/redis:/var/log/redis
+    networks:
+      - fks-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -a '${REDIS_PASSWORD:-}' ping || redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    working_dir: /app
+    command: celery -A web.django worker --loglevel=info --concurrency=4
+    volumes:
+      - ./src:/app
+      - ./logs/celery:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=web.django.settings
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/1
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A web.django inspect ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    working_dir: /app
+    command: celery -A web.django beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ./src:/app
+      - ./logs/celery:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=web.django.settings
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/1
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  flower:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    working_dir: /app
+    command: celery -A web.django flower --port=5555
+    volumes:
+      - ./src:/app
+    ports:
+      - "5555:5555"
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - celery_worker
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  # FKS Microservices
+  fks_api:
+    build:
+      context: ./repo/api
+      dockerfile: Dockerfile
+    container_name: fks_api
+    expose:
+      - "8001"
+    volumes:
+      - ./repo/api:/app
+      - ./logs/api:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_api
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - APP_SERVICE_URL=http://fks_app:8002
+      - DATA_SERVICE_URL=http://fks_data:8003
+      - EXECUTION_SERVICE_URL=http://fks_execution:8004
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/2
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      fks_app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_app:
+    build:
+      context: ./repo/app
+      dockerfile: Dockerfile
+    container_name: fks_app
+    expose:
+      - "8002"
+    volumes:
+      - ./repo/app:/app
+      - ./logs/app:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_app
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - DATA_SERVICE_URL=http://fks_data:8003
+      - AI_SERVICE_URL=http://fks_ai:8006
+      - EXECUTION_SERVICE_URL=http://fks_execution:8004
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/5
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      fks_data:
+        condition: service_healthy
+      fks_ai:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_data:
+    build:
+      context: ./repo/data
+      dockerfile: Dockerfile
+    container_name: fks_data
+    expose:
+      - "8003"
+    volumes:
+      - ./repo/data:/app
+      - ./logs/data:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_data
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/3
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_ai:
+    build:
+      context: ./repo/ai
+      dockerfile: Dockerfile.gpu
+    container_name: fks_ai
+    expose:
+      - "8006"
+    volumes:
+      - ./repo/ai:/app
+      - ./logs/ai:/app/logs
+      - ./ml_models:/app/models  # Persistent model storage
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_ai
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/6
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CUDA_VISIBLE_DEVICES=0
+      - OLLAMA_HOST=http://ollama:11434
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_execution:
+    build:
+      context: ./repo/execution
+      dockerfile: Dockerfile
+    container_name: fks_execution
+    expose:
+      - "8004"
+    volumes:
+      - ./repo/execution:/app
+      - ./logs/execution:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_execution
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/4
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - DATA_SERVICE_URL=http://fks_data:8003
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      fks_data:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_ninja:
+    build:
+      context: ./repo/ninja
+      dockerfile: Dockerfile
+    container_name: fks_ninja
+    expose:
+      - "8005"
+    volumes:
+      - ./repo/ninja:/app
+      - ./logs/ninja:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_ninja
+      - SERVICE_VERSION=1.0.0
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - APP_SERVICE_URL=http://fks_app:8002
+      - EXECUTION_SERVICE_URL=http://fks_execution:8004
+      - DATA_SERVICE_URL=http://fks_data:8003
+      - NINJATRADER_HOST=${NINJATRADER_HOST:-localhost}
+      - NINJATRADER_PORT=${NINJATRADER_PORT:-8080}
+    env_file:
+      - .env
+    depends_on:
+      web:
+        condition: service_healthy
+      fks_app:
+        condition: service_healthy
+      fks_execution:
+        condition: service_healthy
+      fks_data:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  fks_web_ui:
+    build:
+      context: ./repo/web
+      dockerfile: Dockerfile
+    container_name: fks_web_ui
+    expose:
+      - "3001"
+    volumes:
+      - ./repo/web:/app
+      - ./logs/web_ui:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - NODE_ENV=production
+      - SERVICE_NAME=fks_web_ui
+      - SERVICE_VERSION=1.0.0
+      - VITE_API_URL=http://fks_api:8001
+      - VITE_WS_URL=ws://fks_api:8001/ws
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+    depends_on:
+      web:
+        condition: service_healthy
+      fks_api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fks_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - fks-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fks_grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=redis-datasource
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - TZ=America/Toronto
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - fks-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: fks_node_exporter
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    expose:
+      - "9100"
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: fks_postgres_exporter
+    environment:
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-trading_db}?sslmode=disable
+    expose:
+      - "9187"
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: fks_redis_exporter
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    expose:
+      - "9121"
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+  # Tailscale for secure networking
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: fks_tailscale
+    hostname: fks-trading
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+      - TS_EXTRA_ARGS=--advertise-tags=tag:fks-trading --accept-routes
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: unless-stopped
+    networks:
+      - fks-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+  certbot_webroot:
+  prometheus_data:
+  grafana_data:
+  tailscale_data:
+
+networks:
+  fks-network:
+    driver: bridge

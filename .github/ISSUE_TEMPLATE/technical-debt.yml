@@ -1,0 +1,48 @@
+name: 🧹 Technical Debt / Cleanup
+description: Code cleanup, refactoring, or debt reduction
+title: "[DEBT] "
+labels: ["🧹 tech-debt", "refactoring"]
+assignees:
+  - nuniesmith
+
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Debt Type
+      options:
+        - Legacy Code Removal
+        - Empty/Stub File Cleanup
+        - Duplicate Code Removal
+        - Dependency Updates
+        - Documentation
+        - Code Quality Improvement
+    validations:
+      required: true
+  
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      placeholder: "Example: Remove 6 legacy duplicate files (engine.py vs legacy_engine.py)"
+    validations:
+      required: true
+  
+  - type: textarea
+    id: why
+    attributes:
+      label: Why This Matters
+      placeholder: "Example: Reduces confusion, lowers maintenance burden"
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1 - High (causes confusion/bugs)
+        - P2 - Medium (maintenance burden)
+        - P3 - Low (cosmetic)
+    validations:
+      required: true

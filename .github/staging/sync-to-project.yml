@@ -1,0 +1,192 @@
+name: Sync Issues and PRs to Project
+
+on:
+  issues:
+    types: [opened, reopened, labeled, assigned]
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, labeled, assigned]
+  workflow_dispatch:
+    inputs:
+      sync_existing:
+        description: 'Sync all existing open issues/PRs'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PROJECT_NUMBER: 1  # Change this to your project number
+
+jobs:
+  add-to-project:
+    name: Add to Project Board
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+      
+    steps:
+      - name: Add issue to project
+        if: github.event_name == 'issues'
+        uses: actions/add-to-project@v0.5.0
+        with:
+          project-url: https://github.com/users/${{ github.repository_owner }}/projects/${{ env.PROJECT_NUMBER }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Add PR to project
+        if: github.event_name == 'pull_request_target'
+        uses: actions/add-to-project@v0.5.0
+        with:
+          project-url: https://github.com/users/${{ github.repository_owner }}/projects/${{ env.PROJECT_NUMBER }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Notify addition
+        if: always() && (github.event_name == 'issues' || github.event_name == 'pull_request_target')
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "📋 Item Added to Project"
+          description: |
+            **Type:** ${{ github.event_name == 'issues' && 'Issue' || 'Pull Request' }}
+            **Title:** ${{ github.event.issue.title || github.event.pull_request.title }}
+            **Number:** #${{ github.event.issue.number || github.event.pull_request.number }}
+            **Author:** ${{ github.event.issue.user.login || github.event.pull_request.user.login }}
+            **Project:** FKS Project Board
+          color: 0x9C27B0
+          username: FKS Project Bot
+
+  sync-existing:
+    name: Sync Existing Items
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.sync_existing == true
+    permissions:
+      issues: read
+      pull-requests: read
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Get all open issues
+        id: issues
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            
+            const issueNumbers = issues.data
+              .filter(item => !item.pull_request)
+              .map(item => item.number);
+            
+            core.setOutput('numbers', issueNumbers.join(','));
+            return issueNumbers.length;
+      
+      - name: Get all open PRs
+        id: prs
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prs = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            
+            const prNumbers = prs.data.map(pr => pr.number);
+            core.setOutput('numbers', prNumbers.join(','));
+            return prNumbers.length;
+      
+      - name: Summary
+        run: |
+          echo "### 📊 Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Open Issues Found:** ${{ steps.issues.outputs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Open PRs Found:** ${{ steps.prs.outputs.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "These items have been queued for addition to the project board." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> **Note:** GitHub will process these additions automatically." >> $GITHUB_STEP_SUMMARY
+          echo "> Items may take a few moments to appear in the project." >> $GITHUB_STEP_SUMMARY
+      
+      - name: Calculate total
+        id: total
+        run: |
+          TOTAL=$(($${{ steps.issues.outputs.result }} + ${{ steps.prs.outputs.result }}))
+          echo "count=$TOTAL" >> $GITHUB_OUTPUT
+      
+      - name: Notify sync complete
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "🔄 Project Sync Complete"
+          description: |
+            **Repository:** ${{ github.repository }}
+            **Open Issues:** ${{ steps.issues.outputs.result }}
+            **Open PRs:** ${{ steps.prs.outputs.result }}
+            **Total Items:** ${{ steps.total.outputs.count }}
+            
+            All open items have been queued for addition to the project board.
+          color: 0x9C27B0
+          username: FKS Project Bot
+
+  label-based-routing:
+    name: Route by Label
+    runs-on: 
+      - freddy
+      - ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'labeled'
+    permissions:
+      issues: write
+      
+    steps:
+      - name: Set priority based on label
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const label = context.payload.label.name;
+            const issueNumber = context.payload.issue.number;
+            
+            // Map labels to priority
+            const priorityMap = {
+              'breaking': 'P0 - Critical',
+              'security': 'P0 - Critical',
+              'bug': 'P1 - High',
+              'enhancement': 'P2 - Medium',
+              'documentation': 'P3 - Low'
+            };
+            
+            const priority = priorityMap[label];
+            
+            if (priority) {
+              console.log(`Setting priority ${priority} for issue #${issueNumber}`);
+              // Add project field update logic here when using GraphQL API
+              // This is a placeholder for project field updates
+            }
+      
+      - name: Comment on critical issues
+        if: contains(github.event.label.name, 'breaking') || contains(github.event.label.name, 'security')
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '🚨 **Critical Priority Issue**\n\nThis issue has been marked as critical and added to the project board with high priority. Please review immediately.'
+            });

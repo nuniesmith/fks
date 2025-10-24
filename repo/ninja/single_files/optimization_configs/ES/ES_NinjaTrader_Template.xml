@@ -1,0 +1,57 @@
+﻿<!-- NinjaTrader Strategy Analyzer Template -->
+<!-- Asset: ES (S&P 500) -->
+<!-- Generated: 2025-07-13 23:34:03 -->
+
+<Strategy Name="FKSStrategyAIO">
+    <Parameters>
+        <!-- Phase 1: Core Signal Parameters -->
+        <Parameter Name="SignalQualityThreshold" Optimize="true" 
+                   Min="0.6" 
+                   Max="0.75" 
+                   Step="0.02" />
+        
+        <Parameter Name="VolumeThreshold" Optimize="true" 
+                   Min="1.1" 
+                   Max="1.5" 
+                   Step="0.1" />
+        
+        <Parameter Name="ATRStopMultiplier" Optimize="true" 
+                   Min="1.8" 
+                   Max="2.5" 
+                   Step="0.2" />
+        
+        <Parameter Name="ATRTargetMultiplier" Optimize="true" 
+                   Min="1.3" 
+                   Max="2.2" 
+                   Step="0.3" />
+        
+        <!-- Fixed for Phase 1 -->
+        <Parameter Name="BaseContracts" Optimize="false" Value="1" />
+        <Parameter Name="MaxContracts" Optimize="false" Value="3" />
+        <Parameter Name="MaxDailyTrades" Optimize="false" Value="10" />
+        <Parameter Name="StartHour" Optimize="false" Value="3" />
+        <Parameter Name="EndHour" Optimize="false" Value="12" />
+        
+        <!-- Risk Management -->
+        <Parameter Name="DailyProfitSoftTarget" Optimize="false" Value="2000" />
+        <Parameter Name="DailyProfitHardTarget" Optimize="false" Value="3000" />
+        <Parameter Name="DailyLossSoftLimit" Optimize="false" Value="1000" />
+        <Parameter Name="DailyLossHardLimit" Optimize="false" Value="1500" />
+        
+        <!-- Standard Settings -->
+        <Parameter Name="UseTimeFilter" Optimize="false" Value="true" />
+        <Parameter Name="ShowDebugInfo" Optimize="false" Value="false" />
+        <Parameter Name="MinutesBeforeClose" Optimize="false" Value="15" />
+    </Parameters>
+    
+    <!-- Fitness Function: Prioritize Profit Factor and limit Drawdown -->
+    <FitnessFunction>
+        Net Profit + (Profit Factor * 10000) - (Max Drawdown * 50000) + (Sharpe Ratio * 5000)
+    </FitnessFunction>
+    
+    <!-- Minimum Trade Requirements -->
+    <MinimumTrades>50</MinimumTrades>
+    <MinimumWinRate>0.40</MinimumWinRate>
+    <MinimumProfitFactor>1.20</MinimumProfitFactor>
+    <MaximumDrawdown>0.25</MaximumDrawdown>
+</Strategy>

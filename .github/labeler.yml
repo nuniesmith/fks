@@ -1,0 +1,152 @@
+# GitHub Actions Labeler Configuration for FKS Trading Platform
+# Automatically applies labels to PRs based on changed files
+
+# Documentation changes
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: 
+          - 'docs/**/*'
+          - 'README.md'
+          - 'QUICKREF.md'
+          - '**/*.md'
+          - '.github/copilot-instructions.md'
+
+# Core application code
+code:
+  - changed-files:
+      - any-glob-to-any-file: 'src/**/*.py'
+      - all-globs-to-all-files: '!src/tests/**'
+
+# Framework layer (critical - requires extra review)
+framework:
+  - changed-files:
+      - any-glob-to-any-file: 'src/framework/**/*.py'
+
+# Security-sensitive files
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'requirements*.txt'
+          - '.env*'
+          - 'docker-compose*.yml'
+          - 'nginx/**/*'
+          - 'src/authentication/**/*.py'
+          - '**/settings.py'
+          - 'secrets/**/*'
+          - '.github/workflows/**'
+
+# Test files
+tests:
+  - changed-files:
+      - any-glob-to-any-file: 
+          - 'tests/**/*.py'
+          - 'pytest.ini'
+          - 'src/tests/**/*.py'
+
+# Database and migrations
+database:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/core/database/**/*.py'
+          - '**/migrations/**/*.py'
+          - 'sql/**/*'
+          - 'scripts/setup_database.sh'
+
+# Trading logic
+trading:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/trading/**/*.py'
+          - 'src/core/models.py'
+
+# RAG system
+rag:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/rag/**/*.py'
+          - 'docker-compose.gpu.yml'
+          - 'requirements.gpu.txt'
+          - 'scripts/setup_rag.sh'
+
+# ML/AI components
+ml:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/ml/**/*.py'
+          - 'notebooks/**/*.ipynb'
+          - 'scripts/setup_ml.sh'
+
+# Web UI (Django templates, static files)
+web:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/web/**/*'
+          - 'src/web/templates/**/*'
+          - 'src/web/static/**/*'
+          - 'src/api/**/*.py'
+
+# Docker and infrastructure
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docker/**/*'
+          - 'Dockerfile*'
+          - 'docker-compose*.yml'
+          - '.dockerignore'
+
+# Configuration files
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.toml'
+          - '*.yaml'
+          - '*.yml'
+          - '*.ini'
+          - '*.cfg'
+          - '.github/**/*'
+          - 'Makefile'
+
+# Scripts and automation
+scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'scripts/**/*'
+          - '*.sh'
+
+# Monitoring and observability
+monitoring:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'monitoring/**/*'
+          - 'src/framework/monitoring/**/*.py'
+
+# Celery tasks
+celery:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/trading/tasks.py'
+          - 'src/web/django/celery.py'
+          - 'scripts/start_celery.sh'
+          - 'scripts/stop_celery.sh'
+
+# Dependencies
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'requirements*.txt'
+          - 'pyproject.toml'
+          - 'setup.py'
+
+# WIP (Work in Progress) - for draft PRs
+wip:
+  - changed-files:
+      - any-glob-to-any-file: '**/*WIP*'
+  - draft: true
+
+# Breaking changes (requires major review)
+breaking:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/framework/**/*.py'
+          - 'src/core/database/models.py'
+          - '**/settings.py'

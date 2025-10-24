@@ -1,0 +1,32 @@
+#!/bin/bash
+# Pre-commit hook for markdown linting
+# Install: cp .git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+set -e
+
+# Check if markdownlint is installed
+if ! command -v markdownlint &> /dev/null; then
+    echo "⚠️  markdownlint not found. Install with: npm install -g markdownlint-cli"
+    exit 0  # Don't block commit, just warn
+fi
+
+# Get list of staged markdown files
+STAGED_MD_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.md$' || true)
+
+if [ -z "$STAGED_MD_FILES" ]; then
+    exit 0  # No markdown files changed
+fi
+
+echo "🔍 Linting markdown files..."
+
+# Run markdownlint on staged files
+if ! echo "$STAGED_MD_FILES" | xargs markdownlint; then
+    echo ""
+    echo "❌ Markdown linting failed!"
+    echo "Fix errors with: markdownlint --fix <file>"
+    echo "Or commit with --no-verify to skip this check"
+    exit 1
+fi
+
+echo "✅ Markdown linting passed!"
+exit 0

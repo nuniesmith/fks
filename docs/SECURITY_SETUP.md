@@ -13,14 +13,18 @@ This guide helps you secure your FKS Trading Platform before deployment.
 **YOUR CREDENTIALS WERE EXPOSED IN .ENV FILE!** Please take immediate action:
 
 #### Discord Webhook
+
 Your webhook URL was visible. To secure it:
+
 1. Go to Discord Server Settings → Integrations → Webhooks
 2. Find the webhook: `1426890429760278529`
 3. **Delete it** and create a new one
 4. Add the new URL to `.env` (not committed to git)
 
 #### Netdata Token
+
 Your Netdata token was exposed. To secure it:
+
 1. Go to https://app.netdata.cloud
 2. Navigate to your space settings
 3. **Revoke** the old token: `Sn5D3zsAEX9KA_YtztxjdHCpan6v-o...`
@@ -61,17 +65,20 @@ nano .env  # or vim, code, etc.
 ### Step 2: Generate Strong Passwords
 
 **PostgreSQL Password** (minimum 16 characters):
+
 ```bash
 # Generate random password
 openssl rand -base64 24
 ```
 
 **PgAdmin Password** (minimum 12 characters):
+
 ```bash
 openssl rand -base64 16
 ```
 
 **Django Secret Key** (50+ characters):
+
 ```bash
 python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
 ```

@@ -5,16 +5,19 @@
 ### First Time Setup
 
 1. **Test your setup:**
+
    ```bash
    ./test_setup.sh
    ```
 
 2. **Start all services:**
+
    ```bash
    ./start.sh rebuild
    ```
 
 3. **Create admin user:**
+
    ```bash
    ./start.sh createsuperuser
    ```
@@ -44,22 +47,26 @@
 | **pgAdmin** | http://localhost:5050 | Database management |
 
 ### pgAdmin Login (if needed)
+
 - **Email:** admin@admin.com (or from .env)
 - **Password:** admin (or from .env)
 
 ## 📦 Services Overview
 
 ### Core Services
+
 - **web** - Django application (port 8000)
 - **db** - TimescaleDB/PostgreSQL (port 5432)
 - **redis** - Redis cache & Celery broker (port 6379)
 
 ### Celery Services
+
 - **celery_worker** - Background task processor
 - **celery_beat** - Scheduled task scheduler
 - **flower** - Celery monitoring UI (port 5555)
 
 ### Management
+
 - **pgadmin** - Database admin UI (port 5050)
 
 ## 🔧 Troubleshooting
@@ -69,6 +76,7 @@
 **Problem:** `resolution-too-deep` or dependency conflicts
 
 **Solution:**
+
 ```bash
 # The Dockerfile now uses 'uv' instead of 'pip' for faster, better dependency resolution
 # Redis version is constrained to work with celery: redis>=5.0.0,<5.1.0
@@ -78,6 +86,7 @@ docker compose build --no-cache
 ### Container Won't Start
 
 **Check logs:**
+
 ```bash
 ./start.sh logs
 # or for specific service:
@@ -88,6 +97,7 @@ docker compose logs celery_worker
 ### Database Connection Issues
 
 **Reset database:**
+
 ```bash
 ./start.sh stop
 ./start.sh clean-volumes  # WARNING: Deletes all data
@@ -97,6 +107,7 @@ docker compose logs celery_worker
 ### Celery Tasks Not Running
 
 **Check Celery status:**
+
 ```bash
 ./start.sh celery-status
 # or restart Celery:
@@ -106,6 +117,7 @@ docker compose restart celery_worker celery_beat
 ### Port Already in Use
 
 **Check what's using the port:**
+
 ```bash
 # For port 8000
 sudo lsof -i :8000
@@ -114,6 +126,7 @@ netstat -ano | findstr :8000
 ```
 
 **Change port in docker-compose.yml:**
+
 ```yaml
 services:
   web:
@@ -144,6 +157,7 @@ docker system prune -a
 1. Edit code in `src/` directory
 2. Changes are automatically reflected (mounted volume)
 3. For dependency changes:
+
    ```bash
    ./start.sh rebuild
    ```
@@ -178,11 +192,13 @@ python manage.py shell
 ## 📊 Monitoring
 
 ### View All Logs
+
 ```bash
 ./start.sh logs
 ```
 
 ### View Specific Service Logs
+
 ```bash
 docker compose logs -f web
 docker compose logs -f celery_worker
@@ -190,11 +206,13 @@ docker compose logs -f celery_beat
 ```
 
 ### Celery Task Monitoring
+
 - Open Flower UI: http://localhost:5555
 - View active tasks, failed tasks, task history
 - Monitor worker status
 
 ### Database Monitoring
+
 - Open pgAdmin: http://localhost:5050
 - Add server connection:
   - Host: db
@@ -241,11 +259,13 @@ PGADMIN_PASSWORD=admin
 ### Enable Django Debug Toolbar
 
 In `.env`:
+
 ```bash
 DJANGO_DEBUG=True
 ```
 
 Then rebuild:
+
 ```bash
 ./start.sh rebuild
 ```
@@ -274,16 +294,19 @@ docker exec -it fks_app python manage.py shell_plus
 ## ⚠️ Important Notes
 
 ### Dependency Resolution
+
 - The project now uses **uv** instead of pip for faster builds
 - Redis version is constrained to `>=5.0.0,<5.1.0` for Celery compatibility
 - If you modify `requirements.txt`, test with `./test_setup.sh` first
 
 ### Data Persistence
+
 - Database data: Persisted in Docker volume `postgres_data`
 - Redis data: Persisted in Docker volume `redis_data`
 - Use `./start.sh clean-volumes` to reset (WARNING: deletes all data)
 
 ### Resource Usage
+
 - Multiple services run simultaneously (Django, Celery workers, DB, Redis)
 - Recommended: 4GB+ RAM, 20GB+ disk space
 - Monitor with: `docker stats`

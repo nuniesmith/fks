@@ -21,21 +21,25 @@ gh --version
 ```
 
 ### Authenticate
+
 ```bash
 gh auth login
 ```
 
 **Select**:
+
 - GitHub.com
 - HTTPS
 - Authenticate via web browser
 
 ### Test it works
+
 ```bash
 gh auth status
 ```
 
 ### Run import script
+
 ```bash
 python3 scripts/import_project_plan.py --dry-run
 ```
@@ -103,6 +107,7 @@ https://github.com/nuniesmith/fks/issues
 ## 🆘 Troubleshooting
 
 ### "gh: command not found" after install
+
 ```bash
 # WSL: Restart terminal or
 source ~/.bashrc
@@ -111,12 +116,14 @@ source ~/.bashrc
 ```
 
 ### "gh auth login" fails
+
 ```bash
 # Try with token instead
 gh auth login --with-token < ~/.github-token
 ```
 
 ### Permission denied
+
 ```bash
 # WSL might need sudo
 sudo gh auth login

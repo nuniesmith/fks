@@ -8,6 +8,7 @@
 ## 📊 Changes Overview
 
 ### Files Modified: 5
+
 - `src/web/rag/embeddings.py` - Fixed imports
 - `src/web/rag/retrieval.py` - Fixed imports
 - `src/web/rag/intelligence.py` - Fixed imports
@@ -15,6 +16,7 @@
 - `src/trading/tasks.py` - Added 5 RAG ingestion tasks
 
 ### Files Added: 9
+
 1. `src/web/rag/orchestrator.py` - Simplified trading recommendations API
 2. `src/web/rag/services.py` - Public API exports
 3. `src/web/rag/README.md` - Complete RAG documentation
@@ -26,6 +28,7 @@
 9. `tests/unit/test_rag/test_document_processor.py` - Document processor tests
 
 ### Total Lines Added: ~3,400 lines
+
 - Core code: ~1,500 lines
 - Tests: ~560 lines
 - Documentation: ~1,340 lines
@@ -35,6 +38,7 @@
 All 5 sub-tasks from the issue completed:
 
 ### 2.2.1: Document Processor ✅ (3 hrs estimated)
+
 - **Status**: Already complete, no changes needed
 - **Features**:
   - Chunks trading data using sliding window approach
@@ -44,6 +48,7 @@ All 5 sub-tasks from the issue completed:
 - **Tests**: 20+ unit tests added
 
 ### 2.2.2: Embeddings with GPU Fallback ✅ (2 hrs estimated)
+
 - **Status**: Imports fixed, already functional
 - **Changes**: Fixed `database` → `core.database` imports
 - **Features**:
@@ -54,6 +59,7 @@ All 5 sub-tasks from the issue completed:
   - Semantic search with cosine similarity
 
 ### 2.2.3: Retrieval Service with pgvector ✅ (3 hrs estimated)
+
 - **Status**: Imports fixed, already functional
 - **Changes**: Fixed import paths
 - **Features**:
@@ -64,8 +70,9 @@ All 5 sub-tasks from the issue completed:
   - Trading insights retrieval
 
 ### 2.2.4: Intelligence Orchestration with Ollama LLM ✅ (4 hrs estimated)
+
 - **Status**: Imports fixed, new orchestrator API added
-- **Changes**: 
+- **Changes**:
   - Fixed import paths
   - Created IntelligenceOrchestrator for simplified API
 - **Features**:
@@ -77,6 +84,7 @@ All 5 sub-tasks from the issue completed:
   - Signal explanations
 
 ### 2.2.5: Auto-Ingest Pipeline via Celery ✅ (2 hrs estimated)
+
 - **Status**: Imports fixed, Celery tasks added
 - **Changes**:
   - Fixed import paths in ingestion.py
@@ -135,6 +143,7 @@ recommendation = orchestrator.get_trading_recommendation(
 ```
 
 **Returns:**
+
 ```python
 {
     'symbol': 'BTCUSDT',
@@ -153,6 +162,7 @@ recommendation = orchestrator.get_trading_recommendation(
 ### Additional APIs
 
 **Portfolio Optimization:**
+
 ```python
 portfolio = orchestrator.optimize_portfolio(
     symbols=['BTCUSDT', 'ETHUSDT', 'BNBUSDT'],
@@ -163,6 +173,7 @@ portfolio = orchestrator.optimize_portfolio(
 ```
 
 **Daily Signals:**
+
 ```python
 signals = orchestrator.get_daily_signals(
     symbols=['BTCUSDT', 'ETHUSDT'],
@@ -181,6 +192,7 @@ Five new tasks added to `src/trading/tasks.py`:
 5. **ingest_recent_trades(days)** - Batch ingest recent trades
 
 **Usage:**
+
 ```python
 from trading.tasks import ingest_signal, ingest_recent_trades
 
@@ -194,6 +206,7 @@ ingest_recent_trades.delay(days=7)
 ### Unit Tests
 
 **test_orchestrator.py** (170 lines, 15+ tests):
+
 - Initialization
 - Trading recommendations
 - Action parsing (BUY/SELL/HOLD)
@@ -205,6 +218,7 @@ ingest_recent_trades.delay(days=7)
 - Error handling
 
 **test_document_processor.py** (390 lines, 20+ tests):
+
 - Text chunking (empty, short, long)
 - Token counting
 - Signal formatting
@@ -217,6 +231,7 @@ ingest_recent_trades.delay(days=7)
 ### Integration Tests
 
 **scripts/test_rag_system.py** (450 lines):
+
 - System status check (CUDA availability)
 - Local embeddings test
 - Local LLM test
@@ -225,6 +240,7 @@ ingest_recent_trades.delay(days=7)
 - Trading recommendations test
 
 **scripts/rag_example.py** (150 lines):
+
 - Simple usage examples
 - 4 example scenarios
 - Quick start for developers
@@ -232,6 +248,7 @@ ingest_recent_trades.delay(days=7)
 ## 📚 Documentation
 
 ### src/web/rag/README.md (454 lines)
+
 - Architecture overview
 - Component descriptions
 - Quick start guide
@@ -244,6 +261,7 @@ ingest_recent_trades.delay(days=7)
 - Troubleshooting
 
 ### docs/RAG_SETUP_GUIDE.md (490 lines)
+
 - Prerequisites
 - Installation steps
 - Database setup (pgvector)
@@ -260,29 +278,34 @@ ingest_recent_trades.delay(days=7)
 All required models exist in `src/core/database/models.py`:
 
 **documents** (Source documents):
+
 - id, doc_type, title, content
 - symbol, timeframe, metadata
 - created_at, updated_at
 
 **document_chunks** (Chunks with embeddings):
+
 - id, document_id, chunk_index
 - content, embedding (vector)
 - token_count, metadata
 - created_at
 
 **query_history** (Query logs):
+
 - id, query, response
 - retrieved_chunks, model_used
 - response_time_ms, user_feedback
 - created_at
 
 **trading_insights** (Curated insights):
+
 - id, insight_type, title, content
 - symbol, impact, category, tags
 - related_trades, related_backtests
 - created_at, updated_at
 
 **Indexes created** (`sql/migrations/001_add_pgvector.sql`):
+
 - HNSW index on embeddings (fast similarity search)
 - Composite indexes for filtering
 - GIN indexes for JSONB metadata
@@ -290,6 +313,7 @@ All required models exist in `src/core/database/models.py`:
 ## 🔧 Configuration
 
 ### Environment Variables
+
 ```bash
 # OpenAI (fallback)
 OPENAI_API_KEY=sk-...
@@ -305,11 +329,13 @@ REDIS_PORT=6379
 ### Model Selection
 
 **Embeddings**:
+
 - Default: `all-MiniLM-L6-v2` (384 dim, fast)
 - Better quality: `all-mpnet-base-v2` (768 dim)
 - OpenAI: `text-embedding-3-small` (1536 dim)
 
 **LLM**:
+
 - Default: `llama3.2:3b` (3B params, balanced)
 - Tiny: `llama3.2:1b` (1B params, very fast)
 - Quality: `mistral:7b` (7B params, better answers)
@@ -317,6 +343,7 @@ REDIS_PORT=6379
 ## 🚀 Quick Start
 
 ### 1. Setup
+
 ```bash
 # Install dependencies
 pip install -r requirements.txt
@@ -333,6 +360,7 @@ ollama pull llama3.2:3b
 ```
 
 ### 2. Use
+
 ```python
 from web.rag.services import IntelligenceOrchestrator
 
@@ -351,6 +379,7 @@ print(f"Risk: {rec['risk_assessment']}")
 ```
 
 ### 3. Test
+
 ```bash
 # Run test suite
 python scripts/test_rag_system.py
@@ -362,12 +391,14 @@ pytest tests/unit/test_rag/ -v
 ## 📊 Performance
 
 ### Benchmarks (Estimated)
+
 - Embedding (single): ~10-30ms (GPU) / ~30-50ms (CPU)
 - Embedding (batch 32): ~150-300ms (GPU) / ~500-1000ms (CPU)
 - LLM generation (100 tokens): ~1-2s (GPU) / ~3-5s (CPU)
 - Semantic search (top 5): ~20-50ms
 
 ### Optimization Tips
+
 1. Use GPU when available (3-5x faster)
 2. Batch operations for multiple documents
 3. HNSW index for fast similarity search
@@ -431,6 +462,7 @@ Before deploying to production:
 The RAG system is now fully implemented and ready for testing. All 5 sub-tasks completed, all success criteria met, and comprehensive documentation provided.
 
 **Total contribution:**
+
 - 5 files modified
 - 9 files added
 - ~3,400 lines added

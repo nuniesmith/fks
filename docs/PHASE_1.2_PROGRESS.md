@@ -20,6 +20,7 @@ Phase 1.2 focused on fixing legacy import patterns from the microservices-to-mon
 **File:** `src/framework/config/constants.py` (785 lines, 27.7 KB)
 
 **Contains all required constants:**
+
 - ✅ `SYMBOLS` - Trading pairs list
 - ✅ `MAINS` - Main cryptocurrencies (BTC, ETH, BNB)
 - ✅ `ALTS` - Alternative cryptocurrencies
@@ -30,6 +31,7 @@ Phase 1.2 focused on fixing legacy import patterns from the microservices-to-mon
 - ✅ Plus 100+ other constants for trading, ML, monitoring, security
 
 **Legacy Compatibility Section:**
+
 ```python
 # =============================================================================
 # Trading Constants (Legacy config module compatibility)
@@ -57,6 +59,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://...")
 ```
 
 **Key Files Checked:**
+
 1. ✅ `src/trading/backtest/engine.py` - Uses `from framework.config.constants import ALTS, FEE_RATE, MAINS, SYMBOLS`
 2. ✅ `src/trading/signals/generator.py` - Uses `from framework.config.constants import ALTS, MAINS, RISK_PER_TRADE, SYMBOLS`
 3. ✅ `src/core/database/models.py` - Uses `from framework.config.constants import DATABASE_URL`
@@ -94,6 +97,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://...")
 ## Import Migration Status
 
 ### Before (Legacy Patterns - FROM DOCS)
+
 According to the project documentation, these patterns were problematic:
 
 ```python
@@ -106,6 +110,7 @@ from shared_python import get_settings
 ```
 
 ### After (Current State - VERIFIED)
+
 All source code now uses:
 
 ```python
@@ -122,6 +127,7 @@ from django.conf import settings  # For Django-specific settings
 ## Test Files Analysis
 
 **Test Imports Checked:**
+
 - `tests/unit/test_trading/test_signals.py` - ✅ Clean (uses trading.indicators)
 - `tests/unit/test_core/test_database.py` - ✅ Clean (uses core.database.models)
 - `tests/integration/test_backtest/test_backtest_engine.py` - ✅ Clean (uses trading.backtest)
@@ -133,6 +139,7 @@ from django.conf import settings  # For Django-specific settings
 ## Next Steps (To Complete Phase 1.2)
 
 ### 1. Start Docker Services
+
 ```bash
 make up
 # or
@@ -140,6 +147,7 @@ docker-compose up -d
 ```
 
 **Expected Services:**
+
 - web (Django + Gunicorn)
 - db (TimescaleDB + pgvector)
 - redis
@@ -154,6 +162,7 @@ docker-compose up -d
 - redis-exporter
 
 ### 2. Run Full Test Suite
+
 ```bash
 # In Docker (recommended)
 docker-compose exec web pytest tests/ -v --cov=src --cov-report=term-missing
@@ -171,6 +180,7 @@ With imports fixed, we should see significant improvement.
 ### 3. Fix Any Remaining Test Failures
 
 If tests still fail, likely causes:
+
 - Missing dependencies in Docker environment
 - Django app configuration issues (some apps disabled in settings.py)
 - Database connection issues
@@ -179,6 +189,7 @@ If tests still fail, likely causes:
 ### 4. Setup GitHub Actions CI
 
 The CI workflow is already configured in `.github/workflows/main.yml` and includes:
+
 - ✅ Automated testing on push/PR
 - ✅ Multiple Python versions (3.10-3.13)
 - ✅ Coverage reporting
@@ -194,7 +205,9 @@ The CI workflow is already configured in `.github/workflows/main.yml` and includ
 ## Known Issues & Context
 
 ### Disabled Django Apps (from settings.py)
+
 These apps are commented out due to import issues:
+
 - `config` - Has loguru import issues
 - `forecasting`
 - `chatbot`
@@ -206,7 +219,9 @@ These apps are commented out due to import issues:
 **Impact:** Some tests may be skipped if they depend on these apps.
 
 ### Expected Test Failures (From Docs)
+
 The documentation mentioned 20/34 tests were failing due to import errors:
+
 - ✓ **Import errors** - FIXED (verified with script)
 - ⏳ **Test implementations** - Need to verify in Docker
 - ⏳ **Database setup** - Need to verify with live DB

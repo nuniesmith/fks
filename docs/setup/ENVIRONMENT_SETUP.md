@@ -19,21 +19,25 @@ The following environment files are available:
 ### 1. Choose Your Environment
 
 **For local development (CPU only):**
+
 ```bash
 cp .env.development .env
 ```
 
 **For local GPU development:**
+
 ```bash
 cp .env.gpu .env
 ```
 
 **For staging deployment:**
+
 ```bash
 cp .env.staging .env
 ```
 
 **For production deployment:**
+
 ```bash
 cp .env.production .env
 ```
@@ -64,6 +68,7 @@ ADMIN_EMAIL=your_email@domain.com
 Our Docker Compose setup includes these services:
 
 #### CPU Services (Cloud Deployment)
+
 - **API** (`api`) - REST API service on port 8000
 - **Worker** (`worker`) - Background task processing on port 8001
 - **Data** (`data`) - Data processing and ingestion on port 9001
@@ -71,16 +76,19 @@ Our Docker Compose setup includes these services:
 - **Nginx** (`nginx`) - Reverse proxy on ports 80/443
 
 #### GPU Services (Home Deployment)
+
 - **Training** (`training`) - ML model training on port 8088
 - **Transformer** (`transformer`) - AI/NLP service on port 8089
 
 #### Infrastructure Services
+
 - **Redis** - Caching and message broker on port 6379
 - **PostgreSQL** - Primary database on port 5432
 
 ### Environment Variables by Service
 
 #### Core Variables (All Services)
+
 ```bash
 APP_ENV=development|staging|production
 APP_LOG_LEVEL=DEBUG|INFO|WARNING|ERROR
@@ -88,6 +96,7 @@ TZ=America/New_York
 ```
 
 #### API Service
+
 ```bash
 API_PORT=8000
 API_CPU_LIMIT=2
@@ -95,6 +104,7 @@ API_MEMORY_LIMIT=2048M
 ```
 
 #### Data Service
+
 ```bash
 DATA_PORT=9001
 DATA_CPU_LIMIT=2
@@ -102,6 +112,7 @@ DATA_MEMORY_LIMIT=2048M
 ```
 
 #### Worker Service
+
 ```bash
 WORKER_PORT=8001
 WORKER_COUNT=2
@@ -110,6 +121,7 @@ WORKER_MEMORY_LIMIT=2048M
 ```
 
 #### Web Service
+
 ```bash
 WEB_PORT=3000
 NODE_ENV=development|production
@@ -117,6 +129,7 @@ REACT_APP_API_URL=http://localhost:8000
 ```
 
 #### GPU Services
+
 ```bash
 TRAINING_PORT=8088
 TRANSFORMER_PORT=8089
@@ -128,6 +141,7 @@ NVIDIA_VISIBLE_DEVICES=all
 ## 🏗️ Deployment Scenarios
 
 ### Scenario 1: Full Local Development
+
 ```bash
 # Copy development environment
 cp .env.development .env
@@ -140,6 +154,7 @@ docker-compose ps
 ```
 
 ### Scenario 2: GPU Development (Home)
+
 ```bash
 # Copy GPU environment
 cp .env.gpu .env
@@ -153,6 +168,7 @@ nvidia-smi
 ```
 
 ### Scenario 3: Cloud Deployment (CPU only)
+
 ```bash
 # Copy production environment
 cp .env.production .env
@@ -167,6 +183,7 @@ docker-compose up -d api worker data web nginx postgres redis
 ### Scenario 4: Split Deployment (Recommended)
 
 **On Cloud Server (CPU services):**
+
 ```bash
 cp .env.production .env
 # Configure for cloud deployment
@@ -174,6 +191,7 @@ docker-compose up -d api worker data web nginx postgres redis
 ```
 
 **On Home GPU Machine:**
+
 ```bash
 cp .env.gpu .env
 # Configure for GPU services
@@ -211,6 +229,7 @@ DISCORD_WEBHOOK_SERVERS=your_discord_webhook
 ### SSL Configuration
 
 For production with SSL:
+
 ```bash
 ENABLE_SSL=true
 SSL_STAGING=false  # Set to true for Let's Encrypt staging
@@ -244,6 +263,7 @@ docker-compose up -d
 ### Common Issues
 
 **1. Missing environment variables:**
+
 ```bash
 # Check what variables are being used
 grep -r '\${' docker-compose.yml
@@ -253,6 +273,7 @@ cat .env | grep -E '^[A-Z_]+='
 ```
 
 **2. Port conflicts:**
+
 ```bash
 # Check what's using your ports
 netstat -tulpn | grep :8000
@@ -262,6 +283,7 @@ lsof -i :8000
 ```
 
 **3. GPU services not starting:**
+
 ```bash
 # Check GPU availability
 nvidia-smi
@@ -274,6 +296,7 @@ docker-compose --profile gpu config
 ```
 
 **4. Service health check failures:**
+
 ```bash
 # Check service logs
 docker-compose logs api

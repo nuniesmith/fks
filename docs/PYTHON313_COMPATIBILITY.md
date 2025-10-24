@@ -51,6 +51,7 @@ bash scripts/install_requirements.sh
 ```
 
 This will:
+
 - Install PyTorch with CUDA first
 - Install base requirements (skip failures)
 - Install GPU packages individually
@@ -61,6 +62,7 @@ This will:
 Python 3.13 support will improve over the next few months as package maintainers release new versions.
 
 Check package compatibility:
+
 - NumPy: https://numpy.org/install/
 - SciPy: https://scipy.org/install/
 - PyTorch: https://pytorch.org/get-started/locally/

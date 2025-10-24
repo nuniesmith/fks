@@ -335,6 +335,7 @@ Draft PR → Minimal execution
 | Manual trigger | ✓** | ✓ | ✓ | ✓ | ✓*** | - |
 
 Legend:
+
 - ✓ = Runs
 - - = Skipped
 - ✓* = Runs if tests pass

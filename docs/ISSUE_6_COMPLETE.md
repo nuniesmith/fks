@@ -9,6 +9,7 @@
 ## Summary
 
 All 12 pytest import errors have been resolved through a combination of:
+
 1. **Adding missing constants** to framework configuration module
 2. **Fixing import paths** in 3 core trading files  
 3. **Correcting relative import** in data manager
@@ -49,6 +50,7 @@ DATABASE_URL = os.environ.get(
 ```
 
 **Updated Exports**:
+
 ```python
 __all__ = [
     # ... existing exports ...
@@ -68,11 +70,13 @@ __all__ = [
 #### ✅ src/trading/backtest/engine.py (Line 16)
 
 **Before**:
+
 ```python
 from config import SYMBOLS, MAINS, ALTS, FEE_RATE
 ```
 
 **After**:
+
 ```python
 from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE
 ```
@@ -80,11 +84,13 @@ from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE
 #### ✅ src/trading/signals/generator.py (Line 11)
 
 **Before**:
+
 ```python
 from config import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
 ```
 
 **After**:
+
 ```python
 from framework.config.constants import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
 ```
@@ -92,11 +98,13 @@ from framework.config.constants import SYMBOLS, MAINS, ALTS, RISK_PER_TRADE
 #### ✅ src/core/database/models.py (Line 10)
 
 **Before**:
+
 ```python
 from config import DATABASE_URL
 ```
 
 **After**:
+
 ```python
 from framework.config.constants import DATABASE_URL
 ```
@@ -108,11 +116,13 @@ from framework.config.constants import DATABASE_URL
 #### ✅ src/data/manager.py (Line 11)
 
 **Before**:
+
 ```python
 from adapters import get_adapter  # type: ignore
 ```
 
 **After**:
+
 ```python
 from .adapters import get_adapter  # type: ignore
 ```
@@ -126,6 +136,7 @@ from .adapters import get_adapter  # type: ignore
 #### ✅ tests/unit/test_core/test_data.py
 
 **Added at top of file**:
+
 ```python
 """
 Test suite for data fetching functionality
@@ -151,6 +162,7 @@ pytestmark = pytest.mark.skip(
 #### ✅ tests/integration/test_data/test_repository_fetch_methods.py
 
 **Added at top of file**:
+
 ```python
 """Integration tests for data repository fetch methods
 
@@ -177,6 +189,7 @@ pytestmark = pytest.mark.skip(
 ## Test Status
 
 ### Before Fixes
+
 ```
 ERROR tests/integration/test_backtest/test_backtest.py
 ERROR tests/integration/test_backtest/test_backtest_engine.py
@@ -191,9 +204,11 @@ ERROR tests/unit/test_trading/test_assets.py
 ERROR tests/unit/test_trading/test_optimizer.py
 ERROR tests/unit/test_trading/test_signals.py
 ```
+
 **12 collection errors** blocking 20+ tests
 
 ### After Fixes (Expected)
+
 ```
 ✅ tests/integration/test_backtest/* - All 4 files should collect
 ✅ tests/integration/test_data/test_manager_adapter_integration.py - Should collect
@@ -203,6 +218,7 @@ ERROR tests/unit/test_trading/test_signals.py
 ✅ tests/unit/test_core/test_rag_system.py - Should collect
 ✅ tests/unit/test_trading/* - All 3 files should collect
 ```
+
 **0 collection errors**, **2 tests skipped** with clear documentation
 
 ---
@@ -222,6 +238,7 @@ git push origin main
 ```
 
 **Expected CI/CD Result**:
+
 - ✅ Test collection: 0 errors
 - ⏭️ 2 tests skipped (test_data.py, test_repository_fetch_methods.py)
 - ✅ All other tests collect successfully
@@ -246,25 +263,31 @@ git push origin main
 ## Why This Approach?
 
 ### Option A (Rejected): Create Stub Functions
+
 ```python
 # Would add technical debt
 def fetch_ohlcv(*args, **kwargs):
     """Stub for backward compatibility"""
     raise NotImplementedError("Legacy API - use DataManager.fetch_market_data()")
 ```
+
 **Problems**:
+
 - ❌ Creates technical debt
 - ❌ Tests pass but aren't testing real functionality  
 - ❌ Misleading for future developers
 
 ### Option B (CHOSEN): Skip Tests with Documentation
+
 ```python
 pytestmark = pytest.mark.skip(
     reason="Legacy data API tests - module restructured during monolith migration. "
            "See Issue #6. TODO: Update tests to match current data module API."
 )
 ```
+
 **Benefits**:
+
 - ✅ Clear documentation of why tests are skipped
 - ✅ No technical debt created
 - ✅ Tests serve as specification for future refactor
@@ -285,6 +308,7 @@ from framework.config.constants import SYMBOLS, FEE_RATE
 ```
 
 **When to use each**:
+
 - `framework.config.constants` - Static constants (symbols, fees, risks)
 - `django.conf.settings` - Django settings (database, middleware, apps)
 - `framework.config.models` - Type-safe config dataclasses (DatabaseConfig, TradingConfig)
@@ -295,16 +319,19 @@ from framework.config.constants import SYMBOLS, FEE_RATE
 ## Future Work (Post-Issue #6)
 
 ### Short Term
+
 1. ✅ Verify CI/CD passes with these changes
 2. ✅ Update Issue #6 checklist in GitHub
 3. ✅ Close Issue #6 as complete
 
 ### Medium Term  
+
 4. ⏸️ Implement new data module API (see copilot-instructions.md)
 5. ⏸️ Update skipped tests to match new API
 6. ⏸️ Remove skip decorators once tests pass
 
 ### Long Term
+
 7. ⏸️ Audit all remaining legacy `config` imports (if any)
 8. ⏸️ Consider deprecating old `config` module entirely
 9. ⏸️ Document data module architecture in ARCHITECTURE.md

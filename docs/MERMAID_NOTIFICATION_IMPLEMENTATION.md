@@ -18,12 +18,14 @@ Successfully integrated Mermaid.js for dynamic flowchart visualization and set u
 
 ### 1. Mermaid.js Integration
 
-#### Files Modified:
+#### Files Modified
+
 - **`requirements.txt`**: Added `django-mermaid>=0.1.1` for optional ER diagram support
 - **`src/web/templates/base.html`**: Integrated Mermaid CDN and configuration
 - **`src/web/static/css/main.css`**: Added 100+ lines of Mermaid-specific styling
 
-#### Configuration:
+#### Configuration
+
 ```javascript
 // In base.html <head>
 mermaid.initialize({
@@ -43,7 +45,8 @@ mermaid.initialize({
 });
 ```
 
-#### Features:
+#### Features
+
 - ✅ Client-side rendering (no server-side processing)
 - ✅ Responsive design with auto-scrolling for wide diagrams
 - ✅ Light/Dark theme switcher
@@ -54,10 +57,12 @@ mermaid.initialize({
 
 ### 2. FKS Intelligence Dashboard
 
-#### New Template:
+#### New Template
+
 **`src/web/templates/pages/intelligence.html`** (~350 lines)
 
-#### Sections:
+#### Sections
+
 1. **System Status Cards**
    - RAG availability indicator
    - Monitored symbols count
@@ -65,6 +70,7 @@ mermaid.initialize({
    - Current risk level
 
 2. **FKS Intelligence Flowchart** (Mermaid)
+
    ```mermaid
    graph TB
        A[FKS Intelligence Core] -->|Monitor| B[Task Oversight]
@@ -102,7 +108,8 @@ mermaid.initialize({
    - Confidence scores
    - Source citation counts
 
-#### Access:
+#### Access
+
 **URL:** `http://localhost:8000/intelligence/`  
 **Navigation:** Added "AI Insights" link to navbar
 
@@ -110,10 +117,12 @@ mermaid.initialize({
 
 ### 3. Manual Notification System
 
-#### Enhanced Signals Page:
+#### Enhanced Signals Page
+
 **`src/web/templates/pages/signals.html`** (updated)
 
-#### New Features:
+#### New Features
+
 1. **Pending Approval Section**
    - Warning banner for pending signals
    - Dedicated table with yellow highlight
@@ -121,6 +130,7 @@ mermaid.initialize({
    - Batch approve/reject all functionality
 
 2. **Approval Workflow:**
+
    ```
    Signal Generated → Notification Sent → Manual Review → Approve/Reject → Discord Alert → Execute/Discard
    ```
@@ -133,7 +143,8 @@ mermaid.initialize({
    - Reasoning (truncated)
    - Time since generation
 
-#### Discord Integration:
+#### Discord Integration
+
 All notification functions use the existing `send_discord_notification` task in `src/trading/tasks.py`:
 
 ```python
@@ -152,7 +163,7 @@ send_discord_notification(message)
 
 ### 4. View Functions & URL Routing
 
-#### New Views in `src/web/views.py`:
+#### New Views in `src/web/views.py`
 
 1. **`IntelligenceView`** - Intelligence dashboard with RAG status
 2. **`approve_signal(signal_id)`** - POST handler for signal approval
@@ -160,11 +171,13 @@ send_discord_notification(message)
 4. **`approve_all_signals()`** - Batch approval handler
 5. **`reject_all_signals()`** - Batch rejection handler
 
-#### Updated `SignalsView`:
+#### Updated `SignalsView`
+
 - Added `pending_signals` context variable
 - Fetches signals WHERE status='pending'
 
-#### New URL Patterns in `src/web/urls.py`:
+#### New URL Patterns in `src/web/urls.py`
+
 ```python
 path("intelligence/", views.IntelligenceView.as_view(), name="intelligence"),
 path("signals/approve/<int:signal_id>/", views.approve_signal, name="approve_signal"),
@@ -179,7 +192,8 @@ path("signals/reject-all/", views.reject_all_signals, name="reject_all_signals")
 
 **`src/web/static/css/main.css`** (added ~120 lines)
 
-#### New Classes:
+#### New Classes
+
 - `.mermaid` - Diagram container with scrolling
 - `.intelligence-card` - Hover effects for dashboard cards
 - `.table-warning` - Highlighted pending signals
@@ -187,7 +201,8 @@ path("signals/reject-all/", views.reject_all_signals, name="reject_all_signals")
 - Custom scrollbar styling for diagrams
 - Progress bar animations for confidence levels
 
-#### Responsive Design:
+#### Responsive Design
+
 ```css
 @media (max-width: 768px) {
     .mermaid {
@@ -201,7 +216,8 @@ path("signals/reject-all/", views.reject_all_signals, name="reject_all_signals")
 
 ### 6. Discord Webhook Setup
 
-#### Updated `.env` File:
+#### Updated `.env` File
+
 Added comprehensive instructions for Discord webhook configuration:
 
 ```bash
@@ -226,7 +242,8 @@ DISCORD_WEBHOOK_URL=
 
 ## 📦 Dependencies Installed
 
-### Python Packages:
+### Python Packages
+
 ```bash
 # Added to requirements.txt
 django-mermaid>=0.1.1
@@ -235,14 +252,16 @@ django-mermaid>=0.1.1
 requests>=2.32.3  # For Discord webhook HTTP POST
 ```
 
-### Installed in Local Venv:
+### Installed in Local Venv
+
 ```bash
 source .venv/bin/activate
 pip install django-mermaid
 # ✅ Successfully installed django-mermaid-0.1.0
 ```
 
-### JavaScript Libraries (CDN):
+### JavaScript Libraries (CDN)
+
 ```html
 <!-- Mermaid.js v10 -->
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
@@ -259,6 +278,7 @@ pip install django-mermaid
    - Add a channel for trading alerts (e.g., `#trading-alerts`)
 
 2. **Generate Webhook:**
+
    ```
    Server Settings → Integrations → Webhooks → New Webhook
    Name: "FKS Trading Alerts"
@@ -267,6 +287,7 @@ pip install django-mermaid
    ```
 
 3. **Update `.env`:**
+
    ```bash
    DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN
    ```
@@ -286,6 +307,7 @@ make gpu-up
 **URL:** http://localhost:8000/intelligence/
 
 **Features:**
+
 - View FKS Intelligence architecture flowchart
 - Monitor system status (RAG, symbols, strategies, risk)
 - Check opportunity categorization counts
@@ -296,8 +318,10 @@ make gpu-up
 
 **URL:** http://localhost:8000/signals/
 
-#### Workflow:
+#### Workflow
+
 1. **Signal Generation** (via Celery task):
+
    ```python
    # In generate_signals_task() - src/trading/tasks.py
    # Generates signals with status='pending'
@@ -329,6 +353,7 @@ make gpu-up
 ### Celery Tasks Using Notifications
 
 #### 1. Signal Generation (`generate_signals_task`)
+
 ```python
 # After generating signals
 if result['signal'] == 'BUY':
@@ -340,6 +365,7 @@ if result['signal'] == 'BUY':
 ```
 
 #### 2. Risk Alerts (`analyze_risk_task`)
+
 ```python
 if risk_level == 'HIGH':
     message = "⚠️ **HIGH RISK ALERT**\n"
@@ -349,6 +375,7 @@ if risk_level == 'HIGH':
 ```
 
 #### 3. Stop Loss Triggers (`check_stop_loss_task`)
+
 ```python
 if stop_loss_triggered:
     message = "🛑 **STOP LOSS TRIGGERED**\n"
@@ -358,6 +385,7 @@ if stop_loss_triggered:
 ```
 
 #### 4. Portfolio Rebalancing (`rebalance_portfolio_task`)
+
 ```python
 message = "💼 **Portfolio Rebalanced**\n"
 message += f"Trades executed: {len(executed_trades)}\n"
@@ -365,6 +393,7 @@ send_notification.delay(message)
 ```
 
 #### 5. Daily Reports (`generate_report_task`)
+
 ```python
 message = f"📊 **{report_type.upper()} TRADING REPORT**\n"
 message += f"Return: {metrics['total_return_pct']:.2f}%\n"
@@ -433,7 +462,8 @@ class Signal(models.Model):
         ]
 ```
 
-### Migration Command:
+### Migration Command
+
 ```bash
 docker-compose exec web python manage.py makemigrations trading
 docker-compose exec web python manage.py migrate
@@ -444,27 +474,32 @@ docker-compose exec web python manage.py migrate
 ## 🎯 Next Steps
 
 ### Phase 1: Testing (This Week)
+
 1. **Set Discord Webhook**: Add actual URL to `.env`
 2. **Test Mermaid Rendering**: Visit `/intelligence/` and verify flowchart displays
 3. **Test Notifications**: Manually trigger `send_discord_notification` in Django shell:
+
    ```python
    from trading.tasks import send_discord_notification
    send_discord_notification("Test message from FKS Trading Platform")
    ```
 
 ### Phase 2: Signal Model Implementation (Week 2)
+
 1. Create `Signal` model in `src/trading/models.py`
 2. Run migrations
 3. Update `generate_signals_task` to create Signal records with status='pending'
 4. Update view functions to fetch from Signal table
 
 ### Phase 3: Manual Verification Period (Weeks 3-4)
+
 1. Generate real signals via Celery tasks
 2. Manually approve/reject via web UI
 3. Monitor Discord notifications
 4. Log all approvals/rejections for analysis
 
 ### Phase 4: Transition to Automation (Week 5+)
+
 1. After verifying signal quality (1-2 weeks of manual)
 2. Update `generate_signals_task` to set status='approved' automatically
 3. Remove manual approval buttons (keep for override)
@@ -474,25 +509,30 @@ docker-compose exec web python manage.py migrate
 
 ## 🔍 Testing Checklist
 
-### Visual Testing:
+### Visual Testing
+
 - [ ] Navigate to http://localhost:8000/intelligence/
 - [ ] Verify Mermaid flowchart renders correctly
 - [ ] Test light/dark theme switcher
 - [ ] Check mobile responsiveness (resize browser)
 - [ ] Verify all status cards display data
 
-### Notification Testing:
+### Notification Testing
+
 - [ ] Set `DISCORD_WEBHOOK_URL` in `.env`
 - [ ] Restart Docker services (`make restart`)
 - [ ] Run Django shell: `docker-compose exec web python manage.py shell`
 - [ ] Execute test notification:
+
   ```python
   from trading.tasks import send_discord_notification
   send_discord_notification("✅ Test message from FKS Intelligence")
   ```
+
 - [ ] Check Discord channel for message
 
-### Signal Approval Testing:
+### Signal Approval Testing
+
 - [ ] Create test Signal records (once model is implemented)
 - [ ] Visit http://localhost:8000/signals/
 - [ ] Verify pending signals table appears
@@ -500,7 +540,8 @@ docker-compose exec web python manage.py migrate
 - [ ] Click "Reject" button → Check Discord notification
 - [ ] Test batch approve/reject all
 
-### Integration Testing:
+### Integration Testing
+
 - [ ] Run `generate_signals_task` via Celery
 - [ ] Verify signals appear in web UI
 - [ ] Test full workflow: generate → notify → review → approve → execute
@@ -509,19 +550,22 @@ docker-compose exec web python manage.py migrate
 
 ## 📈 Performance Considerations
 
-### Mermaid.js:
+### Mermaid.js
+
 - **Client-side rendering**: No server overhead
 - **Lazy loading**: Only renders visible diagrams
 - **Caching**: Browser caches CDN resources
 - **Optimization**: Use `startOnLoad: true` for auto-rendering
 
-### Discord Notifications:
+### Discord Notifications
+
 - **Async via Celery**: Non-blocking HTTP POST requests
 - **Retry logic**: Built into Celery task decorators
 - **Rate limiting**: Discord allows ~5 requests/sec per webhook
 - **Fallback**: Graceful failure if webhook unavailable
 
-### Database Queries:
+### Database Queries
+
 - **Indexes**: Added on Signal.status and Signal.created_at
 - **Pagination**: Limit pending signals to 50 per page
 - **Caching**: Consider Redis cache for frequently accessed signals
@@ -530,29 +574,35 @@ docker-compose exec web python manage.py migrate
 
 ## 🐛 Troubleshooting
 
-### Mermaid Not Rendering:
+### Mermaid Not Rendering
+
 1. Check browser console for JavaScript errors
 2. Verify CDN loaded: `https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js`
 3. Ensure `<div class="mermaid">` has valid Mermaid syntax
 4. Try hard refresh: Ctrl+Shift+R
 
-### Discord Webhook Not Working:
+### Discord Webhook Not Working
+
 1. Verify `DISCORD_WEBHOOK_URL` in `.env` is correct
 2. Check Docker logs: `make logs | grep discord`
 3. Test URL manually with curl:
+
    ```bash
    curl -X POST $DISCORD_WEBHOOK_URL \
      -H "Content-Type: application/json" \
      -d '{"content": "Test message"}'
    ```
+
 4. Ensure webhook wasn't deleted in Discord
 
-### Views Not Found (404):
+### Views Not Found (404)
+
 1. Verify URL patterns in `src/web/urls.py`
 2. Check Django URL routing: `python manage.py show_urls` (if plugin installed)
 3. Restart Django server: `make restart`
 
-### Signals Not Appearing:
+### Signals Not Appearing
+
 1. Check if Signal model exists and migrations applied
 2. Verify `status='pending'` filter in view
 3. Check Celery task logs: `docker-compose logs celery_worker`
@@ -561,17 +611,20 @@ docker-compose exec web python manage.py migrate
 
 ## 📝 Documentation References
 
-### Mermaid.js:
+### Mermaid.js
+
 - **Official Docs**: https://mermaid.js.org/
 - **Flowchart Syntax**: https://mermaid.js.org/syntax/flowchart.html
 - **Themes**: https://mermaid.js.org/config/theming.html
 
-### Django:
+### Django
+
 - **Template Tags**: https://docs.djangoproject.com/en/5.2/ref/templates/
 - **Views**: https://docs.djangoproject.com/en/5.2/topics/class-based-views/
 - **Messages Framework**: https://docs.djangoproject.com/en/5.2/ref/contrib/messages/
 
-### Discord Webhooks:
+### Discord Webhooks
+
 - **API Docs**: https://discord.com/developers/docs/resources/webhook
 - **Webhook Guide**: https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks
 

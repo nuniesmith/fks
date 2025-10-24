@@ -3,6 +3,7 @@
 ## 🎯 Quick Start (3 Steps)
 
 ### 1. Preview Issues (Dry Run)
+
 ```powershell
 python scripts/import_project_plan.py --dry-run
 ```
@@ -10,6 +11,7 @@ python scripts/import_project_plan.py --dry-run
 This shows you all issues that will be created **without actually creating them**.
 
 **Output**:
+
 ```
 🎯 Importing 20 issues to nuniesmith/fks
 🔍 DRY RUN MODE - No issues will be created
@@ -27,11 +29,13 @@ Total: 20 issues ready to create
 ```
 
 ### 2. Create All Issues
+
 ```powershell
 python scripts/import_project_plan.py
 ```
 
 **What Happens**:
+
 - Creates 20 GitHub issues from your 7-phase plan
 - Assigns labels automatically (🔴 critical, ✨ feature, etc.)
 - Creates milestones (Phase 1-7)
@@ -39,6 +43,7 @@ python scripts/import_project_plan.py
 - Formats with markdown, code blocks, checklists
 
 **Progress Output**:
+
 ```
 🎯 Importing 20 issues to nuniesmith/fks
 🚀 CREATING ISSUES
@@ -57,12 +62,14 @@ View issues: https://github.com/nuniesmith/fks/issues
 ```
 
 ### 3. Organize in Project Board
+
 ```powershell
 # Visit your GitHub Project
 https://github.com/nuniesmith/fks/projects/1
 ```
 
 **Manual Steps**:
+
 1. Go to your Project board
 2. Click "Add items"
 3. Select all newly created issues
@@ -74,7 +81,9 @@ https://github.com/nuniesmith/fks/projects/1
 ## 📋 What Gets Created
 
 ### Issue Structure
+
 Each issue includes:
+
 - ✅ **Clear Title** with phase/task number
 - 📝 **Detailed Description** with sub-tasks
 - 🏷️ **Labels** for priority/effort/phase
@@ -86,12 +95,14 @@ Each issue includes:
 ### 7 Phases Created
 
 #### Phase 1: Immediate Fixes (2-4 weeks)
+
 - **[PHASE 1]** Overview issue
 - **[P1.1]** Security Hardening
 - **[P1.2]** Fix Import/Test Failures
 - **[P1.3]** Code Cleanup
 
 #### Phase 2: Core Development (4-8 weeks)
+
 - **[PHASE 2]** Overview issue
 - **[P2.1]** Implement 16 Celery Tasks
 - **[P2.2]** Complete RAG System
@@ -99,20 +110,25 @@ Each issue includes:
 - **[P2.4]** Data Sync and Backtesting
 
 #### Phase 3: Testing & QA (Ongoing)
+
 - **[PHASE 3]** Overview issue
 - **[P3.1]** Expand Test Suite
 - **[P3.2]** CI/CD Pipeline
 
 #### Phase 4: Documentation (2 weeks)
+
 - **[PHASE 4]** Overview issue
 
 #### Phase 5: Deployment (4-6 weeks)
+
 - **[PHASE 5]** Overview issue
 
 #### Phase 6: Optimization (Ongoing)
+
 - **[PHASE 6]** Overview issue
 
 #### Phase 7: Future Features (6+ weeks)
+
 - **[PHASE 7]** Overview issue
 
 ---
@@ -122,17 +138,20 @@ Each issue includes:
 Issues are automatically labeled for easy filtering:
 
 ### Priority Labels
+
 - 🔴 **critical** - Blocks work, security, deployment
 - 🟡 **high** - Core features, high value
 - 🟢 **medium** - Improvements, moderate value
 - ⚪ **low** - Nice-to-have, future
 
 ### Effort Labels
+
 - **effort:low** - <1 day
 - **effort:medium** - 1-3 days
 - **effort:high** - >3 days
 
 ### Phase Labels
+
 - **phase:1-immediate** - Foundation fixes
 - **phase:2-core** - Core features
 - **phase:3-testing** - Quality assurance
@@ -142,6 +161,7 @@ Issues are automatically labeled for easy filtering:
 - **phase:7-future** - Growth
 
 ### Type Labels
+
 - ✨ **feature** - New functionality
 - 🐛 **bug** - Fix something broken
 - 🔒 **security** - Security hardening
@@ -157,6 +177,7 @@ Issues are automatically labeled for easy filtering:
 ## 🎯 Recommended Workflow
 
 ### After Import
+
 1. **Review Issues**: Click through to verify content
 2. **Create Milestones**: GitHub → Issues → Milestones
    - Phase 1: Foundation (Due: Nov 14, 2025)
@@ -167,12 +188,14 @@ Issues are automatically labeled for easy filtering:
 4. **Prioritize**: Move Phase 1 to "To-Do", rest to "Backlog"
 
 ### Daily Workflow
+
 1. **Morning**: Check "To-Do (This Week)" column
 2. **Pick Task**: Select 1-3 issues, move to "In Progress"
 3. **Work**: Update issue with progress comments
 4. **End of Day**: Move completed to "Done"
 
 ### Weekly Review
+
 1. **Run Analyzer**: `python scripts/analyze_project.py --summary`
 2. **Check Progress**: How many Phase 1 issues closed?
 3. **Reprioritize**: Move urgent items up, less important down
@@ -183,6 +206,7 @@ Issues are automatically labeled for easy filtering:
 ## 🔧 Customization
 
 ### Modify Issues Before Import
+
 Edit `scripts/import_project_plan.py`:
 
 ```python
@@ -206,6 +230,7 @@ Your custom content here
 ```
 
 ### Add Custom Labels
+
 Before running import, create labels:
 
 ```powershell
@@ -213,6 +238,7 @@ gh label create "custom-label" --color "ff0000" --description "My label"
 ```
 
 ### Modify Milestones
+
 After import, adjust milestone dates:
 
 ```powershell
@@ -224,12 +250,15 @@ gh api repos/nuniesmith/fks/milestones/1 -X PATCH -f due_on='2025-11-14T00:00:00
 ## 🆘 Troubleshooting
 
 ### Error: "GitHub CLI not authenticated"
+
 ```powershell
 gh auth login
 ```
 
 ### Error: "Label does not exist"
+
 Run setup script first:
+
 ```powershell
 python scripts/setup_github_project.py
 ```
@@ -237,16 +266,21 @@ python scripts/setup_github_project.py
 This creates all standard labels.
 
 ### Error: "Rate limit exceeded"
+
 GitHub API limits: 5000 req/hr for authenticated users.
 Wait 1 hour or use `--dry-run` to preview first.
 
 ### Issues Created in Wrong Order
+
 Issues are created sequentially. If you want specific order:
+
 1. Delete unwanted issues: `gh issue delete <number>`
 2. Re-run import script
 
 ### Want to Delete All Imported Issues
+
 **⚠️ DESTRUCTIVE - BE CAREFUL**
+
 ```powershell
 # List recent issues
 gh issue list --limit 100
@@ -262,6 +296,7 @@ gh issue delete 124
 ## 📊 Example: First Week Workflow
 
 ### Monday Morning (10 min)
+
 ```powershell
 # 1. View Phase 1 issues
 gh issue list --label "phase:1-immediate"
@@ -273,6 +308,7 @@ gh issue list --label "phase:1-immediate"
 ```
 
 ### During Work (As needed)
+
 ```powershell
 # Update issue with progress
 gh issue comment 5 --body "✅ Sub-task 1.1.1 complete - passwords generated"
@@ -288,6 +324,7 @@ Relates to #5"
 ```
 
 ### End of Day (5 min)
+
 ```powershell
 # Check issue status
 gh issue view 5
@@ -299,6 +336,7 @@ gh issue close 5 --comment "All sub-tasks complete. Security hardening done."
 ```
 
 ### Friday Review (15 min)
+
 ```powershell
 # Run analyzer
 python scripts/analyze_project.py --summary
@@ -315,6 +353,7 @@ gh issue list --state closed --label "phase:1-immediate"
 ## 🎉 After Import
 
 You'll have:
+
 - ✅ **20 structured issues** in GitHub
 - ✅ **7 milestone phases** defined
 - ✅ **Clear priorities** with labels

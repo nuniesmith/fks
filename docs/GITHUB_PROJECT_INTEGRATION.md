@@ -55,12 +55,14 @@ env:
 ```
 
 **Finding your project number:**
+
 - Go to your project URL: `https://github.com/users/YOUR_USERNAME/projects/NUMBER`
 - The `NUMBER` at the end is what you need
 
 ### Step 4: Verify Permissions
 
 **Repository Settings → Actions → General**:
+
 - ✅ **Workflow permissions**: Read and write permissions
 - ✅ **Allow GitHub Actions to create and approve pull requests**
 
@@ -100,6 +102,7 @@ gh issue create --title "Test: Auto-sync" --body "Testing project sync"
 For existing open issues/PRs not yet in the project:
 
 **Via GitHub UI:**
+
 1. Go to **Actions** tab
 2. Select **Sync Issues and PRs to Project**
 3. Click **Run workflow**
@@ -107,6 +110,7 @@ For existing open issues/PRs not yet in the project:
 5. Click **Run workflow**
 
 **Via CLI:**
+
 ```bash
 gh workflow run sync-to-project.yml -f sync_existing=true
 ```
@@ -122,6 +126,7 @@ This will add ALL open issues and PRs to the project.
 **Step 1: Prepare CSV file**
 
 Create `tasks.csv`:
+
 ```csv
 title,body,labels,assignee
 Fix login bug,"Users can't login after update",bug;security,yourusername
@@ -132,6 +137,7 @@ Update README,"Add installation steps",documentation,yourusername
 **Step 2: Import script**
 
 Create `import-tasks.sh`:
+
 ```bash
 #!/bin/bash
 
@@ -163,6 +169,7 @@ echo "Import complete! Issues will auto-add to project."
 ```
 
 **Step 3: Run import**
+
 ```bash
 chmod +x import-tasks.sh
 ./import-tasks.sh
@@ -305,6 +312,7 @@ const priorityMap = {
 3. Enable these workflows:
 
 **Auto-add to project:**
+
 ```
 When: Issue or PR is opened
 Filters: repo:YOUR_USERNAME/fks is:open
@@ -312,12 +320,14 @@ Then: Add to project
 ```
 
 **Item closed:**
+
 ```
 When: Item is closed
 Then: Set status to "Done"
 ```
 
 **Pull request merged:**
+
 ```
 When: PR is merged
 Then: Set status to "Done", Archive item
@@ -335,6 +345,7 @@ Then: Set status to "Done", Archive item
    - **Category** (Single select): Backend, Frontend, DevOps, Docs
 
 **Auto-populate fields** (via workflow):
+
 ```yaml
 - name: Set custom fields
   uses: actions/github-script@v7
@@ -481,12 +492,14 @@ def update_item_field(item_id, field_id, value, token):
 ### Issue: Items not adding to project
 
 **Symptoms:**
+
 - Workflow runs successfully
 - No items appear in project
 
 **Solutions:**
 
 1. **Check project number:**
+
    ```bash
    # Verify project URL
    https://github.com/users/YOUR_USERNAME/projects/NUMBER
@@ -499,6 +512,7 @@ def update_item_field(item_id, field_id, value, token):
    - Project must be public or workflow needs project token
 
 4. **Manual add test:**
+
    ```bash
    gh project item-add PROJECT_NUMBER --owner YOUR_USERNAME --url https://github.com/YOUR_USERNAME/fks/issues/1
    ```
@@ -508,6 +522,7 @@ def update_item_field(item_id, field_id, value, token):
 **Error:** `Resource not accessible by integration`
 
 **Solution:**
+
 ```yaml
 permissions:
   issues: write
@@ -522,6 +537,7 @@ permissions:
 **Error:** `API rate limit exceeded`
 
 **Solution:**
+
 ```bash
 # Add delays in import script
 sleep 2  # Wait 2 seconds between requests
@@ -535,6 +551,7 @@ gh auth login
 **Error:** `Field 'addProjectV2ItemById' doesn't exist`
 
 **Solution:**
+
 - Ensure using Projects V2 (not classic)
 - Update GitHub CLI: `gh extension upgrade gh-project`
 - Verify token scopes include `project`
@@ -542,6 +559,7 @@ gh auth login
 ### Issue: Custom fields not updating
 
 **Checklist:**
+
 1. Get field IDs: `gh project field-list PROJECT_NUMBER`
 2. Get option IDs for select fields
 3. Use correct value format:
@@ -556,6 +574,7 @@ gh auth login
 ### 1. Project Structure
 
 **Recommended views:**
+
 - **Board**: For sprint planning (Backlog → To Do → In Progress → Review → Done)
 - **Table**: For detailed tracking (all fields visible)
 - **Roadmap**: For timeline visualization (requires date fields)
@@ -563,6 +582,7 @@ gh auth login
 ### 2. Label Strategy
 
 Align labels with project fields:
+
 - `priority-*` labels → Priority field
 - `status-*` labels → Status column
 - `type-*` labels → Category field
@@ -570,23 +590,27 @@ Align labels with project fields:
 ### 3. Automation Rules
 
 **Start simple:**
+
 1. Auto-add new items ✅
 2. Auto-close done items ✅
 3. Add complexity gradually
 
 **Avoid:**
+
 - Over-automating (can create conflicts)
 - Circular rules (A triggers B triggers A)
 
 ### 4. Bulk Import
 
 **Before importing:**
+
 - Clean up CSV (remove duplicates)
 - Test with 5 items first
 - Check labels exist in repo
 - Verify assignees are valid
 
 **After importing:**
+
 - Run sync workflow to add to project
 - Manually verify 5-10 items
 - Adjust automation rules if needed
@@ -594,6 +618,7 @@ Align labels with project fields:
 ### 5. Performance
 
 **For large projects (100+ items):**
+
 - Use table view for editing
 - Filter views by sprint/milestone
 - Archive completed items regularly

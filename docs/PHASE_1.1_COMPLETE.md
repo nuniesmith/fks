@@ -27,6 +27,7 @@ DJANGO_SECRET_KEY:  l_qZduN40m5uut8_VwJGgwM0Dpq0lprerO__jv_sgM7JIvjBM4dHikfErepS
 ```
 
 All passwords are:
+
 - Generated using `openssl rand -base64` (cryptographically secure)
 - Minimum 32 characters long
 - Include special characters and mixed case
@@ -37,11 +38,13 @@ All passwords are:
 Confirmed `django-axes` and `django-ratelimit` are properly configured:
 
 **Django Axes (Login Attempt Tracking)**:
+
 - ✅ Installed in `requirements.txt`
 - ✅ Added to `INSTALLED_APPS`
 - ✅ Middleware configured (`AxesMiddleware`)
 - ✅ Authentication backend configured (`AxesStandaloneBackend`)
 - ✅ Settings configured in `src/web/django/settings.py`:
+
   ```python
   AXES_FAILURE_LIMIT = 5               # 5 failed attempts → lockout
   AXES_COOLOFF_TIME = 1                # 1 hour cooldown
@@ -53,9 +56,11 @@ Confirmed `django-axes` and `django-ratelimit` are properly configured:
   ```
 
 **Django Ratelimit (API Rate Limiting)**:
+
 - ✅ Installed in `requirements.txt`
 - ✅ Middleware configured (`RateLimitMiddleware`)
 - ✅ Settings configured:
+
   ```python
   RATELIMIT_ENABLE = True              # Enable rate limiting
   RATELIMIT_USE_CACHE = "default"      # Use Redis cache
@@ -67,12 +72,14 @@ Confirmed `django-axes` and `django-ratelimit` are properly configured:
 Configured PostgreSQL SSL encryption:
 
 **Updated `.env`**:
+
 ```bash
 POSTGRES_SSL_ENABLED=on
 POSTGRES_HOST_AUTH_METHOD=scram-sha-256
 ```
 
 **Verified `docker-compose.yml`**:
+
 ```yaml
 command:
   - postgres
@@ -86,6 +93,7 @@ PostgreSQL will auto-generate self-signed certificates on first run.
 ### 4. ✅ Added pip-audit to Requirements
 
 Updated `requirements.txt`:
+
 ```python
 # Security
 django-ratelimit>=4.1.0
@@ -96,6 +104,7 @@ pip-audit>=2.7.0        # ← Added for vulnerability scanning
 ### 5. ✅ Created Security Audit Script
 
 Created `scripts/security_audit.sh` with:
+
 - Python package vulnerability scanning (pip-audit)
 - .env file password validation
 - Django security settings verification
@@ -103,6 +112,7 @@ Created `scripts/security_audit.sh` with:
 - Comprehensive reporting
 
 **Usage**:
+
 ```bash
 # Run locally (if pip-audit installed)
 ./scripts/security_audit.sh
@@ -124,12 +134,14 @@ docker-compose exec web bash -c "cd /app && ./scripts/security_audit.sh"
 ## Security Improvements
 
 ### Before
+
 - ❌ Placeholder passwords (`CHANGE_THIS_SECURE_PASSWORD_123!`)
 - ❌ Weak passwords (< 20 characters)
 - ❌ No security audit tooling
 - ⚠️ SSL configuration not explicit
 
 ### After
+
 - ✅ Cryptographically secure passwords (32-67 characters)
 - ✅ PostgreSQL SSL explicitly enabled
 - ✅ SCRAM-SHA-256 authentication (more secure than MD5)
@@ -143,6 +155,7 @@ docker-compose exec web bash -c "cd /app && ./scripts/security_audit.sh"
 ## Next Steps (To Run After Docker Services Start)
 
 ### 1. Run pip-audit in Docker
+
 ```bash
 # Start services
 make up
@@ -155,6 +168,7 @@ docker-compose exec web bash -c "cd /app && ./scripts/security_audit.sh"
 ```
 
 ### 2. Test Django Axes (Login Protection)
+
 ```bash
 # Try to login 5 times with wrong password
 # Should be locked out after 5th attempt
@@ -165,6 +179,7 @@ docker-compose exec web python manage.py axes_reset
 ```
 
 ### 3. Test Rate Limiting
+
 ```bash
 # Make 100 API requests to same endpoint
 # Should start returning 429 Too Many Requests
@@ -172,6 +187,7 @@ curl -I http://localhost:8000/api/endpoint
 ```
 
 ### 4. Verify SSL Connection
+
 ```bash
 # Check PostgreSQL SSL
 docker-compose exec db psql -U fks_user -d trading_db -c "SHOW ssl;"
@@ -198,11 +214,13 @@ When deploying to production:
 1. **Generate New Passwords**: Don't use these development passwords in production
 2. **CA-Signed Certificates**: Replace self-signed SSL certificates
 3. **Enable HTTPS**: Uncomment these in Django settings:
+
    ```python
    SECURE_SSL_REDIRECT = True
    SESSION_COOKIE_SECURE = True
    CSRF_COOKIE_SECURE = True
    ```
+
 4. **Set DEBUG=False**: In production `.env`
 5. **Restrict ALLOWED_HOSTS**: Only include production domains
 6. **Rotate Secrets**: Implement secret rotation policy (every 90 days)

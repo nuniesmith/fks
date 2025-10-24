@@ -5,6 +5,7 @@ This guide explains how to configure and use the environment variables for the F
 ## Overview
 
 The system uses a comprehensive set of environment variables to configure:
+
 - Build settings for the dynamic Dockerfile
 - Service configurations for Docker Compose
 - Runtime parameters for all services
@@ -13,20 +14,24 @@ The system uses a comprehensive set of environment variables to configure:
 ## Environment Files
 
 ### Main Environment File (`.env`)
+
 The primary configuration file containing all available variables with default values. This file serves as both documentation and default configuration.
 
 ### Environment-Specific Files
+
 - `.env.development` - Development environment settings
 - `.env.production` - Production environment settings  
 - `.env.staging` - Staging environment settings
 - `.env.testing` - Testing environment settings
 
 ### Local Overrides (`.env.local`)
+
 Create this file for local development overrides (git ignored).
 
 ## Key Variable Categories
 
 ### 1. Build Configuration
+
 Controls how Docker images are built:
 
 ```bash
@@ -51,6 +56,7 @@ SERVICE_RUNTIME=python
 ```
 
 ### 2. Service Configuration
+
 Defines service behavior and networking:
 
 ```bash
@@ -66,6 +72,7 @@ API_PYTHON_MODULE=main
 ```
 
 ### 3. Container Configuration
+
 Controls container behavior:
 
 ```bash
@@ -82,6 +89,7 @@ API_RESTART_POLICY=unless-stopped
 ```
 
 ### 4. Resource Limits
+
 Sets resource constraints:
 
 ```bash
@@ -93,6 +101,7 @@ DATA_MEMORY_LIMIT=2048M
 ```
 
 ### 5. Requirements Files
+
 Specifies Python requirements for different environments:
 
 ```bash
@@ -109,6 +118,7 @@ API_REQUIREMENTS_FILE=requirements_test.txt
 ## Usage Examples
 
 ### Development Environment
+
 ```bash
 # Use default development settings
 docker-compose up -d
@@ -118,18 +128,21 @@ docker-compose --env-file .env.development up -d
 ```
 
 ### Production Environment
+
 ```bash
 # Production deployment
 docker-compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production up -d
 ```
 
 ### Staging Environment
+
 ```bash
 # Staging deployment
 docker-compose --env-file .env.staging up -d
 ```
 
 ### Testing Environment
+
 ```bash
 # Testing with minimal resources
 docker-compose --env-file .env.testing up -d
@@ -138,6 +151,7 @@ docker-compose --env-file .env.testing up -d
 ### Custom Build Configuration
 
 #### Enable Rust Components
+
 ```bash
 # In your .env.local or environment-specific file
 BUILD_RUST_NETWORK=true
@@ -146,6 +160,7 @@ BUILD_CONNECTOR=true
 ```
 
 #### GPU Support
+
 ```bash
 # Enable GPU builds
 BUILD_TYPE_CPU=gpu
@@ -154,6 +169,7 @@ GPU_COUNT=1
 ```
 
 #### Different Python Version
+
 ```bash
 # Use Python 3.11
 PYTHON_VERSION=3.11-slim
@@ -162,6 +178,7 @@ PYTHON_VERSION=3.11-slim
 ### Service-Specific Overrides
 
 #### API Service Customization
+
 ```bash
 API_SERVICE_PORT=9000
 API_SERVICE_HOST=127.0.0.1
@@ -170,6 +187,7 @@ API_REQUIREMENTS_FILE=requirements_api.txt
 ```
 
 #### Database Configuration
+
 ```bash
 POSTGRES_MAX_CONNECTIONS=150
 POSTGRES_SHARED_BUFFERS=384MB
@@ -179,6 +197,7 @@ REDIS_MAXMEMORY=768mb
 ## Advanced Configuration
 
 ### External Secrets
+
 For production, use Docker secrets:
 
 ```bash
@@ -192,6 +211,7 @@ SECRET_KEY_FILE=/run/secrets/secret_key
 ```
 
 ### Custom Requirements Files
+
 Create environment-specific requirements:
 
 ```bash
@@ -206,6 +226,7 @@ API_REQUIREMENTS_FILE=requirements_prod_optimized.txt
 ### Resource Optimization
 
 #### Memory Constrained Environment
+
 ```bash
 API_MEMORY_LIMIT=512M
 DATA_MEMORY_LIMIT=512M
@@ -215,6 +236,7 @@ REDIS_MAXMEMORY=128mb
 ```
 
 #### High Performance Environment
+
 ```bash
 API_CPU_LIMIT=8
 API_MEMORY_LIMIT=8192M
@@ -247,12 +269,14 @@ docker-compose --env-file .env.production config
 1. **Missing environment variables**: Check that all required variables are set in your environment file.
 
 2. **Build failures**: Ensure build flags match your source code structure:
+
    ```bash
    BUILD_PYTHON=true  # if you have Python code
    BUILD_RUST_NETWORK=true  # if you have Rust network code
    ```
 
 3. **Resource limits**: Adjust based on available system resources:
+
    ```bash
    # For low-memory systems
    API_MEMORY_LIMIT=512M
@@ -260,6 +284,7 @@ docker-compose --env-file .env.production config
    ```
 
 4. **Port conflicts**: Change service ports if defaults are in use:
+
    ```bash
    API_SERVICE_PORT=9000
    DATA_SERVICE_PORT=9001

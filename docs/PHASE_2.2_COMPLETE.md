@@ -24,6 +24,7 @@
 #### 1. **Dual-Mode Signal Generation**
 
 **RAG-Powered Mode (Primary)**
+
 ```python
 if RAG_AVAILABLE:
     orchestrator = IntelligenceOrchestrator(use_local=True)
@@ -40,6 +41,7 @@ if RAG_AVAILABLE:
 ```
 
 **Legacy Mode (Fallback)**
+
 ```python
 else:
     # Fallback to technical signals
@@ -96,6 +98,7 @@ class IntelligenceOrchestrator:
 #### 4. **Advanced Signal Features**
 
 **Position Sizing & Risk Management**
+
 - Calculates available cash (balance - margin_used)
 - Tracks current positions per symbol
 - Uses risk percentage from config (default 2% per trade)
@@ -103,11 +106,13 @@ class IntelligenceOrchestrator:
 - Adjusts position size based on RAG confidence
 
 **Multi-Symbol Analysis**
+
 - Generates signals for all 11 symbols simultaneously
 - Main coins allocation: 50% (BTC, ETH, BNB)
 - Alt coins allocation: 50% (ADA, SOL, DOT, MATIC, AVAX, LINK, ATOM, UNI)
 
 **RAG Confidence Boosting**
+
 ```python
 # Increase position size by up to 20% for high confidence signals
 if rag_rec.get('confidence', 0) >= 0.8 and rag_rec.get('action') == 'BUY':
@@ -118,6 +123,7 @@ if rag_rec.get('confidence', 0) >= 0.8 and rag_rec.get('action') == 'BUY':
 #### 5. **Strategy Parameters**
 
 Stored in `StrategyParameters` table:
+
 - `M`: SMA period (default 50)
 - `atr_period`: ATR calculation period (default 14)
 - `sl_multiplier`: Stop loss multiplier (default 2.0)
@@ -126,6 +132,7 @@ Stored in `StrategyParameters` table:
 #### 6. **Discord Notifications**
 
 Automatic notifications on BUY signals:
+
 ```python
 if result['signal'] == 'BUY':
     message = "🚀 **BUY Signal Generated**\n"
@@ -140,6 +147,7 @@ if result['signal'] == 'BUY':
 ### Celery Beat Schedule
 
 **Signal Generation:**
+
 ```python
 'generate-signals': {
     'task': 'trading.tasks.generate_signals_task',
@@ -148,6 +156,7 @@ if result['signal'] == 'BUY':
 ```
 
 **Daily RAG Signals:**
+
 ```python
 'generate-daily-rag-signals': {
     'task': 'trading.tasks.generate_daily_rag_signals_task',
@@ -156,6 +165,7 @@ if result['signal'] == 'BUY':
 ```
 
 **Indicators Update:**
+
 ```python
 'update-indicators': {
     'task': 'trading.tasks.update_indicators_task',
@@ -296,6 +306,7 @@ ema_26 = talib.EMA(pd.Series(closes), timeperiod=26)
 ### Storage
 
 All indicators stored in `IndicatorsCache` table:
+
 - `time`: Timestamp of calculation
 - `symbol`: Trading pair
 - `timeframe`: Candle timeframe
@@ -404,11 +415,13 @@ CREATE TABLE strategy_parameters (
 ### Immediate Actions (Docker Required)
 
 1. **Start Docker services**
+
    ```bash
    make up
    ```
 
 2. **Verify indicators are being calculated**
+
    ```bash
    docker-compose exec web python manage.py shell
    >>> from core.database.models import IndicatorsCache, Session
@@ -418,6 +431,7 @@ CREATE TABLE strategy_parameters (
    ```
 
 3. **Test signal generation manually**
+
    ```bash
    docker-compose exec web python manage.py shell
    >>> from trading.tasks import generate_signals_task
@@ -426,12 +440,14 @@ CREATE TABLE strategy_parameters (
    ```
 
 4. **Monitor automatic signal generation**
+
    ```bash
    docker-compose logs -f celery_worker | grep "generate_signals"
    # Should see signals every 15 minutes
    ```
 
 5. **Check RAG system availability**
+
    ```bash
    docker-compose exec web python manage.py shell
    >>> from web.rag.orchestrator import IntelligenceOrchestrator
@@ -525,22 +541,26 @@ print(f"Reasoning: {recommendation['reasoning']}")
 ## Files Verified
 
 ### Task Implementation
+
 - ✅ `src/trading/tasks.py` - Lines 386-576 (generate_signals_task)
 - ✅ `src/trading/tasks.py` - Lines 578-685 (update_indicators_task)
 - ✅ `src/trading/tasks.py` - Lines 1744-1852 (generate_daily_rag_signals_task)
 
 ### Signal Generation Logic
+
 - ✅ `src/trading/signals/generator.py` - 220 lines, complete implementation
   - `get_current_signal()` - Main signal generation function
   - `_get_rag_recommendations()` - RAG integration helper
 
 ### RAG System
+
 - ✅ `src/web/rag/orchestrator.py` - 331 lines, IntelligenceOrchestrator
   - `get_trading_recommendation()` - Single symbol recommendation
   - `optimize_portfolio()` - Multi-symbol optimization
   - `get_daily_signals()` - Daily signal generation
 
 ### Celery Configuration
+
 - ✅ `src/web/django/celery.py` - Beat schedule configured
 
 ## Time Saved
@@ -554,6 +574,7 @@ print(f"Reasoning: {recommendation['reasoning']}")
 **Phase 2.2 is COMPLETE!** 🎉
 
 The signal generation system is:
+
 - ✅ Fully implemented with RAG-powered intelligence
 - ✅ Comprehensive technical indicators (RSI, MACD, BB, ATR, SMA, EMA)
 - ✅ Dual-mode operation (RAG + legacy fallback)

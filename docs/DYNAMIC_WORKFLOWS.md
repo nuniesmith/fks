@@ -1,16 +1,19 @@
 # Dynamic GitHub Actions Workflows - Implementation Guide
 
 ## Overview
-This document explains the dynamic workflow features implemented in the FKS Trading Platform CI/CD pipeline, including automatic PR labeling, matrix strategies, conditional execution, and release automation.
+
+This document explains the dynamic workflow features implemented in the FKS Trading Platform CI/CD pipeline, including
+automatic PR labeling, matrix strategies, conditional execution, and release automation.
 
 ## 📋 Table of Contents
-1. [Automatic PR Labeling](#automatic-pr-labeling)
-2. [Matrix Strategy Testing](#matrix-strategy-testing)
-3. [Conditional Job Execution](#conditional-job-execution)
-4. [Dynamic Release Creation](#dynamic-release-creation)
-5. [Path Filters](#path-filters)
-6. [Workflow Dispatch Inputs](#workflow-dispatch-inputs)
-7. [Best Practices](#best-practices)
+
+1. [🏷️ Automatic PR Labeling](#️-automatic-pr-labeling)
+2. [🧪 Matrix Strategy Testing](#-matrix-strategy-testing)
+3. [⚙️ Conditional Job Execution](#️-conditional-job-execution)
+4. [🎉 Dynamic Release Creation](#-dynamic-release-creation)
+5. [🛤️ Path Filters](#️-path-filters)
+6. [🎛️ Workflow Dispatch Inputs](#️-workflow-dispatch-inputs)
+7. [📊 Best Practices](#-best-practices)
 
 ---
 
@@ -57,14 +60,19 @@ docker:
 ### Special Warnings
 
 #### Framework Changes
+
 When `framework` label is applied:
+
 ```
 ⚠️ Framework layer modified! This requires Phase 9D analysis due to 26 external imports.
 ```
+
 A GitHub step summary is added with critical review requirements.
 
 #### Breaking Changes
+
 When `breaking` label is applied:
+
 ```
 ⚠️ Breaking changes detected! Major review required.
 ```
@@ -103,6 +111,7 @@ strategy:
 | 3.13 | Windows | Unit + Integration (not slow) |
 
 ### Benefits
+
 - ✅ Catches version-specific bugs early
 - ✅ Ensures compatibility with Python 3.10-3.13
 - ✅ Windows compatibility testing for main version
@@ -110,7 +119,9 @@ strategy:
 - ✅ `fail-fast: false` ensures all versions are tested
 
 ### Selective Coverage
+
 Only Python 3.13 on Ubuntu runs:
+
 - Slow tests (`-m "slow"`)
 - Coverage uploads to Codecov
 
@@ -142,7 +153,9 @@ on:
 ### Label-Based Conditionals
 
 #### Lint Job
+
 Skips on documentation-only PRs:
+
 ```yaml
 lint:
   if: |
@@ -152,7 +165,9 @@ lint:
 ```
 
 #### Security Job
+
 Always runs on security-related changes:
+
 ```yaml
 security:
   if: |
@@ -164,7 +179,9 @@ security:
 ```
 
 #### Docker Job
+
 Skips on WIP PRs and docs-only changes:
+
 ```yaml
 docker:
   if: |
@@ -178,6 +195,7 @@ docker:
 ### Branch-Specific Logic
 
 DNS updates only on main/develop:
+
 ```yaml
 update-dns:
   if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event_name == 'push'
@@ -255,6 +273,7 @@ git push origin v1.0.0
 ### Pre-release Detection
 
 Versions containing `rc` or `beta` are marked as pre-releases:
+
 - `v1.0.0-rc1` → Pre-release ✅
 - `v2.0.0-beta.1` → Pre-release ✅
 - `v1.0.0` → Full release ✅
@@ -266,6 +285,7 @@ Versions containing `rc` or `beta` are marked as pre-releases:
 ### When to Use
 
 Path filters optimize CI/CD by:
+
 1. **Reducing costs** - Skip irrelevant jobs
 2. **Faster feedback** - Only run necessary tests
 3. **Resource efficiency** - Don't waste GitHub Actions minutes
@@ -353,11 +373,13 @@ test:
 ### 1. Labeling Strategy
 
 **DO:**
+
 - ✅ Use descriptive, hierarchical labels
 - ✅ Combine labels for complex changes (e.g., `code` + `security`)
 - ✅ Review auto-applied labels in PR description
 
 **DON'T:**
+
 - ❌ Manually add labels that conflict with auto-labeling
 - ❌ Ignore framework/breaking change warnings
 - ❌ Push to main without proper labels
@@ -365,11 +387,13 @@ test:
 ### 2. Matrix Testing
 
 **DO:**
+
 - ✅ Test main Python version (3.13) across all platforms
 - ✅ Use `fail-fast: false` to see all failures
 - ✅ Run expensive tests only on one matrix combination
 
 **DON'T:**
+
 - ❌ Test every version on every OS (cost explosion)
 - ❌ Use `fail-fast: true` in development
 - ❌ Duplicate test logic across matrix combinations
@@ -377,11 +401,13 @@ test:
 ### 3. Conditional Execution
 
 **DO:**
+
 - ✅ Check `needs.*.result` before running dependent jobs
 - ✅ Use `always()` for notification jobs
 - ✅ Combine multiple conditions with proper precedence
 
 **DON'T:**
+
 - ❌ Skip security checks based on labels alone
 - ❌ Over-optimize - some jobs should always run
 - ❌ Create circular dependencies between jobs
@@ -389,11 +415,13 @@ test:
 ### 4. Release Management
 
 **DO:**
+
 - ✅ Follow semantic versioning (`v1.2.3`)
 - ✅ Use annotated tags (`git tag -a`)
 - ✅ Generate meaningful release notes
 
 **DON'T:**
+
 - ❌ Push tags without testing
 - ❌ Create releases from feature branches
 - ❌ Use arbitrary version numbers
@@ -401,11 +429,13 @@ test:
 ### 5. Path Filters
 
 **DO:**
+
 - ✅ Use negative patterns (`!docs/**`) to exclude
 - ✅ Combine with label conditionals for flexibility
 - ✅ Test path filters locally before pushing
 
 **DON'T:**
+
 - ❌ Over-filter - security checks should always run
 - ❌ Ignore `.github/workflows/**` changes
 - ❌ Assume filters apply to manual triggers
@@ -417,9 +447,11 @@ test:
 ### Common Issues
 
 #### 1. Job Skipped Unexpectedly
+
 **Symptom**: Job shows "Skipped" in Actions tab
 
 **Check:**
+
 ```yaml
 # Review the if condition
 if: |
@@ -430,14 +462,17 @@ if: |
 **Solution**: Add `always()` or adjust conditions
 
 #### 2. Labels Not Applied
+
 **Symptom**: PR doesn't get auto-labeled
 
 **Check:**
+
 - Verify `.github/labeler.yml` syntax
 - Ensure `label-pr` job has `pull-requests: write` permission
 - Check glob patterns match actual file paths
 
 **Test locally:**
+
 ```bash
 # Install act CLI
 # Run workflow locally
@@ -445,16 +480,20 @@ act pull_request
 ```
 
 #### 3. Matrix Job Failures
+
 **Symptom**: One matrix combination fails silently
 
 **Solution:**
+
 - Use `fail-fast: false` to see all failures
 - Check job names include matrix variables: `Run Tests (Python ${{ matrix.python-version }})`
 
 #### 4. Path Filters Not Working
+
 **Symptom**: Workflow triggers on ignored files
 
 **Check:**
+
 - Path filters don't apply to `workflow_dispatch`
 - Use `paths-ignore` for simple exclusions
 - Combine with label conditions for complex logic
@@ -462,6 +501,7 @@ act pull_request
 ### Enable Debug Logging
 
 Add secrets to repository:
+
 - `ACTIONS_RUNNER_DEBUG`: `true`
 - `ACTIONS_STEP_DEBUG`: `true`
 
@@ -483,6 +523,7 @@ Track these metrics in Actions tab:
 ### Label Usage Analytics
 
 Monitor which labels are most common:
+
 ```bash
 gh pr list --state all --json labels --jq '.[] | .labels[].name' | sort | uniq -c | sort -rn
 ```
@@ -490,6 +531,7 @@ gh pr list --state all --json labels --jq '.[] | .labels[].name' | sort | uniq -
 ### Test Coverage Trends
 
 Track coverage over time via Codecov:
+
 - Overall project coverage
 - Per-file coverage
 - Coverage by Python version
@@ -540,6 +582,7 @@ Track coverage over time via Codecov:
 ## 🆘 Support
 
 For questions or issues:
+
 1. Check workflow run logs in Actions tab
 2. Review this documentation
 3. Test changes in a fork first

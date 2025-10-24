@@ -10,15 +10,18 @@
 ## Issues to Create
 
 ### [AI-1] Implement Base Layer - Ollama Embeddings
+
 **Priority**: 🟡 High | **Effort**: Medium (~10 hours) | **Phase**: 2-core
 
 **Summary**:
+
 - Install Ollama + BGE-M3 embedding model
 - Implement `OllamaEmbeddingService` in `src/rag/embeddings.py`
 - Integrate with pgvector for semantic search
 - Test embedding generation and similarity search
 
 **Key Tasks**:
+
 1. Docker infrastructure (Ollama service in docker-compose.gpu.yml)
 2. BGE-M3 model installation
 3. Embedding service implementation
@@ -26,6 +29,7 @@
 5. Testing (unit + integration)
 
 **Acceptance Criteria**:
+
 - Ollama running with GPU support
 - BGE-M3 generating 1024-dim embeddings
 - Semantic search functional (>0.7 similarity threshold)
@@ -36,15 +40,18 @@
 ---
 
 ### [AI-2] Implement Middle Layer - Reasoning/Coding Models
+
 **Priority**: 🟡 High | **Effort**: High (~14 hours) | **Phase**: 2-core
 
 **Summary**:
+
 - Install Qwen3:30b and Mathstral models
 - Implement `TradingReasoningEngine` in `src/trading/intelligence/reasoning.py`
 - Generate trading calculations (ATR, position sizing, R:R ratios)
 - Test math accuracy and code generation
 
 **Key Tasks**:
+
 1. Install Qwen3:30b + Mathstral models
 2. Implement TradingReasoningEngine class
 3. Math calculations module (ATR, position sizing, R:R)
@@ -53,6 +60,7 @@
 6. Testing (20+ test cases)
 
 **Acceptance Criteria**:
+
 - Both models installed and functional
 - Math calculations accurate (within 1% of manual)
 - Code generation produces valid Python
@@ -63,15 +71,18 @@
 ---
 
 ### [AI-3] Implement Top Layer - Agentic Orchestration
+
 **Priority**: 🟡 High | **Effort**: High (~16 hours) | **Phase**: 2-core
 
 **Summary**:
+
 - Install Llama4:scout agentic model
 - Implement `IntelligenceOrchestrator` in `src/rag/intelligence.py`
 - Add tool/function calling for API integrations
 - Generate end-to-end trading recommendations
 
 **Key Tasks**:
+
 1. Install Llama4:scout model
 2. Implement IntelligenceOrchestrator (coordinates all 3 layers)
 3. Function/tool calling (execute_trade, fetch_market_data, etc.)
@@ -80,6 +91,7 @@
 6. Testing (15+ test cases)
 
 **Acceptance Criteria**:
+
 - Llama4:scout functional with tool calling
 - Orchestrator coordinates all 3 layers successfully
 - Recommendations include entry/exit/sizing/reasoning
@@ -93,15 +105,18 @@
 ---
 
 ### [AI-4] Integration Testing & Performance Optimization
+
 **Priority**: 🟡 High | **Effort**: Medium (~10 hours) | **Phase**: 2-core
 
 **Summary**:
+
 - End-to-end integration testing of complete 3-layer AI
 - Performance optimization (latency, VRAM usage, caching)
 - Add monitoring and observability (Prometheus + Grafana)
 - Implement production safeguards
 
 **Key Tasks**:
+
 1. End-to-end integration tests (20+ scenarios)
 2. Performance optimization (caching, model swapping)
 3. Monitoring & observability (Grafana dashboard)
@@ -109,6 +124,7 @@
 5. Documentation & examples
 
 **Acceptance Criteria**:
+
 - All integration tests passing
 - Performance meets targets (<5s end-to-end)
 - Monitoring dashboard operational
@@ -121,12 +137,14 @@
 ---
 
 ### [P2.2] Complete RAG System (UPDATE EXISTING #9)
+
 **Priority**: 🟡 High | **Effort**: High (~50 hours total) | **Phase**: 2-core
 
 **Summary** (updated):
 Complete the RAG system with 3-layer AI architecture. This issue has been expanded into 4 detailed sub-issues ([AI-1] through [AI-4]).
 
 **Architecture**:
+
 ```
 TOP LAYER (Llama4:scout) → [AI-3]
     ↓
@@ -136,6 +154,7 @@ BASE LAYER (BGE-M3) → [AI-1]
 ```
 
 **Timeline**:
+
 - Weeks 1-2: Base Layer ([AI-1]) - 10 hours
 - Weeks 3-4: Middle Layer ([AI-2]) - 14 hours
 - Weeks 5-6: Top Layer ([AI-3]) - 16 hours
@@ -143,6 +162,7 @@ BASE LAYER (BGE-M3) → [AI-1]
 - **Total**: 7 weeks, ~50 hours
 
 **Progress Tracking**:
+
 - [ ] [AI-1] Base Layer - Embeddings (0%)
 - [ ] [AI-2] Middle Layer - Reasoning (0%)
 - [ ] [AI-3] Top Layer - Agentic (0%)
@@ -164,6 +184,7 @@ BASE LAYER (BGE-M3) → [AI-1]
 ## GitHub Commands to Create Issues
 
 ### Create [AI-1]
+
 ```bash
 gh issue create --repo nuniesmith/fks \
   --title "[AI-1] Implement Base Layer - Ollama Embeddings" \
@@ -172,6 +193,7 @@ gh issue create --repo nuniesmith/fks \
 ```
 
 ### Create [AI-2]
+
 ```bash
 gh issue create --repo nuniesmith/fks \
   --title "[AI-2] Implement Middle Layer - Reasoning/Coding Models" \
@@ -180,6 +202,7 @@ gh issue create --repo nuniesmith/fks \
 ```
 
 ### Create [AI-3]
+
 ```bash
 gh issue create --repo nuniesmith/fks \
   --title "[AI-3] Implement Top Layer - Agentic Orchestration" \
@@ -188,6 +211,7 @@ gh issue create --repo nuniesmith/fks \
 ```
 
 ### Create [AI-4]
+
 ```bash
 gh issue create --repo nuniesmith/fks \
   --title "[AI-4] Integration Testing & Performance Optimization" \
@@ -196,6 +220,7 @@ gh issue create --repo nuniesmith/fks \
 ```
 
 ### Update #9
+
 ```bash
 gh issue edit 9 --repo nuniesmith/fks \
   --title "[P2.2] Complete RAG System - AI-Powered Trading Intelligence (UPDATED)" \

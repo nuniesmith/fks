@@ -43,6 +43,7 @@ def get_current_signal(df_prices, best_params, account_size,
 ```
 
 **Key Features**:
+
 - ✅ Technical indicators (RSI, MACD, Bollinger Bands) passed as context to RAG
 - ✅ Account balance and available cash considered in recommendations
 - ✅ Current positions factored into new trade suggestions
@@ -82,12 +83,14 @@ def ingest_recent_trades(days: int = 7):
 ```
 
 **What Gets Indexed**:
+
 - ✅ Trading signals (symbol, action, indicators, timestamp)
 - ✅ Backtest results (strategy, metrics, performance)
 - ✅ Completed trades (entry, exit, PnL, duration)
 - ✅ Market analyses (manual or automated insights)
 
 **Storage**:
+
 - PostgreSQL with pgvector extension
 - Embeddings generated via sentence-transformers (local) or OpenAI
 - Semantic search over historical trading knowledge
@@ -111,6 +114,7 @@ def test_performance_latency():
 ```
 
 **Performance Characteristics**:
+
 - ✅ RAG query latency: ~250ms per symbol (mocked tests)
 - ✅ Graceful fallback if timeout/error
 - ✅ Parallel processing possible for multiple symbols
@@ -147,19 +151,22 @@ When RAG is enabled, each suggestion includes additional fields:
 ### High Confidence Position Boost
 
 When RAG confidence ≥ 80% and action is BUY:
+
 - Position size increased by up to 20%
 - Boost scales linearly: confidence 0.8 → 0% boost, confidence 1.0 → 20% boost
 - Formula: `new_quantity = base_quantity * (1 + 0.2 * confidence_boost)`
 
 Example:
+
 - Base quantity: 0.025 BTC
 - RAG confidence: 0.85 (85%)
 - Confidence boost: (0.85 - 0.8) / 0.2 = 0.25
-- New quantity: 0.025 * (1 + 0.2 * 0.25) = 0.02625 BTC (+5% increase)
+- New quantity: 0.025 *(1 + 0.2* 0.25) = 0.02625 BTC (+5% increase)
 
 ### Graceful Degradation
 
 If RAG fails (service unavailable, timeout, error):
+
 1. Error logged: `⚠ RAG recommendations failed: {error}. Using technical signals only.`
 2. Falls back to pure technical indicators
 3. Suggestions returned with `rag_enhanced: False`
@@ -199,6 +206,7 @@ _get_rag_recommendations(
 **File**: `src/trading/tasks.py`
 
 RAG used in:
+
 - `generate_signals_task()` - Line 385 (already integrated)
 - `optimize_portfolio_task()` - Line 899 (already integrated)
 - `generate_daily_rag_signals_task()` - Line 1713 (RAG-specific daily signals)
@@ -224,6 +232,7 @@ rec = orchestrator.get_trading_recommendation(
 **File**: `src/web/rag/intelligence.py`
 
 Core RAG system with:
+
 - Document ingestion
 - Semantic search via pgvector
 - LLM generation (Ollama local or OpenAI)
@@ -264,12 +273,14 @@ pytest tests/integration/test_rag_signal_integration.py::TestRAGSignalIntegratio
 ### Existing RAG Tests
 
 **Unit tests** (60+ tests):
+
 - `tests/unit/test_rag/test_intelligence_mocked.py`
 - `tests/unit/test_rag/test_orchestrator.py`
 - `tests/unit/test_rag/test_embeddings_mocked.py`
 - `tests/unit/test_rag/test_document_processor.py`
 
 **Performance tests** (16 benchmarks):
+
 - `tests/performance/test_rag_performance.py`
 
 ---
@@ -361,6 +372,7 @@ print(result.get())
 ### Enable/Disable RAG
 
 **In code**:
+
 ```python
 # Enable RAG (default)
 signal, suggestions = get_current_signal(..., use_rag=True)
@@ -370,6 +382,7 @@ signal, suggestions = get_current_signal(..., use_rag=False)
 ```
 
 **Environment variables**:
+
 ```bash
 # Use local models (Ollama)
 USE_LOCAL_LLM=true
@@ -383,10 +396,12 @@ OPENAI_API_KEY=your_key_here
 ### RAG System Requirements
 
 **Required**:
+
 - PostgreSQL 15+ with pgvector extension
 - Python packages: sentence-transformers, torch, ollama
 
 **Optional** (for local LLM):
+
 - Ollama installed (`ollama pull llama3.2:3b`)
 - CUDA-capable GPU (8GB+ VRAM recommended)
 - GPU mode: `make gpu-up` (uses docker-compose.gpu.yml)
@@ -410,6 +425,7 @@ print(f"Sources used: {result['sources_used']}")   # Number of retrieved docs
 ### Logging
 
 RAG events are logged:
+
 ```
 ✓ Using local LLM: llama3.2:3b
 ✓ RAG recommendation for BTCUSDT: BUY (confidence: 85%)
@@ -420,6 +436,7 @@ RAG events are logged:
 ### Health Dashboard
 
 Check RAG system status:
+
 - **Web UI**: http://localhost:8000/health/dashboard/
 - **Metrics**: Ingestion counts, query latency, error rates
 

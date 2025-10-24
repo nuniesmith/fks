@@ -17,6 +17,7 @@ The `.vscode/settings.json` file configures VS Code for optimal Python developme
 - Works across VS Code terminal sessions
 
 **Verify it's working:**
+
 1. Open any `.py` file
 2. Check bottom-right corner - should show: `Python 3.13.8 64-bit ('.venv/fks-trading')`
 3. If wrong, click it and select `/home/jordan/.venv/fks-trading/bin/python`
@@ -24,17 +25,20 @@ The `.vscode/settings.json` file configures VS Code for optimal Python developme
 ### Code Formatting
 
 **Black** is configured with 100-character line length:
+
 - Auto-formats on save
 - Organizes imports automatically
 - Matches `ruff.toml` configuration
 
 **Shortcuts:**
+
 - `Ctrl+Shift+I` - Format document
 - `Ctrl+Shift+O` - Organize imports
 
 ### Linting
 
 Three linters enabled:
+
 1. **Pylint** - Comprehensive Python linting
 2. **Flake8** - Style guide enforcement
 3. **MyPy** - Type checking
@@ -54,12 +58,14 @@ Configured for pytest with auto-discovery:
 ```
 
 **Using Test Explorer:**
+
 1. Click Testing icon in sidebar (beaker icon)
 2. VS Code auto-discovers tests in `tests/` directory
 3. Click play button to run individual tests
 4. Green checkmark = pass, red X = fail
 
 **Keyboard shortcuts:**
+
 - `Ctrl+; Ctrl+A` - Run all tests
 - `Ctrl+; Ctrl+F` - Run failed tests
 - `Ctrl+; Ctrl+L` - Run last test run
@@ -75,6 +81,7 @@ Configured for pytest with auto-discovery:
 - Recognizes Django template tags in HTML files
 
 **Environment file:**
+
 ```json
 "python.envFile": "${workspaceFolder}/.env"
 ```
@@ -90,6 +97,7 @@ Advanced type checking and autocomplete:
 ```
 
 **Features:**
+
 - Auto-imports when you use undefined names
 - Function parameter hints
 - Return type hints (inlay hints)
@@ -97,12 +105,14 @@ Advanced type checking and autocomplete:
 - Find all references (`Shift+F12`)
 
 **Performance:**
+
 - `diagnosticMode: workspace` - Checks all files, not just open ones
 - Catches errors before you run code
 
 ### File Exclusions
 
 Hidden from file explorer and search:
+
 - `__pycache__/` - Python bytecode
 - `*.pyc` - Compiled Python files
 - `.pytest_cache/` - Test cache
@@ -129,6 +139,7 @@ Saves files 1 second after you stop typing. Prevents lost work during WSL crashe
 ```
 
 Uses Unix-style line endings (LF) instead of Windows (CRLF). Required for:
+
 - Docker containers
 - Git on WSL
 - Shell scripts
@@ -142,6 +153,7 @@ Uses Unix-style line endings (LF) instead of Windows (CRLF). Required for:
 New terminals open in WSL Ubuntu by default.
 
 **Environment variables:**
+
 ```json
 "terminal.integrated.env.linux": {
   "PYTHONPATH": "${workspaceFolder}/src"
@@ -153,19 +165,23 @@ Sets `PYTHONPATH` so you can import from `src/` in terminal.
 ## Language-Specific Settings
 
 ### Markdown
+
 - Word wrap enabled
 - Auto-format on save
 - Suggestions enabled
 
 ### JSON/JSONC
+
 - Auto-format on save
 - Built-in formatter
 
 ### YAML
+
 - 2-space indentation (Docker Compose, GitHub Actions)
 - Advanced auto-indent
 
 ### Dockerfile
+
 - Syntax highlighting
 - Auto-formatting
 
@@ -180,6 +196,7 @@ Sets `PYTHONPATH` so you can import from `src/` in terminal.
 ```
 
 Copilot enabled for:
+
 - ✅ Python code
 - ✅ YAML (Docker, CI/CD)
 - ✅ Markdown (docs)
@@ -200,25 +217,31 @@ Copilot enabled for:
 These settings work best with:
 
 ### Essential
+
 - **Python** (`ms-python.python`) - Core Python support
 - **Pylance** (`ms-python.vscode-pylance`) - Fast IntelliSense
 - **Black Formatter** (`ms-python.black-formatter`) - Code formatting
 - **isort** (`ms-python.isort`) - Import sorting
 
 ### Django
+
 - **Django** (`batisteo.vscode-django`) - Template syntax, snippets
 - **Django Template** - Syntax highlighting for `.html` files
 
 ### Testing
+
 - **Python Test Explorer** - Visual test runner
 
 ### Docker
+
 - **Docker** (`ms-azuretools.vscode-docker`) - Dockerfile, Compose support
 
 ### Git
+
 - **GitLens** (`eamodio.gitlens`) - Advanced Git features
 
 ### Utilities
+
 - **Better Comments** - Color-coded comments
 - **Error Lens** - Inline error messages
 - **Todo Tree** - Find TODO comments
@@ -230,6 +253,7 @@ These settings work best with:
 **Problem:** VS Code shows "Python interpreter not set"
 
 **Solution:**
+
 1. Press `Ctrl+Shift+P`
 2. Type "Python: Select Interpreter"
 3. Choose `/home/jordan/.venv/fks-trading/bin/python`
@@ -239,6 +263,7 @@ These settings work best with:
 **Problem:** No red squiggles for errors
 
 **Solution:**
+
 ```bash
 # Activate venv and install linting tools
 source ~/.venv/fks-trading/bin/activate
@@ -250,6 +275,7 @@ pip install pylint flake8 mypy black isort
 **Problem:** Test Explorer shows "No tests found"
 
 **Solution:**
+
 1. Check pytest is installed: `pip list | grep pytest`
 2. Reload window: `Ctrl+Shift+P` → "Developer: Reload Window"
 3. Check `pytest.ini` exists in project root
@@ -259,11 +285,14 @@ pip install pylint flake8 mypy black isort
 **Problem:** `from src.core.models import Trade` shows error
 
 **Solution:**
+
 1. Verify `PYTHONPATH` in terminal:
+
    ```bash
    echo $PYTHONPATH
    # Should include: /mnt/c/Users/jordan/nextcloud/code/repos/fks/src
    ```
+
 2. Reload window
 3. Check `.env` file exists
 
@@ -272,6 +301,7 @@ pip install pylint flake8 mypy black isort
 **Problem:** Save doesn't format code
 
 **Solution:**
+
 1. Check Black is installed: `pip list | grep black`
 2. Open Command Palette (`Ctrl+Shift+P`)
 3. Run "Format Document" manually

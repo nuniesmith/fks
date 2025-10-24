@@ -1,7 +1,9 @@
 # Virtual Environment Setup - WSL
 
 ## Location
+
 The Python virtual environment is installed **outside** the project directory in your WSL home:
+
 ```
 ~/.venvs/fks/
 ```
@@ -11,27 +13,32 @@ This keeps the project directory clean and prevents the large venv from being sy
 ## Activation
 
 ### Quick Activation (Recommended)
+
 ```bash
 source ~/activate-fks.sh
 ```
 
 This will:
+
 - Activate the virtual environment
 - Navigate to the project directory
 - Show helpful information about available commands
 
 ### Manual Activation
+
 ```bash
 source ~/.venvs/fks/bin/activate
 cd /mnt/c/Users/jordan/Nextcloud/code/repos/fks
 ```
 
 ## Deactivation
+
 ```bash
 deactivate
 ```
 
 ## Python Version
+
 ```
 Python 3.12.3
 ```
@@ -39,6 +46,7 @@ Python 3.12.3
 ## Installation Details
 
 ### Initial Setup
+
 ```bash
 # Install venv package
 sudo apt install -y python3.12-venv
@@ -57,6 +65,7 @@ pip install -r requirements.txt
 ```
 
 ### Verify Installation
+
 ```bash
 source ~/.venvs/fks/bin/activate
 python --version  # Should show Python 3.12.3
@@ -75,6 +84,7 @@ pip list          # Shows all installed packages
 ## Common Commands
 
 ### With Virtual Environment Active
+
 ```bash
 # Install a package
 pip install <package-name>
@@ -98,6 +108,7 @@ make up
 ## Troubleshooting
 
 ### Virtual Environment Not Found
+
 ```bash
 # Recreate it
 python3 -m venv ~/.venvs/fks
@@ -106,6 +117,7 @@ pip install -r requirements.txt
 ```
 
 ### Wrong Python Version
+
 ```bash
 # Check Python version
 python --version
@@ -118,6 +130,7 @@ source ~/.venvs/fks/bin/activate
 ```
 
 ### Missing Packages
+
 ```bash
 # Ensure venv is activated
 source ~/.venvs/fks/bin/activate
@@ -127,6 +140,7 @@ pip install -r requirements.txt
 ```
 
 ### Permission Issues
+
 ```bash
 # The venv should be owned by your user
 ls -ld ~/.venvs/fks
@@ -147,6 +161,7 @@ To use this virtual environment in VS Code:
 5. Enter: `/home/jordan/.venvs/fks/bin/python`
 
 Alternatively, create `.vscode/settings.json`:
+
 ```json
 {
     "python.defaultInterpreterPath": "/home/jordan/.venvs/fks/bin/python",
@@ -157,6 +172,7 @@ Alternatively, create `.vscode/settings.json`:
 ## Multiple Environments
 
 You can create additional virtual environments for different projects:
+
 ```bash
 # Create another venv
 python3 -m venv ~/.venvs/other-project
@@ -170,12 +186,14 @@ All venvs live in `~/.venvs/` for easy management.
 ## Backup and Restore
 
 ### Backup (requirements.txt is sufficient)
+
 ```bash
 # The requirements.txt file is all you need
 # It's already in the repository
 ```
 
 ### Restore
+
 ```bash
 # Create fresh venv
 python3 -m venv ~/.venvs/fks

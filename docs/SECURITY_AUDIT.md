@@ -6,6 +6,7 @@
 ## 🔒 Security Hardening Actions Completed
 
 ### 1.1.1: Strong Password Generation ✅
+
 - Updated `.env.example` with clear instructions for generating secure passwords
 - Added specific commands for each credential type:
   - `openssl rand -base64 32` for database and Redis passwords
@@ -13,11 +14,13 @@
   - Django's `get_random_secret_key()` for SECRET_KEY
 
 ### 1.1.2: .env Protection ✅
+
 - Verified `.env` is in `.gitignore` (line 275)
 - Updated `.env.example` with security warnings and generation commands
 - `.env.example` is tracked in git as template (whitelisted in .gitignore line 282)
 
 ### 1.1.3: Rate Limiting and Login Protection ✅
+
 - Added `django-axes` to INSTALLED_APPS
 - Configured `AxesMiddleware` for login attempt tracking
 - Configured settings:
@@ -35,6 +38,7 @@
   - Authenticated: 1000/hour
 
 ### 1.1.4: Database and Redis Security ✅
+
 - **PostgreSQL SSL/TLS**:
   - Enabled SSL with `ssl=on` in command
   - Configured `password_encryption=scram-sha-256` (stronger than md5)
@@ -48,6 +52,7 @@
   - Updated Redis exporter with REDIS_PASSWORD environment variable
 
 ### 1.1.5: Dependency Vulnerability Audit ⚠️
+
 - Installed `pip-audit` tool
 - **Note**: pip-audit experienced network timeout during scan
 - **Action Required**: Manual audit needed after deployment to environment with PyPI access
@@ -62,6 +67,7 @@
 ## 🔐 Additional Security Headers
 
 Added security headers configuration:
+
 - `SECURE_BROWSER_XSS_FILTER = True`
 - `SECURE_CONTENT_TYPE_NOSNIFF = True`
 - `X_FRAME_OPTIONS = 'SAMEORIGIN'`
@@ -72,6 +78,7 @@ Added security headers configuration:
 ## ⚠️ Security Warnings Still Active
 
 From `.env` file (these need to be changed before deployment):
+
 ```
 POSTGRES_PASSWORD=CHANGE_THIS_SECURE_PASSWORD_123!
 PGADMIN_PASSWORD=CHANGE_THIS_ADMIN_PASSWORD_456!

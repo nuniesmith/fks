@@ -9,6 +9,7 @@ This guide covers development setup, GitHub Actions CI/CD, strategy implementati
 ## 🚀 **CURRENT SYSTEM STATUS**
 
 ### ✅ **Completed:**
+
 - Refactored strategy from 4000+ lines to 800 lines
 - Created modular FKS_Strategy_Clean.cs
 - Unified FKS AddOns system (Core, Calculations, Infrastructure, Market, Signals)
@@ -36,6 +37,7 @@ This guide covers development setup, GitHub Actions CI/CD, strategy implementati
 ## 🔧 **LOCAL DEVELOPMENT SETUP**
 
 ### **Prerequisites**
+
 - **Visual Studio 2022** with .NET 8 SDK
 - **NinjaTrader 8** installed
 - **Git** for version control
@@ -43,6 +45,7 @@ This guide covers development setup, GitHub Actions CI/CD, strategy implementati
 - **Node.js** (for web interface development)
 
 ### **Repository Setup**
+
 ```bash
 # Clone the repository
 git clone https://github.com/nuniesmith/ninja.git
@@ -58,6 +61,7 @@ chmod +x scripts/setup-and-test.sh
 ```
 
 ### **NinjaTrader Development**
+
 ```bash
 # Build the strategy
 dotnet build src/FKS.csproj
@@ -106,9 +110,11 @@ ninja/
 ## 🔄 **GITHUB ACTIONS CI/CD**
 
 ### **Workflow Overview**
+
 The system uses GitHub Actions for automated deployment with Tailscale for secure networking.
 
 ### **Required Secrets**
+
 Configure these in **GitHub Settings → Secrets and variables → Actions**:
 
 ```
@@ -119,11 +125,13 @@ DISCORD_WEBHOOK               # Discord webhook (optional)
 ```
 
 ### **Workflow Triggers**
+
 - **Automatic**: Pushes to `main` branch trigger staging deployment
 - **Manual**: Production deployment via workflow dispatch
 - **Testing**: All branches run tests and validation
 
 ### **Deployment Process**
+
 1. **Connect to Tailscale VPN** for secure access
 2. **Run tests** on Python components and configuration validation
 3. **Deploy to staging** environment automatically
@@ -132,6 +140,7 @@ DISCORD_WEBHOOK               # Discord webhook (optional)
 6. **Notifications** sent to Discord (if configured)
 
 ### **Setting Up OAuth Client**
+
 1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin)
 2. Navigate to **Settings** → **OAuth clients**
 3. Click **Generate OAuth client**
@@ -148,6 +157,7 @@ DISCORD_WEBHOOK               # Discord webhook (optional)
 ### **PHASE 1: IMMEDIATE FIXES (Week 1)**
 
 #### **Step 1.1: Fix Core Signal Thresholds**
+
 **File**: `src/Strategies/FKS_Strategy_Clean.cs`
 
 ```csharp
@@ -158,6 +168,7 @@ MinComponentAgreement = 2;        // Require 2 of 3 components
 ```
 
 #### **Step 1.2: Implement Proper VWAP**
+
 **File**: `src/Strategies/FKS_Strategy_Clean.cs`
 
 ```csharp
@@ -169,6 +180,7 @@ vwap = VWAP(Close);  // Use NinjaTrader's built-in VWAP
 ```
 
 #### **Step 1.3: Enhance Setup Detection**
+
 **File**: `src/Strategies/FKS_Strategy_Clean.cs`
 
 Add to `GenerateSimpleSignal()` method:
@@ -183,6 +195,7 @@ private bool DetectBullishBreakout()
 ```
 
 #### **Step 1.4: Add Component Agreement Logic**
+
 **File**: `src/Strategies/FKS_Strategy_Clean.cs`
 
 ```csharp
@@ -201,6 +214,7 @@ private bool ValidateComponentAgreement(CompositeSignal signal)
 ### **PHASE 2: ENHANCED FILTERING (Week 2)**
 
 #### **Step 2.1: Market Condition Detection**
+
 ```csharp
 private MarketCondition DetectMarketCondition()
 {
@@ -214,6 +228,7 @@ private MarketCondition DetectMarketCondition()
 ```
 
 #### **Step 2.2: Time-Based Filtering Enhancement**
+
 ```csharp
 private bool IsActiveTradingTime()
 {
@@ -234,6 +249,7 @@ private bool IsActiveTradingTime()
 ### **PHASE 3: ADVANCED FEATURES (Week 3-4)**
 
 #### **Step 3.1: Dynamic Position Sizing**
+
 ```csharp
 private int CalculateDynamicPosition(double signalQuality, MarketCondition condition)
 {
@@ -263,6 +279,7 @@ private int CalculateDynamicPosition(double signalQuality, MarketCondition condi
 ## 🧪 **TESTING STRATEGY**
 
 ### **Unit Testing Approach**
+
 ```csharp
 // Example test structure for strategy components
 [TestMethod]
@@ -279,12 +296,14 @@ public void TestSignalQualityThreshold()
 ```
 
 ### **Backtesting Protocol**
+
 1. **Historical Data**: Use 3-6 months of 5-minute data
 2. **Markets**: Test on GC, NQ, CL separately
 3. **Metrics**: Track win rate, R:R, max drawdown
 4. **Validation**: Compare against manual trading results
 
 ### **Live Testing Phases**
+
 1. **Monitor Only**: Strategy runs but doesn't place trades
 2. **Single Contract**: Minimal risk live testing
 3. **Scaled Testing**: Gradually increase position sizes
@@ -295,6 +314,7 @@ public void TestSignalQualityThreshold()
 ## 🔍 **DEBUGGING AND MONITORING**
 
 ### **NinjaTrader Debug Output**
+
 ```csharp
 // Enhanced logging for development
 Print($"{Time[0]:HH:mm:ss} - Signal Quality: {signalQuality:F2}, " +
@@ -302,6 +322,7 @@ Print($"{Time[0]:HH:mm:ss} - Signal Quality: {signalQuality:F2}, " +
 ```
 
 ### **Python API Monitoring**
+
 ```python
 # Health check endpoint for monitoring
 @app.get("/healthz")
@@ -315,6 +336,7 @@ async def health_check():
 ```
 
 ### **Web Interface Integration**
+
 ```javascript
 // React component for real-time strategy monitoring
 const StrategyMonitor = () => {
@@ -336,6 +358,7 @@ const StrategyMonitor = () => {
 ## 🛠️ **DEVELOPMENT TOOLS**
 
 ### **VS Code Configuration**
+
 ```json
 // .vscode/tasks.json
 {
@@ -353,6 +376,7 @@ const StrategyMonitor = () => {
 ```
 
 ### **Useful Development Commands**
+
 ```bash
 # Build and test strategy
 dotnet build src/FKS.csproj
@@ -374,12 +398,14 @@ ssh ninja@your-server "systemctl status ninja-trading"
 ## 📈 **PERFORMANCE OPTIMIZATION**
 
 ### **Strategy Performance**
+
 - **Signal Processing**: Optimize indicator calculations
 - **Memory Usage**: Efficient data series management
 - **CPU Usage**: Minimize heavy calculations in OnBarUpdate
 - **Network**: Efficient API communication
 
 ### **System Performance**
+
 - **Docker**: Use multi-stage builds for smaller images
 - **Database**: Index frequently queried fields
 - **Caching**: Implement Redis for session data
@@ -390,6 +416,7 @@ ssh ninja@your-server "systemctl status ninja-trading"
 ## 🔄 **DEPLOYMENT WORKFLOW**
 
 ### **Development to Production**
+
 1. **Feature Development**: Work on feature branch
 2. **Local Testing**: Test with NinjaTrader Simulator
 3. **PR Review**: Code review and automated tests
@@ -398,6 +425,7 @@ ssh ninja@your-server "systemctl status ninja-trading"
 6. **Monitoring**: Watch metrics and logs post-deployment
 
 ### **Rollback Strategy**
+
 ```bash
 # Quick rollback commands
 git revert HEAD
@@ -415,18 +443,21 @@ docker-compose restart
 ## 📚 **NEXT DEVELOPMENT PRIORITIES**
 
 ### **Short Term (1-2 weeks)**
+
 1. Fix signal quality thresholds
 2. Implement proper VWAP integration
 3. Add component agreement validation
 4. Enhance time-based filtering
 
 ### **Medium Term (1 month)**
+
 1. Dynamic position sizing implementation
 2. Advanced market regime detection
 3. Enhanced backtesting framework
 4. Real-time performance dashboard
 
 ### **Long Term (3 months)**
+
 1. Machine learning signal enhancement
 2. Multi-timeframe analysis
 3. Portfolio management features

@@ -10,6 +10,7 @@
 
 **Total test files:** 56  
 **Test directories:**
+
 - `tests/unit/` - Unit tests for isolated components
 - `tests/integration/` - Integration tests for component interactions
 - `tests/performance/` - Performance benchmarks
@@ -140,6 +141,7 @@ pytest tests/unit/ -v --cov=src --cov-report=html
 ```
 
 **Expected Results:**
+
 - Unit tests: Should pass (mocked dependencies)
 - No database required
 - No external services required
@@ -163,6 +165,7 @@ docker-compose exec web pytest tests/ -v -m "benchmark or slow"
 ```
 
 **Expected Results:**
+
 - All tests should pass
 - Database integration works
 - Celery tasks execute
@@ -171,11 +174,13 @@ docker-compose exec web pytest tests/ -v -m "benchmark or slow"
 ### Phase 3: CI/CD (Automated Testing)
 
 **Triggers:**
+
 - Every push to main/dev branches
 - Every pull request
 - Nightly builds (full test suite + benchmarks)
 
 **Actions:**
+
 - Run pytest with coverage
 - Build Docker images
 - Run lint checks
@@ -187,6 +192,7 @@ docker-compose exec web pytest tests/ -v -m "benchmark or slow"
 ### Current Coverage (Estimated)
 
 Based on existing tests:
+
 - **Trading tasks:** 80% (comprehensive mocking)
 - **Signal generation:** 75% (technical indicators covered)
 - **RAG system:** 70% (orchestrator + intelligence tests exist)
@@ -378,7 +384,7 @@ jobs:
 
 ## Success Criteria
 
-### Phase 3 Complete When:
+### Phase 3 Complete When
 
 1. ✅ **Test Coverage ≥ 80%** - Measured by pytest-cov
 2. ✅ **All Unit Tests Passing** - No failures in tests/unit/
@@ -394,10 +400,12 @@ jobs:
 **Status:** ⚠️ Blocking integration tests
 
 **Issue:** 20 tests failing due to legacy imports
+
 - `from config import SYMBOLS` → `from framework.config.constants import SYMBOLS`
 - `from shared_python` → Remove entirely, use Django settings
 
 **Fix Strategy:**
+
 1. Update all test files with correct imports
 2. Create test fixtures for mocked config
 3. Re-run test suite to verify fixes
@@ -408,6 +416,7 @@ jobs:
 **Status:** ⚠️ Blocking integration tests
 
 **Required for:**
+
 - Integration tests
 - Celery task execution tests
 - Database-dependent tests
@@ -436,6 +445,7 @@ jobs:
 ### Immediate (Can Do Now)
 
 1. **Run existing unit tests** to establish baseline
+
    ```bash
    pytest tests/unit/test_trading/test_tasks.py -v
    pytest tests/unit/test_trading/test_signals.py -v
@@ -443,6 +453,7 @@ jobs:
    ```
 
 2. **Generate coverage report** to identify gaps
+
    ```bash
    pytest tests/unit/ -v --cov=src --cov-report=html
    open htmlcov/index.html  # View coverage
@@ -455,12 +466,14 @@ jobs:
 ### After Docker Start
 
 4. **Run integration tests**
+
    ```bash
    make up
    docker-compose exec web pytest tests/integration/ -v
    ```
 
 5. **Test Celery tasks in Docker**
+
    ```bash
    docker-compose logs -f celery_worker
    # Watch for task executions

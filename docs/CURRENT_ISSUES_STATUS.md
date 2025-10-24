@@ -29,9 +29,11 @@
 ## Existing Issues
 
 ### RAG System Implementation (#62-73)
+
 12 phased issues for RAG system development
 
 ### Other
+
 - #56: Python Core Improvements & Django Integration
 
 ## Issue Breakdown
@@ -46,11 +48,14 @@
 ## Recommended Next Steps
 
 ### Immediate (This Week)
+
 1. **Start with #74 - Security Hardening**
+
    ```bash
    gh issue view 74
    gh issue develop 74 --checkout
    ```
+
    - Generate secure passwords
    - Lock down ports
    - Enable rate limiting
@@ -68,11 +73,14 @@
    - Run formatting
 
 ### Parallel Work
+
 - Continue RAG development (#62-73) on separate branch
 - Keep Platform and RAG work isolated
 
 ### Future Phases (After Phase 1 Complete)
+
 If Phase 1 goes well, import additional platform phases:
+
 - Phase 2: Celery Tasks, Web UI, Backtesting
 - Phase 3: Testing & QA
 - Phase 4: Documentation
@@ -130,6 +138,7 @@ gh issue edit 76 --add-project "FKS Development"
 ```
 
 Suggested columns:
+
 - **Backlog** - Not started
 - **Platform Work** - Active platform issues
 - **RAG Development** - Active RAG issues

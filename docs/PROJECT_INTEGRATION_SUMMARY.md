@@ -8,10 +8,12 @@ Successfully implemented comprehensive GitHub Project integration for the FKS Tr
 
 ## 📦 What Was Created
 
-### 1. **Workflow: Sync Issues and PRs to Project** 
+### 1. **Workflow: Sync Issues and PRs to Project**
+
    **File:** `.github/workflows/sync-to-project.yml`
 
 **Features:**
+
 - ✅ **Auto-add issues** - Automatically adds new/reopened issues to project
 - ✅ **Auto-add PRs** - Automatically adds PRs when opened or ready for review
 - ✅ **Label-based routing** - Routes items by priority based on labels
@@ -20,6 +22,7 @@ Successfully implemented comprehensive GitHub Project integration for the FKS Tr
 - ✅ **Critical issue alerts** - Auto-comments on breaking/security issues
 
 **Triggers:**
+
 - Issue opened, reopened, labeled, or assigned
 - PR opened, ready for review, labeled, or assigned
 - Manual workflow dispatch for bulk sync
@@ -27,6 +30,7 @@ Successfully implemented comprehensive GitHub Project integration for the FKS Tr
 ### 2. **Setup Scripts**
 
 **Bash Script:** `scripts/setup-github-project.sh`
+
 - Interactive CLI setup
 - Project creation guidance
 - Workflow configuration
@@ -34,6 +38,7 @@ Successfully implemented comprehensive GitHub Project integration for the FKS Tr
 - Works on Linux/macOS/WSL
 
 **PowerShell Script:** `scripts/setup-github-project.ps1`
+
 - Windows-native setup
 - Same features as bash version
 - Color-coded output
@@ -44,6 +49,7 @@ Successfully implemented comprehensive GitHub Project integration for the FKS Tr
 **File:** `docs/GITHUB_PROJECT_INTEGRATION.md` (40+ pages)
 
 **Covers:**
+
 - Initial setup (step-by-step)
 - Automatic syncing configuration
 - Bulk import from CSV/external sources
@@ -86,6 +92,7 @@ Successfully implemented comprehensive GitHub Project integration for the FKS Tr
 ### Bulk Operations
 
 **Sync all existing items:**
+
 ```bash
 # Via GitHub UI
 Actions → Sync Issues and PRs to Project → Run workflow → ✓ Sync existing
@@ -95,6 +102,7 @@ gh workflow run sync-to-project.yml -f sync_existing=true
 ```
 
 **Import from CSV:**
+
 ```bash
 # Prepare CSV with: title, body, labels, assignee
 ./scripts/import-tasks.sh tasks.csv
@@ -110,12 +118,14 @@ python3 scripts/import-tasks.py tasks.csv
 ### Quick Start (5 minutes)
 
 1. **Create GitHub Project**
+
    ```
    https://github.com/YOUR_USERNAME?tab=projects
    → New project → Board/Table → Name: "FKS Development"
    ```
 
 2. **Run setup script**
+
    ```bash
    # On Linux/macOS/WSL
    ./scripts/setup-github-project.sh
@@ -125,11 +135,13 @@ python3 scripts/import-tasks.py tasks.csv
    ```
 
 3. **Link repository**
+
    ```
    Repository → Projects tab → Link a project → Select "FKS Development"
    ```
 
 4. **Commit changes**
+
    ```bash
    git add .github/workflows/sync-to-project.yml
    git commit -m "Add GitHub Project integration"
@@ -137,6 +149,7 @@ python3 scripts/import-tasks.py tasks.csv
    ```
 
 5. **Test it**
+
    ```bash
    gh issue create --title "Test: Project sync" --label "documentation"
    # Check project board - should appear in ~30 seconds
@@ -147,12 +160,14 @@ python3 scripts/import-tasks.py tasks.csv
 **Update project number in workflow:**
 
 `.github/workflows/sync-to-project.yml`:
+
 ```yaml
 env:
   PROJECT_NUMBER: 1  # Change to your project number
 ```
 
 **Find your project number:**
+
 ```
 https://github.com/users/YOUR_USERNAME/projects/NUMBER
                                                  ^^^^^^
@@ -200,12 +215,14 @@ Discord Notification Sent
 ### 1. Sprint Planning
 
 **Setup:**
+
 - Create project with "Board" view
 - Columns: Backlog → To Do → In Progress → Review → Done
 - Auto-add all issues to "Backlog"
 - Manually drag to "To Do" for current sprint
 
 **Automation:**
+
 - Assigned → Move to "In Progress"
 - PR opened → Move to "Review"
 - Closed → Move to "Done"
@@ -213,11 +230,13 @@ Discord Notification Sent
 ### 2. Bug Triage
 
 **Setup:**
+
 - Filter view: `label:bug is:open`
 - Sort by: Priority (P0 → P3)
 - Group by: Assignee
 
 **Automation:**
+
 - Bug labeled → Auto-add with P1 priority
 - Security bug → Auto-add with P0 + alert
 - Assigned → Notify assignee via Discord
@@ -225,11 +244,13 @@ Discord Notification Sent
 ### 3. Feature Roadmap
 
 **Setup:**
+
 - Create "Roadmap" view
 - Add custom fields: Quarter, Estimate, Status
 - Group by: Quarter
 
 **Automation:**
+
 - Enhancement labeled → Auto-add
 - Milestone set → Update Quarter field
 - Closed → Archive
@@ -237,11 +258,13 @@ Discord Notification Sent
 ### 4. Multi-Repo Tracking
 
 **Setup:**
+
 - Organization-level project
 - Link multiple repos
 - Shared workflow across repos
 
 **Automation:**
+
 - Issue in any repo → Add to shared board
 - Tag with repo name for filtering
 - Centralized visibility
@@ -391,20 +414,24 @@ mutation {
 ### Common Issues
 
 **Items not adding:**
+
 - Check project number in workflow
 - Verify repository permissions (write)
 - Ensure project is public or token has access
 
 **Permission errors:**
+
 - Update workflow permissions to `read+write`
 - For org projects, use PAT with `project` scope
 
 **Bulk sync not working:**
+
 - Check workflow dispatch inputs
 - Verify GitHub CLI authentication
 - Review Actions logs for errors
 
 **Labels not routing:**
+
 - Confirm label names match exactly
 - Check priority map in workflow
 - Verify GraphQL field IDs

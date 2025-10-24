@@ -51,17 +51,20 @@ Access Flower dashboard at **http://localhost:5555**
 ## Task Schedule Overview
 
 ### Critical (Every 5 minutes)
+
 - Market data sync
 - Position updates
 - Stop loss monitoring
 
 ### Regular (Every 15-30 minutes)
+
 - Signal generation
 - Balance sync
 - Indicators update
 - Risk analysis
 
 ### Daily
+
 - 00:00 - Backtest
 - 01:00 - Strategy validation
 - 03:00 - Data archival
@@ -70,6 +73,7 @@ Access Flower dashboard at **http://localhost:5555**
 - 23:30 - Daily report
 
 ### Weekly
+
 - Monday 08:00 - Weekly report
 
 ---
@@ -87,6 +91,7 @@ Access Flower dashboard at **http://localhost:5555**
 ## Discord Notifications
 
 Automatic alerts for:
+
 - 🚀 BUY signals
 - ⚠️ HIGH risk alerts
 - 🛑 Stop loss triggers

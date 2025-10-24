@@ -7,6 +7,7 @@ This guide5. Copy the token and add as `LINODE_CLI_TOKEN` secret
 ## 🚀 Quick Overview
 
 The automation will:
+
 1. ✅ Create/verify a StackScript on Linode using your existing script
 2. ✅ Create a new Arch Linux server (4GB, $24/month recommended)
 3. ✅ Run the two-phase StackScript setup automatically
@@ -43,6 +44,7 @@ Before using the automation, you need to configure these secrets in your GitHub 
 ## 🛠️ Step-by-Step Setup
 
 ### 1. Create Linode API Token
+
 1. Go to [Linode Cloud Manager](https://cloud.linode.com/profile/tokens)
 2. Click "Create a Personal Access Token"
 3. Set Label: `GitHub Actions FKS`
@@ -55,6 +57,7 @@ Before using the automation, you need to configure these secrets in your GitHub 
 7. Copy the token and add as `LINODE_CLI_TOKEN` secret
 
 ### 2. Get Tailscale Auth Key (REQUIRED)
+
 1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
 2. Click "Generate auth key"
 3. Settings:
@@ -64,6 +67,7 @@ Before using the automation, you need to configure these secrets in your GitHub 
 4. Copy the key and add as `TAILSCALE_AUTH_KEY` secret
 
 ### 3. Set Up Docker Hub (Optional but Recommended)
+
 1. Go to [Docker Hub Security Settings](https://hub.docker.com/settings/security)
 2. Click "New Access Token"
 3. Set Description: `GitHub Actions FKS`
@@ -72,6 +76,7 @@ Before using the automation, you need to configure these secrets in your GitHub 
 6. Add your Docker Hub username as `DOCKER_USERNAME` secret
 
 ### 4. Configure Netdata Monitoring (Optional)
+
 1. Go to [Netdata Cloud](https://app.netdata.cloud/)
 2. Create or select a Space
 3. Go to Space Settings → "Connecting Nodes"
@@ -79,6 +84,7 @@ Before using the automation, you need to configure these secrets in your GitHub 
 5. Add as `NETDATA_CLAIM_TOKEN` and `NETDATA_CLAIM_ROOM` secrets
 
 ### 5. Set Up Discord Notifications (Optional)
+
 1. Go to your Discord server
 2. Server Settings → Integrations → Webhooks
 3. Create a new webhook
@@ -88,6 +94,7 @@ Before using the automation, you need to configure these secrets in your GitHub 
 ## 🚀 How to Use
 
 ### Option 1: GitHub UI (Recommended)
+
 1. Go to your repository on GitHub
 2. Click "Actions" tab
 3. Find "Create Linode Server with Arch Linux" workflow
@@ -101,6 +108,7 @@ Before using the automation, you need to configure these secrets in your GitHub 
    - **Delete existing**: `false` (set to `true` to replace existing server)
 
 ### Option 2: GitHub CLI
+
 ```bash
 gh workflow run create-linode-server.yml \
   -f server_name=fks \
@@ -115,6 +123,7 @@ gh workflow run create-linode-server.yml \
 ## 📊 Server Configuration Options
 
 ### Linode Plans
+
 | Plan | RAM | CPUs | Storage | Monthly Cost | Use Case |
 |------|-----|------|---------|--------------|----------|
 | `g6-standard-1` | 2GB | 1 | 50GB | $12 | Development/Testing |
@@ -122,6 +131,7 @@ gh workflow run create-linode-server.yml \
 | `g6-standard-4` | 8GB | 4 | 160GB | $48 | Production/High Load |
 
 ### Regions
+
 | Region Code | Location | Good For |
 |-------------|----------|----------|
 | `us-east` | Newark, NJ | US East Coast |
@@ -132,6 +142,7 @@ gh workflow run create-linode-server.yml \
 | `ap-south` | Singapore | Asia Pacific |
 
 ### Operating Systems
+
 | Image | Description | Recommendation |
 |-------|-------------|----------------|
 | `linode/arch` | **Arch Linux** | ✅ **Recommended** - Latest packages, optimized for your stack |
@@ -141,6 +152,7 @@ gh workflow run create-linode-server.yml \
 ## 🔄 Workflow Process
 
 ### Phase 1: Validation & Creation (2-3 minutes)
+
 1. ✅ Validate all required secrets
 2. ✅ Install and configure Linode CLI
 3. ✅ Check for existing StackScript (create if needed)
@@ -148,6 +160,7 @@ gh workflow run create-linode-server.yml \
 5. ✅ Create new Linode server
 
 ### Phase 2: Server Setup Monitoring (15-20 minutes)
+
 1. ⏳ Wait for server to boot
 2. ⏳ Monitor StackScript Phase 1 (system setup)
 3. ⏳ Monitor automatic reboot
@@ -157,7 +170,8 @@ gh workflow run create-linode-server.yml \
 
 ## 📱 What You Get
 
-### After successful completion:
+### After successful completion
+
 - 🖥️ **Fully configured Arch Linux server**
 - 🐳 **Docker environment ready**
 - 🔒 **Tailscale VPN configured**
@@ -166,7 +180,8 @@ gh workflow run create-linode-server.yml \
 - 📊 **Monitoring setup** (Netdata)
 - 🔑 **SSH access ready**
 
-### Connection Information:
+### Connection Information
+
 ```bash
 # Public SSH access
 ssh jordan@<public-ip>
@@ -183,17 +198,20 @@ http://<tailscale-ip>:19999  # Monitoring
 ## 🔧 Manual Steps After Creation
 
 1. **SSH to your server**:
+
    ```bash
    ssh jordan@<server-ip>
    ```
 
 2. **Clone your repository**:
+
    ```bash
    git clone https://github.com/your-username/fks.git
    cd fks
    ```
 
 3. **Start your services**:
+
    ```bash
    ./start.sh
    # or
@@ -201,6 +219,7 @@ http://<tailscale-ip>:19999  # Monitoring
    ```
 
 4. **Check status**:
+
    ```bash
    docker compose ps
    system-status  # Custom alias created by StackScript
@@ -216,7 +235,7 @@ http://<tailscale-ip>:19999  # Monitoring
 
 ## 🐛 Troubleshooting
 
-### Common Issues:
+### Common Issues
 
 1. **StackScript timeout**:
    - The workflow waits up to 25 minutes
@@ -234,7 +253,8 @@ http://<tailscale-ip>:19999  # Monitoring
    - SSH to server and run: `sudo systemctl restart docker`
    - Check logs: `journalctl -u docker -f`
 
-### Monitoring Commands:
+### Monitoring Commands
+
 ```bash
 # Check StackScript progress
 tail -f /var/log/fks-setup.log
@@ -251,13 +271,15 @@ tailscale status
 
 ## 💰 Cost Breakdown
 
-### Monthly Costs (USD):
+### Monthly Costs (USD)
+
 - **Server (4GB)**: $24.00
 - **Backups**: $2.40 (10% of server cost)
 - **Bandwidth**: $0.00 (1TB included)
 - **Total**: ~$26.40/month
 
-### Additional Services:
+### Additional Services
+
 - **Tailscale**: Free (up to 100 devices)
 - **Netdata Cloud**: Free (community tier)
 - **Discord**: Free

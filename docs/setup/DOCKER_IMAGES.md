@@ -3,16 +3,19 @@
 ## Recent Fixes (Latest Update)
 
 ### Fixed Docker Registry Issues
+
 - **Problem**: Nginx build was trying to push to separate `fks-nginx` repository
 - **Solution**: All images now use single `nuniesmith/fks` repository with descriptive tags
 - **Result**: `fks:nginx-latest`, `fks:api-latest`, `fks:worker-latest`, `fks:web-latest`
 
 ### Fixed Linode CLI Configuration
+
 - **Problem**: Interactive prompts causing workflow failures
 - **Solution**: Non-interactive configuration with proper secrets integration
 - **Result**: Automated server provisioning works correctly
 
 ### Fixed Docker Compose Configuration
+
 - **Problem**: Conflict between inline nginx config and custom nginx image
 - **Solution**: Use custom nginx image with templates, removed inline configuration
 - **Result**: Cleaner setup using pre-built nginx configuration
@@ -42,6 +45,7 @@ All images are hosted on Docker Hub under `nuniesmith/fks` repository.
 ## Deployment Commands
 
 ### Development (using override file)
+
 ```bash
 # Uses docker-compose.override.yml automatically
 docker compose up -d
@@ -51,12 +55,14 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
 ```
 
 ### Production
+
 ```bash
 # Production deployment with resource limits
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 ### Pull Latest Images
+
 ```bash
 # Pull all latest images
 docker compose pull
@@ -68,6 +74,7 @@ docker compose pull api
 ## Image Tags Available
 
 Each service has multiple tag formats:
+
 - `service-name-latest` (e.g., `api-latest`)
 - `service-name` (e.g., `api`)
 - `main-service-name` (e.g., `main-api`)
@@ -110,11 +117,13 @@ export NINJA_BUILD_API_IMAGE_TAG=nuniesmith/fks:ninja-build-api-latest
 ## Updating Images
 
 When new code is pushed, GitHub Actions automatically:
+
 1. Builds new images
 2. Pushes to Docker Hub with latest tags
 3. Updates the stackscript deployment
 
 To deploy updates:
+
 ```bash
 docker compose pull && docker compose up -d
 ```

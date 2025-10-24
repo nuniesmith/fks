@@ -12,6 +12,7 @@
 ## Implementation Details
 
 ### Task Location
+
 - **File:** `src/trading/tasks.py`
 - **Function:** `sync_market_data_task()` (lines 89-201)
 - **Decorator:** `@shared_task(bind=True, max_retries=3)`
@@ -19,6 +20,7 @@
 ### Features Implemented
 
 #### 1. **Comprehensive Data Fetching**
+
 ```python
 @shared_task(bind=True, max_retries=3)
 def sync_market_data_task(self, symbol: str = None, timeframe: str = DEFAULT_TIMEFRAME, limit: int = 500):
@@ -33,11 +35,13 @@ def sync_market_data_task(self, symbol: str = None, timeframe: str = DEFAULT_TIM
 ```
 
 #### 2. **Multi-Symbol Support**
+
 - Syncs all configured symbols from `framework.config.constants.SYMBOLS`
 - Can sync single symbol or all symbols in one call
 - Defaults to all 11 symbols: BTCUSDT, ETHUSDT, BNBUSDT, ADAUSDT, SOLUSDT, DOTUSDT, MATICUSDT, AVAXUSDT, LINKUSDT, ATOMUSDT, UNIUSDT
 
 #### 3. **SyncStatus Tracking**
+
 - Creates/updates `SyncStatus` records for each symbol
 - Tracks:
   - Last sync time
@@ -47,24 +51,28 @@ def sync_market_data_task(self, symbol: str = None, timeframe: str = DEFAULT_TIM
   - Error messages if sync fails
 
 #### 4. **Duplicate Prevention**
+
 - Checks for existing candles before inserting
 - Uses timestamp + symbol + timeframe as unique key
 - Only adds new candles, skips duplicates
 - Reports count of new candles added
 
 #### 5. **BinanceAdapter Integration**
+
 - Uses `BinanceAdapter` from `src/data/adapters/binance.py`
 - **Circuit Breaker Protection:** Opens circuit after 3 failures, resets after 60s
 - **Rate Limiting:** 10 requests/second with token bucket algorithm
 - **Automatic Retries:** Celery retries up to 3 times on failure with 60s delay
 
 #### 6. **Database Integration**
+
 - Stores data in `OHLCVData` table (TimescaleDB hypertable)
 - Proper timezone handling (America/Toronto)
 - Decimal precision for prices (DECIMAL(20, 8))
 - Efficient bulk inserts
 
 #### 7. **Error Handling**
+
 - Per-symbol error tracking
 - Doesn't fail entire sync if one symbol errors
 - Updates SyncStatus with error messages
@@ -72,6 +80,7 @@ def sync_market_data_task(self, symbol: str = None, timeframe: str = DEFAULT_TIM
 - Celery auto-retry with exponential backoff
 
 #### 8. **Comprehensive Logging**
+
 ```python
 logger.info(f"Synced {candles_added} new candles for {sym}")
 logger.warning(f"No data received for {sym}")
@@ -83,6 +92,7 @@ logger.error(f"Error syncing {sym}: {e}")
 The adapter (`src/data/adapters/binance.py`) provides:
 
 #### Circuit Breaker
+
 ```python
 CircuitBreakerConfig(
     failure_threshold=3,  # Open after 3 failures
@@ -94,6 +104,7 @@ CircuitBreakerConfig(
 ```
 
 #### Rate Limiter
+
 ```python
 RateLimiter(
     max_requests=10,
@@ -105,6 +116,7 @@ RateLimiter(
 ```
 
 #### Dual API Support
+
 - **Spot API:** `https://api.binance.com/api/v3/klines`
 - **Futures API:** `https://fapi.binance.com/fapi/v1/klines`
 - Automatic endpoint selection based on asset type
@@ -121,6 +133,7 @@ The task is **already scheduled** in `src/web/django/celery.py`:
 ```
 
 **Current Schedule:**
+
 - Runs every 5 minutes automatically
 - Syncs all 11 symbols
 - Uses default 1-hour timeframe
@@ -131,6 +144,7 @@ The task is **already scheduled** in `src/web/django/celery.py`:
 Created `test_market_sync.py` to verify implementation without Docker:
 
 ### Test Suite
+
 1. **BinanceAdapter Basic Fetch** - Tests single symbol data fetch
 2. **Multiple Symbols Fetch** - Tests fetching multiple symbols
 3. **Task Logic Verification** - Validates task logic flow
@@ -222,6 +236,7 @@ CREATE TABLE sync_status (
 ## Performance Metrics
 
 ### Expected Performance (Per Sync)
+
 - **Symbols:** 11 (BTCUSDT, ETHUSDT, etc.)
 - **Candles per symbol:** 500 (default)
 - **Total API calls:** 11 requests
@@ -232,6 +247,7 @@ CREATE TABLE sync_status (
 ### Monitoring
 
 #### Circuit Breaker Metrics
+
 ```python
 from data.adapters.binance import BinanceAdapter
 adapter = BinanceAdapter()
@@ -248,6 +264,7 @@ metrics = adapter.get_circuit_metrics()
 ```
 
 #### Rate Limiter Stats
+
 ```python
 stats = adapter.get_rate_limit_stats()
 
@@ -263,6 +280,7 @@ stats = adapter.get_rate_limit_stats()
 ## Next Steps
 
 ### Immediate (Docker Required)
+
 1. ✅ **Start Docker services** - `make up`
 2. ✅ **Verify Celery worker running** - Check logs with `make logs`
 3. ✅ **Test task manually** - Use Django shell to run `sync_market_data_task()`
@@ -270,6 +288,7 @@ stats = adapter.get_rate_limit_stats()
 5. ✅ **Check Beat schedule** - Confirm automatic execution every 5 minutes
 
 ### Integration Testing
+
 ```bash
 # 1. Start services
 make up
@@ -295,7 +314,9 @@ docker-compose exec web python manage.py shell
 ```
 
 ### Phase 2.2 Prerequisites
+
 Before moving to Signal Generation (Phase 2.2), ensure:
+
 - ✅ Docker is running
 - ✅ PostgreSQL + TimescaleDB accessible
 - ✅ Celery worker executing tasks
@@ -305,6 +326,7 @@ Before moving to Signal Generation (Phase 2.2), ensure:
 ## Files Modified/Created
 
 ### Verified Working Files
+
 - ✅ `src/trading/tasks.py` - `sync_market_data_task()` implementation
 - ✅ `src/data/adapters/binance.py` - BinanceAdapter with circuit breaker/rate limiter
 - ✅ `src/web/django/celery.py` - Beat schedule configuration
@@ -312,12 +334,14 @@ Before moving to Signal Generation (Phase 2.2), ensure:
 - ✅ `src/framework/config/constants.py` - SYMBOLS, DEFAULT_TIMEFRAME constants
 
 ### New Files Created
+
 - ✅ `test_market_sync.py` - Test suite for verifying implementation
 - ✅ `docs/PHASE_2.1_COMPLETE.md` - This documentation
 
 ## Troubleshooting
 
 ### Issue: "Docker not running"
+
 ```bash
 # Start Docker
 make up
@@ -330,6 +354,7 @@ make logs
 ```
 
 ### Issue: "No data fetched"
+
 ```bash
 # Check network connectivity
 curl https://api.binance.com/api/v3/ping
@@ -343,11 +368,13 @@ docker-compose exec web python manage.py shell
 ```
 
 ### Issue: "Rate limit exceeded"
+
 - Circuit breaker automatically handles this
 - Task will retry after 60 seconds
 - Check rate limiter stats: `adapter.get_rate_limit_stats()`
 
 ### Issue: "Database connection failed"
+
 ```bash
 # Check PostgreSQL
 docker-compose exec db psql -U postgres -d trading_db
@@ -361,6 +388,7 @@ SELECT * FROM timescaledb_information.hypertables;
 **Phase 2.1 is COMPLETE!** 🎉
 
 The market data sync task is:
+
 - ✅ Fully implemented with production-ready code
 - ✅ Protected by circuit breaker and rate limiter
 - ✅ Scheduled to run every 5 minutes via Celery Beat

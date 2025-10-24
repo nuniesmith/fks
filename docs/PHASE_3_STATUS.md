@@ -11,6 +11,7 @@
 **Key Finding:** Cannot run tests without pytest installed in environment. Docker is the primary testing environment.
 
 **Current State:**
+
 - ✅ **Test infrastructure complete** - 56 files, comprehensive coverage
 - ✅ **Test organization excellent** - unit/integration/performance split
 - ✅ **pytest config comprehensive** - 9 markers, coverage settings
@@ -22,6 +23,7 @@
 ### Test Files Breakdown (56 total)
 
 **Unit Tests (tests/unit/):**
+
 - `test_trading/test_tasks.py` - 600+ lines, all 17 Celery tasks
 - `test_trading/test_signals.py` - 400+ lines, all technical indicators
 - `test_trading/test_strategies.py` - Trading strategy tests
@@ -35,12 +37,14 @@
 - `test_api/` - 14 API endpoint tests
 
 **Integration Tests (tests/integration/):**
+
 - `test_rag_signal_integration.py` - RAG + signal generation
 - `test_backtest/` - Backtest engine integration (4 files)
 - `test_data/` - Data adapter integration (11 files)
 - `test_celery/` - Celery task execution
 
 **Performance Tests (tests/performance/):**
+
 - `test_rag_performance.py` - RAG query benchmarks
 
 ### Test Coverage by Component
@@ -119,28 +123,33 @@ pytest tests/unit/ -v
 **Steps:**
 
 1. **Start Docker environment**
+
    ```bash
    make up
    make logs  # Verify all services running
    ```
 
 2. **Run unit tests** (no external dependencies)
+
    ```bash
    docker-compose exec web pytest tests/unit/ -v --tb=short
    ```
 
 3. **Generate coverage report**
+
    ```bash
    docker-compose exec web pytest tests/unit/ -v --cov=src --cov-report=html --cov-report=term
    ```
 
 4. **View coverage in browser**
+
    ```bash
    # Coverage report saved to: htmlcov/index.html
    # Open in browser to see line-by-line coverage
    ```
 
 5. **Run integration tests**
+
    ```bash
    docker-compose exec web pytest tests/integration/ -v -m integration
    ```
@@ -152,6 +161,7 @@ pytest tests/unit/ -v
    - Performance benchmarks needed
 
 **Expected Output:**
+
 - Coverage percentage per module
 - List of uncovered lines
 - Test execution time
@@ -164,6 +174,7 @@ pytest tests/unit/ -v
 **Tests to Create:**
 
 1. **Full Trading Cycle** (`tests/integration/test_full_trading_cycle.py`)
+
    ```python
    def test_complete_trading_workflow():
        """Test: Sync → Indicators → Signals → Risk → Execution"""
@@ -191,6 +202,7 @@ pytest tests/unit/ -v
    ```
 
 2. **RAG End-to-End** (`tests/integration/test_rag_e2e.py`)
+
    ```python
    def test_rag_recommendation_to_execution():
        """Test: RAG query → Recommendation → Position sizing → Discord notification"""
@@ -216,6 +228,7 @@ pytest tests/unit/ -v
    ```
 
 3. **Circuit Breaker & Rate Limiting** (`tests/integration/test_resilience.py`)
+
    ```python
    def test_circuit_breaker_failure_handling():
        """Test circuit breaker opens after failures"""
@@ -384,12 +397,14 @@ jobs:
    - `CODECOV_TOKEN` (sign up at codecov.io)
 
 2. **Create workflow file:**
+
    ```bash
    mkdir -p .github/workflows
    # Create ci.yml as shown above
    ```
 
 3. **Test locally with act:**
+
    ```bash
    # Install act (GitHub Actions local runner)
    curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
@@ -399,6 +414,7 @@ jobs:
    ```
 
 4. **Push to GitHub:**
+
    ```bash
    git add .github/workflows/ci.yml
    git commit -m "Add CI/CD pipeline with automated testing"
@@ -417,6 +433,7 @@ jobs:
 **Impact:** Cannot run integration tests or Docker-dependent operations
 
 **Required for:**
+
 - Integration tests (database, Redis, Celery)
 - Full test suite execution
 - Coverage report generation
@@ -445,7 +462,7 @@ make logs
 
 ## Success Criteria
 
-### Phase 3 Complete When:
+### Phase 3 Complete When
 
 - ✅ **Test Coverage ≥ 80%** across all modules
 - ✅ **All Unit Tests Passing** (tests/unit/)

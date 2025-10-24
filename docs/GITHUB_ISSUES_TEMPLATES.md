@@ -13,27 +13,32 @@ This document provides copy-paste templates for creating GitHub issues for each 
 ## Label Guide
 
 ### Priority Labels
+
 - `priority:P1` - Critical, blocks other work
 - `priority:P2` - High, core features
 - `priority:P3` - Medium, improvements
 - `priority:P4` - Low, nice-to-have
 
 ### Impact Labels
+
 - `impact:high` - Unblocks revenue/core features
 - `impact:medium` - Improves efficiency
 - `impact:low` - Nice-to-have
 
 ### Urgency Labels
+
 - `urgency:high` - Blocks other tasks
 - `urgency:medium` - Time-sensitive
 - `urgency:low` - Can wait
 
 ### Effort Labels
+
 - `effort:small` - <1 day
 - `effort:medium` - 1-3 days
 - `effort:large` - >3 days
 
 ### Type Labels
+
 - `type:bug` - Something broken
 - `type:feature` - New functionality
 - `type:refactor` - Code improvement
@@ -41,6 +46,7 @@ This document provides copy-paste templates for creating GitHub issues for each 
 - `type:test` - Testing-related
 
 ### Phase Labels
+
 - `phase:1-immediate` - Phase 1: Immediate Fixes
 - `phase:2-core` - Phase 2: Core Development
 - `phase:3-testing` - Phase 3: Testing & QA
@@ -137,9 +143,11 @@ Legacy imports from microservices architecture (`config`, `shared_python`) are c
   FEE_RATE = 0.001
   RISK_PER_TRADE = 0.02
   ```
+
 - [ ] Test imports work from multiple modules
 
 ### Hours 3-6: Update Import Statements
+
 - [ ] Update `src/core/database/models.py`
   - Replace: `from config import SYMBOLS`
   - With: `from framework.config.constants import SYMBOLS`
@@ -151,6 +159,7 @@ Legacy imports from microservices architecture (`config`, `shared_python`) are c
 - [ ] Update all test files with similar issues
 
 ### Hours 7-9: Fix and Verify Tests
+
 - [ ] Run `pytest tests/unit/test_api/ -v` (should still pass - 14 tests)
 - [ ] Run `pytest tests/unit/test_trading/ -v` (fix failures)
 - [ ] Run `pytest tests/integration/ -v` (fix failures)
@@ -158,6 +167,7 @@ Legacy imports from microservices architecture (`config`, `shared_python`) are c
 - [ ] Target: 34/34 passing
 
 ### Hours 10-11: GitHub Action Setup
+
 - [ ] Create `.github/workflows/test.yml`
 - [ ] Configure to run on push and PR
 - [ ] Run pytest with coverage report
@@ -165,9 +175,11 @@ Legacy imports from microservices architecture (`config`, `shared_python`) are c
 - [ ] Test workflow locally with `act` if possible
 
 ## Dependencies
+
 - Depends on: Issue #1 (Security Hardening) for secure test environment
 
 ## Acceptance Criteria
+
 - [ ] All 34 tests passing
 - [ ] No imports from `config` or `shared_python` modules
 - [ ] Framework constants properly defined and accessible
@@ -175,8 +187,10 @@ Legacy imports from microservices architecture (`config`, `shared_python`) are c
 - [ ] Coverage report generated in CI
 
 ## References
+
 - [Known Test Failures](../.github/copilot-instructions.md#known-test-failures-to-fix)
 - [Framework Config](../src/framework/config/README.md)
+
 ```
 
 ---
@@ -213,9 +227,11 @@ Analyze script identified 25+ empty/stub files and 6+ legacy duplicates that nee
   This module is responsible for...
   """
   ```
+
 - [ ] Test imports still work after changes
 
 ### Hour 4: Merge Legacy Duplicates
+
 - [ ] Identify duplicate files:
   - `trading/backtest/engine.py` vs `legacy_engine.py`
   - `trading/signals/generator.py` vs `legacy_generator.py`
@@ -226,15 +242,18 @@ Analyze script identified 25+ empty/stub files and 6+ legacy duplicates that nee
 - [ ] Delete legacy versions
 
 ### Hour 5: Code Formatting
+
 - [ ] Run `black src/ tests/` to format all Python
 - [ ] Run `isort src/ tests/` to organize imports
 - [ ] Run `ruff check src/ tests/` and fix top issues
 - [ ] Commit with message: "chore: code cleanup and formatting"
 
 ## Dependencies
+
 - Depends on: Issue #2 (Import Fixes) to avoid conflicts
 
 ## Acceptance Criteria
+
 - [ ] <5 empty files remaining (only necessary `__init__.py`)
 - [ ] 0 duplicate legacy files
 - [ ] All code passes `black --check`
@@ -243,7 +262,9 @@ Analyze script identified 25+ empty/stub files and 6+ legacy duplicates that nee
 - [ ] Analyze script shows improvement
 
 ## References
+
 - [Code Style Guide](../.github/copilot-instructions.md#code-style--quality)
+
 ```
 
 ---
@@ -283,10 +304,12 @@ Foundation task for all trading features. Fetches OHLCV data from Binance and st
       """
       # Implementation here
   ```
+
 - [ ] Use `ccxt` library for Binance API
 - [ ] Fetch last 100 candles for symbol
 
 ### Hour 2: Error Handling
+
 - [ ] Add try/except for API errors
 - [ ] Implement retry logic for rate limits
 - [ ] Log errors with context
@@ -294,22 +317,26 @@ Foundation task for all trading features. Fetches OHLCV data from Binance and st
 - [ ] Return proper error responses
 
 ### Hour 3: Database Storage
+
 - [ ] Store data in TimescaleDB hypertable
 - [ ] Use bulk insert for performance
 - [ ] Handle duplicate records gracefully
 - [ ] Add proper indexing
 
 ### Hour 4: Testing
+
 - [ ] Write unit tests with mocked Binance API
 - [ ] Test error scenarios
 - [ ] Test database storage
 - [ ] Manual test with real API (rate limits!)
 
 ## Dependencies
+
 - Depends on: Issue #2 (tests passing)
 - Requires: TimescaleDB running (`make up`)
 
 ## Acceptance Criteria
+
 - [ ] Task successfully fetches 100 candles
 - [ ] Data stored in database with correct schema
 - [ ] Error handling covers API failures
@@ -318,8 +345,10 @@ Foundation task for all trading features. Fetches OHLCV data from Binance and st
 - [ ] No API rate limit violations
 
 ## References
+
 - [Celery Tasks Guide](../.github/copilot-instructions.md#celery-tasks)
 - [CCXT Documentation](https://docs.ccxt.com/)
+
 ```
 
 ---

@@ -3,6 +3,7 @@
 ## Services Quick Access
 
 ### RAG Service
+
 ```python
 from services import get_rag_service
 rag = get_rag_service()
@@ -24,6 +25,7 @@ analytics = rag.get_query_analytics(days=7)
 ```
 
 ### Feedback Service
+
 ```python
 from services import get_feedback_service
 feedback = get_feedback_service()
@@ -52,6 +54,7 @@ loss_analysis = feedback.learn_from_losses("ETHUSDT", lookback_days=30)
 ```
 
 ### Optimization Service
+
 ```python
 from services import get_optimization_service
 optimizer = get_optimization_service()
@@ -80,11 +83,13 @@ comparison = optimizer.compare_strategies(
 ## Streamlit Intelligence Tab
 
 ### Navigation
+
 ```
 app.py → Tab 8: "🧠 Intelligence"
 ```
 
 ### Features
+
 1. **Query Interface**
    - Natural language questions
    - 6 quick question templates
@@ -100,6 +105,7 @@ app.py → Tab 8: "🧠 Intelligence"
    - Database statistics
 
 ### Example Queries
+
 ```
 - "What strategy works best for BTCUSDT?"
 - "Analyze my recent losing trades"
@@ -111,6 +117,7 @@ app.py → Tab 8: "🧠 Intelligence"
 ## Django REST API Endpoints
 
 ### Query Knowledge Base
+
 ```bash
 POST /api/intelligence/query/
 {
@@ -121,6 +128,7 @@ POST /api/intelligence/query/
 ```
 
 ### Strategy Suggestions
+
 ```bash
 POST /api/intelligence/strategy/
 {
@@ -131,11 +139,13 @@ POST /api/intelligence/strategy/
 ```
 
 ### Analyze Trades
+
 ```bash
 GET /api/intelligence/trades/BTCUSDT/?days=30&min_trades=5
 ```
 
 ### Explain Signal
+
 ```bash
 POST /api/intelligence/signal/
 {
@@ -145,6 +155,7 @@ POST /api/intelligence/signal/
 ```
 
 ### Manual Ingestion
+
 ```bash
 POST /api/intelligence/ingest/
 {
@@ -155,11 +166,13 @@ POST /api/intelligence/ingest/
 ```
 
 ### System Stats
+
 ```bash
 GET /api/intelligence/stats/
 ```
 
 ### Health Check
+
 ```bash
 GET /api/intelligence/health/
 ```
@@ -167,6 +180,7 @@ GET /api/intelligence/health/
 ## CLI Commands
 
 ### Start Services
+
 ```bash
 make up                    # Standard startup
 make gpu-up                # With GPU support
@@ -174,12 +188,14 @@ make logs-celery           # View Celery logs
 ```
 
 ### Test RAG
+
 ```bash
 chmod +x scripts/test_rag_integration.sh
 ./scripts/test_rag_integration.sh
 ```
 
 ### Database
+
 ```bash
 # Enable pgvector
 docker exec fks_db psql -U postgres -d trading_db \
@@ -191,6 +207,7 @@ docker exec fks_db psql -U postgres -d trading_db \
 ```
 
 ### Celery
+
 ```bash
 # Check scheduled tasks
 docker-compose exec celery_worker celery -A fks_project inspect scheduled
@@ -205,6 +222,7 @@ open http://localhost:5555
 ## Configuration
 
 ### Environment Variables
+
 ```bash
 # .env file
 OPENAI_API_KEY=sk-...           # OpenAI API (optional)
@@ -214,6 +232,7 @@ REDIS_PORT=6379                  # Redis port
 ```
 
 ### Model Selection
+
 ```python
 # Use local models (default)
 rag = RAGService(use_local=True, local_model="llama3.2:3b")
@@ -223,6 +242,7 @@ rag = RAGService(use_local=False, openai_model="gpt-4o-mini")
 ```
 
 ### Performance Tuning
+
 ```python
 # Adjust top-k for speed vs. context
 result = rag.query_with_rag(query, top_k=3)  # Faster
@@ -244,6 +264,7 @@ results = rag.query_with_cosine_similarity(
 ## Common Patterns
 
 ### Pattern 1: Trade Logging Workflow
+
 ```python
 # 1. Execute trade
 trade_result = execute_trade(symbol, strategy, params)
@@ -267,6 +288,7 @@ insights = feedback.analyze_strategy_performance(strategy)
 ```
 
 ### Pattern 2: Strategy Optimization
+
 ```python
 # 1. Get RAG-suggested ranges
 ranges = optimizer.get_rag_suggested_ranges(strategy, symbol, params)
@@ -287,6 +309,7 @@ apply_parameters(results['best_parameters'])
 ```
 
 ### Pattern 3: Loss Analysis Loop
+
 ```python
 # 1. Detect losing streak
 recent_losses = get_recent_trades(outcome='loss', days=7)
@@ -308,6 +331,7 @@ if len(recent_losses) >= 3:
 ## Troubleshooting
 
 ### Issue: Slow queries
+
 ```python
 # Solution 1: Reduce top_k
 result = rag.query_with_rag(query, top_k=3)
@@ -323,6 +347,7 @@ result = rag.query_with_rag(
 ```
 
 ### Issue: Low confidence
+
 ```python
 # Solution 1: Increase top_k
 result = rag.query_with_rag(query, top_k=15)
@@ -335,6 +360,7 @@ feedback.log_backtest_result(...)  # Add more context
 ```
 
 ### Issue: No results
+
 ```python
 # Solution 1: Check filters
 results = rag.query_with_cosine_similarity(
@@ -354,6 +380,7 @@ print(f"Documents for BTCUSDT: {count}")
 ## Performance Benchmarks
 
 ### Query Response Times
+
 - Simple query (top_k=5): ~1-2s
 - Complex query (top_k=15): ~2-4s
 - Hybrid search (top_k=10): ~2-3s
@@ -361,11 +388,13 @@ print(f"Documents for BTCUSDT: {count}")
 - Strategy suggestion: ~2-4s
 
 ### Optimization Times
+
 - 50 trials: ~5-15 min (depends on objective)
 - 100 trials: ~10-30 min
 - 200 trials: ~20-60 min
 
 ### Ingestion Rates
+
 - Trade outcome: ~0.1s per document
 - Backtest result: ~0.2s per document
 - Bulk ingestion (100 docs): ~30-60s

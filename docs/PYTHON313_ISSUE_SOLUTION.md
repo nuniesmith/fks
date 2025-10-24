@@ -20,6 +20,7 @@ bash scripts/migrate_to_python312.sh
 ```
 
 This script will:
+
 1. ✅ Install Python 3.12 (if not already installed)
 2. ✅ Backup your Python 3.13 venv
 3. ✅ Create new Python 3.12 venv at `~/.venv/fks-trading`
@@ -83,6 +84,7 @@ bash scripts/verify_setup.sh
 ## 📋 What Changes?
 
 ### Before (Python 3.13)
+
 ```bash
 $ python --version
 Python 3.13.8
@@ -93,6 +95,7 @@ ERROR: No matching distribution found
 ```
 
 ### After (Python 3.12)
+
 ```bash
 $ python --version
 Python 3.12.3
@@ -113,6 +116,7 @@ Python 3.13 introduced breaking changes:
 4. **PEP 684** - Per-interpreter GIL changes
 
 Most data science packages haven't released Python 3.13 wheels yet:
+
 - ❌ Some NumPy versions
 - ❌ Some SciPy versions  
 - ❌ faiss-gpu (all versions)
@@ -185,16 +189,19 @@ sudo apt remove python3.13 python3.13-venv python3.13-dev
 ## 🎯 Next Steps
 
 1. **Migrate to Python 3.12** (recommended)
+
    ```bash
    bash scripts/migrate_to_python312.sh
    ```
 
 2. **Verify installation**
+
    ```bash
    bash scripts/verify_setup.sh
    ```
 
 3. **Continue development** - Fix Issue #48 (import errors)
+
    ```bash
    gh issue develop 48 --checkout
    ```

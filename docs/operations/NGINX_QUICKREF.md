@@ -28,12 +28,14 @@ openssl x509 -in nginx/ssl/fkstrading.xyz.crt -text -noout
 ## URLs (Local Testing)
 
 First, add to `/etc/hosts`:
+
 ```
 127.0.0.1  fkstrading.xyz
 127.0.0.1  www.fkstrading.xyz
 ```
 
 Then access:
+
 - **Homepage:** https://fkstrading.xyz/
 - **Login:** https://fkstrading.xyz/login/
 - **Dashboard:** https://fkstrading.xyz/dashboard/
@@ -51,17 +53,20 @@ sudo bash scripts/upgrade-to-letsencrypt.sh
 ## Troubleshooting
 
 **502 Bad Gateway?**
+
 ```bash
 docker compose ps web
 docker compose logs web
 ```
 
 **Static files not loading?**
+
 ```bash
 docker compose exec web python manage.py collectstatic --noinput
 ```
 
 **Certificate issues?**
+
 ```bash
 bash scripts/generate-self-signed-cert.sh
 docker compose restart nginx

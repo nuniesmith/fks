@@ -5,17 +5,19 @@ This folder contains comprehensive documentation for the dynamic GitHub Actions 
 ## 📚 Documentation Files
 
 ### Quick Start
+
 - **[SETUP_CHECKLIST.md](SETUP_CHECKLIST.md)** - Step-by-step setup and validation checklist
 - **[QUICKREF_DYNAMIC_WORKFLOWS.md](QUICKREF_DYNAMIC_WORKFLOWS.md)** - Quick reference guide with common commands
 
 ### Comprehensive Guides
+
 - **[DYNAMIC_WORKFLOWS.md](DYNAMIC_WORKFLOWS.md)** - Full technical documentation (40+ pages)
 - **[WORKFLOW_VISUAL_GUIDE.md](WORKFLOW_VISUAL_GUIDE.md)** - Visual diagrams and flow charts
 - **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Implementation details and impact analysis
 
 ## 🎯 Which Document to Use?
 
-### I want to...
+### I want to
 
 **Set up the workflows for the first time**
 → Start with [SETUP_CHECKLIST.md](SETUP_CHECKLIST.md)
@@ -37,32 +39,38 @@ This folder contains comprehensive documentation for the dynamic GitHub Actions 
 The dynamic workflow system includes:
 
 ### 1. **Automatic PR Labeling**
+
 - 20+ file-based labels
 - Automatic application on PR creation/update
 - Smart label removal when files no longer match
 
 ### 2. **Matrix Strategy Testing**
+
 - Test across Python 3.10-3.13
 - Ubuntu + Windows compatibility
 - Parallel execution for speed
 
 ### 3. **Conditional Job Execution**
+
 - Skip lint on docs-only PRs
 - Enhanced security on security changes
 - Smart Docker builds based on labels
 
 ### 4. **Release Automation**
+
 - One-command releases with `git tag`
 - Auto-generated changelogs
 - Versioned Docker images
 - Pre-release detection
 
 ### 5. **Path Filters**
+
 - Trigger only on relevant file changes
 - Ignore docs for code-focused jobs
 - Optimize CI/CD costs
 
 ### 6. **Manual Workflow Control**
+
 - GUI-based workflow triggers
 - Choose Python version for testing
 - Skip tests for urgent deploys
@@ -80,6 +88,7 @@ The dynamic workflow system includes:
 ## 🔗 Related Files
 
 ### Configuration Files
+
 ```
 .github/
 ├── labeler.yml              # PR labeling rules
@@ -89,6 +98,7 @@ The dynamic workflow system includes:
 ```
 
 ### Project Documentation
+
 ```
 docs/
 ├── ARCHITECTURE.md          # System architecture (existing)
@@ -128,11 +138,13 @@ Monitor these in **GitHub Actions** tab:
 ### Regular Updates
 
 **Monthly:**
+
 - Review label usage analytics
 - Adjust glob patterns if needed
 - Check for failed workflows
 
 **Quarterly:**
+
 - Update Python version matrix
 - Review cost savings metrics
 - Optimize job conditionals

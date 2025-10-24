@@ -13,6 +13,7 @@ This guide explains all the ways to force Docker builds when the automatic chang
 2. **Run Workflow with Force Options**:
    - Click **"Run workflow"** button
    - Select these options:
+
      ```
      Deployment mode: builds-only          (just builds, no deploy)
      Build Options: force-rebuild-all      (builds everything)
@@ -55,6 +56,7 @@ git push
 ### **Method 4: Environment Variables Override**
 
 If you have access to workflow settings, you can set:
+
 ```yaml
 env:
   FORCE_REBUILD_ALL: true
@@ -63,6 +65,7 @@ env:
 ## 📋 Service Categories
 
 ### **CPU Services** (Built on standard runners)
+
 - `api` - Main API service (FastAPI/Python)
 - `worker` - Background task processor
 - `data` - Data management service
@@ -71,6 +74,7 @@ env:
 - `ninja-api` - NinjaTrader integration API
 
 ### **GPU Services** (Require GPU runners)
+
 - `training` - ML model training service
 - `transformer` - AI transformer models
 
@@ -93,6 +97,7 @@ The enhanced workflow now shows debug output:
 ## ⚡ Performance Benefits
 
 With the optimized build system:
+
 - **Concurrent Building**: All services build in parallel
 - **Batch Pushing**: Images pushed together to Docker Hub
 - **60-70% Faster**: Compared to old sequential builds
@@ -101,18 +106,22 @@ With the optimized build system:
 ## 🛠️ Troubleshooting
 
 ### **Issue: "No services to build"**
+
 - **Cause**: Force flags not properly set
 - **Solution**: Use Method 1 (GitHub UI) with explicit force options
 
 ### **Issue: "Services skipped despite force flag"**
+
 - **Cause**: Change detection overriding force logic
 - **Solution**: Check debug output, use `force-rebuild-all` option
 
 ### **Issue: "Build fails due to disk space"**
+
 - **Cause**: Concurrent builds using more disk space
 - **Solution**: Enhanced cleanup runs automatically, should resolve itself
 
 ### **Issue: "GPU builds not running"**
+
 - **Cause**: GPU builds require explicit enablement
 - **Solution**: Set `Enable GPU builds: true` in workflow UI
 

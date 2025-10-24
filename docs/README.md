@@ -19,12 +19,15 @@
 ## 📚 Documentation Index
 
 ### 📖 Core
+
 - [QUICKSTART.md](QUICKSTART.md) - Quick start guide
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System architecture  
 - [INDEX.md](INDEX.md) - Legacy index
 
 ### 🔧 Setup (6 files)
+
 Located in `setup/`
+
 - ENVIRONMENT_SETUP.md - Environment configuration
 - ENVIRONMENT_GUIDE.md - Detailed environment guide
 - LOCAL_DEV_DOMAIN_SETUP.md - Local domain setup
@@ -33,7 +36,9 @@ Located in `setup/`
 - CLOUDFLARE_SSL_SETUP_GUIDE.md - SSL configuration
 
 ### 🚀 Deployment (7 files)
+
 Located in `deployment/`
+
 - **DEPLOYMENT.md** - Main deployment guide
 - **SECRETS.md** - All secrets (consolidated) ✨ NEW
 - DEPLOYMENT_TROUBLESHOOTING.md - Troubleshooting
@@ -43,7 +48,9 @@ Located in `deployment/`
 - FORCE_BUILD_GUIDE.md - Force rebuild
 
 ### ✨ Features (7 files)
+
 Located in `features/`
+
 - TRADING_GUIDE.md - Trading features
 - RAG_SETUP_GUIDE.md - RAG system
 - LOCAL_LLM_SETUP.md - Local LLM with GPU
@@ -53,17 +60,22 @@ Located in `features/`
 - DATA_PROVIDERS.md - Data providers
 
 ### ⚙️ Operations (3 files)
+
 Located in `operations/`
+
 - NGINX_QUICKREF.md - Nginx commands
 - TROUBLESHOOTING_GUIDE.md - Problem resolution
 - GITHUB_SECRETS_QUICKREF.md - Secrets reference
 
 ### 💻 Development (2 files)
+
 Located in `development/`
+
 - DEVELOPMENT_GUIDE.md - Development workflow
 - TESTING_GUIDE.md - Testing guide
 
 ### 📦 Archived (83 files)
+
 Located in `archived/` - Historical documentation
 
 ---
@@ -71,24 +83,31 @@ Located in `archived/` - Historical documentation
 ## 🎯 Common Tasks
 
 ### Setup Locally
+
 ```bash
 ./start.sh start
 ```
+
 See: [QUICKSTART.md](QUICKSTART.md)
 
 ### Deploy to Production
+
 ```bash
 git push origin main  # Auto-deploys via GitHub Actions
 ```
+
 See: [deployment/DEPLOYMENT.md](deployment/DEPLOYMENT.md)
 
 ### Configure Secrets
+
 See: [deployment/SECRETS.md](deployment/SECRETS.md)
 
 ### Enable RAG
+
 ```bash
 ./start.sh --gpu start  # Local LLM (free)
 ```
+
 See: [features/RAG_SETUP_GUIDE.md](features/RAG_SETUP_GUIDE.md)
 
 ---

@@ -43,6 +43,7 @@ git push origin v1.0.0
 GitHub UI → Actions → FKS CI/CD Pipeline → Run workflow
 
 **Options:**
+
 - Python version: 3.10, 3.11, 3.12, or 3.13
 - Skip tests: Yes/No
 - Environment: staging or production
@@ -62,12 +63,14 @@ docs/
 ## 🔧 Key Improvements
 
 ### Before
+
 - ❌ Static single-version testing
 - ❌ All jobs run on every change
 - ❌ Manual labeling required
 - ❌ No release automation
 
 ### After
+
 - ✅ Multi-version Python testing (3.10-3.13)
 - ✅ Smart conditional execution
 - ✅ Automatic PR labeling
@@ -106,6 +109,7 @@ act pull_request --workflows .github/workflows/ci-cd.yml
 
 **Old approach:** ~20 min pipeline on every push  
 **New approach:**
+
 - Docs-only: ~2 min (skip lint/tests)
 - WIP PRs: ~10 min (skip Docker)
 - Full pipeline: ~18 min (matrix parallelization)

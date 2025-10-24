@@ -67,6 +67,7 @@ docker-compose exec web curl http://fks_api:8001/health
 ```
 
 **Health Check Response Format:**
+
 ```json
 {
   "status": "healthy",
@@ -111,6 +112,7 @@ graph TB
 ## Docker Compose Services
 
 ### Core Services (Always Running)
+
 - `web` - Main Django application (port 8000)
 - `db` - PostgreSQL with TimescaleDB + pgvector
 - `redis` - Redis cache and message broker
@@ -118,6 +120,7 @@ graph TB
 - `celery_beat` - Celery scheduler for periodic tasks
 
 ### Microservices (Started with `make multi-up`)
+
 - `fks_api` - API Gateway (port 8001)
 - `fks_data` - Data ingestion (port 8002)
 - `fks_execution` - Trade execution (port 8003)
@@ -125,11 +128,13 @@ graph TB
 - `fks_web_ui` - React SPA (port 3001)
 
 ### Monitoring Stack
+
 - `grafana` - Metrics visualization (port 3000)
 - `prometheus` - Metrics collection (port 9090)
 - `node-exporter` - System metrics exporter
 
 ### Admin Tools
+
 - `pgadmin` - PostgreSQL admin (port 5050)
 - `flower` - Celery task monitor (port 5555)
 
@@ -138,6 +143,7 @@ graph TB
 ## Environment Variables
 
 ### Required for All Microservices
+
 ```bash
 SERVICE_NAME=fks_api          # Unique service identifier
 MONITOR_URL=http://web:8000/monitor/api/discover/
@@ -148,17 +154,20 @@ REDIS_URL=redis://redis:6379/2
 ### Service-Specific Variables
 
 **fks_data:**
+
 ```bash
 BINANCE_API_KEY=your_key
 BINANCE_API_SECRET=your_secret
 ```
 
 **fks_execution:**
+
 ```bash
 DATA_SERVICE_URL=http://fks_data:8002
 ```
 
 **fks_ninja:**
+
 ```bash
 NINJATRADER_HOST=host.docker.internal
 NINJATRADER_PORT=47740
@@ -166,6 +175,7 @@ EXECUTION_SERVICE_URL=http://fks_execution:8003
 ```
 
 **fks_web_ui:**
+
 ```bash
 NODE_ENV=production
 VITE_API_URL=http://fks_api:8001
@@ -176,6 +186,7 @@ VITE_API_URL=http://fks_api:8001
 ## Git Submodules
 
 ### Initial Setup
+
 ```bash
 # Add all microservices as submodules
 git submodule add https://github.com/nuniesmith/fks-api.git repo/api
@@ -190,6 +201,7 @@ git push
 ```
 
 ### Update Submodules
+
 ```bash
 # Update all to latest
 make multi-update
@@ -202,6 +214,7 @@ git submodule status
 ```
 
 ### Clone Repository with Submodules
+
 ```bash
 # Clone with submodules
 git clone --recurse-submodules https://github.com/nuniesmith/fks.git
@@ -218,6 +231,7 @@ git submodule update
 ## Troubleshooting
 
 ### Service Won't Start
+
 ```bash
 # Check logs for specific service
 docker-compose logs fks_api
@@ -227,6 +241,7 @@ make multi-logs
 ```
 
 ### Health Check Fails
+
 ```bash
 # Manual health check from inside web container
 docker-compose exec web curl -f http://fks_api:8001/health
@@ -236,6 +251,7 @@ make multi-status
 ```
 
 ### Build Fails
+
 ```bash
 # Build single service with verbose output
 docker-compose build --no-cache fks_api
@@ -247,6 +263,7 @@ cat requirements.txt
 ```
 
 ### Submodule Issues
+
 ```bash
 # Force update submodule
 git submodule update --remote --force repo/api
@@ -258,6 +275,7 @@ git pull origin main
 ```
 
 ### Port Conflicts
+
 ```bash
 # Check what's using a port
 lsof -i :8001  # Linux/macOS
@@ -272,11 +290,13 @@ docker-compose stop fks_api
 ## Monitoring & Health Checks
 
 ### Automatic Monitoring
+
 - Celery Beat runs `check_all_services_task` every 2 minutes
 - Results stored in `HealthCheck` model
 - Dashboard auto-refreshes every 30 seconds
 
 ### Manual Health Checks
+
 ```bash
 # Check all services via API
 curl http://localhost:8000/monitor/api/health/ | jq
@@ -290,6 +310,7 @@ docker-compose exec web python manage.py shell -c \
 ```
 
 ### View Service Registry
+
 ```bash
 # Get all registered services
 curl http://localhost:8000/monitor/api/registry/ | jq
@@ -305,6 +326,7 @@ docker-compose exec web python manage.py shell
 ## Development Workflow
 
 ### 1. Create Satellite Repository
+
 ```bash
 # Create repo on GitHub
 gh repo create nuniesmith/fks-api --public
@@ -324,6 +346,7 @@ git push
 ```
 
 ### 2. Add as Submodule
+
 ```bash
 cd ~/Nextcloud/code/repos/fks
 git submodule add https://github.com/nuniesmith/fks-api.git repo/api
@@ -332,6 +355,7 @@ git push
 ```
 
 ### 3. Build and Test
+
 ```bash
 # Build service
 docker-compose build fks_api
@@ -347,6 +371,7 @@ docker-compose logs -f fks_api
 ```
 
 ### 4. Register and Monitor
+
 ```bash
 # Register service
 make register-services
@@ -363,18 +388,21 @@ curl http://localhost:8000/monitor/api/health/
 ## Testing
 
 ### Unit Tests (Per Service)
+
 ```bash
 cd repo/api
 pytest tests/unit/ -v
 ```
 
 ### Integration Tests
+
 ```bash
 cd repo/api
 pytest tests/integration/ -v
 ```
 
 ### End-to-End Health Check
+
 ```bash
 # Start all services
 make multi-up
@@ -393,6 +421,7 @@ make multi-health
 ## CI/CD
 
 ### GitHub Actions Workflow (Per Service)
+
 Create `.github/workflows/ci.yml` in each satellite repo:
 
 ```yaml
@@ -419,12 +448,14 @@ jobs:
 ## Production Deployment
 
 ### Prerequisites
+
 - Docker and Docker Compose installed
 - Git with submodules initialized
 - `.env` file with all required variables
 - Ports 8000-8004 and 3001 available
 
 ### Deploy Steps
+
 ```bash
 # Clone repository with submodules
 git clone --recurse-submodules https://github.com/nuniesmith/fks.git

@@ -640,12 +640,14 @@ Task Routing:
 ## 🔄 Migration Summary
 
 ### Before (Microservices)
+
 - React frontend + 3 microservices
 - Complex inter-service communication
 - 214 files, ~707K to be removed
 - Difficult to deploy and maintain
 
 ### After (Django Monolith)
+
 - Single Django application
 - Celery for async operations
 - 10 modular Django apps
@@ -653,6 +655,7 @@ Task Routing:
 - Framework layer for abstractions
 
 ### Benefits
+
 - ✅ Reduced complexity
 - ✅ Easier deployment
 - ✅ Better testability

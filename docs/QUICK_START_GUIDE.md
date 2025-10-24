@@ -7,16 +7,19 @@
 ## 📍 Where to Start RIGHT NOW
 
 ### 1. Read This First (5 minutes)
+
 **File**: `docs/PROJECT_HEALTH_DASHBOARD.md`
 
 **Why**: Shows you exactly what to work on this week with clear priorities.
 
 **Key Sections**:
+
 - Priority Matrix - Visual guide for task selection
 - This Week's Sprint - Specific tasks for Oct 22-29
 - Health Metrics - Current status vs. targets
 
 ### 2. Create Your First Issues (15 minutes)
+
 **File**: `docs/GITHUB_ISSUES_TEMPLATES.md`
 
 **Action**: Copy-paste these 3 issues into GitHub:
@@ -37,6 +40,7 @@
    - Run code formatting
 
 **Quick Method**:
+
 ```bash
 # Go to: https://github.com/nuniesmith/fks/issues/new
 # Copy template from GITHUB_ISSUES_TEMPLATES.md
@@ -44,17 +48,21 @@
 ```
 
 ### 3. Start Week 1 Sprint (This Week)
+
 **Goal**: Fix critical blockers
 
 **Monday-Tuesday** (3 hours):
+
 - [ ] Security hardening - passwords, rate limiting, pip-audit
 
 **Wednesday-Friday** (11 hours):
+
 - [ ] Fix import errors in 5 files
 - [ ] Run tests - target 34/34 passing
 - [ ] Setup GitHub Actions CI
 
 **Weekend** (5 hours):
+
 - [ ] Delete/merge empty files
 - [ ] Run black/isort/flake8
 - [ ] Commit clean codebase
@@ -107,6 +115,7 @@ If NO to all three → **Backlog it.**
 ## 🗺️ The 6-Phase Roadmap
 
 ### Phase 1: Immediate Fixes (Weeks 1-4; 19 hrs)
+
 - Security hardening
 - Fix import errors → 34/34 tests passing
 - Code cleanup
@@ -114,6 +123,7 @@ If NO to all three → **Backlog it.**
 **Exit**: Stable, secure, clean codebase
 
 ### Phase 2: Core Development (Weeks 5-10; 56 hrs)
+
 - Celery tasks (market data, signals, backtesting)
 - RAG system completion
 - Markov chain integration
@@ -122,12 +132,14 @@ If NO to all three → **Backlog it.**
 **Exit**: Trading signals working, RAG operational
 
 ### Phase 3: Testing & QA (Weeks 7-12; 12 hrs)
+
 - Expand test coverage to 80%+
 - Setup CI/CD automation
 
 **Exit**: Confidence in code quality
 
 ### Phase 4: Account Integration (Weeks 9-11; 13 hrs)
+
 - Personal accounts (Shakepay, Netcoins, Crypto.com)
 - Prop firms (FXIFY, Topstep)
 - Long-term banking (RBC, Scotiabank)
@@ -135,12 +147,14 @@ If NO to all three → **Backlog it.**
 **Exit**: Multi-account support
 
 ### Phase 5: Visualization (Weeks 10-12; 13 hrs)
+
 - Mermaid.js diagrams
 - Optional Rust monitoring wrapper
 
 **Exit**: Dynamic visuals for emotional guidance
 
 ### Phase 6: Advanced Features (Weeks 13+; 21 hrs)
+
 - Multi-container architecture
 - Production deployment
 
@@ -153,17 +167,20 @@ If NO to all three → **Backlog it.**
 ## 📈 Your Success Metrics
 
 ### This Week
+
 - [ ] 34/34 tests passing
 - [ ] 0 security vulnerabilities
 - [ ] <5 empty files
 - [ ] GitHub Actions working
 
 ### This Month
+
 - [ ] Market data syncing
 - [ ] First trading signals
 - [ ] 50% code coverage
 
 ### In 3 Months
+
 - [ ] Backtesting operational
 - [ ] RAG providing insights
 - [ ] 80% code coverage
@@ -174,6 +191,7 @@ If NO to all three → **Backlog it.**
 ## 🛠️ Tools You'll Use
 
 ### Development
+
 ```bash
 make up              # Start services
 make test            # Run pytest
@@ -182,6 +200,7 @@ make format          # Auto-format code
 ```
 
 ### Testing
+
 ```bash
 pytest tests/ -v --cov=src       # All tests with coverage
 pytest -m unit                    # Unit tests only
@@ -189,6 +208,7 @@ pytest tests/unit/test_api/ -v    # Specific module
 ```
 
 ### Security
+
 ```bash
 openssl rand -base64 32          # Generate passwords
 pip-audit                         # Check for CVEs
@@ -219,16 +239,19 @@ pip-audit                         # Check for CVEs
 ## 📅 Your Weekly Routine
 
 ### Monday Morning
+
 - [ ] Check [dashboard](docs/PROJECT_HEALTH_DASHBOARD.md)
 - [ ] Pick top 3-5 tasks for the week
 - [ ] Create/update GitHub issues
 
 ### Daily
+
 - [ ] Work on current task
 - [ ] Run tests after each change
 - [ ] Update issue status
 
 ### Friday at 5pm
+
 - [ ] Weekly review:
   - What got done?
   - What blocked?
@@ -238,6 +261,7 @@ pip-audit                         # Check for CVEs
 - [ ] Plan next week
 
 ### 1st of Month
+
 - [ ] Full analyze script run
 - [ ] Coverage report
 - [ ] Update all KPIs
@@ -279,18 +303,21 @@ Project Root
 ## 🎓 Key Concepts
 
 ### FKS Intelligence
+
 - **Markov Chains**: Probabilistic trading states
 - **RAG System**: AI-powered recommendations
 - **Daily Optimization**: Learn from every trade
 - **Emotional Safeguards**: Hand-holding visuals
 
 ### Multi-Account System
+
 - **Personal**: Daily spending (Shakepay, Netcoins)
 - **Prop Firms**: Leveraged income (FXIFY, Topstep)
 - **Long-Term**: Wealth preservation (RBC, Scotiabank)
 - **Profit Split**: 50% banks, 50% crypto ($1000/month)
 
 ### Development Philosophy
+
 - **Start Manual**: Verify before automating
 - **Then Automate**: Celery tasks, beat schedule
 - **Dynamic Growth**: Scale with user capital

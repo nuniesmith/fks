@@ -79,6 +79,7 @@ curl -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
 ## DNS Record Configuration
 
 All records are created with:
+
 - **Type**: A record
 - **TTL**: 300 seconds (5 minutes)
 - **Proxied**: Yes (through Cloudflare CDN)
@@ -87,10 +88,12 @@ All records are created with:
 ## Workflow Trigger
 
 Automatic on push to:
+
 - `main` branch (production)
 - `develop` branch (staging)
 
 Manual trigger:
+
 - Actions tab → CI/CD Pipeline → Run workflow
 
 ## Verification Commands

@@ -9,13 +9,15 @@
 
 **Your DDD research is excellent, but WRONG TIMING.**
 
-### Do This First (Next 4 Weeks):
+### Do This First (Next 4 Weeks)
+
 1. ✅ Fix broken imports (Issue #48) - **1-2 days**
 2. ✅ Implement RAG tasks (Issue #49) - **1-2 weeks**  
 3. ✅ Replace mock data (Issue #39) - **2-3 days**
 4. ✅ Expand test coverage (Issue #41) - **1 week**
 
-### Do This Later (Week 8+):
+### Do This Later (Week 8+)
+
 - 📋 DDD refactoring (see `ARCHITECTURE_REFACTORING_PLAN.md`)
 - 📋 Domain-driven restructuring
 - 📋 Polyrepo considerations
@@ -75,6 +77,7 @@ graph TD
 ```
 
 **Deliverables**:
+
 - ✅ All tests passing (34/34)
 - ✅ RAG generates real signals
 - ✅ UI shows live trading data
@@ -98,6 +101,7 @@ docker-compose up --build
 ```
 
 **Deliverables**:
+
 - ✅ Production deployment
 - ✅ 2 weeks of stable trading
 - ✅ Performance baselines
@@ -119,6 +123,7 @@ docker-compose up --build
 ```
 
 **Why this works**:
+
 - Tests act as safety net
 - Real functionality proves structure works
 - Metrics show regressions immediately
@@ -197,6 +202,7 @@ EOF
 ```
 
 **Test immediately**:
+
 ```bash
 pytest tests/unit/test_trading/test_assets.py -v
 # Should go from FAIL → PASS
@@ -329,6 +335,7 @@ if fix_then_refactor:
 **Company**: Mid-size fintech startup  
 **Mistake**: Attempted DDD refactoring with 60% test coverage  
 **Result**:
+
 - Week 1-4: Moving files, fixing imports
 - Week 5-8: Debugging circular dependencies
 - Week 9-12: Rolling back some changes
@@ -351,7 +358,7 @@ You have **flexibility** - you can pause refactoring without team politics. Use 
 
 ## 🚀 Final Recommendation
 
-### This Week (Oct 18-25):
+### This Week (Oct 18-25)
 
 ```bash
 # Monday-Tuesday
@@ -369,13 +376,13 @@ gh issue develop 49 --checkout
 # Document what you learned
 ```
 
-### Next 3 Weeks:
+### Next 3 Weeks
 
 - Week 2: Finish RAG tasks (#49), start mock data replacement (#39)
 - Week 3: Expand test coverage (#41), add integration tests
 - Week 4: Deploy to staging, monitor for 1 week
 
-### Week 8+ (After Stable Production):
+### Week 8+ (After Stable Production)
 
 - Read `docs/ARCHITECTURE_REFACTORING_PLAN.md`
 - Execute DDD migration incrementally
@@ -385,12 +392,14 @@ gh issue develop 49 --checkout
 
 ## 📚 Resources to Review (In Order)
 
-### Now (Before Writing Code):
+### Now (Before Writing Code)
+
 1. `docs/GITHUB_ISSUES_SUMMARY.md` - Understand all issues
 2. `.github/copilot-instructions.md` - Project conventions
 3. `tests/TEST_GUIDE.md` - How to run tests
 
-### Later (After Phase 1):
+### Later (After Phase 1)
+
 4. `docs/ARCHITECTURE_REFACTORING_PLAN.md` - DDD migration guide
 5. [DDD in Django (Medium)](https://medium.com/@hamz.ghp/a-practical-blueprint-for-domain-driven-design-ddd-in-django-projects-2d36652b03b9)
 6. [Scalable Django 2025](https://python.plainenglish.io/scalable-django-project-architecture-best-practices-for-2025-6be2f9665f7e)
@@ -400,6 +409,7 @@ gh issue develop 49 --checkout
 ## ✅ Your Commitment (Sign Below)
 
 I understand that:
+
 - [ ] DDD refactoring is valuable, but NOT urgent
 - [ ] I will fix Issues #48 and #49 BEFORE refactoring
 - [ ] I will achieve 80% test coverage BEFORE refactoring  

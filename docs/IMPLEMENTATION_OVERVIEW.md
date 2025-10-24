@@ -12,6 +12,7 @@ This implementation adds **two powerful automation systems** to your FKS Trading
 ## 📦 Files Created
 
 ### GitHub Actions Workflows
+
 ```
 .github/
 ├── labeler.yml                    # PR auto-labeling configuration (20+ labels)
@@ -22,6 +23,7 @@ This implementation adds **two powerful automation systems** to your FKS Trading
 ```
 
 ### Documentation (11 files)
+
 ```
 docs/
 ├── dynamic-workflows/
@@ -35,6 +37,7 @@ docs/
 ```
 
 ### Setup Scripts
+
 ```
 scripts/
 ├── setup-github-project.sh        # Bash setup script (Linux/macOS/WSL)
@@ -50,6 +53,7 @@ scripts/
 **Already configured and ready to use!** Just push code and watch it work.
 
 **Features:**
+
 - ✅ Auto-labels PRs based on changed files
 - ✅ Tests across Python 3.10-3.13 + Windows
 - ✅ Smart job skipping (docs-only, WIP PRs)
@@ -58,6 +62,7 @@ scripts/
 - ✅ Multi-version Docker images
 
 **Test it:**
+
 ```bash
 # Create a PR with only docs changes
 echo "# Test" >> docs/TEST.md
@@ -87,6 +92,7 @@ gh pr create --title "Test: Docs only" --body "Should skip lint job"
 ```
 
 **Features:**
+
 - ✅ Auto-adds issues/PRs to project board
 - ✅ Routes by priority based on labels
 - ✅ Bulk sync existing items
@@ -117,12 +123,14 @@ gh pr create --title "Test: Docs only" --body "Should skip lint job"
 ### Time Savings
 
 **Dynamic Workflows:**
+
 - **30-40% reduction** in GitHub Actions minutes
 - **Faster feedback** (10 min vs 20 min for docs-only)
 - **One-command releases** (save 30 min per release)
 - **Estimated annual savings**: $200-300 in Actions costs
 
 **Project Integration:**
+
 - **Zero manual PM work** (~10 sec per issue = 8 hrs/month)
 - **Automated prioritization**
 - **Centralized visibility**
@@ -287,11 +295,13 @@ Issue/PR Created/Labeled
 ### Workflows Not Running
 
 **Check:**
+
 - Path filters - might be excluding your files
 - Branch protection - might require manual approval
 - Workflow permissions - need read+write
 
 **Debug:**
+
 ```bash
 # View recent runs
 gh run list --workflow=ci-cd.yml
@@ -306,11 +316,13 @@ gh run view --log
 ### Items Not Adding to Project
 
 **Check:**
+
 - Project number in workflow matches your project URL
 - Repository is linked to project
 - Workflow has `issues: write` permission
 
 **Test manually:**
+
 ```bash
 gh project item-add <PROJECT_NUMBER> --owner <USERNAME> --url https://github.com/<USERNAME>/fks/issues/1
 ```
@@ -318,11 +330,13 @@ gh project item-add <PROJECT_NUMBER> --owner <USERNAME> --url https://github.com
 ### Labels Not Applied
 
 **Check:**
+
 - `.github/labeler.yml` syntax is valid
 - Workflow has `pull-requests: write` permission
 - Glob patterns match your file structure
 
 **Test patterns:**
+
 ```bash
 # Check which files match pattern
 git diff --name-only HEAD~1 HEAD | grep -E '^(src|tests|docs)/'
@@ -398,7 +412,7 @@ git diff --name-only HEAD~1 HEAD | grep -E '^(src|tests|docs)/'
 
 ---
 
-## 🎉 Congratulations!
+## 🎉 Congratulations
 
 You now have:
 

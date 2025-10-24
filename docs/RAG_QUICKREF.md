@@ -140,11 +140,13 @@ OLLAMA_HOST=http://localhost:11434
 ### Model Options
 
 **Embeddings:**
+
 - `all-MiniLM-L6-v2` - Fast, 384 dim (default)
 - `all-mpnet-base-v2` - Better quality, 768 dim
 - `text-embedding-3-small` - OpenAI, 1536 dim
 
 **LLM (Ollama):**
+
 - `llama3.2:3b` - Fast, good quality
 - `llama3.2:1b` - Very fast, smaller
 - `mistral:7b` - Better quality, slower
@@ -243,10 +245,12 @@ WITH (m = 16, ef_construction = 64);
 ## Files Reference
 
 ### SQL Migrations
+
 - `sql/migrations/000_create_rag_tables.sql` - Create RAG tables
 - `sql/migrations/001_add_pgvector.sql` - Enable pgvector
 
 ### Python Modules
+
 - `src/web/rag/embeddings.py` - Embedding generation
 - `src/web/rag/document_processor.py` - Text chunking
 - `src/web/rag/retrieval.py` - Semantic search
@@ -255,18 +259,21 @@ WITH (m = 16, ef_construction = 64);
 - `src/web/rag/services.py` - Public API
 
 ### Scripts
+
 - `scripts/setup_rag_foundation.py` - Setup script
 - `scripts/validate_rag_foundation.py` - Validation script
 - `scripts/test_rag_system.py` - Test suite
 - `scripts/rag_example.py` - Usage examples
 
 ### Documentation
+
 - `docs/RAG_PHASE1.md` - Full Phase 1 documentation
 - `src/web/rag/README.md` - RAG system README
 
 ## Next Steps
 
 After Phase 1 setup:
+
 1. Phase 2: Auto-ingestion pipeline
 2. Phase 3: LLM integration
 3. Phase 4: Trading recommendations
@@ -275,6 +282,7 @@ After Phase 1 setup:
 ## Support
 
 See full documentation:
+
 - `docs/RAG_PHASE1.md` - Phase 1 complete guide
 - `src/web/rag/README.md` - RAG system guide
 - `docs/ARCHITECTURE.md` - Project architecture

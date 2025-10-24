@@ -33,6 +33,7 @@ metrics, returns, cum_ret, trades = run_backtest(
 ## 🎯 Key Metrics
 
 ### Backtest Metrics
+
 ```python
 {
     'Sharpe': 1.54,           # > 1 is good, > 2 is excellent
@@ -46,6 +47,7 @@ metrics, returns, cum_ret, trades = run_backtest(
 ```
 
 ### Circuit Breaker Metrics
+
 ```python
 metrics = adapter.get_circuit_metrics()
 {
@@ -62,6 +64,7 @@ metrics = adapter.get_circuit_metrics()
 ```
 
 ### Rate Limiter Stats
+
 ```python
 stats = adapter.get_rate_limit_stats()
 {
@@ -77,6 +80,7 @@ stats = adapter.get_rate_limit_stats()
 ## ⚙️ Configuration Cheatsheet
 
 ### Binance Adapter
+
 ```python
 # Default configuration (auto-applied)
 circuit_breaker:
@@ -93,6 +97,7 @@ rate_limiter:
 ```
 
 ### OptunaOptimizer
+
 ```python
 OptunaOptimizer(
     df_prices=df_prices,
@@ -104,6 +109,7 @@ OptunaOptimizer(
 ```
 
 ### Backtest Engine
+
 ```python
 run_backtest(
     df_prices,
@@ -118,6 +124,7 @@ run_backtest(
 ## 🔥 Common Patterns
 
 ### Pattern 1: Quick Optimization
+
 ```python
 # For rapid testing
 optimizer = OptunaOptimizer(df_prices, n_trials=20, n_jobs=2)
@@ -125,6 +132,7 @@ results = optimizer.optimize()
 ```
 
 ### Pattern 2: Production Optimization
+
 ```python
 # For production deployment
 optimizer = OptunaOptimizer(
@@ -138,6 +146,7 @@ importance = optimizer.get_param_importance()
 ```
 
 ### Pattern 3: RAG-Enhanced Optimization
+
 ```python
 # With LLM suggestions
 from services.rag_service import RAGService
@@ -147,6 +156,7 @@ results = optimizer.optimize()
 ```
 
 ### Pattern 4: Safe Data Fetching
+
 ```python
 # With error handling
 from framework.middleware.circuit_breaker.exceptions import CircuitOpenError
@@ -163,12 +173,14 @@ except CircuitOpenError as e:
 ## 🐛 Troubleshooting
 
 ### Circuit Breaker Won't Close
+
 ```python
 # Manually reset
 adapter.circuit_breaker.reset()
 ```
 
 ### Rate Limit Exceeded
+
 ```python
 # Check current stats
 stats = adapter.get_rate_limit_stats()
@@ -179,6 +191,7 @@ time.sleep(stats['time_window'])
 ```
 
 ### Optimization Too Slow
+
 ```python
 # Reduce trials or increase parallelization
 optimizer = OptunaOptimizer(
@@ -189,6 +202,7 @@ optimizer = OptunaOptimizer(
 ```
 
 ### Backtest Out of Memory
+
 ```python
 # Use slow mode
 run_backtest(..., fast_mode=False)
@@ -217,6 +231,7 @@ df_prices = {k: v.tail(100) for k, v in df_prices.items()}
 | tp_multiplier | 1.0-10.0 | 3.0 | Take profit multiplier |
 
 **Typical Good Values**:
+
 - Trending markets: M=50-100, sl=2.5, tp=5.0
 - Range-bound: M=10-20, sl=1.5, tp=2.0
 - High volatility: M=30-60, atr=20, sl=3.0
@@ -273,6 +288,7 @@ importance = optimizer.get_param_importance()
 ## 🎯 Success Checklist
 
 Before deploying:
+
 - [ ] Tested with n_trials=20
 - [ ] Reviewed parameter importance
 - [ ] Validated with backtest

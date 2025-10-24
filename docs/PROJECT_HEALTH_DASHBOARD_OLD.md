@@ -9,23 +9,27 @@
 ## Key Metrics
 
 ### Files
+
 - **Total files**: [TOTAL_FILES]
 - **Source files**: [SOURCE_FILES]
 - **Test files**: [TEST_FILES]
 - **Empty files**: [EMPTY_FILES]
 
 ### Code Quality
+
 - **Lines of code**: [LOC]
 - **Test coverage**: [COVERAGE]%
 - **Legacy imports**: [LEGACY_IMPORTS] files
 - **Technical debt markers**: [DEBT_MARKERS]
 
 ### Tests
+
 - **Total tests**: [TOTAL_TESTS]
 - **Passing tests**: [PASSING_TESTS]
 - **Failing tests**: [FAILING_TESTS]
 
 ### Git Status
+
 - **Uncommitted changes**: [UNCOMMITTED]
 - **Last commit**: [LAST_COMMIT]
 
@@ -36,16 +40,19 @@ Based on current metrics, here are suggested priority adjustments:
 [Auto-generated recommendations]
 
 ### High Priority (>80% impact)
+
 - [ ] Fix failing tests (if any)
 - [ ] Address security issues
 - [ ] Resolve legacy imports
 
 ### Medium Priority (50-80% impact)
+
 - [ ] Improve test coverage
 - [ ] Clean up empty files
 - [ ] Update documentation
 
 ### Low Priority (<50% impact)
+
 - [ ] Code formatting
 - [ ] Performance optimizations
 - [ ] Feature enhancements

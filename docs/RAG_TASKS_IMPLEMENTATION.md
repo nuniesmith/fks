@@ -19,6 +19,7 @@ Successfully integrated RAG-powered FKS Intelligence system into Celery trading 
 **After:** Uses RAG-powered `IntelligenceOrchestrator.get_trading_recommendation()`
 
 **Features:**
+
 - Analyzes historical data via RAG knowledge base
 - Provides recommendations with confidence scores and reasoning
 - Calculates position sizing based on account balance and available cash
@@ -26,6 +27,7 @@ Successfully integrated RAG-powered FKS Intelligence system into Celery trading 
 - Graceful fallback to legacy method if RAG unavailable
 
 **Output Structure:**
+
 ```python
 {
     'status': 'success',
@@ -55,12 +57,14 @@ Successfully integrated RAG-powered FKS Intelligence system into Celery trading 
 **After:** Uses RAG-powered `IntelligenceOrchestrator.optimize_portfolio()`
 
 **Features:**
+
 - Analyzes historical backtests via RAG knowledge base
 - Provides AI-driven allocation based on past performance
 - Includes portfolio-level insights and recommendations
 - Graceful fallback to simple allocation if RAG unavailable
 
 **Output Structure:**
+
 ```python
 {
     'status': 'success',
@@ -86,12 +90,14 @@ Successfully integrated RAG-powered FKS Intelligence system into Celery trading 
 **Schedule:** Daily at 8:00 AM
 
 **Features:**
+
 - Uses `IntelligenceOrchestrator.get_daily_signals()` for all symbols
 - Filters signals by minimum confidence threshold (default 70%)
 - Sends Discord notifications for high-confidence signals
 - Returns structured daily signals with confidence scores
 
 **Output Structure:**
+
 ```python
 {
     'status': 'success',
@@ -161,12 +167,14 @@ def task_name(self, params):
 ### 1. `src/trading/tasks.py` (+264 lines → 1,997 total)
 
 **Changes:**
+
 - Added RAG import with fallback handling
 - Enhanced `generate_signals_task` (91 new lines)
 - Enhanced `optimize_portfolio_task` (103 new lines)  
 - Added `generate_daily_rag_signals_task` (70 new lines)
 
 **Key Code Additions:**
+
 - Lines 30-37: RAG import with graceful fallback
 - Lines 377-577: Enhanced `generate_signals_task` with RAG
 - Lines 807-1027: Enhanced `optimize_portfolio_task` with RAG
@@ -175,10 +183,12 @@ def task_name(self, params):
 ### 2. `src/web/django/celery.py` (+4 lines → 108 total)
 
 **Changes:**
+
 - Added beat schedule for daily RAG signals task
 - Schedule: Daily at 8:00 AM
 
 **Code Addition:**
+
 ```python
 'generate-daily-rag-signals': {
     'task': 'trading.tasks.generate_daily_rag_signals_task',
@@ -189,6 +199,7 @@ def task_name(self, params):
 ### 3. `docs/CELERY_TASKS.md` (updated, +76 lines)
 
 **Changes:**
+
 - Updated task count from 16 to 17
 - Added 🤖 RAG-POWERED markers for 3 tasks
 - Documented RAG integration with code examples
@@ -197,11 +208,13 @@ def task_name(self, params):
 ### 4. `tests/unit/test_trading/test_tasks.py` (+190 lines → 747 total)
 
 **Changes:**
+
 - Added import for new RAG task
 - Added 5 comprehensive RAG unit tests
 - Tests cover RAG success and fallback scenarios
 
 **Tests Added:**
+
 1. `test_generate_signals_task_with_rag` - RAG signal generation
 2. `test_generate_signals_task_fallback_to_legacy` - Fallback handling
 3. `test_optimize_portfolio_task_with_rag` - RAG portfolio optimization
@@ -215,7 +228,7 @@ def task_name(self, params):
 **Total Tasks:** 17 (16 original + 1 new RAG task)  
 **RAG-Powered Tasks:** 3 (`generate_signals_task`, `optimize_portfolio_task`, `generate_daily_rag_signals_task`)
 
-### Updated Schedule:
+### Updated Schedule
 
 | Task | Schedule | RAG-Powered |
 |------|----------|-------------|
@@ -241,15 +254,18 @@ def task_name(self, params):
 ## Testing Status
 
 ### Unit Tests
+
 - ✅ 5 new RAG-specific unit tests added
 - ✅ Python syntax validation passed
 - ✅ Mock structures verified
 - ⏳ Full pytest execution pending (requires CI environment)
 
 ### Integration Tests
+
 - ⏳ Pending (requires Docker environment with GPU stack)
 
 ### Manual Testing
+
 - ⏳ Ready for testing with `make gpu-up`
 - ⏳ Requires RAG system running (Ollama + pgvector)
 
@@ -348,21 +364,25 @@ Trading Task → IntelligenceOrchestrator
 ## Benefits of RAG Integration
 
 ### 1. Intelligent Decision Making
+
 - Analyzes historical performance patterns
 - Learns from past trades and backtests
 - Provides reasoning for recommendations
 
 ### 2. Adaptive Strategies
+
 - Adjusts to changing market conditions
 - Optimizes based on account-specific history
 - Personalizes recommendations per account
 
 ### 3. Risk Management
+
 - Confidence scoring for trade recommendations
 - Risk assessment based on historical volatility
 - Position sizing adapted to account state
 
 ### 4. Continuous Learning
+
 - Auto-ingests new trades and signals
 - Builds knowledge base over time
 - Improves recommendations with more data
@@ -372,12 +392,14 @@ Trading Task → IntelligenceOrchestrator
 ## Next Steps
 
 ### For Deployment
+
 1. Run integration tests with GPU stack
 2. Verify RAG system generates valid recommendations
 3. Test Discord notifications
 4. Monitor task execution in production
 
 ### For Further Enhancement
+
 1. Add more RAG-powered tasks (risk analysis, strategy validation)
 2. Implement RAG-based backtesting
 3. Add sentiment analysis integration

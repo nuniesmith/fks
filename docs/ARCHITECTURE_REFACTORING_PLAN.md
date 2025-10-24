@@ -9,6 +9,7 @@
 ## ⚠️ IMPORTANT: Prerequisites
 
 **DO NOT START THIS REFACTORING UNTIL:**
+
 - [ ] All 34 tests passing (currently 14/34 - 41%)
 - [ ] All 16 Celery tasks implemented (currently 0/16)
 - [ ] All mock data replaced with real queries (currently 15 TODOs)
@@ -38,6 +39,7 @@ src/
 ```
 
 **Problems**:
+
 - Mixed concerns (business logic + infrastructure)
 - `config` module conflicts with Django settings
 - No clear domain boundaries
@@ -153,11 +155,13 @@ notebooks/                     # Experiments (unchanged)
 **Before touching code:**
 
 1. **Create migration branch**
+
    ```bash
    git checkout -b refactor/ddd-architecture
    ```
 
 2. **Audit current imports**
+
    ```bash
    # Find all absolute imports
    grep -r "from src\." src/ > /tmp/imports_audit.txt
@@ -170,6 +174,7 @@ notebooks/                     # Experiments (unchanged)
    - List external integrations (stays in providers)
 
 4. **Set up import mapper**
+
    ```python
    # tools/migration/import_mapper.py
    IMPORT_MAP = {
@@ -185,6 +190,7 @@ notebooks/                     # Experiments (unchanged)
 **One domain at a time, with tests passing after each:**
 
 #### Week 2: Trading Domain
+
 ```bash
 # 1. Create new structure
 mkdir -p apps/trading/{domain,services,repositories,api}
@@ -203,6 +209,7 @@ pytest tests/unit/test_trading/ -v
 ```
 
 #### Week 3: Data Domain
+
 ```bash
 git mv src/data/models/ apps/data/domain/
 git mv src/data/providers/ apps/data/providers/  # Unchanged
@@ -211,6 +218,7 @@ pytest tests/integration/test_data/ -v
 ```
 
 #### Week 4: Intelligence Domain
+
 ```bash
 git mv src/web/rag/ apps/intelligence/
 # Update imports, test
@@ -267,6 +275,7 @@ SESSION_COOKIE_SECURE = True
 ```
 
 **Update manage.py:**
+
 ```python
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
 ```
@@ -274,12 +283,14 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
 ### Phase 3D: Cleanup (Week 6)
 
 1. **Remove legacy directories**
+
    ```bash
    git rm -r src/config/  # After fixing all imports
    git rm -r src/infrastructure/  # After moving to infrastructure/
    ```
 
 2. **Consolidate small files**
+
    ```bash
    # Merge 24 small files (Issue #40)
    # Remove empty __init__.py where unnecessary
@@ -297,6 +308,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
 ### Test Coverage Requirements
 
 **Before each migration step:**
+
 ```bash
 # Baseline coverage
 pytest tests/ --cov=src --cov-report=term > /tmp/coverage_before.txt
@@ -311,6 +323,7 @@ diff /tmp/coverage_before.txt /tmp/coverage_after.txt
 ### Regression Testing
 
 **Critical paths to verify after each domain:**
+
 1. **Trading**: Signal generation → Backtest → Position update
 2. **Data**: Market data sync → Indicator calculation → Storage
 3. **Intelligence**: Document ingestion → RAG query → Recommendation
@@ -345,25 +358,31 @@ pytest tests/integration/test_e2e.py -v --tb=short
 ## ⚠️ Risks & Mitigations
 
 ### Risk 1: Import Breakage
+
 **Likelihood**: High  
 **Impact**: Critical  
 **Mitigation**:
+
 - Use automated import rewriting tool
 - Test after each file move
 - Keep old imports as deprecation warnings for 1 release
 
 ### Risk 2: Lost Git History
+
 **Likelihood**: Medium  
 **Impact**: High  
 **Mitigation**:
+
 - Use `git mv` (preserves history)
 - Tag pre-refactor state: `git tag pre-ddd-refactor`
 - Document moved files in migration log
 
 ### Risk 3: Team Disruption
+
 **Likelihood**: Low (solo dev)  
 **Impact**: Low  
 **Mitigation**:
+
 - Complete in dedicated sprint
 - Notify via GitHub discussions
 
@@ -412,14 +431,17 @@ git push origin main
 ## 📚 References
 
 ### DDD Implementation
+
 - [A Practical Blueprint for DDD in Django](https://medium.com/@hamz.ghp/a-practical-blueprint-for-domain-driven-design-ddd-in-django-projects-2d36652b03b9)
 - [Scalable Django Architecture 2025](https://python.plainenglish.io/scalable-django-project-architecture-best-practices-for-2025-6be2f9665f7e)
 
 ### Django Best Practices
+
 - [Two Scoops of Django](https://www.feldroy.com/books/two-scoops-of-django-3-x) - Chapter on project layout
 - [Django Forum: Project Structure](https://forum.djangoproject.com/t/best-practices-for-structuring-django-projects/39835)
 
 ### Migration Tools
+
 - `git mv` - Preserve history
 - `sed` - Bulk import updates
 - `rope` - Python refactoring library
@@ -429,6 +451,7 @@ git push origin main
 ## 🎯 Success Criteria
 
 **Refactoring is complete when:**
+
 - [ ] All 34 tests passing (≥100%)
 - [ ] Coverage ≥ 80% (currently ~41%)
 - [ ] Import errors = 0
@@ -445,16 +468,19 @@ git push origin main
 ## 💡 Alternatives Considered
 
 ### Option 1: Full Polyrepo Split
+
 **Pros**: Maximum isolation, independent deploys  
 **Cons**: Overhead for solo dev, shared code duplication  
 **Decision**: Defer until team size > 3
 
 ### Option 2: Incremental Modularization (NO DDD)
+
 **Pros**: Less disruption, gradual improvement  
 **Cons**: Doesn't solve root coupling issues  
 **Decision**: Partial approach (fix imports first)
 
 ### Option 3: Stay As-Is
+
 **Pros**: Zero refactoring cost  
 **Cons**: Tech debt compounds, scalability limits  
 **Decision**: Rejected - current issues justify change

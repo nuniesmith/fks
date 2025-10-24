@@ -14,6 +14,7 @@ Created intelligent file-based labeling with **20+ labels** that automatically c
 - **Special**: `wip`, `breaking`, `dependencies`
 
 **Key features:**
+
 - Auto-applies labels based on glob patterns
 - Removes stale labels when files no longer match
 - Triggers warnings for critical changes (framework, breaking)
@@ -32,6 +33,7 @@ Transformed single-version testing into **5 parallel test jobs**:
 ```
 
 **Benefits:**
+
 - Catches version-specific bugs across Python 3.10-3.13
 - Windows compatibility validation
 - Parallel execution (saves ~40% time)
@@ -58,6 +60,7 @@ git push origin v1.0.0
 ```
 
 **Pipeline automatically:**
+
 - Generates changelog from commits
 - Creates GitHub release
 - Builds versioned Docker images (1.0.0, 1.0, 1, latest)
@@ -105,12 +108,14 @@ Created `.github/workflows/notify.yml` for DRY notifications (though not yet mig
 ## 📁 Files Created/Modified
 
 ### New Files
+
 1. `.github/labeler.yml` - PR labeling configuration (20+ labels)
 2. `.github/workflows/notify.yml` - Reusable notification workflow
 3. `docs/DYNAMIC_WORKFLOWS.md` - Comprehensive guide (40+ pages)
 4. `docs/QUICKREF_DYNAMIC_WORKFLOWS.md` - Quick reference
 
 ### Modified Files
+
 1. `.github/workflows/ci-cd.yml` - Enhanced with all dynamic features
 
 ---
@@ -118,6 +123,7 @@ Created `.github/workflows/notify.yml` for DRY notifications (though not yet mig
 ## 🎯 Impact on Your FKS Project
 
 ### Before Implementation
+
 ```yaml
 ❌ Single Python version (3.13)
 ❌ All jobs run on every push
@@ -128,6 +134,7 @@ Created `.github/workflows/notify.yml` for DRY notifications (though not yet mig
 ```
 
 ### After Implementation
+
 ```yaml
 ✅ Multi-version testing (3.10-3.13)
 ✅ Intelligent conditionals
@@ -222,6 +229,7 @@ git push origin v2.0.0-rc1
 **Average savings:** 30-40% across typical PR mix
 
 **Monthly estimate** (assuming 100 PRs/month):
+
 - Old cost: 2000 minutes
 - New cost: 1200-1400 minutes
 - **Savings: 600-800 minutes/month**
@@ -251,6 +259,7 @@ Major review required.
 ```
 
 **Files that trigger this:**
+
 - `src/framework/**`
 - `src/core/database/models.py`
 - `**/settings.py`
@@ -261,6 +270,7 @@ Major review required.
 **Max recommended:** 8-10 jobs (cost/benefit tradeoff)
 
 If you need more combinations, consider:
+
 - Reducing to Python 3.12-3.13 only
 - Windows testing only on releases
 - Using `max-parallel: 4` to limit concurrency
@@ -268,6 +278,7 @@ If you need more combinations, consider:
 ### 4. Label Synchronization
 
 The labeler uses `sync-labels: true`, which means:
+
 - ✅ Labels are removed if files no longer match
 - ⚠️ Manual labels may be removed automatically
 - 💡 Add persistent labels AFTER auto-labeling completes
@@ -283,6 +294,7 @@ The labeler uses `sync-labels: true`, which means:
 **Symptoms:** PR doesn't get auto-labeled
 
 **Fixes:**
+
 - Check `.github/labeler.yml` syntax (use YAML validator)
 - Verify `pull-requests: write` permission in workflow
 - Ensure glob patterns match actual file paths
@@ -293,6 +305,7 @@ The labeler uses `sync-labels: true`, which means:
 **Symptoms:** One Python version fails, others pass
 
 **Debugging:**
+
 ```bash
 # Check specific version logs
 gh run view --job "Run Tests (Python 3.11 on ubuntu-latest)"
@@ -306,11 +319,13 @@ python3.11 -m pytest tests/
 **Symptoms:** Workflow runs on ignored files
 
 **Check:**
+
 - Path filters don't apply to `workflow_dispatch`
 - Use `paths-ignore` for simple exclusions
 - Verify glob patterns are correct
 
 **Test:**
+
 ```bash
 # Check what paths are matched
 git diff --name-only HEAD~1 HEAD | grep -E '^(src|tests)/'
@@ -321,6 +336,7 @@ git diff --name-only HEAD~1 HEAD | grep -E '^(src|tests)/'
 **Symptoms:** Tag pushed but no release created
 
 **Fixes:**
+
 - Ensure tag starts with `v` (e.g., `v1.0.0`, not `1.0.0`)
 - Check `contents: write` permission
 - Verify `GITHUB_TOKEN` has access
@@ -342,18 +358,21 @@ Track these metrics in **Actions** tab:
 ## 🎓 Learning Resources
 
 ### GitHub Actions Documentation
+
 - [Workflow syntax](https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions)
 - [Matrix strategies](https://docs.github.com/actions/using-jobs/using-a-matrix-for-your-jobs)
 - [Conditional execution](https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idif)
 - [Events that trigger workflows](https://docs.github.com/actions/using-workflows/events-that-trigger-workflows)
 
 ### Tools & Actions
+
 - [actions/labeler](https://github.com/actions/labeler) - PR auto-labeling
 - [docker/metadata-action](https://github.com/docker/metadata-action) - Docker tags
 - [softprops/action-gh-release](https://github.com/softprops/action-gh-release) - Release creation
 - [act](https://github.com/nektos/act) - Run Actions locally
 
 ### FKS-Specific Docs
+
 - **Full guide:** `docs/DYNAMIC_WORKFLOWS.md` (40 pages, comprehensive)
 - **Quick ref:** `docs/QUICKREF_DYNAMIC_WORKFLOWS.md` (2 pages, commands)
 - **Architecture:** `docs/ARCHITECTURE.md` (existing, updated context)
@@ -366,6 +385,7 @@ Track these metrics in **Actions** tab:
 ### Immediate Actions
 
 1. **Test the changes:**
+
    ```bash
    # Create a test PR with docs-only changes
    echo "Test" >> README.md
@@ -420,6 +440,7 @@ You now have a **production-ready, intelligent CI/CD pipeline** that:
 ✅ Adapts to your solo development workflow  
 
 The system is optimized for **your FKS Trading Platform** with special handling for:
+
 - Django 5.2.7 monolith structure
 - RAG system (GPU stack)
 - Trading logic validation

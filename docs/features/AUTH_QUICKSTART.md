@@ -36,6 +36,7 @@ docker-compose down && docker-compose up -d
 ## 6. Test Authentication
 
 ### Web Interface
+
 - Visit: https://fkstrading.xyz/admin/
 - Login with superuser credentials
 
@@ -97,6 +98,6 @@ curl -H "X-API-Key: YOUR_API_KEY_HERE" \
   https://fkstrading.xyz/auth/me/
 ```
 
-## Done!
+## Done
 
 Your authentication system is now ready. See `AUTHENTICATION_IMPLEMENTATION.md` for full documentation.

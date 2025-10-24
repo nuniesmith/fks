@@ -3,9 +3,11 @@
 ## .env File in Git History
 
 ### Current Status
+
 The `.env` file is currently tracked in git history. While the current version only contains **placeholder passwords** (not real credentials), this is still a security concern.
 
 ### What This Means
+
 - ✅ **GOOD**: Current .env contains only placeholder passwords like `CHANGE_THIS_SECURE_PASSWORD_123!`
 - ⚠️ **CONCERN**: .env should never be in git, even with placeholders
 - ⚠️ **ACTION REQUIRED**: Remove .env from git tracking
@@ -26,6 +28,7 @@ git push origin main
 ```
 
 This is **safe** because:
+
 - It doesn't rewrite history (no force push)
 - It keeps your local .env file
 - Future commits won't include .env
@@ -45,6 +48,7 @@ echo ".env" >> .gitignore
 #### 3. Rotate Exposed Credentials (if any)
 
 If you previously committed real credentials to .env:
+
 1. Change all passwords immediately
 2. Rotate API keys (Discord webhook, Binance, OpenAI, etc.)
 3. Generate new Django SECRET_KEY
@@ -72,6 +76,7 @@ git push origin --force --tags
 #### Option B: Keep History, Rotate All Secrets
 
 Simpler approach:
+
 1. Remove .env from tracking (git rm --cached .env)
 2. Rotate ALL credentials that were in .env
 3. Document the incident
@@ -90,6 +95,7 @@ Simpler approach:
    - `.env.example` (tracked, documentation)
 
 3. **Audit Regularly**
+
    ```bash
    # Check if .env is tracked
    git ls-files | grep "\.env$"
@@ -99,6 +105,7 @@ Simpler approach:
 
 4. **Use Pre-commit Hooks**
    Install git hooks to prevent committing secrets:
+
    ```bash
    # .git/hooks/pre-commit
    #!/bin/bash
@@ -121,6 +128,7 @@ bash scripts/setup-security.sh
 ```
 
 This will:
+
 - Generate strong passwords with OpenSSL
 - Create/update .env with secure credentials
 - Enable PostgreSQL SSL
@@ -136,6 +144,7 @@ This will:
 ### Questions?
 
 If you're unsure about any security aspect:
+
 1. Review the security documentation
 2. Run `make security-check`
 3. Consult with the security team

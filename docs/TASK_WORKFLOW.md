@@ -9,6 +9,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ## Minute-by-Minute Schedule
 
 ### Every 5 Minutes (Critical Path)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  🔄 sync_market_data_task                                   │
@@ -20,6 +21,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ```
 
 **Flow:**
+
 1. Fetch latest OHLCV data from Binance
 2. Update position prices and unrealized PnL
 3. Check if any stop losses triggered
@@ -28,6 +30,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### Every 15 Minutes (Signal Generation)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  🔄 sync_market_data_task (new data)                        │
@@ -39,6 +42,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ```
 
 **Flow:**
+
 1. Ensure fresh market data
 2. Generate BUY/HOLD signals
 3. Update account balance and equity
@@ -47,6 +51,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### Every 30 Minutes (Analysis & Indicators)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  🔄 sync_market_data_task (new data)                        │
@@ -58,6 +63,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ```
 
 **Flow:**
+
 1. Fetch fresh data
 2. Calculate RSI, MACD, BB, ATR, SMA, EMA
 3. Cache indicators for signal generation
@@ -67,6 +73,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### Every Hour (News & Data)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  📰 fetch_news_task                                         │
@@ -74,6 +81,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ```
 
 **Flow:**
+
 1. Fetch market news
 2. Store for sentiment analysis
 3. (Future: Feed into signal generation)
@@ -83,6 +91,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ## Daily Schedule
 
 ### Midnight (00:00) - Backtesting
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  🧪 run_backtest_task                                       │
@@ -98,6 +107,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### 1 AM - Strategy Validation
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  ✅ validate_strategies_task                                │
@@ -115,6 +125,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### 3 AM - Data Management
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  🗄️  archive_old_data_task                                  │
@@ -130,6 +141,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### 6 AM - Portfolio Optimization
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  💼 optimize_portfolio_task                                 │
@@ -147,6 +159,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### 11 PM - Metrics & Reports
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  📊 calculate_metrics_task                                  │
@@ -166,6 +179,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ## Weekly Schedule
 
 ### Monday 8 AM - Weekly Report
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  📊 calculate_metrics_task (7 days)                         │
@@ -183,6 +197,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ## On-Demand Tasks (Not Scheduled)
 
 ### Manual Rebalancing
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  User/Admin triggers:                                       │
@@ -204,6 +219,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### Custom Notifications
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Any task can call:                                         │
@@ -222,6 +238,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ## Complete Trading Workflow
 
 ### Normal Market Conditions
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Every 5 minutes:                                           │
@@ -241,6 +258,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### BUY Signal Detected
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  📈 generate_signals_task                                   │
@@ -260,6 +278,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### Stop Loss Triggered
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  🛑 check_stop_loss_task                                    │
@@ -279,6 +298,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ---
 
 ### HIGH Risk Detected
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  ⚠️  analyze_risk_task                                      │
@@ -301,6 +321,7 @@ This document illustrates how the 16 Celery tasks work together in the automated
 ## Task Dependencies
 
 ### Data Flow
+
 ```
 sync_market_data_task
     ├──> update_indicators_task (needs OHLCV)
@@ -328,12 +349,14 @@ optimize_portfolio_task
 ## Monitoring Points
 
 ### Flower Dashboard (http://localhost:5555)
+
 - Task success/failure rates
 - Execution times
 - Queue depths
 - Worker status
 
 ### Discord Notifications
+
 - 🚀 BUY signals
 - ⚠️ HIGH risk alerts
 - 🛑 Stop loss triggers
@@ -342,6 +365,7 @@ optimize_portfolio_task
 - ⚠️ Strategy validation failures
 
 ### Database Monitoring
+
 - SyncStatus table (data freshness)
 - BalanceHistory (equity tracking)
 - Trade table (execution log)
@@ -352,6 +376,7 @@ optimize_portfolio_task
 ## Troubleshooting Flow
 
 ### Task Not Running
+
 ```
 1. Check Celery worker: celery -A web.django inspect active
 2. Check Beat schedule: celery -A web.django inspect scheduled
@@ -360,6 +385,7 @@ optimize_portfolio_task
 ```
 
 ### Task Failing
+
 ```
 1. Get task result: AsyncResult('task-id').traceback
 2. Check database connection
@@ -369,6 +395,7 @@ optimize_portfolio_task
 ```
 
 ### Missing Data
+
 ```
 1. Check sync_market_data_task status
 2. Verify Binance API connectivity
@@ -381,17 +408,20 @@ optimize_portfolio_task
 ## Performance Optimization
 
 ### Task Execution Times
+
 - **Fast (< 5s):** sync_market_data, update_positions, check_stop_loss
 - **Medium (5-15s):** generate_signals, update_indicators, calculate_metrics
 - **Slow (> 15s):** run_backtest, generate_report
 
 ### Database Optimization
+
 - Indexes on (time, symbol, timeframe)
 - TimescaleDB compression for old data
 - Regular VACUUM operations
 - Connection pooling
 
 ### Redis Optimization
+
 - Monitor queue sizes: `celery -A web.django inspect active_queues`
 - Set result expiration: `result_expires = 3600`
 - Clear old results periodically
@@ -401,6 +431,7 @@ optimize_portfolio_task
 ## Best Practices
 
 ### Task Design
+
 ✓ Keep tasks idempotent (safe to retry)  
 ✓ Use short timeouts for external APIs  
 ✓ Log all important actions  
@@ -408,12 +439,14 @@ optimize_portfolio_task
 ✓ Handle all exceptions gracefully  
 
 ### Scheduling
+
 ✓ Critical tasks every 5 minutes  
 ✓ Analysis tasks every 30 minutes  
 ✓ Heavy tasks during low-traffic hours  
 ✓ Stagger related tasks (e.g., metrics at 11 PM, report at 11:30 PM)  
 
 ### Monitoring
+
 ✓ Watch task failure rates in Flower  
 ✓ Set up Discord alerts for critical failures  
 ✓ Monitor database growth  

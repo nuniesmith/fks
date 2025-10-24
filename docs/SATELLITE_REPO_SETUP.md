@@ -433,6 +433,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    - `/api/websocket/subscribe` - Subscribe to WebSocket feeds
 
 2. **`src/config.py`** - Add exchange API credentials:
+
    ```python
    BINANCE_API_KEY: str = ""
    BINANCE_API_SECRET: str = ""
@@ -440,6 +441,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    ```
 
 3. **`src/health.py`** - Check Binance API connectivity:
+
    ```python
    dependencies = {
        "binance_api": await check_binance_connection(),
@@ -448,6 +450,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    ```
 
 4. **`requirements.txt`** - Add:
+
    ```txt
    ccxt>=4.0.0
    websockets>=14.0
@@ -470,6 +473,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    - `GET /api/orders/{order_id}` - Get order status
 
 2. **`src/config.py`** - Add:
+
    ```python
    DATA_SERVICE_URL: str = "http://fks_data:8002"
    MAX_POSITION_SIZE: float = 10000.0
@@ -477,6 +481,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    ```
 
 3. **`src/health.py`** - Check data service connectivity:
+
    ```python
    dependencies = {
        "data_service": await check_service(settings.DATA_SERVICE_URL),
@@ -485,6 +490,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    ```
 
 4. **`requirements.txt`** - Add:
+
    ```txt
    ccxt>=4.0.0
    celery>=5.5.0
@@ -506,6 +512,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    - `GET /api/ninja/account-info` - Get account information
 
 2. **`src/config.py`** - Add:
+
    ```python
    NINJATRADER_HOST: str = "localhost"
    NINJATRADER_PORT: int = 47740  # Default AT Interface port
@@ -514,6 +521,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    ```
 
 3. **`src/health.py`** - Check NinjaTrader connectivity:
+
    ```python
    dependencies = {
        "ninjatrader": await check_ninjatrader_connection(),
@@ -523,6 +531,7 @@ docker run -p 8001:8001 --env-file .env fks-api:latest
    ```
 
 4. **`requirements.txt`** - Add:
+
    ```txt
    aiohttp>=3.11.0
    python-socketio>=5.11.0
@@ -704,6 +713,7 @@ make multi-status
 ```
 
 Expected output:
+
 ```
 === Microservices Status ===
 NAME           IMAGE              STATUS      PORTS
@@ -763,6 +773,7 @@ make multi-health
 ### Issue: Service won't start
 
 **Solution**: Check logs for the specific service
+
 ```bash
 docker-compose logs fks_api
 ```
@@ -770,6 +781,7 @@ docker-compose logs fks_api
 ### Issue: Health check fails
 
 **Solution**: Verify service is accessible on expected port
+
 ```bash
 docker-compose exec web curl -f http://fks_api:8001/health
 ```
@@ -777,6 +789,7 @@ docker-compose exec web curl -f http://fks_api:8001/health
 ### Issue: Submodule not updating
 
 **Solution**: Force update and checkout correct branch
+
 ```bash
 git submodule update --remote --force repo/api
 cd repo/api
@@ -787,6 +800,7 @@ git pull origin main
 ### Issue: Build fails for service
 
 **Solution**: Check Dockerfile and requirements.txt
+
 ```bash
 cd repo/api
 docker build -t fks-api:test .

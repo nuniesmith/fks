@@ -5,6 +5,7 @@
 FKS is a bulletproof trading system that combines AI-enhanced signals with traditional technical analysis for futures trading. The system uses three core components that must agree before generating trades.
 
 ### **Core Components:**
+
 - **FKS_AI**: Support/resistance detection with signal quality scoring
 - **FKS_AO**: Awesome Oscillator with momentum confirmation  
 - **FKS_Dashboard**: Market regime and performance dashboard
@@ -14,18 +15,21 @@ FKS is a bulletproof trading system that combines AI-enhanced signals with tradi
 ## 📊 **SIGNAL HIERARCHY (Trade Only These)**
 
 ### 🟢 **TIER 1 - PREMIUM SIGNALS** (4-5 contracts)
+
 ```
 LONG:  "G" signal + AO cross > 0 + Quality > 85% + Wave > 2.0x
 SHORT: "Top" signal + AO cross < 0 + Quality > 85% + Wave > 2.0x
 ```
 
 ### 🟡 **TIER 2 - STRONG SIGNALS** (2-3 contracts)  
+
 ```
 LONG:  "G" or "^" + AO > signal line + Quality 70-85% + Wave 1.5-2.0x
 SHORT: "Top" or "v" + AO < signal line + Quality 70-85% + Wave 1.5-2.0x
 ```
 
 ### ⚪ **TIER 3 - STANDARD SIGNALS** (1-2 contracts)
+
 ```
 LONG:  "^" + AO bullish + Quality 60-70% + Wave > 1.5x
 SHORT: "v" + AO bearish + Quality 60-70% + Wave > 1.5x
@@ -36,7 +40,9 @@ SHORT: "v" + AO bearish + Quality 60-70% + Wave > 1.5x
 ## 🎯 **THE 4 BULLETPROOF SETUPS**
 
 ### **Setup 1: EMA9 + VWAP Bullish Breakout**
+
 **Entry Conditions (ALL must be met):**
+
 - Price > EMA9 > VWAP (stacked alignment)
 - "G" signal appears at support level
 - AO crosses above zero OR shows bullish momentum
@@ -46,7 +52,9 @@ SHORT: "v" + AO bearish + Quality 60-70% + Wave > 1.5x
 **Entry Trigger:** Price breaks above recent swing high with volume
 
 ### **Setup 2: EMA9 + VWAP Bearish Breakdown**
+
 **Entry Conditions (ALL must be met):**
+
 - Price < EMA9 < VWAP (bearish stack)
 - "Top" signal appears at resistance level  
 - AO crosses below zero OR shows bearish momentum
@@ -56,14 +64,18 @@ SHORT: "v" + AO bearish + Quality 60-70% + Wave > 1.5x
 **Entry Trigger:** Price breaks below recent swing low with volume
 
 ### **Setup 3: VWAP Rejection Bounce**
+
 **Entry Conditions:**
+
 - Price approaches VWAP and bounces with "G" signal
 - AO shows bullish divergence or momentum
 - Strong support confluence
 - High-quality rejection candle (hammer, pin bar)
 
 ### **Setup 4: Support/Resistance + AO Zero Cross**
+
 **Entry Conditions:**
+
 - Price at key S/R level from FKS_AI
 - AO crosses zero line (bullish/bearish)
 - Signal quality > 70%
@@ -86,18 +98,21 @@ SHORT: "v" + AO bearish + Quality 60-70% + Wave > 1.5x
 ## 🛑 **RISK MANAGEMENT RULES**
 
 ### **Daily Limits**
+
 - **Maximum 6 trades per day** (stop at 6 regardless of P&L)
 - **3 consecutive losses = Stop trading for the day**
 - **Daily loss limit = 2% of account** (hard stop)
 - **Daily profit target = 1.5% of account** (consider stopping)
 
 ### **Position Sizing Rules**
+
 - **Base contract size**: 1 contract for Tier 3 signals
 - **Scale up**: Only for Tier 1-2 signals in trending markets
 - **Scale down**: -50% in volatile markets, -30% in ranging markets
 - **Never risk more than 1% per trade**
 
 ### **Exit Rules**
+
 - **Stop Loss**: 2x ATR from entry point
 - **Take Profit**: 3x ATR (minimum 1:1.5 R:R)
 - **Trailing Stop**: Use 1.5x ATR trail after 1:1 R:R achieved
@@ -108,6 +123,7 @@ SHORT: "v" + AO bearish + Quality 60-70% + Wave > 1.5x
 ## 🥇 **MARKET-SPECIFIC PARAMETERS**
 
 ### **GOLD FUTURES (GC)**
+
 ```
 FKS_AI Settings:
 - Asset Type: "Gold"
@@ -123,6 +139,7 @@ Trading Specs:
 ```
 
 ### **NASDAQ FUTURES (NQ)**
+
 ```
 FKS_AI Settings:
 - Asset Type: "Stocks"  
@@ -138,6 +155,7 @@ Trading Specs:
 ```
 
 ### **CRUDE OIL FUTURES (CL)**
+
 ```
 FKS_AI Settings:
 - Asset Type: "Forex"
@@ -157,6 +175,7 @@ Trading Specs:
 ## 🔧 **NINJATRADER 8 SETUP**
 
 ### **FKS_AI (Primary Panel)**
+
 ```
 Support/Resistance Length: 150
 Show Entry Zones: TRUE
@@ -166,6 +185,7 @@ Signal Quality Threshold: 0.65
 ```
 
 ### **FKS_AO (Lower Panel)**
+
 ```
 Fast Period: 5
 Slow Period: 34
@@ -175,6 +195,7 @@ Use AO Signal Cross: TRUE
 ```
 
 ### **Chart Configuration**
+
 ```
 Primary Timeframe: 5-minute (main trading)
 Confirmation Timeframe: 15-minute (context)
@@ -187,6 +208,7 @@ Session Template: CME US Index Futures RTH
 ## ⚡ **QUICK START CHECKLIST**
 
 ### **Daily Preparation:**
+
 1. [ ] Check FKS_AI signal quality threshold (≥0.65)
 2. [ ] Verify AO settings are correct
 3. [ ] Review daily limits and account balance
@@ -194,6 +216,7 @@ Session Template: CME US Index Futures RTH
 5. [ ] Set up charts with proper timeframes
 
 ### **Pre-Trade Verification:**
+
 1. [ ] Signal quality ≥ 60% (minimum)
 2. [ ] AO confirmation present
 3. [ ] Volume above 1.2x average
@@ -201,6 +224,7 @@ Session Template: CME US Index Futures RTH
 5. [ ] Stop loss and take profit levels set
 
 ### **Post-Trade Review:**
+
 1. [ ] Record signal quality and outcome
 2. [ ] Update daily trade count
 3. [ ] Calculate running P&L
@@ -212,6 +236,7 @@ Session Template: CME US Index Futures RTH
 ## 📚 **STRATEGY IMPLEMENTATION STATUS**
 
 ### ✅ **Completed:**
+
 - Refactored strategy from 4000+ lines to 800 lines
 - Created modular FKS_Strategy_Clean.cs
 - Unified FKS AddOns system
@@ -219,11 +244,13 @@ Session Template: CME US Index Futures RTH
 - Basic signal coordination
 
 ### ⚠️ **Current Issues:**
+
 1. **Signal Quality**: Thresholds may be too low (need 0.65+ minimum)
 2. **Setup Detection**: Logic needs enhancement
 3. **Risk Management**: Dynamic position sizing incomplete
 
 ### 🚀 **Next Phase Improvements:**
+
 1. **Fix Core Thresholds**: Raise signal quality requirements
 2. **Implement Proper VWAP**: Replace SMA proxy with real VWAP
 3. **Enhance Component Agreement**: Require 2 of 3 components
@@ -235,6 +262,7 @@ Session Template: CME US Index Futures RTH
 ## 🎯 **PERFORMANCE TARGETS**
 
 ### **Expected Results:**
+
 - **Win Rate**: 55-65% (quality over quantity)
 - **Average R:R**: 1:1.5 minimum
 - **Monthly Return**: 8-15% (conservative estimate)
@@ -242,6 +270,7 @@ Session Template: CME US Index Futures RTH
 - **Trade Frequency**: 2-4 trades per day average
 
 ### **Key Metrics to Track:**
+
 - Signal quality vs. win rate correlation
 - Best performing setups by market
 - Time of day performance analysis

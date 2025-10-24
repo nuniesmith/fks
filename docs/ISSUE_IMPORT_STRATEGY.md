@@ -7,6 +7,7 @@
 You have **13 existing open issues** (#56, #62-73):
 
 ### Existing Issues Breakdown
+
 - **RAG System Issues** (#62-73): 12 phased issues for RAG implementation
   - Phase 1: Foundation Setup
   - Phase 2: Document Processing
@@ -28,6 +29,7 @@ You have **13 existing open issues** (#56, #62-73):
 The import script we created adds **19 platform development issues**:
 
 ### Platform Issues (Complementary to RAG)
+
 - **Phase 1: Immediate Fixes** (3 issues)
   - Security Hardening
   - Fix Import/Test Failures
@@ -64,9 +66,11 @@ The import script we created adds **19 platform development issues**:
 ## Issue Overlap Analysis
 
 ### No Conflicts
+
 Your RAG issues are **highly specific** to RAG system implementation, while the platform issues cover **foundational infrastructure**. They complement each other.
 
 ### Potential Synergies
+
 - **RAG System Completion** (Platform Phase 2) + **RAG Foundation** (existing #62-73)
 - **Trading Signal Integration** (existing #66) + **Celery Tasks** (Platform Phase 2)
 - **Production Deployment** (existing #71) + **Production Readiness** (Platform Phase 5)
@@ -74,6 +78,7 @@ Your RAG issues are **highly specific** to RAG system implementation, while the 
 ## Recommended Strategy
 
 ### Option A: Import All (Comprehensive Roadmap)
+
 ```bash
 ./scripts/import_github_issues.sh
 ```
@@ -81,20 +86,24 @@ Your RAG issues are **highly specific** to RAG system implementation, while the 
 **Result**: 32 total open issues (13 existing + 19 new)
 
 **Pros:**
+
 - Complete visibility into all work
 - Proper dependency tracking
 - Clear separation (RAG vs Platform labels)
 
 **Cons:**
+
 - Large number of open issues
 - Need good organization system
 
 ### Option B: Phased Import (Recommended)
+
 ```bash
 ./scripts/organize_issues.sh
 ```
 
 This interactive script will:
+
 1. Show you current issue analysis
 2. Import **only Phase 1 platform issues** (3 critical issues)
 3. Optionally create GitHub Project board
@@ -103,14 +112,17 @@ This interactive script will:
 **Result**: 16 total open issues (13 existing + 3 Phase 1)
 
 **Pros:**
+
 - Manageable issue count
 - Focus on immediate needs
 - Can expand later
 
 **Cons:**
+
 - Missing long-term roadmap visibility initially
 
 ### Option C: Manual Organization First
+
 1. Review existing RAG issues (#62-73)
 2. Add proper milestones and labels
 3. Close any that are duplicates or premature
@@ -119,18 +131,21 @@ This interactive script will:
 ## Quick Start
 
 ### For Immediate Action (Recommended)
+
 ```bash
 # Interactive helper - analyzes and imports Phase 1 only
 ./scripts/organize_issues.sh
 ```
 
 ### For Full Import
+
 ```bash
 # Imports all 19 platform issues
 ./scripts/import_github_issues.sh
 ```
 
 ### For Manual Review
+
 ```bash
 # View current issues
 gh issue list --limit 20
@@ -208,6 +223,7 @@ gh label create "blocked" --color "b60205"
 ---
 
 **Files Reference:**
+
 - Full import script: `scripts/import_github_issues.sh`
 - Organization helper: `scripts/organize_issues.sh`
 - Complete guide: `docs/GITHUB_ISSUES_IMPORT.md`

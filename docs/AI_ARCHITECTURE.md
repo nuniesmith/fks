@@ -112,26 +112,31 @@ This document defines the **layered AI architecture** for the FKS Trading Platfo
 ## Layer 1: Base - Embeddings for RAG
 
 ### Purpose
+
 Vectorize trading data (OHLCV, reports, signals, trades) for semantic search in PostgreSQL with pgvector extension.
 
 ### Recommended Models
 
 #### Primary: BGE-M3 (567M parameters)
+
 **Ollama command**: `ollama pull bge-m3`
 
 **Strengths**:
+
 - Multi-functionality: Dense/sparse/multi-vector retrieval
 - 100+ languages (useful for global market news)
 - 8192 token context (handles long financial reports)
 - #1 on MTEB multilingual leaderboard (score ~70+)
 
 **Use Cases**:
+
 - Embedding trading signals for similarity search
 - Vectorizing market reports and financial PDFs
 - Semantic search across historical trades
 - Document ingestion in `rag/document_processor.py`
 
 **Integration**:
+
 ```python
 # In src/rag/embeddings.py
 from ollama import Client
@@ -148,27 +153,33 @@ def generate_embedding(text: str) -> list[float]:
 ```
 
 #### Alternative: Qwen3-Embedding (0.6B / 4B / 8B)
+
 **Ollama command**: `ollama pull qwen3-embedding:8b`
 
 **Strengths**:
+
 - Flexible dimensions (32-4096)
 - Strong in text/code retrieval (MTEB: 70.58 for 8B)
 - User-defined instructions for domain-specific embeddings
 
 **Use Cases**:
+
 - Code-aware embeddings (for strategy files)
 - Multilingual financial data
 - Scalable sizes for layered efficiency
 
 #### Alternative: Nomic-Embed-Text (137M - 335M)
+
 **Ollama command**: `ollama pull nomic-embed-text`
 
 **Strengths**:
+
 - Large context (8192+ tokens)
 - Outperforms OpenAI ada-002 on long tasks
 - Extremely low resource usage
 
 **Use Cases**:
+
 - Extended trading histories
 - Long-form market analysis
 - News article embeddings
@@ -207,6 +218,7 @@ class OllamaEmbeddingService:
 ```
 
 **Integration with pgvector**:
+
 ```python
 # In src/rag/vector_store.py
 from pgvector.psycopg2 import register_vector
@@ -237,26 +249,31 @@ def store_embedding(text: str, metadata: dict):
 ## Layer 2: Middle - Reasoning and Coding
 
 ### Purpose
+
 Handle math-heavy calculations, backtesting logic, strategy optimization, and code generation for trading strategies.
 
 ### Recommended Models
 
 #### Primary: Qwen3 (30B-235B MoE recommended)
+
 **Ollama command**: `ollama pull qwen3:30b`
 
 **Strengths**:
+
 - Strong math/code/reasoning (90.6+ on MGSM math benchmark)
 - Agent tools with thinking/non-thinking modes
 - Competitive with o1/Grok-3 on mathematical reasoning
 - MoE variants (30B-A3B activates only 3B) for efficiency
 
 **Use Cases**:
+
 - Backtesting calculations (Sharpe ratio, drawdown, etc.)
 - Risk management math (position sizing, ATR calculations)
 - Strategy code generation
 - Portfolio optimization algorithms
 
 **Integration**:
+
 ```python
 # In src/trading/signals/ai_analyzer.py
 from ollama import Client
@@ -282,27 +299,33 @@ def analyze_market_math(data: dict) -> dict:
 ```
 
 #### Alternative: DeepSeek-V3.1 (671B MoE, 37B active)
+
 **Ollama command**: `ollama pull deepseek-v3.1`
 
 **Strengths**:
+
 - Hybrid thinking/non-thinking modes
 - Enhanced code/search agents
 - Approaches o3-mini/Gemini 2.5 Pro in reasoning
 
 **Use Cases**:
+
 - Complex trading logic reasoning
 - Code agents for Celery task automation
 - Multi-step strategy optimization
 
 #### Specialized: Mathstral (7B)
+
 **Ollama command**: `ollama pull mathstral`
 
 **Strengths**:
+
 - Specialized math reasoning (70-73 on MathVista)
 - Efficient for quantitative tasks
 - Outperforms similar sizes in logic/math
 
 **Use Cases**:
+
 - ATR, SMA, EMA calculations
 - Statistical analysis of trades
 - Risk metrics (VaR, CVaR)
@@ -392,26 +415,31 @@ class TradingReasoningEngine:
 ## Layer 3: Top - Agentic/Tools for Orchestration
 
 ### Purpose
+
 High-level orchestration, tool calling, API integrations, multi-turn reasoning, and autonomous trading decisions.
 
 ### Recommended Models
 
 #### Primary: Llama4 Scout (109B MoE, 17B active)
+
 **Ollama command**: `ollama pull llama4:scout`
 
 **Strengths**:
+
 - Multimodal (text + image) - can analyze charts
 - Native tool/function calling
 - Strong agentic capabilities (MMMU 69-73)
 - Multilingual support
 
 **Use Cases**:
+
 - Orchestrating RAG → Reasoning → Action workflows
 - Tool calls to CCXT (exchange APIs)
 - Chart analysis via screenshots
 - Multi-agent coordination
 
 **Integration**:
+
 ```python
 # In src/rag/intelligence.py
 from ollama import Client
@@ -486,27 +514,33 @@ class IntelligenceOrchestrator:
 ```
 
 #### Alternative: GPT-OSS (20B / 120B)
+
 **Ollama command**: `ollama pull gpt-oss:20b`
 
 **Strengths**:
+
 - Competitive with GPT-4o in function calling
 - Strong reasoning/agentic capabilities
 - Versatile for development tasks
 
 **Use Cases**:
+
 - Intelligence orchestration in `rag/intelligence.py`
 - Complex multi-turn strategy discussions
 - API integration coordination
 
 #### Alternative: Mistral-Small3.2 (24B)
+
 **Ollama command**: `ollama pull mistral-small3.2`
 
 **Strengths**:
+
 - Improved function calling
 - 128K context (long trading histories)
 - Less repetition in responses
 
 **Use Cases**:
+
 - Multi-turn strategy refinement
 - Long-context portfolio analysis
 - Tool-based automation
@@ -905,16 +939,16 @@ echo "See docs/AI_ARCHITECTURE.md for integration details"
 .PHONY: ollama-setup ollama-test ollama-logs
 
 ollama-setup:
-	@echo "Setting up Ollama models..."
-	bash scripts/setup_ollama_models.sh
+ @echo "Setting up Ollama models..."
+ bash scripts/setup_ollama_models.sh
 
 ollama-test:
-	@echo "Testing Ollama models..."
-	pytest src/tests/test_ai/ -v -m ollama
+ @echo "Testing Ollama models..."
+ pytest src/tests/test_ai/ -v -m ollama
 
 ollama-logs:
-	@echo "Showing Ollama logs..."
-	docker-compose -f docker-compose.gpu.yml logs -f ollama
+ @echo "Showing Ollama logs..."
+ docker-compose -f docker-compose.gpu.yml logs -f ollama
 ```
 
 ---
@@ -1098,6 +1132,7 @@ model_loaded = Gauge(
 **File**: `monitoring/grafana/dashboards/ai-performance.json`
 
 Panels:
+
 - Embedding requests/sec
 - Inference latency (p50, p95, p99)
 - Model VRAM usage
@@ -1111,6 +1146,7 @@ Panels:
 If currently using OpenAI API:
 
 ### Before (OpenAI)
+
 ```python
 from openai import OpenAI
 
@@ -1122,6 +1158,7 @@ response = client.embeddings.create(
 ```
 
 ### After (Ollama)
+
 ```python
 from ollama import Client
 
@@ -1133,6 +1170,7 @@ response = client.embeddings(
 ```
 
 ### Cost Savings
+
 - **OpenAI**: $0.0001 per 1K tokens = $100/million tokens
 - **Ollama**: $0 (local inference)
 - **Annual savings** (estimated): $10K-$50K depending on volume
@@ -1142,30 +1180,38 @@ response = client.embeddings(
 ## Risks and Mitigation
 
 ### Risk 1: Hallucination in Financial Decisions
+
 **Impact**: AI makes incorrect trading recommendations  
 **Mitigation**:
+
 - Implement fact-checking chains
 - Require human approval for large trades
 - Set confidence thresholds (e.g., only act on >80% confidence)
 - Monitor recommendation accuracy
 
 ### Risk 2: Model Drift
+
 **Impact**: Model performance degrades over time  
 **Mitigation**:
+
 - Continuous evaluation on held-out test set
 - Track decision accuracy vs actual outcomes
 - Retrain/fine-tune quarterly
 
 ### Risk 3: GPU Resource Exhaustion
+
 **Impact**: Models fail to load or run slowly  
 **Mitigation**:
+
 - Implement model swapping (load on-demand)
 - Use smaller models during high load
 - Scale horizontally (multiple GPU nodes)
 
 ### Risk 4: Inference Latency
+
 **Impact**: Slow recommendations miss trading opportunities  
 **Mitigation**:
+
 - Cache frequent queries
 - Use smaller models for time-sensitive tasks
 - Pre-compute embeddings overnight
@@ -1176,6 +1222,7 @@ response = client.embeddings(
 ## Roadmap
 
 ### Phase 1: Base Layer (Weeks 1-2)
+
 - ✅ Research and document models (this doc)
 - ⏳ Install Ollama + BGE-M3
 - ⏳ Implement `OllamaEmbeddingService`
@@ -1183,6 +1230,7 @@ response = client.embeddings(
 - ⏳ Test embedding generation and search
 
 ### Phase 2: Middle Layer (Weeks 3-4)
+
 - ⏳ Install Qwen3:30b + Mathstral
 - ⏳ Implement `TradingReasoningEngine`
 - ⏳ Test math calculations (ATR, position sizing)
@@ -1190,6 +1238,7 @@ response = client.embeddings(
 - ⏳ Validate reasoning accuracy
 
 ### Phase 3: Top Layer (Weeks 5-6)
+
 - ⏳ Install Llama4:scout
 - ⏳ Implement `IntelligenceOrchestrator`
 - ⏳ Connect all three layers
@@ -1197,6 +1246,7 @@ response = client.embeddings(
 - ⏳ Add function calling for tool use
 
 ### Phase 4: Integration (Weeks 7-8)
+
 - ⏳ Integrate with Celery tasks
 - ⏳ Connect to live trading (with safeguards)
 - ⏳ Add monitoring/metrics
@@ -1204,6 +1254,7 @@ response = client.embeddings(
 - ⏳ Production deployment
 
 ### Phase 5: Optimization (Weeks 9-12)
+
 - ⏳ Fine-tune on historical trades
 - ⏳ Implement caching strategies
 - ⏳ Add model swapping logic

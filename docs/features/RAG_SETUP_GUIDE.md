@@ -72,6 +72,7 @@ python -c "from database import init_db; init_db()"
 ### 3. Install Dependencies
 
 Dependencies are already in `requirements.txt`:
+
 - pgvector>=0.3.6
 - tiktoken>=0.9.0
 - langchain and related packages
@@ -257,6 +258,7 @@ Automated data ingestion pipeline.
 ## Database Schema
 
 ### documents
+
 - `id` - Document ID
 - `doc_type` - Document type
 - `title` - Document title
@@ -267,6 +269,7 @@ Automated data ingestion pipeline.
 - `created_at` - Creation timestamp
 
 ### document_chunks
+
 - `id` - Chunk ID
 - `document_id` - Parent document
 - `chunk_index` - Order in document
@@ -276,6 +279,7 @@ Automated data ingestion pipeline.
 - `metadata` - JSON metadata
 
 ### query_history
+
 - `id` - Query ID
 - `query` - User question
 - `response` - AI response
@@ -285,6 +289,7 @@ Automated data ingestion pipeline.
 - `created_at` - Query timestamp
 
 ### trading_insights
+
 - `id` - Insight ID
 - `insight_type` - Type of insight
 - `title` - Insight title
@@ -297,16 +302,19 @@ Automated data ingestion pipeline.
 ## Performance Optimization
 
 ### Embedding Generation
+
 - Batch size: 100 texts per API call
 - Model: text-embedding-3-small (1536 dimensions)
 - Cost: ~$0.02 per 1M tokens
 
 ### Vector Search
+
 - Index: HNSW (fast approximate nearest neighbor)
 - Similarity: Cosine distance
 - Typical query time: <100ms for 10k documents
 
 ### Context Window
+
 - Max tokens per query: 4000 tokens (~16,000 characters)
 - Default chunks retrieved: 5
 - Chunk size: 512 tokens with 50 token overlap
@@ -378,11 +386,13 @@ REINDEX INDEX idx_document_chunks_embedding_hnsw;
 ## Cost Estimation
 
 ### Embeddings
+
 - 1000 documents × 2 chunks avg = 2000 chunks
 - 2000 chunks × 512 tokens = 1,024,000 tokens
 - Cost: ~$0.02
 
 ### LLM Queries
+
 - 100 queries/day × 1500 tokens avg = 150,000 tokens/day
 - Using GPT-4o-mini: ~$0.15/day
 - Monthly: ~$4.50
@@ -397,6 +407,7 @@ REINDEX INDEX idx_document_chunks_embedding_hnsw;
 ## Support
 
 For issues or questions:
+
 1. Check logs in `logs/` directory
 2. Review query history in database
 3. Test with simple queries first

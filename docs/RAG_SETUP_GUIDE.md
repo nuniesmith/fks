@@ -1,23 +1,25 @@
 # FKS Intelligence RAG System - Setup Guide
 
-Complete guide to setting up and using the FKS Intelligence RAG (Retrieval-Augmented Generation) system for AI-powered trading recommendations.
+Complete guide to setting up and using the FKS Intelligence RAG (Retrieval-Augmented Generation) system for
+AI-powered trading recommendations.
 
 ## 📋 Table of Contents
 
-- [Overview](#overview)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Database Setup](#database-setup)
-- [Ollama Setup](#ollama-setup)
-- [Quick Start](#quick-start)
-- [Usage Examples](#usage-examples)
-- [Celery Integration](#celery-integration)
-- [Testing](#testing)
-- [Troubleshooting](#troubleshooting)
+- [🎯 Overview](#-overview)
+- [📦 Prerequisites](#-prerequisites)
+- [🔧 Installation](#-installation)
+- [🗄️ Database Setup](#️-database-setup)
+- [🤖 Ollama Setup](#-ollama-setup)
+- [🚀 Quick Start](#-quick-start)
+- [💡 Usage Examples](#-usage-examples)
+- [🔄 Celery Integration](#-celery-integration)
+- [🧪 Testing](#-testing)
+- [🔍 Troubleshooting](#-troubleshooting)
 
 ## 🎯 Overview
 
 The FKS Intelligence RAG system provides:
+
 - AI-powered trading recommendations based on historical data
 - Semantic search over signals, backtests, and trade analyses
 - Local LLM support (Ollama) with GPU acceleration
@@ -25,6 +27,7 @@ The FKS Intelligence RAG system provides:
 - OpenAI API fallback
 
 **Architecture:**
+
 ```
 Trading Data → Document Processor → Embeddings → pgvector (PostgreSQL)
                                                         ↓
@@ -34,12 +37,14 @@ User Query → Retrieval Service → Context + LLM → Trading Insights
 ## 📦 Prerequisites
 
 ### Required
+
 - Python 3.10+
 - PostgreSQL 15+ with pgvector extension
 - Redis (for Celery)
 - Docker & Docker Compose (recommended)
 
 ### Optional but Recommended
+
 - CUDA-capable GPU (for acceleration)
 - Ollama (for local LLM)
 - 8GB+ RAM (16GB+ for local LLM)
@@ -55,6 +60,7 @@ pip install -r requirements.txt
 ```
 
 Key packages:
+
 - `sentence-transformers` - Local embeddings
 - `ollama` - Local LLM client
 - `torch` - CUDA support
@@ -100,6 +106,7 @@ psql -U postgres -d trading_db -f sql/migrations/001_add_pgvector.sql
 ```
 
 This creates:
+
 - Vector indexes (HNSW for fast similarity search)
 - Composite indexes for filtering
 - GIN indexes for JSONB metadata
@@ -111,6 +118,7 @@ psql -U postgres -d trading_db -c "\dt"
 ```
 
 Should show:
+
 - `documents` - Source documents
 - `document_chunks` - Chunks with embeddings
 - `query_history` - Query logs
@@ -123,11 +131,13 @@ Ollama provides free local LLM inference with GPU acceleration.
 ### 1. Install Ollama
 
 **Linux:**
+
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
 **macOS:**
+
 ```bash
 brew install ollama
 ```
@@ -373,6 +383,7 @@ if cuda_info['cuda_available']:
 **Error:** `OllamaConnectionError` or `Connection refused`
 
 **Solution:**
+
 ```bash
 # Make sure Ollama is running
 ollama serve
@@ -389,6 +400,7 @@ ollama pull llama3.2:3b
 **Error:** `extension "vector" is not available`
 
 **Solution:**
+
 ```bash
 # Install pgvector (Ubuntu/Debian)
 sudo apt install postgresql-15-pgvector
@@ -408,6 +420,7 @@ psql -U postgres -d trading_db -c "CREATE EXTENSION vector;"
 **Error:** `CUDA available: False`
 
 **Solution:**
+
 ```bash
 # Check NVIDIA driver
 nvidia-smi
@@ -424,17 +437,21 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 **Error:** `CUDA out of memory`
 
 **Solution:**
+
 1. Use smaller models:
+
    ```bash
    ollama pull llama3.2:1b  # Instead of 3b
    ```
 
 2. Use CPU instead:
+
    ```python
    orchestrator = IntelligenceOrchestrator(use_local=False)  # Use OpenAI
    ```
 
 3. Reduce batch size:
+
    ```python
    embeddings.generate_embeddings_batch(texts, batch_size=16)  # Instead of 32
    ```
@@ -444,6 +461,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 **Error:** Queries taking >1 second
 
 **Solution:**
+
 ```sql
 -- Check if HNSW index exists
 SELECT indexname FROM pg_indexes 
@@ -464,6 +482,7 @@ VACUUM ANALYZE document_chunks;
 **Error:** `ModuleNotFoundError: No module named 'web.rag'`
 
 **Solution:**
+
 ```bash
 # Make sure you're in project root
 cd /path/to/fks
@@ -501,7 +520,7 @@ from src.web.rag.services import IntelligenceOrchestrator
 6. **Test with mock data first** - Before ingesting production data
 7. **Set up scheduled ingestion** - Keep knowledge base up-to-date
 
-## 🎉 You're Ready!
+## 🎉 You're Ready
 
 The RAG system is now set up and ready to use. Start with the example scripts and explore the API:
 

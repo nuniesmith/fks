@@ -84,16 +84,19 @@ Already configured in `src/web/django/celery.py`:
 ### Immediate Actions (Requires Docker)
 
 1. **Start Docker services**
+
    ```bash
    make up
    ```
 
 2. **Verify Celery worker running**
+
    ```bash
    docker-compose logs -f celery_worker
    ```
 
 3. **Test task manually**
+
    ```bash
    docker-compose exec web python manage.py shell
    >>> from trading.tasks import sync_market_data_task
@@ -102,6 +105,7 @@ Already configured in `src/web/django/celery.py`:
    ```
 
 4. **Verify data in database**
+
    ```bash
    docker-compose exec web python manage.py shell
    >>> from core.database.models import OHLCVData, Session
@@ -132,6 +136,7 @@ The project instructions stated:
 > "Celery tasks are **currently stubs** - implementations needed for market data sync..."
 
 However, the actual code shows:
+
 - Full production implementation
 - Comprehensive error handling
 - Advanced features (circuit breaker, rate limiter)
@@ -151,6 +156,7 @@ python test_market_sync.py
 ```
 
 **Output:**
+
 ```
 ================================================================================
 MARKET DATA SYNC - TEST SUITE

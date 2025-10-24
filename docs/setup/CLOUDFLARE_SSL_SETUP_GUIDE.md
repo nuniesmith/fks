@@ -24,6 +24,7 @@ You need to add these **4 new secrets** to your GitHub repository:
 ### Step 1: Create Cloudflare API Token
 
 1. **Go to Cloudflare Dashboard**
+
    ```
    https://dash.cloudflare.com/profile/api-tokens
    ```
@@ -31,6 +32,7 @@ You need to add these **4 new secrets** to your GitHub repository:
 2. **Click "Create Token"**
 
 3. **Use "Custom token" template** with these exact permissions:
+
    ```
    🔧 Permissions:
    - Zone : Zone : Read (for all zones)
@@ -49,6 +51,7 @@ You need to add these **4 new secrets** to your GitHub repository:
 ### Step 2: Get Zone ID
 
 1. **Go to your domain overview**
+
    ```
    https://dash.cloudflare.com/
    ```
@@ -61,6 +64,7 @@ You need to add these **4 new secrets** to your GitHub repository:
 ### Step 3: Add Secrets to GitHub
 
 1. **Go to your repository settings**
+
    ```
    https://github.com/[username]/fks/settings/secrets/actions
    ```
@@ -68,29 +72,35 @@ You need to add these **4 new secrets** to your GitHub repository:
 2. **Click "New repository secret"** and add each secret:
 
 #### Secret #1: CLOUDFLARE_API_TOKEN
+
 ```
 Name: CLOUDFLARE_API_TOKEN
 Value: [Paste your API token from Step 1]
 ```
 
 #### Secret #2: CLOUDFLARE_ZONE_ID
+
 ```
 Name: CLOUDFLARE_ZONE_ID
 Value: [Paste your Zone ID from Step 2]
 ```
 
 #### Secret #3: DOMAIN_NAME (Optional)
+
 ```
 Name: DOMAIN_NAME
 Value: fkstrading.xyz
 ```
+
 *Note: This has a default value in the workflow, but setting it ensures consistency*
 
 #### Secret #4: ADMIN_EMAIL
+
 ```
 Name: ADMIN_EMAIL
 Value: your-email@example.com
 ```
+
 *Use a real email - Let's Encrypt will send renewal notifications here*
 
 ## ✅ Verification
@@ -125,13 +135,13 @@ env:
 
 ## 🚨 Troubleshooting
 
-### Common Issues:
+### Common Issues
 
 1. **"Invalid API token"**
    - Check token permissions include Zone:Edit for fkstrading.xyz
    - Verify token hasn't expired
 
-2. **"Zone not found"** 
+2. **"Zone not found"**
    - Double-check the Zone ID is correct
    - Ensure domain is active in Cloudflare
 
@@ -143,7 +153,7 @@ env:
    - Use a real, accessible email address
    - Check email formatting
 
-### Debug Commands:
+### Debug Commands
 
 ```bash
 # Test API token (run in workflow or locally)

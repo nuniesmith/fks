@@ -5,11 +5,13 @@
 ### **Docker Startup Failures**
 
 #### **Problem**: Docker fails to start with overlay filesystem errors
+
 ```
 Error: failed to mount overlay: no such device
 ```
 
 **Solution for Arch Linux:**
+
 ```bash
 # Configure Docker to use VFS storage driver
 sudo mkdir -p /etc/docker
@@ -25,6 +27,7 @@ sudo systemctl restart docker
 ```
 
 **Solution for Ubuntu/Debian:**
+
 ```bash
 # Install overlay kernel module
 sudo modprobe overlay
@@ -35,6 +38,7 @@ sudo systemctl restart docker
 ```
 
 #### **Problem**: Docker service won't start after reboot
+
 ```bash
 # Check Docker status
 sudo systemctl status docker
@@ -52,9 +56,11 @@ sudo systemctl restart docker
 ### **User Permission Issues**
 
 #### **Problem**: "sudo: unknown user ninja" during setup
+
 **Root Cause**: SSH setup attempted before user creation
 
 **Solution 1 - Quick Fix Script:**
+
 ```bash
 # Download and run the quick fix
 curl -fsSL https://raw.githubusercontent.com/nuniesmith/ninja/main/scripts/stackscript-quickfix.sh -o quickfix.sh
@@ -69,6 +75,7 @@ sudo ./quickfix.sh
 ```
 
 **Solution 2 - Manual Fix:**
+
 ```bash
 # Create the ninja user
 sudo useradd -m -s /bin/bash ninja
@@ -89,9 +96,11 @@ sudo -u ninja chmod 700 /home/ninja/.ssh
 ### **Network and Firewall Issues**
 
 #### **Problem**: Cannot access web interfaces
+
 **Symptoms**: Connection refused on ports 3000, 8002, 8081, 6080
 
 **Check firewall status:**
+
 ```bash
 # Ubuntu/Debian
 sudo ufw status
@@ -107,6 +116,7 @@ sudo ufw allow 6080  # VNC web
 ```
 
 **Check services are running:**
+
 ```bash
 # Check if services are listening
 sudo netstat -tlnp | grep -E '(3000|8002|8081|6080|5900)'
@@ -123,6 +133,7 @@ docker-compose restart
 #### **Problem**: SSH connection refused or authentication failure
 
 **Check SSH service:**
+
 ```bash
 # Check if SSH is running
 sudo systemctl status ssh     # Ubuntu/Debian
@@ -133,6 +144,7 @@ sudo systemctl restart ssh
 ```
 
 **Check SSH configuration:**
+
 ```bash
 # Verify SSH config
 sudo sshd -T | grep -E "(PermitRootLogin|PasswordAuthentication|PubkeyAuthentication)"
@@ -144,6 +156,7 @@ sudo sshd -T | grep -E "(PermitRootLogin|PasswordAuthentication|PubkeyAuthentica
 ```
 
 **Test SSH key authentication:**
+
 ```bash
 # Test from local machine
 ssh -v ninja@YOUR_IP
@@ -160,11 +173,13 @@ cat /home/ninja/.ssh/authorized_keys
 ### **Tailscale Connection Failures**
 
 #### **Problem**: GitHub Actions can't connect to Tailscale
+
 ```
 Error: Failed to authenticate with Tailscale
 ```
 
 **Check OAuth client configuration:**
+
 1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin)
 2. Navigate to **Settings** → **OAuth clients**
 3. Verify client has correct scopes: `devices:write` and `all:read`
@@ -172,6 +187,7 @@ Error: Failed to authenticate with Tailscale
 5. Regenerate client secret if needed
 
 **Check GitHub secrets:**
+
 ```bash
 # Verify secrets are set in GitHub repository
 # Settings → Secrets and variables → Actions → Repository secrets
@@ -183,11 +199,13 @@ NINJA_SSH_PRIVATE_KEY
 ### **SSH Authentication Failures**
 
 #### **Problem**: GitHub Actions can't SSH to server
+
 ```
 Error: Permission denied (publickey)
 ```
 
 **Solution:**
+
 ```bash
 # Generate new SSH key for CI/CD
 ssh-keygen -t ed25519 -f ~/.ssh/ninja-ci-cd -N ""
@@ -202,7 +220,9 @@ cat ~/.ssh/ninja-ci-cd  # Copy this to NINJA_SSH_PRIVATE_KEY secret
 ### **Deployment Script Failures**
 
 #### **Problem**: Deployment fails with "command not found"
+
 **Check PATH and environment:**
+
 ```bash
 # SSH into server and check
 ssh ninja@YOUR_SERVER
@@ -223,7 +243,9 @@ echo $PATH
 ### **Stage 2 Service Not Running**
 
 #### **Problem**: Stage 2 deployment doesn't run after reboot
+
 **Check systemd service:**
+
 ```bash
 # Check if Stage 2 service exists
 sudo systemctl status ninja-stage2
@@ -238,6 +260,7 @@ sudo /usr/local/bin/ninja-stage2.sh
 ### **Repository Cloning Issues**
 
 #### **Problem**: Git clone fails with authentication error
+
 ```bash
 # Check GitHub token has correct permissions
 curl -H "Authorization: token YOUR_GITHUB_TOKEN" https://api.github.com/user
@@ -253,7 +276,9 @@ sudo chown -R ninja:ninja /home/ninja/ninja
 ### **Environment Configuration Problems**
 
 #### **Problem**: Services can't find configuration files
+
 **Check configuration paths:**
+
 ```bash
 # Verify configuration exists
 ls -la /etc/ninja-trading/
@@ -273,7 +298,9 @@ sudo chown -R ninja:ninja /opt/ninja-trading/
 ### **NinjaTrader Compilation Errors**
 
 #### **Problem**: Strategy won't compile in NinjaTrader
+
 **Common issues:**
+
 ```csharp
 // Missing using statements
 using NinjaTrader.Cbi;
@@ -291,6 +318,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 ```
 
 **Check references:**
+
 ```xml
 <!-- Ensure proper references in .csproj -->
 <Reference Include="NinjaTrader.Core" />
@@ -301,7 +329,9 @@ namespace NinjaTrader.NinjaScript.Strategies
 ### **Indicator Dependencies Missing**
 
 #### **Problem**: Strategy can't find custom indicators
+
 **Solution:**
+
 ```bash
 # Copy all FKS AddOns to NinjaTrader
 cp src/AddOns/*.cs "$env:USERPROFILE\Documents\NinjaTrader 8\bin\Custom\AddOns\"
@@ -313,7 +343,9 @@ cp src/AddOns/*.cs "$env:USERPROFILE\Documents\NinjaTrader 8\bin\Custom\AddOns\"
 ### **Signal Quality Issues**
 
 #### **Problem**: Poor signal quality or too many/few signals
+
 **Debug signal generation:**
+
 ```csharp
 // Add debug output to strategy
 Print($"Signal Quality: {signalQuality:F2}, " +
@@ -335,6 +367,7 @@ if (signalQuality < SignalThreshold)
 ### **System Recovery**
 
 #### **Complete system failure - can't access server**
+
 ```bash
 # Use Linode console (Lish) to access system
 # From Linode Cloud Manager → Select your Linode → Launch Lish Console
@@ -351,6 +384,7 @@ systemctl restart ninja-trading
 ```
 
 #### **Service rollback**
+
 ```bash
 # Quick rollback to previous version
 cd /home/ninja/ninja
@@ -362,6 +396,7 @@ docker-compose restart
 ### **Data Recovery**
 
 #### **Backup and restore configuration**
+
 ```bash
 # Create backup
 sudo tar -czf ninja-backup-$(date +%Y%m%d).tar.gz \
@@ -377,12 +412,14 @@ sudo chown -R ninja:ninja /home/ninja/ninja/
 ### **Contact Information**
 
 #### **When to escalate**
+
 - System completely unreachable
 - Data corruption or loss
 - Security breach suspected
 - Multiple service failures
 
 #### **Information to gather before escalating**
+
 ```bash
 # System information
 uname -a
@@ -404,6 +441,7 @@ ss -tlnp
 ## 📋 **DIAGNOSTIC COMMANDS**
 
 ### **Quick Health Check**
+
 ```bash
 #!/bin/bash
 echo "=== System Health Check ==="
@@ -432,6 +470,7 @@ ss -tlnp | grep -E ':(3000|8002|8081|6080|5900)'
 ```
 
 ### **Log Collection Script**
+
 ```bash
 #!/bin/bash
 LOG_DIR="/tmp/ninja-logs-$(date +%Y%m%d-%H%M%S)"
@@ -459,6 +498,7 @@ Run these scripts when troubleshooting to gather comprehensive diagnostic inform
 ## **SSH Connection Failures in CI/CD**
 
 #### **Problem**: SSH connection fails with "Permission denied (publickey,password)"
+
 ```
 ***@***: Permission denied (publickey,password).
 ERROR: SSH connection failed
@@ -467,6 +507,7 @@ ERROR: SSH connection failed
 **Common Causes & Solutions:**
 
 1. **SSH Key Not Added to Server**
+
    ```bash
    # On your deployment server, add the public key to authorized_keys
    mkdir -p ~/.ssh
@@ -482,12 +523,15 @@ ERROR: SSH connection failed
 
 2. **Incorrect SSH Key Format in GitHub Secrets**
    - Ensure the private key includes proper headers:
+
      ```
      -----BEGIN OPENSSH PRIVATE KEY-----
      ...key content...
      -----END OPENSSH PRIVATE KEY-----
      ```
+
    - Or for RSA keys:
+
      ```
      -----BEGIN RSA PRIVATE KEY-----
      ...key content...
@@ -495,6 +539,7 @@ ERROR: SSH connection failed
      ```
 
 3. **SSH Service Configuration Issues**
+
    ```bash
    # Check SSH service status
    sudo systemctl status ssh
@@ -509,6 +554,7 @@ ERROR: SSH connection failed
    ```
 
 4. **Firewall Blocking SSH**
+
    ```bash
    # Check if SSH port is open
    sudo ufw status
@@ -524,6 +570,7 @@ ERROR: SSH connection failed
    - Test manually: `ssh user@host`
 
 **Debugging Steps:**
+
 ```bash
 # Test SSH connection manually
 ssh -vvv user@hostname
@@ -536,11 +583,13 @@ ssh-copy-id user@hostname
 ```
 
 #### **Problem**: Host key verification failures
+
 ```
 Host key verification failed
 ```
 
 **Solution:**
+
 ```bash
 # Remove old host key
 ssh-keygen -R hostname

@@ -9,6 +9,7 @@
 ## 📋 Issue List
 
 ### 🔴 CRITICAL (Do First)
+
 - **#48**: [P3.2] Fix Legacy Import Errors
   - **Impact**: Unblocks 20 failing tests (41% → 100% pass rate)
   - **Effort**: 1-2 days
@@ -20,18 +21,21 @@
   - **Blocker**: No automated trading without this
 
 ### 🟡 HIGH (Next Sprint)
+
 - **#39**: [P3.4] Replace Mock Data in Views (15 TODOs)
 - **#41**: [P3.6] Expand Test Coverage (41% → 80%)
 - **#42**: [P3.7] Verify RAG Integration
 - **#45**: [P3.10] Runtime Security Checks
 
 ### 🟢 MEDIUM (Polish)
+
 - **#43**: [P3.8] Update Dependencies (pip-audit)
 - **#44**: [P3.9] Add Async Support (6-7x faster)
 - **#46**: [P3.11] Fix Markdown Lint (189 errors)
 - **#47**: [P3.12] GPU Optimization (6GB VRAM)
 
 ### ⚪ LOW (Optional)
+
 - **#40**: [P3.5] Cleanup Small Files (24 → <10)
 
 ---
@@ -60,6 +64,7 @@ gh run list --limit 5
 ## 🚀 Recommended Sprint Plan
 
 ### Sprint 1 (Week 1): Critical Fixes
+
 ```bash
 # Issue #48: Fix imports (Days 1-2)
 git checkout -b fix/legacy-imports
@@ -71,6 +76,7 @@ git checkout -b feature/rag-tasks
 ```
 
 ### Sprint 2 (Week 2): High Priority
+
 ```bash
 # Issue #39: Replace mock data
 # Issue #41: Expand test coverage to 80%
@@ -79,6 +85,7 @@ git checkout -b feature/rag-tasks
 ```
 
 ### Sprint 3 (Week 3): Polish
+
 ```bash
 # Issue #43: Update deps (pip-audit)
 # Issue #44: Add async (6-7x speedup)
@@ -87,6 +94,7 @@ git checkout -b feature/rag-tasks
 ```
 
 ### Sprint 4 (Week 4): Ship It
+
 ```bash
 # Issue #40: Cleanup (optional)
 # Final testing
@@ -112,6 +120,7 @@ git checkout -b feature/rag-tasks
 ## 🎯 Daily Workflow
 
 ### Morning
+
 ```bash
 # Pull latest changes
 git pull origin main
@@ -124,6 +133,7 @@ gh issue list --assignee @me
 ```
 
 ### Development
+
 ```bash
 # Start feature branch
 gh issue develop <number> --checkout
@@ -136,6 +146,7 @@ git commit -m "feat: <short description>"
 ```
 
 ### End of Day
+
 ```bash
 # Push work
 git push origin HEAD
@@ -152,6 +163,7 @@ gh issue list --label "phase:3-testing" --sort created
 ## 🛠️ Essential Commands
 
 ### Testing
+
 ```bash
 pytest tests/ -v                          # All tests
 pytest tests/ -x                          # Stop on first fail
@@ -161,6 +173,7 @@ pytest -m "not slow" -v                   # Skip slow
 ```
 
 ### Quality
+
 ```bash
 make lint                                 # Ruff, mypy, black
 make format                               # Auto-format
@@ -168,6 +181,7 @@ pip-audit requirements.txt                # Security
 ```
 
 ### Docker
+
 ```bash
 make up                                   # Start services
 make logs                                 # Follow logs
@@ -176,6 +190,7 @@ make down                                 # Stop all
 ```
 
 ### Monitoring
+
 - Health: http://localhost:8000/health/dashboard/
 - Grafana: http://localhost:3000
 - Flower: http://localhost:5555

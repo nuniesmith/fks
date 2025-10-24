@@ -7,10 +7,12 @@ Your FKS deployment workflow is now properly configured for automatic deployment
 ## Automatic Deployment Configuration
 
 ### ✅ **Triggers**
+
 - **Automatic**: Deploys on push to `main` or `develop` branches
 - **Manual**: Workflow dispatch with customizable options
 
 ### ✅ **Deployment Modes**
+
 - `single` - Traditional single-server deployment
 - `multi-auth` - Deploy only auth server (g6-nanode-1, $5/month)
 - `multi-api` - Deploy only API server (g6-standard-1, $12/month)
@@ -18,6 +20,7 @@ Your FKS deployment workflow is now properly configured for automatic deployment
 - `multi-all` - Deploy all three servers ($22/month total)
 
 ### ✅ **Cost-Optimized Architecture**
+
 ```
 🔐 Auth Server:  g6-nanode-1   (1GB RAM) - $5/month
 ⚡ API Server:   g6-standard-1 (2GB RAM) - $12/month
@@ -28,24 +31,29 @@ Your FKS deployment workflow is now properly configured for automatic deployment
 ## Cleanup & Resource Management
 
 ### 🧹 **Pre-Deployment Cleanup** (New Feature)
+
 The workflow now includes a comprehensive cleanup step that runs before deployment:
 
 #### **Linode Servers**
+
 - Finds and deletes old FKS servers (`fks`, `fks-auth`, `fks-api`, `fks-web`)
 - Prevents orphaned servers from previous deployments
 - Ensures clean environment for new deployment
 
 #### **Cloudflare DNS Records**
+
 - Removes old DNS records for all FKS subdomains
 - Cleans up: `fks.7gram.xyz`, `auth.7gram.xyz`, `api.7gram.xyz`, `web.7gram.xyz`
 - Prevents DNS conflicts during redeployment
 
 #### **Tailscale Devices** (Optional)
+
 - Removes old FKS devices from Tailscale network
 - Requires `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_SECRET` secrets
 - Keeps your Tailscale network clean
 
 ### 🛡️ **Failure Handling**
+
 - Automatic server cleanup on deployment failures (NVIDIA firmware conflict fixes)
 - Comprehensive error reporting with server IDs and cleanup status
 - DNS record cleanup on partial failures
@@ -88,6 +96,7 @@ Deploy all three servers with default settings:
 Your FKS repository must have these secrets configured:
 
 #### Infrastructure Secrets
+
 ```bash
 LINODE_CLI_TOKEN          # Linode API token
 FKS_ROOT_PASSWORD         # Root password for servers
@@ -96,6 +105,7 @@ ACTIONS_USER_PASSWORD     # Service user password
 ```
 
 #### Networking Secrets
+
 ```bash
 TAILSCALE_AUTH_KEY        # Tailscale auth key for VPN
 TAILSCALE_OAUTH_CLIENT_ID # Optional: Tailscale OAuth
@@ -103,12 +113,14 @@ TAILSCALE_OAUTH_SECRET    # Optional: Tailscale OAuth
 ```
 
 #### DNS Secrets
+
 ```bash
 CLOUDFLARE_API_TOKEN      # Cloudflare API token
 CLOUDFLARE_ZONE_ID        # Cloudflare zone ID for 7gram.xyz
 ```
 
 #### Container Registry (Optional)
+
 ```bash
 DOCKER_USERNAME           # Docker Hub username
 DOCKER_TOKEN             # Docker Hub token
@@ -136,11 +148,13 @@ fks/
 After successful deployment:
 
 ### Multi-Server Setup
+
 - **Auth Portal**: https://auth.7gram.xyz
 - **Trading API**: https://api.7gram.xyz  
 - **Web Interface**: https://fks.7gram.xyz
 
 ### Tailscale Access (Internal)
+
 - **Auth**: http://fks-auth:9000
 - **API**: http://fks-api:8080
 - **Web**: http://fks-web:80
@@ -156,6 +170,7 @@ After successful deployment:
 ### Common Issues
 
 #### Services Not Starting
+
 ```bash
 # SSH into the problematic server
 ssh fks_user@fks-auth  # or fks-api, fks-web
@@ -167,11 +182,13 @@ docker compose logs
 ```
 
 #### DNS Not Resolving
+
 - Wait 5-10 minutes for DNS propagation
 - Check Cloudflare dashboard for DNS records
 - Verify Tailscale connectivity as fallback
 
 #### Connection Issues
+
 ```bash
 # Test Tailscale connectivity
 tailscale ping fks-auth
@@ -189,6 +206,7 @@ curl http://fks-web/health
 ### Deploying Updates
 
 For code changes:
+
 ```bash
 # Push to main branch triggers automatic deployment
 git push origin main
@@ -200,6 +218,7 @@ git push origin main
 ### Partial Updates
 
 Update specific services:
+
 ```bash
 # Update only API server
 deployment_mode: "multi-api"
@@ -223,6 +242,7 @@ deployment_mode: "multi-all"
 ## 💰 Cost Management
 
 Current setup cost breakdown:
+
 - Auth Server: $5/month (1GB RAM)
 - API Server: $12/month (2GB RAM)
 - Web Server: $5/month (1GB RAM)

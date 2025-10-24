@@ -9,6 +9,7 @@ This guide walks you through importing all 19 FKS development tasks as GitHub is
 If you don't have GitHub CLI installed:
 
 **Ubuntu/Debian (WSL):**
+
 ```bash
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
@@ -17,6 +18,7 @@ sudo apt install gh
 ```
 
 **Or via snap:**
+
 ```bash
 sudo snap install gh
 ```
@@ -28,12 +30,14 @@ gh auth login
 ```
 
 Follow the prompts:
+
 - Choose: **GitHub.com**
 - Protocol: **HTTPS** (recommended) or **SSH**
 - Authenticate: **Login with a web browser** (easiest)
 - Copy the one-time code and paste it in your browser
 
 Verify authentication:
+
 ```bash
 gh auth status
 ```
@@ -45,6 +49,7 @@ gh auth status
 The import script is located at: `scripts/import_github_issues.sh`
 
 It will create:
+
 - **7 milestones** (one for each phase)
 - **19 issues** (with detailed hour-by-hour breakdowns)
 - **Labels** for impact, urgency, effort, and phase
@@ -66,12 +71,14 @@ Execute the script:
 ```
 
 The script will:
+
 1. Check if `gh` CLI is installed and authenticated
 2. Create 7 phase milestones
 3. Create 19 issues with full details
 4. Apply appropriate labels and milestones
 
 **Expected output:**
+
 ```
 === FKS GitHub Issues Import ===
 This will create 19 issues across 7 phases
@@ -175,6 +182,7 @@ gh issue edit <issue-number> --add-project "<project-name>"
 Each issue includes:
 
 ### Metadata
+
 - **Phase**: Which development phase (1-7)
 - **Impact**: High/Medium/Low (business value)
 - **Urgency**: High/Medium/Low (time sensitivity)
@@ -182,7 +190,9 @@ Each issue includes:
 - **Dependencies**: Related issues to complete first
 
 ### Hour-by-Hour Breakdown
+
 Detailed steps for each hour of work, including:
+
 - Specific tasks to accomplish
 - Files to modify
 - Commands to run
@@ -190,12 +200,14 @@ Detailed steps for each hour of work, including:
 - Verification steps
 
 ### Verification Checklist
+
 - [ ] Checkbox items to confirm completion
 - Tests to run
 - Metrics to achieve
 - Documentation to update
 
 ### Notes
+
 - Tips and best practices
 - Common pitfalls to avoid
 - References to relevant documentation
@@ -203,41 +215,51 @@ Detailed steps for each hour of work, including:
 ## Labels Explained
 
 ### Impact Labels
+
 - `impact:high` - Critical features, security, or blocking issues
 - `impact:medium` - Important but not blocking
 - `impact:low` - Nice-to-have improvements
 
 ### Urgency Labels
+
 - `urgency:high` - Needs immediate attention
 - `urgency:medium` - Important but can wait
 - `urgency:low` - Future work
 
 ### Effort Labels
+
 - `effort:high` - 10+ hours of work
 - `effort:medium` - 5-10 hours of work
 - `effort:low` - <5 hours of work
 
 ### Phase Labels
+
 - `phase:1` through `phase:7` - Development phases
 
 ## Troubleshooting
 
 ### "gh: command not found"
+
 Install GitHub CLI (see Prerequisites above)
 
 ### "authentication required"
+
 Run: `gh auth login`
 
 ### "milestone already exists" errors
+
 This is normal if re-running the script. Existing milestones won't be duplicated.
 
 ### Issues not appearing
+
 Check repository permissions. Run:
+
 ```bash
 gh repo view
 ```
 
 ### Too many issues at once
+
 You can modify the script to create issues in batches by commenting out phases.
 
 ## Next Steps

@@ -48,12 +48,14 @@ print(f"Limit: {stats['limit']} req/{stats['time_window']}s")
 ### Configuration
 
 Circuit breaker settings:
+
 - **Failure threshold**: 3 failures before opening
 - **Reset timeout**: 60 seconds
 - **Success threshold**: 2 successes to close
 - **Request timeout**: 30 seconds
 
 Rate limiter settings:
+
 - **Max requests**: 10 per second
 - **Algorithm**: Token bucket
 - **Policy**: Wait (blocks until token available)
@@ -77,6 +79,7 @@ except Exception as e:
 ### Performance Improvements
 
 The backtest engine now includes:
+
 - **Vectorized NumPy operations** - Replace Python loops with array operations
 - **Pre-allocated arrays** - Avoid dynamic list growth
 - **Optimized DataFrame operations** - Reduce copies and indexing overhead
@@ -197,6 +200,7 @@ for param, score in sorted(importance.items(), key=lambda x: x[1], reverse=True)
 ```
 
 Output:
+
 ```
 M: 0.8234              # Moving average most important
 sl_multiplier: 0.7123  # Stop loss second
@@ -263,18 +267,21 @@ print(f"Max Drawdown: {metrics['Max Drawdown']:.2%}")
 ## Best Practices
 
 ### 1. Rate Limiting
+
 - Monitor circuit breaker state regularly
 - Handle CircuitOpenError gracefully
 - Set appropriate retry delays
 - Use rate limiter stats for debugging
 
 ### 2. Backtesting
+
 - Always use `fast_mode=True` for production
 - Use `fast_mode=False` only for debugging
 - Validate results between modes
 - Monitor memory usage with large datasets
 
 ### 3. Optimization
+
 - Start with 20-50 trials for quick tests
 - Use 100-500 trials for production
 - Enable parallel execution (n_jobs > 1)
@@ -282,6 +289,7 @@ print(f"Max Drawdown: {metrics['Max Drawdown']:.2%}")
 - Check parameter importance regularly
 
 ### 4. RAG Integration
+
 - Use RAG for initial parameter exploration
 - Cache RAG responses to reduce API calls
 - Validate RAG suggestions with backtests
@@ -290,16 +298,19 @@ print(f"Max Drawdown: {metrics['Max Drawdown']:.2%}")
 ## Troubleshooting
 
 ### Circuit Breaker Open
+
 ```
 CircuitOpenError: Circuit 'binance_api' is open. Retry after 45.23s.
 ```
 
 **Solution**: Wait for reset timeout (60s) or manually reset:
+
 ```python
 adapter.circuit_breaker.reset()
 ```
 
 ### Rate Limit Exceeded
+
 ```
 RateLimitExceededError: Rate limit exceeded: 10 requests per 1 seconds
 ```
@@ -307,11 +318,13 @@ RateLimitExceededError: Rate limit exceeded: 10 requests per 1 seconds
 **Solution**: Increase wait time or reduce request frequency
 
 ### Optimization Timeout
+
 ```
 # Optimization didn't complete all trials
 ```
 
 **Solution**: Increase timeout or reduce n_trials:
+
 ```python
 optimizer = OptunaOptimizer(
     df_prices=df_prices,
@@ -321,11 +334,13 @@ optimizer = OptunaOptimizer(
 ```
 
 ### Memory Issues
+
 ```
 MemoryError: Unable to allocate array
 ```
 
 **Solution**: Reduce data size or use slow mode:
+
 ```python
 run_backtest(..., fast_mode=False)
 ```
@@ -341,17 +356,20 @@ run_backtest(..., fast_mode=False)
 ## API Reference
 
 ### BinanceAdapter
+
 - `fetch(**kwargs)`: Fetch market data with protection
 - `get_circuit_metrics()`: Get circuit breaker status
 - `get_rate_limit_stats()`: Get rate limiter statistics
 
 ### OptunaOptimizer
+
 - `optimize(study_name)`: Run optimization
 - `get_best_params()`: Get optimal parameters
 - `get_optimization_history()`: Get trial history DataFrame
 - `get_param_importance()`: Get parameter importance scores
 
 ### run_backtest
+
 - `run_backtest(df_prices, M, atr_period, sl_multiplier, tp_multiplier, fast_mode=True)`
 - Returns: `(metrics, returns, cum_ret, trades)`
 
@@ -365,6 +383,7 @@ run_backtest(..., fast_mode=False)
 ## Support
 
 For issues or questions:
+
 1. Check existing tests in `tests/unit/test_trading/`
 2. Review example scripts in `examples/`
 3. Open an issue on GitHub

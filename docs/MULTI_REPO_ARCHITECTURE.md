@@ -39,6 +39,7 @@ The FKS Trading Platform uses a **microservices architecture** with a **monorepo
 ## Service Architecture
 
 ### **FKS Main (Monitor & Orchestrator)**
+
 - **Role**: Master service registry, health check aggregator, dashboard
 - **Port**: 8000 (Django + Gunicorn)
 - **Health**: `http://localhost:8000/monitor/api/ping/`
@@ -47,6 +48,7 @@ The FKS Trading Platform uses a **microservices architecture** with a **monorepo
 ### **Satellite Services**
 
 #### 1. **fks-api** (API Gateway)
+
 - **Role**: External API gateway for third-party integrations
 - **Port**: 8001
 - **Health**: `http://fks_api:8001/api/health`
@@ -54,6 +56,7 @@ The FKS Trading Platform uses a **microservices architecture** with a **monorepo
 - **Dependencies**: fks_main (auth), fks_data (market data)
 
 #### 2. **fks-data** (Data Ingestion)
+
 - **Role**: Market data sync from exchanges (Binance, others)
 - **Port**: 8002
 - **Health**: `http://fks_data:8002/health`
@@ -61,6 +64,7 @@ The FKS Trading Platform uses a **microservices architecture** with a **monorepo
 - **Dependencies**: fks_main (DB), redis (caching)
 
 #### 3. **fks-execution** (Trade Execution)
+
 - **Role**: Execute trades, manage positions, risk checks
 - **Port**: 8003
 - **Health**: `http://fks_execution:8003/health`
@@ -68,6 +72,7 @@ The FKS Trading Platform uses a **microservices architecture** with a **monorepo
 - **Dependencies**: fks_data (prices), fks_main (strategies)
 
 #### 4. **fks-ninja** (NinjaTrader Integration)
+
 - **Role**: Bridge to NinjaTrader for futures trading
 - **Port**: 8004
 - **Health**: `http://fks_ninja:8004/health`
@@ -75,6 +80,7 @@ The FKS Trading Platform uses a **microservices architecture** with a **monorepo
 - **Dependencies**: fks_execution (orders), fks_data (symbols)
 
 #### 5. **fks-web-ui** (Alternative Web UI)
+
 - **Role**: Modern SPA UI (React/Vue) as alternative to Django templates
 - **Port**: 3000
 - **Health**: `http://fks_web:3000/health`
@@ -149,6 +155,7 @@ networks:
 ```
 
 Services communicate using Docker DNS:
+
 - `fks_main` → Main Django app
 - `fks_api` → API Gateway
 - `fks_data` → Data service
@@ -277,18 +284,22 @@ GET  /monitor/api/ping/                 # Ping monitor service
 ## Database Models
 
 ### **ServiceRegistry**
+
 - Tracks all microservices (name, host, port, status)
 - Auto-updated by health checks
 
 ### **HealthCheck**
+
 - Records every health check ping
 - Tracks response time, success rate, errors
 
 ### **ServiceDependency**
+
 - Maps service dependencies (e.g., execution depends on data)
 - Flags critical vs optional dependencies
 
 ### **ServiceMetric**
+
 - Time-series metrics (CPU, memory, requests, latency)
 - Used for Prometheus/Grafana integration
 
@@ -309,6 +320,7 @@ Last Seen: 2 minutes ago
 ### **Grafana Integration**
 
 Metrics exported to Prometheus → visualized in Grafana:
+
 - Service uptime %
 - Average response times
 - Request rates

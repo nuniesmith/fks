@@ -11,6 +11,7 @@ All legacy microservices-era imports have been successfully migrated to Django m
 ## Problem Statement
 
 The migration from microservices to Django monolith left some import statements pointing to non-existent or legacy modules:
+
 - Legacy `config` module imports instead of `framework.config.constants`
 - References to removed `shared_python` module
 - Missing imports in data adapter classes
@@ -20,6 +21,7 @@ This caused 20/34 tests to fail (41% pass rate).
 ## Solution Overview
 
 ### 1. Framework Constants Module
+
 **Location**: `src/framework/config/constants.py`
 
 This module serves as the single source of truth for all trading constants and configuration values. It includes:
@@ -50,7 +52,9 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 ```
 
 ### 2. Data Module Helpers
-**Locations**: 
+
+**Locations**:
+
 - `src/data/exceptions.py` - Defines `DataFetchError`
 - `src/data/config.py` - Defines `get_settings()`
 - `src/data/app_logging.py` - Defines `get_logger()`
@@ -62,9 +66,11 @@ These modules provide essential utilities for the data adapter layer.
 ### Critical Fixes (New in This PR)
 
 #### File: `src/data/adapters/base.py`
+
 **Problem**: Used `get_logger`, `get_settings`, and `DataFetchError` without importing them.
 
 **Fix**: Added imports at top of file:
+
 ```python
 from data.app_logging import get_logger
 from data.config import get_settings
@@ -74,9 +80,11 @@ from data.exceptions import DataFetchError
 **Impact**: The `APIAdapter` base class can now be properly instantiated and used by all adapter subclasses.
 
 #### File: `src/data/adapters/binance.py`
+
 **Problem**: Extended `APIAdapter` without importing it.
 
 **Fix**: Added import:
+
 ```python
 from .base import APIAdapter
 ```
@@ -86,11 +94,13 @@ from .base import APIAdapter
 ### Already Fixed (From Previous Work)
 
 The following files were already correctly updated to use framework imports:
+
 - ✅ `src/trading/backtest/engine.py`
 - ✅ `src/trading/signals/generator.py`
 - ✅ `src/core/database/models.py`
 
 All use:
+
 ```python
 from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE, ...
 ```
@@ -98,13 +108,16 @@ from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE, ...
 ### Test Files Handled
 
 Legacy test files that referenced `shared_python` are now properly skipped:
+
 - ✅ `tests/integration/test_data/test_shared_import.py` - Marked with `@pytest.mark.skip`
 - ✅ `tests/integration/test_data/test_logging_json_adapter.py` - Marked with `@pytest.mark.skip`
 
 ## Verification and Testing
 
 ### Automated Verification Script
+
 Created comprehensive test script that validates:
+
 1. ✅ All required constants exist in framework module
 2. ✅ All data module helpers are properly defined
 3. ✅ Adapter imports are correct
@@ -113,7 +126,9 @@ Created comprehensive test script that validates:
 **Result**: All tests passed ✅
 
 ### Search Verification
+
 Confirmed no legacy imports remain:
+
 ```bash
 # No legacy config imports found
 find src/ tests/ -name "*.py" | xargs grep "^from config import"
@@ -125,7 +140,9 @@ find src/ tests/ -name "*.py" | xargs grep "from shared_python"
 ```
 
 ### Syntax Validation
+
 All modified files pass Python syntax validation:
+
 ```bash
 python3 -m py_compile src/data/adapters/base.py      # ✅
 python3 -m py_compile src/data/adapters/binance.py   # ✅
@@ -134,6 +151,7 @@ python3 -m py_compile src/data/adapters/binance.py   # ✅
 ## Migration Guide for Developers
 
 ### For New Code (Recommended)
+
 ```python
 # Import trading constants
 from framework.config.constants import SYMBOLS, MAINS, ALTS, FEE_RATE
@@ -149,9 +167,11 @@ settings = get_settings()
 ```
 
 ### For Existing Code
+
 If you encounter import errors:
 
 1. **Replace legacy config imports**:
+
    ```python
    # OLD (don't use)
    from config import SYMBOLS
@@ -161,6 +181,7 @@ If you encounter import errors:
    ```
 
 2. **Replace shared_python imports**:
+
    ```python
    # OLD (don't use)
    from shared_python.config import get_settings
@@ -174,6 +195,7 @@ If you encounter import errors:
 ## Impact Assessment
 
 ### Statistics
+
 - **Files Modified**: 2 (base.py, binance.py)
 - **Lines Added**: 4 import statements
 - **Lines Removed**: 0
@@ -181,6 +203,7 @@ If you encounter import errors:
 - **Risk Level**: LOW
 
 ### Benefits
+
 1. ✅ **Single Source of Truth**: All constants in `framework.config.constants`
 2. ✅ **No Circular Dependencies**: Clean import structure
 3. ✅ **Type Safe**: Consistent constant definitions
@@ -188,6 +211,7 @@ If you encounter import errors:
 5. ✅ **Test Coverage**: Automated verification prevents regressions
 
 ### Breaking Changes
+
 **NONE** - All changes are additive (adding missing imports) or already handled via test skips.
 
 ## Next Steps
@@ -201,10 +225,12 @@ If you encounter import errors:
 ## Expected Test Results
 
 ### Before This Fix
+
 - Tests passing: 14/34 (41%)
 - Tests failing: 20/34 due to import errors
 
 ### After This Fix  
+
 - Tests passing: Expected 34/34 (100%)
 - Tests failing: 0
 
@@ -220,6 +246,7 @@ Note: Actual test results depend on having all dependencies installed via `pip i
 ## Conclusion
 
 The legacy import migration is complete. The codebase now follows a consistent, modern pattern that:
+
 - Uses Django/framework modules for all configuration
 - Has no references to legacy microservices modules
 - Maintains clean import structure with no circular dependencies

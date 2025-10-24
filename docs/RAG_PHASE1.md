@@ -71,6 +71,7 @@ python scripts/setup_rag_foundation.py --no-test
 ```
 
 The script will:
+
 1. Check database connectivity
 2. Enable pgvector extension
 3. Create RAG tables
@@ -222,11 +223,13 @@ OLLAMA_HOST=http://localhost:11434
 ### Model Selection
 
 **Embedding Models:**
+
 - `all-MiniLM-L6-v2`: Fast, 384 dimensions (default local)
 - `all-mpnet-base-v2`: Better quality, 768 dimensions
 - `text-embedding-3-small`: OpenAI, 1536 dimensions
 
 **LLM Models (Ollama):**
+
 - `llama3.2:3b`: Small, fast (3B parameters)
 - `llama3.2:1b`: Tiny, very fast (1B parameters)
 - `mistral:7b`: Good quality (7B parameters)
@@ -317,11 +320,13 @@ After completing Phase 1, you're ready for:
 ## Files Modified/Created
 
 ### New Files
+
 - `sql/migrations/000_create_rag_tables.sql` - RAG database schema
 - `scripts/setup_rag_foundation.py` - Automated setup script
 - `docs/RAG_PHASE1.md` - This documentation
 
 ### Modified Files
+
 - `src/web/rag/__init__.py` - Fixed import paths
 - `src/web/rag/embeddings.py` - Fixed duplicate Session import
 - `src/web/rag/intelligence.py` - Fixed database imports
@@ -341,6 +346,7 @@ After completing Phase 1, you're ready for:
 ## Support
 
 For issues or questions:
+
 1. Check the troubleshooting section above
 2. Review test files in `tests/unit/test_rag/`
 3. Consult the main project documentation

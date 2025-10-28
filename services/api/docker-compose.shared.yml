@@ -1,0 +1,9 @@
+
+services:
+  fks_api:
+    environment:
+      USE_SHARED: "1"
+    volumes:
+      - ./shared/scripts:/app/shared/scripts:ro
+      - ./shared/python:/app/shared/python:ro
+    command: ["uvicorn", "fastapi_main:app", "--host", "0.0.0.0", "--port", "8000"]

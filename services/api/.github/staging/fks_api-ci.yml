@@ -1,0 +1,231 @@
+name: fks_api CI
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'Dockerfile*'
+      - '.github/workflows/fks_api-ci.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'Dockerfile*'
+      - '.github/workflows/fks_api-ci.yml'
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    name: Unit Tests (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'  # Ensure shared_python submodule is checked out
+          
+      - name: Verify shared_python dependency
+        run: |
+          if [ ! -d "shared_python" ] && [ -f ".gitmodules" ]; then
+            echo "shared_python not found but .gitmodules exists, attempting to initialize submodules"
+            git submodule update --init --recursive
+          fi
+          ls -la shared_python/ || echo "shared_python directory not available"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+            python-version: '3.11'
+            cache: 'pip'
+            cache-dependency-path: |
+              requirements.txt
+              requirements.dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements.dev.txt
+          # Note: shared_python is added to PYTHONPATH in test steps instead of installing as editable package
+
+      - name: Validate imports
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}/shared_python
+        run: python validate_imports.py
+
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}/shared_python
+        run: pytest src/tests/ -q --maxfail=1 --disable-warnings --color=yes
+
+      - name: Upload test results (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-cache
+          path: .pytest_cache
+          if-no-files-found: ignore
+
+  docker-build:
+    name: Docker Build (fks_api)
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_TOKEN: ${{ secrets.DOCKER_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'  # Ensure shared_python submodule is checked out
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: (Optional) Log in to DockerHub
+        if: ${{ env.DOCKER_USERNAME != '' && env.DOCKER_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_USERNAME != '' && format('{0}/fks', env.DOCKER_USERNAME) || 'local/fks' }}
+          tags: |
+            type=ref,event=branch,prefix=api-
+            type=ref,event=tag,prefix=api-
+            type=sha,prefix=api-
+            type=raw,value=api-latest
+
+      - name: Build image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.simple
+          push: ${{ env.DOCKER_USERNAME != '' && env.DOCKER_TOKEN != '' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          load: true  # Load image to local Docker daemon for smoke test
+          build-args: |
+            SERVICE_RUNTIME=python
+            SERVICE_TYPE=api
+            BUILD_TYPE=cpu
+
+      - name: Run container smoke test
+        run: |
+          # Use the locally built image for testing (no pull required)
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Testing image: $IMAGE_TAG"
+          
+          # First, try running the container in non-daemon mode to see immediate output
+          echo "🧪 Testing container startup..."
+          timeout 10s docker run --rm -p 8080:8000 --name fks_api_test_quick "$IMAGE_TAG" &
+          QUICK_PID=$!
+          sleep 3
+          
+          # Check if the quick test is still running
+          if kill -0 $QUICK_PID 2>/dev/null; then
+            echo "✅ Container appears to start successfully"
+            kill $QUICK_PID 2>/dev/null || true
+            wait $QUICK_PID 2>/dev/null || true
+          else
+            echo "❌ Container failed to start or exited immediately"
+            wait $QUICK_PID 2>/dev/null || echo "Quick test process finished"
+          fi
+          
+          # Wait for any cleanup
+          sleep 2
+          
+          # Now run the actual daemon test
+          echo "🚀 Starting daemon container..."
+          CONTAINER_ID=$(docker run -d -p 8080:8000 --name fks_api_test \
+            -e APP_ENV=production \
+            -e API_SERVICE_PORT=8000 \
+            "$IMAGE_TAG")
+          echo "Started container: $CONTAINER_ID"
+          
+          # Wait for container to initialize and show startup logs
+          echo "⏳ Waiting for container initialization..."
+          sleep 5
+          echo "📋 Current container status:"
+          docker ps -a --filter "name=fks_api_test"
+          echo "📝 Container logs so far:"
+          docker logs fks_api_test 2>&1 | head -50
+          
+          # Check if container is still running
+          if ! docker ps -q --filter "name=fks_api_test" | grep -q .; then
+            echo "❌ Container exited. Full logs:"
+            docker logs fks_api_test 2>&1
+            echo "❌ Container inspection:"
+            docker inspect fks_api_test --format='{{.State}}' || true
+            exit 1
+          fi
+          
+          echo '🔍 Container is running. Testing health endpoint...'
+          for i in {1..15}; do
+            echo "Attempt $i/15: Testing health endpoint..."
+            
+            # Check if container is still running
+            if ! docker ps -q --filter "name=fks_api_test" | grep -q .; then
+              echo "❌ Container stopped during health check (attempt $i)"
+              echo "Final logs:"
+              docker logs fks_api_test 2>&1
+              exit 1
+            fi
+            
+            # Try to connect to health endpoint with verbose output
+            if curl -v -f --connect-timeout 3 --max-time 5 http://localhost:8080/health 2>&1; then
+              echo '✅ Service responded to /health'
+              echo "Health response:"
+              curl -s http://localhost:8080/health | head -c 500
+              echo ""
+              echo '✅ Smoke test passed!'
+              break
+            else
+              echo "Health endpoint not ready yet (attempt $i/15)..."
+              sleep 3
+            fi
+            
+            if [ $i -eq 15 ]; then 
+              echo "❌ Health endpoint failed after 45 seconds"
+              echo "Final container logs:"
+              docker logs fks_api_test 2>&1
+              echo "Container status:"
+              docker ps -a --filter "name=fks_api_test"
+              echo "Port mapping check:"
+              docker port fks_api_test
+              echo "Network connectivity test:"
+              docker exec fks_api_test netstat -tlnp 2>/dev/null || docker exec fks_api_test ss -tlnp 2>/dev/null || echo "Cannot check ports in container"
+              exit 1
+            fi
+          done
+          
+          # Clean up
+          echo "Cleaning up container..."
+          docker stop fks_api_test || true
+          docker rm fks_api_test || true
+
+      - name: Export image artifact (no push scenario)
+        if: ${{ env.DOCKER_USERNAME == '' || env.DOCKER_TOKEN == '' }}
+        run: |
+          # Get the first tag from the metadata output
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          docker save "$IMAGE_TAG" | gzip > fks_api-image.tar.gz
+        
+      - name: Upload image artifact
+        if: ${{ env.DOCKER_USERNAME == '' || env.DOCKER_TOKEN == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fks_api-image
+          path: fks_api-image.tar.gz

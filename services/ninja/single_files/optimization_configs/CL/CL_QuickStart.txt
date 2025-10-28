@@ -1,0 +1,21 @@
+﻿# CL (Crude Oil) Quick Start Parameters
+# Copy these into NinjaTrader for immediate testing
+
+SignalQualityThreshold: 0.65
+VolumeThreshold: 1.2
+ATRStopMultiplier: 3.25
+ATRTargetMultiplier: 2.4
+BaseContracts: 1
+MaxContracts: 1
+MaxDailyTrades: 8
+StartHour: 6
+EndHour: 16
+DailyProfitSoftTarget: 1500
+DailyProfitHardTarget: 2500
+DailyLossSoftLimit: 800
+DailyLossHardLimit: 1200
+
+# Expected Performance Targets:
+# Win Rate: 48%
+# Profit Factor: 1.6+
+# Max Drawdown: <15%

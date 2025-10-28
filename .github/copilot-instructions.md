@@ -10,8 +10,8 @@
 ## Project Overview
 **FKS Main** is the **orchestrator and monitoring hub** for an **8-service microservices architecture**. It provides centralized authentication, service registry, health monitoring, and Celery Beat scheduling for the entire trading ecosystem.
 
-### Architecture: Multi-Repo Microservices (October 2025)
-FKS uses **Git submodules** under `repo/` for each microservice, with FKS Main as the orchestration layer.
+### Architecture: Monorepo Multi-Container (October 2025)
+FKS uses a **monorepo architecture** with multiple Docker containers under `services/` for each microservice, with FKS Main as the orchestration layer. All code lives in a single Git repository for simplified development while maintaining service isolation via containers.
 
 **8 Core Services**:
 1. **fks_main** (This Repo, Port 8000) - Orchestrator, service registry, health monitoring, Celery Beat
@@ -50,20 +50,20 @@ NinjaTrader: fks_app (signal) → fks_ninja (bridge) → NinjaTrader 8 → Prop 
    - Celery Beat scheduler for periodic tasks
    - **NO business logic, NO exchange communication, NO data storage**
 
-2. **fks_api** (Gateway - `repo/api/`):
+2. **fks_api** (Gateway - `services/api/`):
    - Route requests to fks_app, fks_data, fks_execution
    - JWT auth and API key validation
    - Rate limiting and throttling
    - **Pure gateway pattern - NO domain logic**
 
-3. **fks_app** (Business Logic - `repo/app/`):
+3. **fks_app** (Business Logic - `services/app/`):
    - Strategy development and backtesting
    - Signal generation (RSI, MACD, Bollinger Bands)
    - Portfolio optimization with Optuna
    - Queries fks_ai for ML predictions and RAG insights
    - **ALL trading intelligence lives here**
 
-4. **fks_ai** (ML/RAG - `repo/ai/`):
+4. **fks_ai** (ML/RAG - `services/ai/`):
    - Local LLM inference with Ollama/llama.cpp (CUDA)
    - RAG system with pgvector semantic search
    - Embeddings (sentence-transformers + OpenAI fallback)
@@ -71,24 +71,24 @@ NinjaTrader: fks_app (signal) → fks_ninja (bridge) → NinjaTrader 8 → Prop 
    - **Regime detection**, **LLM strategy generation**, **forecasting**
    - Zero-cost AI inference (no API fees)
 
-5. **fks_data** (Data Collection - `repo/data/`):
+5. **fks_data** (Data Collection - `services/data/`):
    - Continuous market data collection (CCXT + Binance)
    - TimescaleDB hypertables for time-series storage
    - Redis caching for fast queries
    - **Other services query fks_data, NEVER exchanges directly**
 
-6. **fks_execution** (Execution Engine - `repo/execution/`):
+6. **fks_execution** (Execution Engine - `services/execution/`):
    - Rust-based high-performance order execution
    - **ONLY service that talks to exchanges/brokers**
    - Order lifecycle management with FSM
    - Position tracking and updates
 
-7. **fks_ninja** (NinjaTrader Bridge - `repo/ninja/`):
+7. **fks_ninja** (NinjaTrader Bridge - `services/ninja/`):
    - C# .NET bridge to NinjaTrader 8
    - Forward signals from fks_app to NT8
    - Support prop firm accounts (FXIFY, Topstep)
 
-8. **fks_web** (Web UI - `repo/web/`):
+8. **fks_web** (Web UI - `services/web/`):
    - Dashboard, strategies, signals, portfolio views
    - Bootstrap 5 templates with Mermaid diagrams
    - **All data fetched via fks_api** (no direct DB queries)
@@ -103,7 +103,7 @@ fks/  (THIS REPOSITORY)
 ├── requirements.txt           # Python dependencies (orchestrator)
 ├── Makefile                   # Development commands
 │
-├── repo/                      # Git submodules (microservices)
+├── services/                  # Microservices code (monorepo)
 │   ├── api/                  # fks_api service
 │   ├── app/                  # fks_app service
 │   ├── ai/                   # fks_ai service (GPU ML/RAG)
@@ -450,11 +450,10 @@ limiter = RateLimiter(max_requests=100, window=60)
 1. **Don't bypass fks_execution** - ONLY service that talks to exchanges/brokers directly
 2. **Don't query exchanges directly** - Use fks_data service for all market data
 3. **GPU commands differ** - Use `make gpu-up` (combines docker-compose.yml + docker-compose.gpu.yml)
-4. **Submodule updates** - Run `git submodule update --init --recursive` after pulling
-5. **Service dependencies** - Check docker-compose.yml `depends_on` before starting services
-6. **Cross-service imports** - Each service is independent, communicate via HTTP APIs only
-7. **GPU requirements** - Need CUDA 12.2+, nvidia-docker2, 8GB VRAM for fks_ai/Ollama
-8. **Regime detection expectations** - Expect 50-70% degradation from backtest to forward test
+4. **Service dependencies** - Check docker-compose.yml `depends_on` before starting services
+5. **Cross-service imports** - Each service is independent, communicate via HTTP APIs only
+6. **GPU requirements** - Need CUDA 12.2+, nvidia-docker2, 8GB VRAM for fks_ai/Ollama
+7. **Regime detection expectations** - Expect 50-70% degradation from backtest to forward test
 
 ## Test Status & Known Issues (Phase 3.1 - Oct 23, 2025)
 
@@ -581,7 +580,7 @@ docker-compose exec web pytest tests/unit/test_trading/test_strategies.py -v
 1. **Identify target service** - Determine which microservice needs changes (fks_main, fks_api, fks_app, fks_ai, fks_data, fks_execution, fks_ninja, fks_web)
 2. **Review service boundaries** - Ensure changes respect service responsibilities (no business logic in fks_api, no DB queries in fks_web)
 3. **Check existing tests** - Understand test patterns before adding new code
-4. **Verify submodules** - Run `git submodule update --init --recursive` if working with repo/
+4. **Review service code** - All service code is in `services/[service_name]/`
 
 ### Development Workflow
 1. **Write tests first** - TDD approach, create test cases before implementation
@@ -782,9 +781,9 @@ Support multiple account types with isolated states:
 When working on this codebase, prioritize in this order:
 
 ### Immediate Actions (This Week)
-1. **Complete submodule setup** - Create GitHub repositories for all 8 microservices
-2. **Create Dockerfiles** - Implement Dockerfiles for each service (api, app, ai, data, execution, ninja, web)
-3. **Test GPU stack** - Validate Ollama + fks_ai service with `make gpu-up`
+1. **Fix import errors** - Create `src/framework/config/constants.py` and update all imports
+2. **Implement core Celery tasks** - Market data sync, signal generation in `services/app/`
+3. **Test service communication** - Verify fks_app → fks_data → fks_execution flow
 
 ### Near-Term Focus (Next 2-4 Weeks)
 4. **AI Strategy Phase 1** - Data Foundation (EODHD API, fundamentals table, feature engineering)

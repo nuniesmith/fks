@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Service Monitor - FKS Trading{% endblock %}
+
+{% block extra_css %}
+<style>
+    .service-card {
+        transition: all 0.3s ease;
+        border-left: 4px solid #dee2e6;
+    }
+    
+    .service-card.healthy {
+        border-left-color: #28a745;
+        background-color: #f8fff9;
+    }
+    
+    .service-card.degraded {
+        border-left-color: #ffc107;
+        background-color: #fffef8;
+    }
+    
+    .service-card.down {
+        border-left-color: #dc3545;
+        background-color: #fff8f8;
+    }
+    
+    .service-card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+    }
+    
+    .status-badge {
+        font-size: 0.875rem;
+        padding: 0.35em 0.65em;
+    }
+    
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+    
+    .last-seen {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .health-history {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .dependency-badge {
+        margin: 0.25rem;
+    }
+    
+    .auto-refresh-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background-color: #28a745;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    
+    .mermaid-diagram {
+        background-color: white;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="mb-0">
+                <i class="fas fa-heartbeat text-primary"></i>
+                Service Monitor
+            </h1>
+            <p class="text-muted mb-0">
+                Real-time health monitoring for FKS microservices
+                <span class="auto-refresh-indicator ms-2" id="refreshIndicator"></span>
+                <small class="ms-1">Auto-refresh: 30s</small>
+            </p>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" onclick="refreshDashboard()">
+                <i class="fas fa-sync-alt"></i> Refresh Now
+            </button>
+            <button class="btn btn-outline-secondary" onclick="registerServices()">
+                <i class="fas fa-server"></i> Register Services
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Healthy</h5>
+                    <p class="metric-value mb-0" id="healthyCount">{{ stats.healthy }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Degraded</h5>
+                    <p class="metric-value mb-0" id="degradedCount">{{ stats.degraded }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Down</h5>
+                    <p class="metric-value mb-0" id="downCount">{{ stats.down }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Services</h5>
+                    <p class="metric-value mb-0" id="totalCount">{{ stats.total }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Service Cards -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h3 class="mb-3">Service Status</h3>
+        </div>
+    </div>
+    <div class="row g-3 mb-4" id="serviceCards">
+        {% for service in services %}
+        <div class="col-lg-4 col-md-6">
+            <div class="card service-card {{ service.status|lower }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0">
+                            {% if service.service_type == 'web' %}
+                                <i class="fas fa-globe text-primary"></i>
+                            {% elif service.service_type == 'api' %}
+                                <i class="fas fa-code text-info"></i>
+                            {% elif service.service_type == 'worker' %}
+                                <i class="fas fa-cogs text-warning"></i>
+                            {% elif service.service_type == 'database' %}
+                                <i class="fas fa-database text-success"></i>
+                            {% else %}
+                                <i class="fas fa-server text-secondary"></i>
+                            {% endif %}
+                            {{ service.name }}
+                        </h5>
+                        <span class="badge status-badge 
+                            {% if service.status == 'healthy' %}bg-success
+                            {% elif service.status == 'degraded' %}bg-warning
+                            {% else %}bg-danger{% endif %}">
+                            {{ service.status|upper }}
+                        </span>
+                    </div>
+                    
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-tag"></i> {{ service.service_type }}
+                    </p>
+                    
+                    <div class="mb-2">
+                        <strong>Endpoint:</strong>
+                        <code class="small">{{ service.host }}:{{ service.port }}{{ service.health_endpoint }}</code>
+                    </div>
+                    
+                    {% if service.version %}
+                    <div class="mb-2">
+                        <strong>Version:</strong> <span class="badge bg-secondary">{{ service.version }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mb-2">
+                        <strong>Last Seen:</strong>
+                        <span class="last-seen">
+                            {% if service.last_seen %}
+                                {{ service.last_seen|timesince }} ago
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </span>
+                    </div>
+                    
+                    {% if service.dependencies.exists %}
+                    <div class="mb-2">
+                        <strong>Dependencies:</strong><br>
+                        {% for dep in service.dependencies.all %}
+                            <span class="badge dependency-badge 
+                                {% if dep.is_critical %}bg-danger{% else %}bg-secondary{% endif %}">
+                                {{ dep.depends_on.name }}
+                                {% if dep.is_critical %}<i class="fas fa-exclamation-triangle"></i>{% endif %}
+                            </span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-flex gap-2 mt-3">
+                        <a href="{% url 'monitor:service_health_detail' service.id %}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-chart-line"></i> Details
+                        </a>
+                        <button class="btn btn-sm btn-outline-secondary" 
+                                onclick="checkService({{ service.id }})">
+                            <i class="fas fa-stethoscope"></i> Check Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                No services registered yet. Click "Register Services" to auto-discover services.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Architecture Diagram -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-project-diagram"></i>
+                        Service Architecture
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mermaid-diagram">
+                        <div class="mermaid">
+                        graph TB
+                            subgraph "FKS Main (Port 8000)"
+                                web[Web Service]
+                                monitor[Monitor Service]
+                                celery[Celery Worker]
+                            end
+                            
+                            subgraph "Microservices"
+                                api[fks_api:8001<br/>API Gateway]
+                                data[fks_data:8002<br/>Data Ingestion]
+                                execution[fks_execution:8003<br/>Trade Execution]
+                                ninja[fks_ninja:8004<br/>NinjaTrader Bridge]
+                                web_ui[fks_web_ui:3001<br/>React SPA]
+                            end
+                            
+                            subgraph "Infrastructure"
+                                db[(PostgreSQL<br/>TimescaleDB)]
+                                redis[(Redis)]
+                            end
+                            
+                            web --> monitor
+                            monitor -.Health Check.-> api
+                            monitor -.Health Check.-> data
+                            monitor -.Health Check.-> execution
+                            monitor -.Health Check.-> ninja
+                            monitor -.Health Check.-> web_ui
+                            
+                            api --> data
+                            execution --> data
+                            ninja --> execution
+                            ninja --> data
+                            web_ui --> api
+                            
+                            web --> db
+                            web --> redis
+                            data --> db
+                            execution --> db
+                            celery --> redis
+                            
+                            style web fill:#4CAF50
+                            style monitor fill:#2196F3
+                            style api fill:#FF9800
+                            style data fill:#9C27B0
+                            style execution fill:#F44336
+                            style ninja fill:#00BCD4
+                            style web_ui fill:#FFEB3B
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Health Checks -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i>
+                        Recent Health Checks
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="health-history">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Service</th>
+                                    <th>Status</th>
+                                    <th>Response Time</th>
+                                    <th>Checked At</th>
+                                    <th>Success</th>
+                                    <th>Error</th>
+                                </tr>
+                            </thead>
+                            <tbody id="healthCheckTable">
+                                {% for check in recent_checks %}
+                                <tr>
+                                    <td>{{ check.service.name }}</td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if check.status_code == 200 %}bg-success
+                                            {% elif check.status_code >= 500 %}bg-danger
+                                            {% else %}bg-warning{% endif %}">
+                                            {{ check.status_code }}
+                                        </span>
+                                    </td>
+                                    <td>{{ check.response_time_ms }}ms</td>
+                                    <td>{{ check.checked_at|date:"Y-m-d H:i:s" }}</td>
+                                    <td>
+                                        {% if check.success %}
+                                            <i class="fas fa-check-circle text-success"></i>
+                                        {% else %}
+                                            <i class="fas fa-times-circle text-danger"></i>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if check.error_message %}
+                                            <span class="text-danger small">{{ check.error_message|truncatewords:10 }}</span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        No health checks recorded yet
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Auto-refresh every 30 seconds
+    let refreshInterval;
+    
+    function startAutoRefresh() {
+        refreshInterval = setInterval(refreshDashboard, 30000);
+    }
+    
+    function stopAutoRefresh() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    }
+    
+    async function refreshDashboard() {
+        try {
+            const response = await fetch('{% url "monitor:service_health_list" %}');
+            const data = await response.json();
+            
+            // Update summary counts
+            const healthy = data.filter(s => s.status === 'healthy').length;
+            const degraded = data.filter(s => s.status === 'degraded').length;
+            const down = data.filter(s => s.status === 'down').length;
+            
+            document.getElementById('healthyCount').textContent = healthy;
+            document.getElementById('degradedCount').textContent = degraded;
+            document.getElementById('downCount').textContent = down;
+            document.getElementById('totalCount').textContent = data.length;
+            
+            // Flash refresh indicator
+            const indicator = document.getElementById('refreshIndicator');
+            indicator.style.backgroundColor = '#ffc107';
+            setTimeout(() => {
+                indicator.style.backgroundColor = '#28a745';
+            }, 300);
+            
+            console.log('✅ Dashboard refreshed:', new Date().toLocaleTimeString());
+        } catch (error) {
+            console.error('❌ Failed to refresh dashboard:', error);
+        }
+    }
+    
+    async function checkService(serviceId) {
+        try {
+            const response = await fetch(`{% url "monitor:service_health_list" %}?service=${serviceId}`);
+            const data = await response.json();
+            alert(`Service checked!\nStatus: ${data.status}\nResponse Time: ${data.response_time_ms}ms`);
+            refreshDashboard();
+        } catch (error) {
+            alert('Failed to check service: ' + error.message);
+        }
+    }
+    
+    async function registerServices() {
+        try {
+            const response = await fetch('{% url "monitor:service_discover" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            const data = await response.json();
+            alert(`✅ Registered ${data.registered} services`);
+            window.location.reload();
+        } catch (error) {
+            alert('❌ Failed to register services: ' + error.message);
+        }
+    }
+    
+    // Start auto-refresh on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        startAutoRefresh();
+        console.log('🚀 Monitor dashboard loaded');
+    });
+    
+    // Stop auto-refresh when leaving page
+    window.addEventListener('beforeunload', function() {
+        stopAutoRefresh();
+    });
+</script>
+{% endblock %}

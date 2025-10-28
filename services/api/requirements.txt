@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+httpx
+requests
+orjson
+pydantic>=2
+celery[redis]>=5.3.0
+pytz  # Timezone support
+zoneinfo-backport; python_version < "3.9"  # Backport for older Python versions
+
+# NOTE: Local path dependency to fks_data disabled for container build. The relative path '../fks_data'
+# does not exist inside the Docker build context (only fks_api directory copied). To develop locally with
+# editable cross-package imports, install fks_data separately (e.g. `pip install -e ../fks_data`) before
+# running, or multi-stage COPY both folders. Leaving this path here breaks `pip install` during image build.
+# ../fks_data

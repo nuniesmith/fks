@@ -257,13 +257,13 @@ services:
   # FKS Microservices
   fks_api:
     build:
-      context: ./repo/api
+      context: ./services/api
       dockerfile: Dockerfile
     container_name: fks_api
     expose:
       - "8001"
     volumes:
-      - ./repo/api:/app
+      - ./services/api:/app
       - ./logs/api:/app/logs
     environment:
       - TZ=America/Toronto
@@ -302,13 +302,13 @@ services:
 
   fks_app:
     build:
-      context: ./repo/app
+      context: ./services/app
       dockerfile: Dockerfile
     container_name: fks_app
     expose:
       - "8002"
     volumes:
-      - ./repo/app:/app
+      - ./services/app:/app
       - ./logs/app:/app/logs
     environment:
       - TZ=America/Toronto
@@ -352,13 +352,13 @@ services:
 
   fks_data:
     build:
-      context: ./repo/data
+      context: ./services/data
       dockerfile: Dockerfile
     container_name: fks_data
     expose:
       - "8003"
     volumes:
-      - ./repo/data:/app
+      - ./services/data:/app
       - ./logs/data:/app/logs
     environment:
       - TZ=America/Toronto
@@ -396,13 +396,13 @@ services:
 
   fks_ai:
     build:
-      context: ./repo/ai
+      context: ./services/ai
       dockerfile: Dockerfile.gpu
     container_name: fks_ai
     expose:
       - "8006"
     volumes:
-      - ./repo/ai:/app
+      - ./services/ai:/app
       - ./logs/ai:/app/logs
       - ./ml_models:/app/models  # Persistent model storage
     environment:
@@ -447,13 +447,13 @@ services:
 
   fks_execution:
     build:
-      context: ./repo/execution
+      context: ./services/execution
       dockerfile: Dockerfile
     container_name: fks_execution
     expose:
       - "8004"
     volumes:
-      - ./repo/execution:/app
+      - ./services/execution:/app
       - ./logs/execution:/app/logs
     environment:
       - TZ=America/Toronto
@@ -494,13 +494,13 @@ services:
 
   fks_ninja:
     build:
-      context: ./repo/ninja
+      context: ./services/ninja
       dockerfile: Dockerfile
     container_name: fks_ninja
     expose:
       - "8005"
     volumes:
-      - ./repo/ninja:/app
+      - ./services/ninja:/app
       - ./logs/ninja:/app/logs
     environment:
       - TZ=America/Toronto
@@ -536,13 +536,13 @@ services:
 
   fks_web_ui:
     build:
-      context: ./repo/web
+      context: ./services/web
       dockerfile: Dockerfile
     container_name: fks_web_ui
     expose:
       - "3001"
     volumes:
-      - ./repo/web:/app
+      - ./services/web:/app
       - ./logs/web_ui:/app/logs
     environment:
       - TZ=America/Toronto

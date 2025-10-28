@@ -146,10 +146,10 @@ services:
   # Override fks_ai for GPU support
   fks_ai:
     build:
-      context: ./repo/ai
+      context: ./services/ai
       dockerfile: Dockerfile.gpu
     volumes:
-      - ./repo/ai:/app
+      - ./services/ai:/app
       - ./logs/ai:/app/logs
       - ./ml_models:/app/models
       - ~/.cache/huggingface:/root/.cache/huggingface

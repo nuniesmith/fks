@@ -1,0 +1,35 @@
+﻿# FKS Strategy Optimization Configuration
+# Asset: GC (Gold)
+# Phase: Phase3
+# Generated: 2025-07-13 23:34:03
+
+# CORE PARAMETERS - Phase3
+[StartHour]
+# Trading session start hour (EST)
+Values = 4, 6, 7, 8
+
+[EndHour]
+# Trading session end hour (EST)
+Values = 14, 15, 16, 17
+
+[MinutesBeforeClose]
+# Minutes before session close to stop trading
+Values = 10, 15, 20, 30
+
+# FIXED PARAMETERS (Don't optimize these simultaneously)
+UseTimeFilter = true
+ShowDebugInfo = false
+SignalQualityMultiplier = 1.0
+VolumeMultiplier = 1.0
+DisableTimeFilter = false
+
+# PERFORMANCE TARGETS FOR GC
+# Win Rate Target: 55%
+# Profit Factor Target: 1.4+
+# Max Drawdown Target: <8%
+
+# OPTIMIZATION NOTES:
+# 1. Start with Phase1 parameters - these are most critical
+# 2. Use 6+ months of tick data for reliable results  
+# 3. Test on out-of-sample data before going live
+# 4. Avoid over-optimization - robust parameters > perfect backtests

@@ -1,0 +1,386 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Trading Signals - FKS Trading Platform{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h2>
+            <i class="bi bi-broadcast"></i>
+            Trading Signals
+        </h2>
+        <p class="text-muted">Real-time trading signals from multiple strategies</p>
+    </div>
+</div>
+
+<!-- Filter Controls -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="get" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Symbol</label>
+                        <select class="form-select" name="symbol">
+                            <option value="">All Symbols</option>
+                            <option value="BTCUSDT">BTCUSDT</option>
+                            <option value="ETHUSDT">ETHUSDT</option>
+                            <option value="SOLUSDT">SOLUSDT</option>
+                            <option value="BNBUSDT">BNBUSDT</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Strategy</label>
+                        <select class="form-select" name="strategy">
+                            <option value="">All Strategies</option>
+                            <option value="rsi">RSI Divergence</option>
+                            <option value="macd">MACD Crossover</option>
+                            <option value="bb">Bollinger Bands</option>
+                            <option value="breakout">Breakout</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Signal Type</label>
+                        <select class="form-select" name="signal_type">
+                            <option value="">All Types</option>
+                            <option value="buy">BUY</option>
+                            <option value="sell">SELL</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary d-block w-100">
+                            <i class="bi bi-funnel"></i> Filter
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Signal Statistics -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-success">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Active Signals</h6>
+                <h3 class="mb-0">{{ active_signals|default:"12" }}</h3>
+                <small class="text-success"><i class="bi bi-arrow-up"></i> 3 new today</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-primary">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Avg Confidence</h6>
+                <h3 class="mb-0">{{ avg_confidence|default:"78.5" }}%</h3>
+                <small class="text-muted">Across all signals</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-warning">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Win Rate</h6>
+                <h3 class="mb-0">{{ signal_win_rate|default:"68.3" }}%</h3>
+                <small class="text-muted">Last 30 days</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-3">
+        <div class="card border-start-info">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Total Profit</h6>
+                <h3 class="mb-0">${{ signal_total_profit|default:"8,450"|floatformat:2 }}</h3>
+                <small class="text-success"><i class="bi bi-arrow-up"></i> +12.5%</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Approval Section -->
+{% if pending_signals %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-warning border-start-warning">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle fs-3 me-3"></i>
+                <div>
+                    <h5 class="alert-heading mb-1">Manual Verification Required</h5>
+                    <p class="mb-0">{{ pending_signals|length }} signal(s) awaiting your approval. Review and approve/reject before automated execution.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Signals Table -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="bi bi-hourglass-split"></i>
+                    Pending Approval ({{ pending_signals|length }})
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Generated</th>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th>Entry</th>
+                                <th>Target</th>
+                                <th>SL</th>
+                                <th>Risk/Reward</th>
+                                <th>Confidence</th>
+                                <th>Reasoning</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for signal in pending_signals %}
+                            <tr class="table-warning">
+                                <td><small>{{ signal.created_at|timesince }} ago</small></td>
+                                <td><strong>{{ signal.symbol }}</strong></td>
+                                <td>
+                                    <span class="badge bg-{{ signal.type_color }}">{{ signal.signal_type }}</span>
+                                </td>
+                                <td>${{ signal.entry_price|floatformat:2 }}</td>
+                                <td class="text-success">${{ signal.target|floatformat:2 }}</td>
+                                <td class="text-danger">${{ signal.stop_loss|floatformat:2 }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ signal.risk_reward|default:"1:3"|floatformat:1 }}</span>
+                                </td>
+                                <td>{{ signal.confidence }}%</td>
+                                <td>
+                                    <small class="text-muted">{{ signal.reasoning|truncatewords:10 }}</small>
+                                </td>
+                                <td>
+                                    <div class="btn-group-vertical btn-group-sm" role="group">
+                                        <form method="post" action="{% url 'web_app:approve_signal' signal.id %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-success w-100 mb-1">
+                                                <i class="bi bi-check-circle"></i> Approve
+                                            </button>
+                                        </form>
+                                        <form method="post" action="{% url 'web_app:reject_signal' signal.id %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-danger w-100">
+                                                <i class="bi bi-x-circle"></i> Reject
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-light">
+                <div class="row">
+                    <div class="col-md-6">
+                        <form method="post" action="{% url 'web_app:approve_all_signals' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-check-all"></i> Approve All
+                            </button>
+                        </form>
+                    </div>
+                    <div class="col-md-6">
+                        <form method="post" action="{% url 'web_app:reject_all_signals' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger w-100">
+                                <i class="bi bi-x-circle"></i> Reject All
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Active Signals Table -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-broadcast-pin"></i>
+                    Active Signals
+                </h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Symbol</th>
+                                <th>Type</th>
+                                <th>Strategy</th>
+                                <th>Entry Price</th>
+                                <th>Target</th>
+                                <th>Stop Loss</th>
+                                <th>Confidence</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for signal in signals %}
+                            <tr>
+                                <td>
+                                    <small>{{ signal.timestamp|default:"2 mins ago" }}</small>
+                                </td>
+                                <td><strong>{{ signal.symbol }}</strong></td>
+                                <td>
+                                    {% if signal.signal_type == 'BUY' %}
+                                        <span class="badge bg-success">BUY</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">SELL</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ signal.strategy }}</td>
+                                <td>${{ signal.entry_price|floatformat:2 }}</td>
+                                <td class="text-success">${{ signal.target|floatformat:2 }}</td>
+                                <td class="text-danger">${{ signal.stop_loss|floatformat:2 }}</td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar {% if signal.confidence >= 80 %}bg-success{% elif signal.confidence >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                             role="progressbar" 
+                                             style="width: {{ signal.confidence }}%"
+                                             aria-valuenow="{{ signal.confidence }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            {{ signal.confidence }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ signal.status_color|default:'primary' }}">
+                                        {{ signal.status|default:"ACTIVE" }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <form method="post" action="{% url 'web_app:approve_signal' signal.id %}" style="display: inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-success" title="Approve & Execute">
+                                                <i class="bi bi-check-circle"></i> Approve
+                                            </button>
+                                        </form>
+                                        <button class="btn btn-outline-info" title="View Details" 
+                                                data-bs-toggle="modal" data-bs-target="#signalModal{{ signal.id }}">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <form method="post" action="{% url 'web_app:reject_signal' signal.id %}" style="display: inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger" title="Reject">
+                                                <i class="bi bi-x-circle"></i> Reject
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                    No active signals. Waiting for market opportunities...
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Signal History Chart -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-graph-up"></i>
+                    Signal Performance History
+                </h5>
+            </div>
+            <div class="card-body">
+                <canvas id="signalHistoryChart" height="80"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Signal History Chart
+const signalCtx = document.getElementById('signalHistoryChart').getContext('2d');
+const signalChart = new Chart(signalCtx, {
+    type: 'line',
+    data: {
+        labels: {{ signal_history_labels|default:"['Week 1', 'Week 2', 'Week 3', 'Week 4']"|safe }},
+        datasets: [
+            {
+                label: 'Win Signals',
+                data: {{ signal_wins|default:"[12, 15, 14, 18]"|safe }},
+                borderColor: 'rgb(25, 135, 84)',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                tension: 0.4
+            },
+            {
+                label: 'Loss Signals',
+                data: {{ signal_losses|default:"[5, 4, 6, 5]"|safe }},
+                borderColor: 'rgb(220, 53, 69)',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                tension: 0.4
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+            intersect: false,
+            mode: 'index'
+        },
+        plugins: {
+            legend: {
+                position: 'top',
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    precision: 0
+                }
+            }
+        }
+    }
+});
+
+// Auto-refresh signals every 30 seconds
+setInterval(function() {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

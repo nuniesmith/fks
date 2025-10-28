@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<NinjaScriptManifest SchemaVersion="1.0" xmlns="http://www.ninjatrader.com/NinjaScript">
+  <Assemblies>
+    <Assembly>
+      <FullName>FKS, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null</FullName>
+      <ExportedTypes>
+        <!-- Only export actual NinjaScript components (Indicators and Strategies) -->
+        <!-- AddOns are utility classes and should NOT be exported -->
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_AI</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_AO</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_Dashboard</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Indicators.FKS_PythonBridge</ExportedType>
+        <ExportedType>NinjaTrader.NinjaScript.Strategies.FKS_Strategy</ExportedType>
+      </ExportedTypes>
+    </Assembly>
+  </Assemblies>
+  <NinjaScriptCollection>
+    <Indicators>
+      <Indicator>
+        <TypeName>FKS_AI</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_AI</FullTypeName>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_AO</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_AO</FullTypeName>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_Dashboard</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_Dashboard</FullTypeName>
+      </Indicator>
+      <Indicator>
+        <TypeName>FKS_PythonBridge</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Indicators.FKS_PythonBridge</FullTypeName>
+      </Indicator>
+    </Indicators>
+    <Strategies>
+      <Strategy>
+        <TypeName>FKS_Strategy</TypeName>
+        <AssemblyName>FKS</AssemblyName>
+        <FullTypeName>NinjaTrader.NinjaScript.Strategies.FKS_Strategy</FullTypeName>
+      </Strategy>
+    </Strategies>
+    <AddOns>
+      <!-- Note: AddOns are utility classes and are not typically exported as individual components -->
+      <!-- They are included as part of the compiled assembly and source files -->
+    </AddOns>
+  </NinjaScriptCollection>
+  <Files>
+    <!-- Compiled Assembly -->
+    <File>
+      <n>FKS.dll</n>
+      <Path>bin</Path>
+    </File>
+    <!-- AddOn Source Files (from AddOns subdirectory) -->
+    <File>
+      <n>FKS_Core.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Calculations.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Infrastructure.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Market.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <File>
+      <n>FKS_Signals.cs</n>
+      <Path>bin\Custom\AddOns</Path>
+    </File>
+    <!-- Indicator Source Files -->
+    <File>
+      <n>FKS_AI.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <File>
+      <n>FKS_AO.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <File>
+      <n>FKS_Dashboard.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <File>
+      <n>FKS_PythonBridge.cs</n>
+      <Path>bin\Custom\Indicators</Path>
+    </File>
+    <!-- Strategy Source Files -->
+    <File>
+      <n>FKS_Strategy.cs</n>
+      <Path>bin\Custom\Strategies</Path>
+    </File>
+  </Files>
+</NinjaScriptManifest>

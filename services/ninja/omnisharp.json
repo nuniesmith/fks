@@ -1,0 +1,117 @@
+{
+  "FormattingOptions": {
+    "EnableEditorConfigSupport": true,
+    "OrganizeImports": true,
+    "NewLine": "\r\n",
+    "UseTabs": false,
+    "TabSize": 4,
+    "IndentationSize": 4
+  },
+  "RoslynExtensionsOptions": {
+    "EnableAnalyzersSupport": true,
+    "EnableImportCompletion": true,
+    "EnableDecompilationSupport": true,
+    "DocumentAnalysisTimeoutMs": 30000,
+    "InlayHintsOptions": {
+      "EnableForParameters": true,
+      "EnableForLiteralParameters": true,
+      "EnableForIndexerParameters": true,
+      "EnableForObjectCreationParameters": true,
+      "EnableForOtherParameters": true,
+      "SuppressForParametersThatDifferOnlyBySuffix": false,
+      "SuppressForParametersThatMatchMethodIntent": false,
+      "SuppressForParametersThatMatchArgumentName": false,
+      "EnableForTypes": true,
+      "EnableForImplicitVariableTypes": true,
+      "EnableForLambdaParameterTypes": true,
+      "EnableForImplicitObjectCreation": true
+    }
+  },
+  "MSBuild": {
+    "LoadProjectsOnDemand": false,
+    "UseLegacySdkResolver": true,
+    "EnablePackageAutoRestore": true,
+    "MSBuildSDKPath": null,
+    "ToolsVersion": "Current",
+    "MSBuildExtensionsPath": null,
+    "TargetFrameworkRootPath": null,
+    "MSBuildSDKsPath": null,
+    "CSharpExtensionsPath": null,
+    "GlobalPackagesCacheLocation": null
+  },
+  "Script": {
+    "EnableScriptNuGetReferences": true,
+    "DefaultTargetFramework": "net48"
+  },
+  "FileOptions": {
+    "SystemExcludeSearchPatterns": [
+      "**/bin/**/*",
+      "**/obj/**/*",
+      "**/.vs/**/*",
+      "**/packages/**/*",
+      "**/*.tmp",
+      "**/*.dll",
+      "**/*.pdb"
+    ]
+  },
+  "Plugins": {
+    "LocationPaths": []
+  },
+  "Sdk": {
+    "IncludePrereleases": false
+  },
+  "DotNet": {
+    "Server": {
+      "Path": null
+    }
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "OmniSharp": "Information",
+      "System": "Warning"
+    }
+  },
+  "ImplementTypeOptions": {
+    "InsertionBehavior": "WithOtherMembersOfTheSameKind",
+    "PropertyGenerationBehavior": "PreferThrowingProperties"
+  },
+  "RenameOptions": {
+    "RenameOverloads": false,
+    "RenameInStrings": false,
+    "RenameInComments": false
+  },
+  "OrganizeImportsOptions": {
+    "SeparateImportDirectiveGroups": true,
+    "PlaceSystemNamespaceFirst": true
+  },
+  "InlayHints": {
+    "EnableForParameters": true,
+    "ForLiteralParameters": true,
+    "ForIndexerParameters": true,
+    "ForObjectCreationParameters": true,
+    "ForOtherParameters": true,
+    "SuppressForParametersThatDifferOnlyBySuffix": false,
+    "SuppressForParametersThatMatchMethodIntent": false,
+    "SuppressForParametersThatMatchArgumentName": false,
+    "EnableForTypes": true,
+    "ForImplicitVariableTypes": true,
+    "ForLambdaParameterTypes": true,
+    "ForImplicitObjectCreation": true
+  },
+  "Completion": {
+    "CompletionItemsCache": true,
+    "FilterText": true,
+    "ResolveNameConflicts": true,
+    "ShowItemsFromUnimportedNamespaces": true,
+    "EnableArgumentCompletions": true
+  },
+  "CodeLens": {
+    "EnableReferencesCodeLens": true,
+    "EnableTestsCodeLens": true
+  },
+  "SemanticHighlighting": {
+    "Enabled": true
+  }
+}

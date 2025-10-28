@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Manifest>
+    <Package>
+        <Name>FKS Trading Systems</Name>
+        <Version>1.0.0</Version>
+        <Description>Professional automated trading system with AI-enhanced signals for futures markets</Description>
+        <Author>FKS Trading</Author>
+        <Url>https://fkstrading.com</Url>
+        <Support>support@fkstrading.com</Support>
+        <MinNinjaTraderVersion>8.0.27.1</MinNinjaTraderVersion>
+        <Platform>Futures</Platform>
+        <RequiresDataFeed>true</RequiresDataFeed>
+        <CreateDate>2025-07-07</CreateDate>
+        <UpdateDate>2025-07-07</UpdateDate>
+    </Package>
+    
+    <Assemblies>
+        <Assembly>
+            <Path>FKS.dll</Path>
+            <Name>FKS</Name>
+            <Description>FKS Trading Systems Core Library</Description>
+        </Assembly>
+    </Assemblies>
+    
+    <AddOns>
+        <AddOn>
+            <Name>FKS_Core</Name>
+            <FullName>NinjaTrader.NinjaScript.AddOns.FKS.FKS_Core</FullName>
+            <Description>Central infrastructure hub for FKS components</Description>
+        </AddOn>
+        <AddOn>
+            <Name>FKS_Market</Name>
+            <FullName>NinjaTrader.NinjaScript.AddOns.FKS.FKS_Market</FullName>
+            <Description>Market-specific configurations and analysis</Description>
+        </AddOn>
+        <AddOn>
+            <Name>FKS_Infrastructure</Name>
+            <FullName>NinjaTrader.NinjaScript.AddOns.FKS.FKS_Infrastructure</FullName>
+            <Description>Component registry and communication infrastructure</Description>
+        </AddOn>
+        <AddOn>
+            <Name>FKS_Signals</Name>
+            <FullName>NinjaTrader.NinjaScript.AddOns.FKS.FKS_Signals</FullName>
+            <Description>Unified signal generation and management</Description>
+        </AddOn>
+        <AddOn>
+            <Name>FKS_Calculations</Name>
+            <FullName>NinjaTrader.NinjaScript.AddOns.FKS.FKS_Calculations</FullName>
+            <Description>Shared calculation methods and utilities</Description>
+        </AddOn>
+    </AddOns>
+    
+    <Indicators>
+        <Indicator>
+            <Name>FKS_AI</Name>
+            <FullName>NinjaTrader.NinjaScript.Indicators.FKS.FKS_AI</FullName>
+            <Description>AI-enhanced support/resistance detection with signal quality scoring</Description>
+            <Category>FKS Trading</Category>
+            <IsOverlay>true</IsOverlay>
+        </Indicator>
+        <Indicator>
+            <Name>FKS_AO</Name>
+            <FullName>NinjaTrader.NinjaScript.Indicators.FKS.FKS_AO</FullName>
+            <Description>Awesome Oscillator with momentum confirmation</Description>
+            <Category>FKS Trading</Category>
+            <IsOverlay>false</IsOverlay>
+        </Indicator>
+        <Indicator>
+            <Name>FKS_Dashboard</Name>
+            <FullName>NinjaTrader.NinjaScript.Indicators.FKS.FKS_Dashboard</FullName>
+            <Description>Market regime and performance dashboard</Description>
+            <Category>FKS Trading</Category>
+            <IsOverlay>true</IsOverlay>
+        </Indicator>
+        <Indicator>
+            <Name>FKS_PythonBridge</Name>
+            <FullName>NinjaTrader.NinjaScript.Indicators.FKS.FKS_PythonBridge</FullName>
+            <Description>Python integration for data logging and model feedback</Description>
+            <Category>FKS Trading</Category>
+            <IsOverlay>false</IsOverlay>
+        </Indicator>
+    </Indicators>
+    
+    <Strategies>
+        <Strategy>
+            <Name>FKS_Strategy</Name>
+            <FullName>NinjaTrader.NinjaScript.Strategies.FKS.FKS_Strategy</FullName>
+            <Description>Consolidated FKS trading strategy with 4 proven setups</Description>
+            <Category>FKS Trading</Category>
+            <DefaultQuantity>1</DefaultQuantity>
+            <SupportsOptimization>false</SupportsOptimization>
+            <AllowMultipleInstances>true</AllowMultipleInstances>
+        </Strategy>
+    </Strategies>
+    
+    <Dependencies>
+        <Dependency>
+            <Name>System.ValueTuple</Name>
+            <Version>4.5.0</Version>
+        </Dependency>
+        <Dependency>
+            <Name>System.Memory</Name>
+            <Version>4.5.5</Version>
+        </Dependency>
+        <Dependency>
+            <Name>System.Buffers</Name>
+            <Version>4.5.1</Version>
+        </Dependency>
+    </Dependencies>
+    
+    <RequiredIndicators>
+        <!-- These are standard NT8 indicators we depend on -->
+        <RequiredIndicator>EMA</RequiredIndicator>
+        <RequiredIndicator>SMA</RequiredIndicator>
+        <RequiredIndicator>ATR</RequiredIndicator>
+        <RequiredIndicator>VOL</RequiredIndicator>
+    </RequiredIndicators>
+    
+    <License>
+        <Type>Proprietary</Type>
+        <Text>Copyright (c) 2025 FKS Trading. All rights reserved.</Text>
+        <RequiresActivation>false</RequiresActivation>
+    </License>
+    
+    <ReleaseNotes>
+        <![CDATA[
+        Version 1.0.0 - Major Refactoring Release
+        - Consolidated strategy implementation with 4 proven setups
+        - Removed unnecessary parameters for production use
+        - Enhanced dashboard with comprehensive system monitoring
+        - Improved component integration and health checking
+        - Market-specific automatic configuration
+        - Python bridge support for logging and analysis
+        - Performance optimizations throughout
+        ]]>
+    </ReleaseNotes>
+</Manifest>

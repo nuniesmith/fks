@@ -1,0 +1,38 @@
+#### Flat layout pyproject (PEP 621) ####
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "api-service"
+version = "0.1.0"
+description = "FKS API Service (flat src layout)"
+authors = [{ name = "nuniesmith" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "httpx",
+  "requests",
+  "orjson",
+  "pydantic>=2",
+  "celery[redis]>=5.3.0"
+]
+
+[project.optional-dependencies]
+websocket = ["websockets", "python-socketio"]
+security = ["python-jose", "cryptography", "passlib", "bcrypt", "python-multipart"]
+dev = ["pytest", "pytest-asyncio", "coverage", "mypy", "ruff"]
+
+[project.scripts]
+api = "main:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.uvicorn]
+factory = true
+
+

@@ -94,11 +94,11 @@ multi-logs:
 multi-build:
 	@echo "Building all microservice images..."
 	@for service in api data execution ninja web; do \
-		if [ -d "repo/$$service" ]; then \
+		if [ -d "services/$$service" ]; then \
 			echo "=== Building fks_$$service ==="; \
 			docker-compose build fks_$$service; \
 		else \
-			echo "⚠ repo/$$service not found (skipping)"; \
+			echo "⚠ services/$$service not found (skipping)"; \
 		fi \
 	done
 	@echo "Build complete!"
@@ -123,7 +123,7 @@ multi-update:
 	@git submodule status
 	@echo ""
 	@echo "Updated! Review changes and commit:"
-	@echo "  git add repo/"
+	@echo "  git add services/"
 	@echo "  git commit -m 'chore: Update microservices submodules'"
 
 multi-health:

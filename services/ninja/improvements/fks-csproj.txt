@@ -1,0 +1,126 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net48</TargetFramework>
+        <AssemblyName>FKS</AssemblyName>
+        <RootNamespace>NinjaTrader.NinjaScript</RootNamespace>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+        <OutputPath>bin\Release\</OutputPath>
+        <IntermediateOutputPath>obj\Release\</IntermediateOutputPath>
+        <DocumentationFile>bin\Release\FKS.xml</DocumentationFile>
+        <DebugType>pdbonly</DebugType>
+        <Optimize>true</Optimize>
+        <DefineConstants>TRACE;RELEASE</DefineConstants>
+        <ErrorReport>prompt</ErrorReport>
+        <WarningLevel>4</WarningLevel>
+        <NoWarn>CS0436;CS1701;CS1702</NoWarn>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Prefer32Bit>false</Prefer32Bit>
+        <LangVersion>7.3</LangVersion>
+    </PropertyGroup>
+
+    <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+        <OutputPath>bin\Debug\</OutputPath>
+        <IntermediateOutputPath>obj\Debug\</IntermediateOutputPath>
+        <DocumentationFile>bin\Debug\FKS.xml</DocumentationFile>
+        <DebugType>full</DebugType>
+        <Optimize>false</Optimize>
+        <DefineConstants>DEBUG;TRACE</DefineConstants>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- NinjaTrader References -->
+        <Reference Include="NinjaTrader.Core">
+            <HintPath>references\NinjaTrader.Core.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="NinjaTrader.Custom">
+            <HintPath>references\NinjaTrader.Custom.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="NinjaTrader.Gui">
+            <HintPath>references\NinjaTrader.Gui.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        
+        <!-- WPF References -->
+        <Reference Include="PresentationCore">
+            <HintPath>references\PresentationCore.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="PresentationFramework">
+            <HintPath>references\PresentationFramework.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="System.Xaml">
+            <HintPath>references\System.Xaml.dll</HintPath>
+            <Private>false</Private>
+        </Reference>
+        <Reference Include="WindowsBase">
+            <Private>false</Private>
+        </Reference>
+        
+        <!-- System References -->
+        <Reference Include="System" />
+        <Reference Include="System.Core" />
+        <Reference Include="System.Xml.Linq" />
+        <Reference Include="System.Data.DataSetExtensions" />
+        <Reference Include="Microsoft.CSharp" />
+        <Reference Include="System.Data" />
+        <Reference Include="System.Net.Http" />
+        <Reference Include="System.Xml" />
+        <Reference Include="System.Drawing" />
+        <Reference Include="System.Windows.Forms" />
+        
+        <!-- SharpDX for rendering -->
+        <PackageReference Include="SharpDX" Version="4.2.0" />
+        <PackageReference Include="SharpDX.Direct2D1" Version="4.2.0" />
+        <PackageReference Include="SharpDX.DirectWrite" Version="4.2.0" />
+        <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Global Usings -->
+        <Compile Include="GlobalUsings.cs" />
+        
+        <!-- AddOns (Core Infrastructure) -->
+        <Compile Include="AddOns\FKS_Core.cs" />
+        <Compile Include="AddOns\FKS_Infrastructure.cs" />
+        <Compile Include="AddOns\FKS_Market.cs" />
+        <Compile Include="AddOns\FKS_Signals.cs" />
+        <Compile Include="AddOns\FKS_Calculations.cs" />
+        
+        <!-- Indicators -->
+        <Compile Include="Indicators\FKS_AI.cs" />
+        <Compile Include="Indicators\FKS_AO.cs" />
+        <Compile Include="Indicators\FKS_Dashboard.cs" />
+        <Compile Include="Indicators\FKS_PythonBridge.cs" />
+        
+        <!-- Strategies -->
+        <Compile Include="Strategies\FKS_Strategy.cs" />
+        
+        <!-- Assembly Info -->
+        <Compile Include="Properties\AssemblyInfo.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Include Info.xml in package -->
+        <Content Include="Info.xml">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
+
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+        <Exec Command="echo FKS Build Complete: $(TargetPath)" />
+        <Message Text="FKS assembly built successfully" Importance="high" />
+    </Target>
+
+    <Target Name="CreatePackage" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+        <Message Text="Creating NinjaTrader package..." Importance="high" />
+        <Copy SourceFiles="$(OutputPath)FKS.dll" DestinationFolder="..\..\package_nt8\temp\bin\" />
+        <Copy SourceFiles="$(OutputPath)FKS.pdb" DestinationFolder="..\..\package_nt8\temp\bin\" />
+        <Copy SourceFiles="$(OutputPath)FKS.xml" DestinationFolder="..\..\package_nt8\temp\bin\" />
+        <Copy SourceFiles="..\..\manifest.xml" DestinationFolder="..\..\package_nt8\temp\" />
+        <Copy SourceFiles="Info.xml" DestinationFolder="..\..\package_nt8\temp\" />
+    </Target>
+</Project>

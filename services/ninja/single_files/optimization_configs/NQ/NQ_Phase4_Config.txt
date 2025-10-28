@@ -1,0 +1,39 @@
+﻿# FKS Strategy Optimization Configuration
+# Asset: NQ (Nasdaq)
+# Phase: Phase4
+# Generated: 2025-07-13 23:34:03
+
+# CORE PARAMETERS - Phase4
+[DailyProfitSoftTarget]
+# Soft profit target (reduce risk)
+Values = 1760, 2200, 2640
+
+[DailyProfitHardTarget]
+# Hard profit target (stop trading)
+Values = 2640, 3300, 3960
+
+[DailyLossSoftLimit]
+# Soft loss limit (reduce risk)
+Values = 880, 1100, 1320
+
+[DailyLossHardLimit]
+# Hard loss limit (stop trading)
+Values = 1320, 1650, 1980
+
+# FIXED PARAMETERS (Don't optimize these simultaneously)
+UseTimeFilter = true
+ShowDebugInfo = false
+SignalQualityMultiplier = 1.0
+VolumeMultiplier = 1.0
+DisableTimeFilter = false
+
+# PERFORMANCE TARGETS FOR NQ
+# Win Rate Target: 50%
+# Profit Factor Target: 1.5+
+# Max Drawdown Target: <12%
+
+# OPTIMIZATION NOTES:
+# 1. Start with Phase1 parameters - these are most critical
+# 2. Use 6+ months of tick data for reliable results  
+# 3. Test on out-of-sample data before going live
+# 4. Avoid over-optimization - robust parameters > perfect backtests

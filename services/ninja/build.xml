@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Release</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{44387377-FCA2-495F-89D1-B7965E67142F}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NinjaTrader.Custom</RootNamespace>
+    <AssemblyName>FKS</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <NinjaTraderPath>C:\Program Files\NinjaTrader 8</NinjaTraderPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+
+    <!-- NinjaTrader References -->
+    <Reference Include="NinjaTrader.Core">
+      <HintPath>$(NinjaTraderPath)\bin64\NinjaTrader.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NinjaTrader.Gui">
+      <HintPath>$(NinjaTraderPath)\bin64\NinjaTrader.Gui.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NinjaTrader.Custom">
+      <HintPath>$(NinjaTraderPath)\bin64\NinjaTrader.Custom.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- AddOns -->
+    <Compile Include="src\AddOns\FKS_Calculations.cs" />
+    <Compile Include="src\AddOns\FKS_Core.cs" />
+    <Compile Include="src\AddOns\FKS_Infrastructure.cs" />
+    <Compile Include="src\AddOns\FKS_Market.cs" />
+    <Compile Include="src\AddOns\FKS_NeuralNetwork.cs" />
+    <Compile Include="src\AddOns\FKS_Signals.cs" />
+    <Compile Include="src\AddOns\FKS_TensorFlowWrapper.cs" />
+    
+    <!-- Indicators -->
+    <Compile Include="src\Indicators\FKS_AI.cs" />
+    <Compile Include="src\Indicators\FKS_AO.cs" />
+    <Compile Include="src\Indicators\FKS_Dashboard.cs" />
+    <Compile Include="src\Indicators\FKS_PythonBridge.cs" />
+
+    <!-- Strategies -->
+    <Compile Include="src\Strategies\FKS_Strategy.cs" />
+
+  </ItemGroup>
+
+  <Target Name="Build">
+    <MakeDir Directories="$(OutputPath)" />
+    <Csc Sources="@(Compile)"
+         References="@(Reference)"
+         OutputAssembly="$(OutputPath)$(AssemblyName).dll"
+         TargetType="library"
+         WarningLevel="4"
+         Optimize="$(Optimize)"
+         DefineConstants="$(DefineConstants)" />
+  </Target>
+
+  <Target Name="Clean">
+    <Delete Files="$(OutputPath)$(AssemblyName).dll" />
+    <Delete Files="$(OutputPath)$(AssemblyName).pdb" />
+  </Target>
+
+  <Target Name="Rebuild" DependsOnTargets="Clean;Build" />
+
+  <!-- Custom target for packaging -->
+  <Target Name="Package" DependsOnTargets="Build">
+    <PropertyGroup>
+      <PackageDir>packages</PackageDir>
+      <TempPackageDir>$(PackageDir)\temp</TempPackageDir>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(PackageDir)" />
+    <MakeDir Directories="$(TempPackageDir)\bin\Custom\Indicators" />
+    <MakeDir Directories="$(TempPackageDir)\bin\Custom\Strategies" />
+    <MakeDir Directories="$(TempPackageDir)\bin\Custom\AddOns" />
+
+    <!-- Copy source files -->
+    <Copy SourceFiles="@(Compile)"
+          DestinationFiles="@(Compile->'$(TempPackageDir)\bin\Custom\%(RecursiveDir)%(Filename)%(Extension)')" />
+
+    <!-- Create manifest -->
+    <WriteLinesToFile File="$(TempPackageDir)\manifest.xml"
+                      Lines="&lt;?xml version='1.0' encoding='utf-8'?&gt;&lt;Manifest&gt;&lt;Name&gt;FKS Trading Systems&lt;/Name&gt;&lt;Version&gt;1.0.0&lt;/Version&gt;&lt;/Manifest&gt;" />
+
+    <!-- Create zip -->
+    <Exec Command="powershell Compress-Archive -Path '$(TempPackageDir)\*' -DestinationPath '$(PackageDir)\fks.zip' -Force" />
+
+    <!-- Cleanup -->
+    <RemoveDir Directories="$(TempPackageDir)" />
+  </Target>
+</Project>

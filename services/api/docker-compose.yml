@@ -1,0 +1,43 @@
+
+services:
+  fks_api:
+    container_name: fks_api
+    build:
+      context: .
+      dockerfile: shared/docker/templates/Dockerfile.python
+      args:
+        PYTHON_VERSION: "3.11"
+        BUILD_PACKAGES: "build-essential gcc libpq-dev"
+        INSTALL_EDITABLE: "1" # set to 0 for production build or use override file
+    env_file:
+      - ./.env
+    environment:
+      APP_ENV: development
+      SERVICE_PORT: 8000
+      SERVICE_TYPE: api
+      PYTHONPATH: /app/src:/app
+      TZ: America/Toronto
+      PYTHON_MODULE: fastapi_main:app
+    working_dir: /app/src
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["uvicorn fastapi_main:app --host 0.0.0.0 --port 8000"]
+    volumes:
+      - ./src:/app/src:ro
+      # Standalone mode: shared mount removed (add via override if needed)
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "8000:8000"
+    networks:
+      - fks_net
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import socket,os; s=socket.socket(); s.settimeout(2); s.connect((\"127.0.0.1\", int(os.environ.get(\"SERVICE_PORT\",8000)))); s.close()'" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  fks_net:
+    name: fks_net
+    external: true

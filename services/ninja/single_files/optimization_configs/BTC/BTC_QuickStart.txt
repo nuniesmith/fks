@@ -1,0 +1,21 @@
+﻿# BTC (Bitcoin) Quick Start Parameters
+# Copy these into NinjaTrader for immediate testing
+
+SignalQualityThreshold: 0.65
+VolumeThreshold: 1.2
+ATRStopMultiplier: 4
+ATRTargetMultiplier: 3
+BaseContracts: 1
+MaxContracts: 1
+MaxDailyTrades: 8
+StartHour: 6
+EndHour: 16
+DailyProfitSoftTarget: 1200
+DailyProfitHardTarget: 2000
+DailyLossSoftLimit: 600
+DailyLossHardLimit: 1000
+
+# Expected Performance Targets:
+# Win Rate: 45%
+# Profit Factor: 1.8+
+# Max Drawdown: <20%

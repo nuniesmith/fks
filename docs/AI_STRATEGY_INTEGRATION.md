@@ -1,9 +1,14 @@
 # AI Strategy Integration Plan: LLM Strategy Generation & DL Regime Detection
 
-**Status**: Planning Phase  
+**Status**: Implementation Ready (Oct 28, 2025)  
 **Target Services**: fks_ai (GPU ML/RAG), fks_app (trading logic), fks_data (data collection)  
 **Created**: October 24, 2025  
-**Priority**: Medium-High (Post Phase 3 - after core testing complete)
+**Updated**: October 28, 2025  
+**Priority**: High (Current Phase - AI Enhancement 12-phase plan active)
+
+> **Note**: This document describes the original 5-phase AI plan. For the comprehensive 12-phase implementation roadmap including ASMBTR baseline, multi-agent LLM architecture, and advanced evaluation frameworks, see:
+> - **Primary Reference**: `.github/copilot-instructions.md` (lines 866-1400) - Complete 12-phase plan
+> - **Current Status**: `docs/PHASE_STATUS.md` - Progress tracker
 
 ## Executive Summary
 
@@ -22,10 +27,36 @@ Both features align perfectly with FKS's microservices architecture and existing
 
 ### Feasibility Assessment
 ✅ **High Feasibility** - All required infrastructure exists:
-- fks_ai: GPU support, PyTorch, Ollama local LLM
+- fks_ai: GPU support, PyTorch, Ollama local LLM, LangGraph for multi-agent orchestration
 - fks_app: Backtesting framework, Optuna optimization
 - fks_data: CCXT integration (can extend to EODHD for stocks/fundamentals)
 - fks_execution: Order execution with circuit breaker
+- **Current Status**: 15/16 services operational (93.75%), 69/69 tests passing
+
+### Enhanced 12-Phase Roadmap (Oct 2025)
+The original 5-phase plan has been expanded into a comprehensive 12-phase AI enhancement strategy:
+
+**Phases 1-4: ASMBTR Baseline** (4 weeks)
+- Non-AI probabilistic baseline using Binary Tree Representation for benchmarking
+- Target: Calmar >0.3 on EUR/USD tick data
+
+**Phases 5-7: Multi-Agent LLM System** (8 weeks)
+- LangGraph orchestration with Bull/Bear/Manager agents
+- 4 analyst types, 3 trader personas, adversarial debate architecture
+- Target: >60% signal quality on validation set
+
+**Phases 8-10: Advanced Models & Risk** (4 weeks)
+- Confusion matrix evaluation with Bonferroni/BH corrections
+- CNN-LSTM + LLM vetoes, Walk-Forward Optimization
+- MDD protection, CPI-Gold hedging, Markov chain integration
+- Target: Calmar >0.45, Sharpe ~0.5
+
+**Phases 11-12: Production** (4 weeks)
+- Grafana monitoring, Discord alerts
+- Paper trading validation, A/B testing, ethics audit
+- Target: Real-world Sharpe >2.5
+
+See `.github/copilot-instructions.md` for complete phase details and implementation templates.
 
 ## Research Foundation
 

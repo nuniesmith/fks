@@ -146,12 +146,13 @@ services:
   # Override fks_ai for GPU support
   fks_ai:
     build:
-      context: ./services/ai
-      dockerfile: Dockerfile.gpu
+      context: .
+      dockerfile: ./docker/Dockerfile.ai
+      args:
+        - SERVICE_DIR=./src/services/ai
     volumes:
-      - ./services/ai:/app
+      - ./src/services/ai:/app
       - ./logs/ai:/app/logs
-      - ./ml_models:/app/models
       - ~/.cache/huggingface:/root/.cache/huggingface
     environment:
       - USE_LOCAL_LLM=true

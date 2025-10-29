@@ -1,0 +1,31 @@
+# FKS Web Service Requirements
+# Django Web UI with Vite frontend
+
+# Core Framework
+django>=5.2.7
+djangorestframework>=3.14.0
+
+# Database
+psycopg2-binary>=2.9.9
+redis>=5.2.0
+
+# ASGI Server
+uvicorn[standard]>=0.27.0
+gunicorn>=21.2.0
+
+# API Client
+httpx>=0.26.0
+requests>=2.31.0
+
+# Templates & Static
+whitenoise>=6.6.0
+
+# Utils
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Development
+pytest>=7.4.3
+pytest-django>=4.7.0
+pytest-asyncio>=0.23.2

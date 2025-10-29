@@ -26,7 +26,7 @@ services:
     networks:
       - fks-network
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      test: ["CMD", "wget", "--no-check-certificate", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -46,7 +46,7 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
-             gunicorn web.django.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
+             gunicorn services.web.src.django.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120"
     depends_on:
       db:
         condition: service_healthy
@@ -61,7 +61,7 @@ services:
     environment:
       - TZ=America/Toronto
       - PYTHONUNBUFFERED=1
-      - DJANGO_SETTINGS_MODULE=web.django.settings
+      - DJANGO_SETTINGS_MODULE=services.web.src.django.settings
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-dev-key-change-in-production}
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - POSTGRES_DB=${POSTGRES_DB:-trading_db}
@@ -162,14 +162,14 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     working_dir: /app
-    command: celery -A web.django worker --loglevel=info --concurrency=4
+    command: celery -A services.web.src.django worker --loglevel=info --concurrency=4
     volumes:
       - ./src:/app
       - ./logs/celery:/app/logs
     environment:
       - TZ=America/Toronto
       - PYTHONUNBUFFERED=1
-      - DJANGO_SETTINGS_MODULE=web.django.settings
+      - DJANGO_SETTINGS_MODULE=services.web.src.django.settings
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
       - POSTGRES_DB=${POSTGRES_DB:-trading_db}
@@ -187,7 +187,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "celery -A web.django inspect ping"]
+      test: ["CMD-SHELL", "celery -A services.web.src.django inspect ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -201,14 +201,14 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     working_dir: /app
-    command: celery -A web.django beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: celery -A services.web.src.django beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
       - ./src:/app
       - ./logs/celery:/app/logs
     environment:
       - TZ=America/Toronto
       - PYTHONUNBUFFERED=1
-      - DJANGO_SETTINGS_MODULE=web.django.settings
+      - DJANGO_SETTINGS_MODULE=services.web.src.django.settings
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
       - POSTGRES_DB=${POSTGRES_DB:-trading_db}
@@ -235,7 +235,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     working_dir: /app
-    command: celery -A web.django flower --port=5555
+    command: celery -A services.web.src.django flower --port=5555
     volumes:
       - ./src:/app
     ports:
@@ -243,6 +243,7 @@ services:
     environment:
       - TZ=America/Toronto
       - PYTHONUNBUFFERED=1
+      - DJANGO_SETTINGS_MODULE=services.web.src.django.settings
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
     env_file:
@@ -257,19 +258,24 @@ services:
   # FKS Microservices
   fks_api:
     build:
-      context: ./services/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./docker/Dockerfile.api
+      args:
+        - SERVICE_DIR=./src/services/api
     container_name: fks_api
     expose:
       - "8001"
+    ports:
+      - "8001:8001"
     volumes:
-      - ./services/api:/app
+      - ./src/services/api:/app
       - ./logs/api:/app/logs
     environment:
       - TZ=America/Toronto
       - PYTHONUNBUFFERED=1
       - SERVICE_NAME=fks_api
       - SERVICE_VERSION=1.0.0
+      - SERVICE_PORT=8001
       - MONITOR_URL=http://web:8000/monitor/api/discover/
       - APP_SERVICE_URL=http://fks_app:8002
       - DATA_SERVICE_URL=http://fks_data:8003
@@ -291,7 +297,7 @@ services:
       fks_app:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=3)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -302,13 +308,15 @@ services:
 
   fks_app:
     build:
-      context: ./services/app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./docker/Dockerfile.app
+      args:
+        - SERVICE_DIR=./src/services/app
     container_name: fks_app
     expose:
       - "8002"
     volumes:
-      - ./services/app:/app
+      - ./src/services/app:/app
       - ./logs/app:/app/logs
     environment:
       - TZ=America/Toronto
@@ -338,8 +346,9 @@ services:
         condition: service_healthy
       fks_data:
         condition: service_healthy
-      fks_ai:
-        condition: service_healthy
+      # TEMP: Commented out while fks_ai is disabled
+      # fks_ai:
+      #   condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
@@ -352,19 +361,24 @@ services:
 
   fks_data:
     build:
-      context: ./services/data
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./docker/Dockerfile.data
+      args:
+        - SERVICE_DIR=./src/services/data
     container_name: fks_data
     expose:
       - "8003"
+    ports:
+      - "8003:8003"
     volumes:
-      - ./services/data:/app
+      - ./src/services/data:/app
       - ./logs/data:/app/logs
     environment:
       - TZ=America/Toronto
       - PYTHONUNBUFFERED=1
       - SERVICE_NAME=fks_data
       - SERVICE_VERSION=1.0.0
+      - SERVICE_PORT=8003
       - MONITOR_URL=http://web:8000/monitor/api/discover/
       - POSTGRES_DB=${POSTGRES_DB:-trading_db}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
@@ -373,8 +387,8 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/3
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
-      - BINANCE_API_KEY=${BINANCE_API_KEY}
-      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
     env_file:
       - .env
     depends_on:
@@ -385,7 +399,7 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health', timeout=3)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -394,178 +408,187 @@ services:
     networks:
       - fks-network
 
-  fks_ai:
-    build:
-      context: ./services/ai
-      dockerfile: Dockerfile.gpu
-    container_name: fks_ai
-    expose:
-      - "8006"
-    volumes:
-      - ./services/ai:/app
-      - ./logs/ai:/app/logs
-      - ./ml_models:/app/models  # Persistent model storage
-    environment:
-      - TZ=America/Toronto
-      - PYTHONUNBUFFERED=1
-      - SERVICE_NAME=fks_ai
-      - SERVICE_VERSION=1.0.0
-      - MONITOR_URL=http://web:8000/monitor/api/discover/
-      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_HOST=db
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/6
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CUDA_VISIBLE_DEVICES=0
-      - OLLAMA_HOST=http://ollama:11434
-    env_file:
-      - .env
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      web:
-        condition: service_healthy
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    restart: unless-stopped
-    networks:
-      - fks-network
+  # TEMPORARILY DISABLED - GPU service takes long to build, enable with make gpu-up
+  # fks_ai:
+  #   build:
+  #     context: ./src/services/ai
+  #     dockerfile: ../../docker/Dockerfile.ai
+  #   container_name: fks_ai
+  #   expose:
+  #     - "8006"
+  #   volumes:
+  #     - ./src/services/ai:/app
+  #     - ./logs/ai:/app/logs
+  #   environment:
+  #     - TZ=America/Toronto
+  #     - PYTHONUNBUFFERED=1
+  #     - SERVICE_NAME=fks_ai
+  #     - SERVICE_VERSION=1.0.0
+  #     - MONITOR_URL=http://web:8000/monitor/api/discover/
+  #     - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+  #     - POSTGRES_USER=${POSTGRES_USER:-postgres}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+  #     - POSTGRES_HOST=db
+  #     - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/6
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - CUDA_VISIBLE_DEVICES=0
+  #     - OLLAMA_HOST=http://ollama:11434
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     web:
+  #       condition: service_healthy
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 60s
+  #   restart: unless-stopped
+  #   networks:
+  #     - fks-network
 
-  fks_execution:
-    build:
-      context: ./services/execution
-      dockerfile: Dockerfile
-    container_name: fks_execution
-    expose:
-      - "8004"
-    volumes:
-      - ./services/execution:/app
-      - ./logs/execution:/app/logs
-    environment:
-      - TZ=America/Toronto
-      - PYTHONUNBUFFERED=1
-      - SERVICE_NAME=fks_execution
-      - SERVICE_VERSION=1.0.0
-      - MONITOR_URL=http://web:8000/monitor/api/discover/
-      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_HOST=db
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/4
-      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
-      - DATA_SERVICE_URL=http://fks_data:8003
-      - BINANCE_API_KEY=${BINANCE_API_KEY}
-      - BINANCE_API_SECRET=${BINANCE_API_SECRET}
-    env_file:
-      - .env
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      web:
-        condition: service_healthy
-      fks_data:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
-    networks:
-      - fks-network
+  # TODO: fks_execution Rust binary exits silently - needs debugging
+  # Binary builds successfully but exits immediately with no logs
+  # fks_execution:
+  #   build:
+  #     context: .
+  #     dockerfile: ./docker/Dockerfile.execution
+  #     args:
+  #       - SERVICE_DIR=./src/services/execution
+  #   container_name: fks_execution
+  #   expose:
+  #     - "8004"
+  #   volumes:
+  #     - ./src/services/execution:/app
+  #     - ./logs/execution:/app/logs
+  #   environment:
+  #     - TZ=America/Toronto
+  #     - PYTHONUNBUFFERED=1
+  #     - SERVICE_NAME=fks_execution
+  #     - SERVICE_VERSION=1.0.0
+  #     - MONITOR_URL=http://web:8000/monitor/api/discover/
+  #     - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+  #     - POSTGRES_USER=${POSTGRES_USER:-postgres}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+  #     - POSTGRES_HOST=db
+  #     - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/4
+  #     - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+  #     - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+  #     - DATA_SERVICE_URL=http://fks_data:8003
+  #     - BINANCE_API_KEY=${BINANCE_API_KEY}
+  #     - BINANCE_API_SECRET=${BINANCE_API_SECRET}
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     web:
+  #       condition: service_healthy
+  #     fks_data:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   restart: unless-stopped
+  #   networks:
+  #     - fks-network
 
-  fks_ninja:
-    build:
-      context: ./services/ninja
-      dockerfile: Dockerfile
-    container_name: fks_ninja
-    expose:
-      - "8005"
-    volumes:
-      - ./services/ninja:/app
-      - ./logs/ninja:/app/logs
-    environment:
-      - TZ=America/Toronto
-      - PYTHONUNBUFFERED=1
-      - SERVICE_NAME=fks_ninja
-      - SERVICE_VERSION=1.0.0
-      - MONITOR_URL=http://web:8000/monitor/api/discover/
-      - APP_SERVICE_URL=http://fks_app:8002
-      - EXECUTION_SERVICE_URL=http://fks_execution:8004
-      - DATA_SERVICE_URL=http://fks_data:8003
-      - NINJATRADER_HOST=${NINJATRADER_HOST:-localhost}
-      - NINJATRADER_PORT=${NINJATRADER_PORT:-8080}
-    env_file:
-      - .env
-    depends_on:
-      web:
-        condition: service_healthy
-      fks_app:
-        condition: service_healthy
-      fks_execution:
-        condition: service_healthy
-      fks_data:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    restart: unless-stopped
-    networks:
-      - fks-network
+  # TEMPORARILY DISABLED - .NET Framework 4.8 build issue, needs conversion to .NET 8
+  # fks_ninja:
+  #   build:
+  #     context: ./src/services/ninja
+  #     dockerfile: ../../docker/Dockerfile.ninja
+  #   container_name: fks_ninja
+  #   expose:
+  #     - "8005"
+  #   volumes:
+  #     - ./src/services/ninja:/app
+  #     - ./logs/ninja:/app/logs
+  #   environment:
+  #     - TZ=America/Toronto
+  #     - PYTHONUNBUFFERED=1
+  #     - SERVICE_NAME=fks_ninja
+  #     - SERVICE_VERSION=1.0.0
+  #     - MONITOR_URL=http://web:8000/monitor/api/discover/
+  #     - APP_SERVICE_URL=http://fks_app:8002
+  #     - EXECUTION_SERVICE_URL=http://fks_execution:8004
+  #     - DATA_SERVICE_URL=http://fks_data:8003
+  #     - NINJATRADER_HOST=${NINJATRADER_HOST:-localhost}
+  #     - NINJATRADER_PORT=${NINJATRADER_PORT:-8080}
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     web:
+  #       condition: service_healthy
+  #     fks_app:
+  #       condition: service_healthy
+  #     fks_execution:
+  #       condition: service_healthy
+  #     fks_data:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 40s
+  #   restart: unless-stopped
+  #   networks:
+  #     - fks-network
 
-  fks_web_ui:
-    build:
-      context: ./services/web
-      dockerfile: Dockerfile
-    container_name: fks_web_ui
-    expose:
-      - "3001"
-    volumes:
-      - ./services/web:/app
-      - ./logs/web_ui:/app/logs
-    environment:
-      - TZ=America/Toronto
-      - NODE_ENV=production
-      - SERVICE_NAME=fks_web_ui
-      - SERVICE_VERSION=1.0.0
-      - VITE_API_URL=http://fks_api:8001
-      - VITE_WS_URL=ws://fks_api:8001/ws
-      - MONITOR_URL=http://web:8000/monitor/api/discover/
-    depends_on:
-      web:
-        condition: service_healthy
-      fks_api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    restart: unless-stopped
-    networks:
-      - fks-network
+  # TODO: fks_web_ui needs architectural review - missing manage.py
+  # Web UI is currently served by fks_main Django app
+  # fks_web_ui:
+  #   build:
+  #     context: .
+  #     dockerfile: ./docker/Dockerfile.web_ui
+  #     args:
+  #       - SERVICE_DIR=./src/services/web
+  #   container_name: fks_web_ui
+  #   expose:
+  #     - "3001"
+  #   volumes:
+  #     - ./src/services/web:/app
+  #     - ./logs/web_ui:/app/logs
+  #   environment:
+  #     - TZ=America/Toronto
+  #     - NODE_ENV=production
+  #     - SERVICE_NAME=fks_web_ui
+  #     - SERVICE_VERSION=1.0.0
+  #     - VITE_API_URL=http://fks_api:8001
+  #     - VITE_WS_URL=ws://fks_api:8001/ws
+  #     - MONITOR_URL=http://web:8000/monitor/api/discover/
+  #   depends_on:
+  #     web:
+  #       condition: service_healthy
+  #     fks_api:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 20s
+  #   restart: unless-stopped
+  #   networks:
+  #     - fks-network
 
   # Monitoring Stack
   prometheus:

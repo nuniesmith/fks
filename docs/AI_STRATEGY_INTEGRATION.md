@@ -78,7 +78,6 @@ fks_ai (Port 8006 - GPU)
 │   └── Endpoints: /ai/regime, /ai/train-regime-model
 │
 └── Model Management
-    ├── ./ml_models volume for persistence
     ├── HuggingFace cache for embeddings
     └── Version tracking (MLflow or custom)
 

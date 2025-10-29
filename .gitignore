@@ -236,6 +236,7 @@ docker-compose.override.yml
 # LOGS & DEBUGGING
 # ============================================================================
 logs/
+!logs/*/.gitkeep
 *.log
 trace/
 debug/

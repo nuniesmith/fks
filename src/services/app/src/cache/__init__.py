@@ -9,6 +9,6 @@ This module provides Redis-based caching for:
 Phase: AI Enhancement Plan Phase 5.4 - Redis Caching Layer
 """
 
-from .feature_cache import FeatureCache, get_cache_instance
+from .feature_cache import FeatureCache, get_cache_instance, HAS_CACHE
 
-__all__ = ["FeatureCache", "get_cache_instance"]
+__all__ = ["FeatureCache", "get_cache_instance", "HAS_CACHE"]

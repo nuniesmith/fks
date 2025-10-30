@@ -17,6 +17,10 @@ import numpy as np
 from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))  # Add /app/src to path
+
 
 @pytest.fixture
 def mock_redis():

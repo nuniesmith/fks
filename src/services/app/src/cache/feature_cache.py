@@ -30,6 +30,14 @@ from redis import ConnectionPool
 
 logger = logging.getLogger(__name__)
 
+# Flag to indicate if Redis is available
+try:
+    import redis
+    HAS_CACHE = True
+except ImportError:
+    HAS_CACHE = False
+    logger.warning("Redis not available - caching will be disabled")
+
 
 class FeatureCache:
     """Redis-based cache for trading features and data.

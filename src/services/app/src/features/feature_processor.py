@@ -31,11 +31,11 @@ except ImportError:
 
 # Redis caching
 try:
-    from ..cache.feature_cache import get_cache_instance, FeatureCache
-    HAS_CACHE = True
-except ImportError:
+    from cache.feature_cache import get_cache_instance, FeatureCache, HAS_CACHE as REDIS_AVAILABLE
+    HAS_CACHE = REDIS_AVAILABLE
+except ImportError as e:
     HAS_CACHE = False
-    logging.warning("Redis cache not available - features will not be cached")
+    logging.warning(f"Redis cache not available - features will not be cached: {e}")
 
 logger = logging.getLogger(__name__)
 

@@ -35,7 +35,10 @@ Comprehensive monitoring and health dashboard for solo development workflow. Pro
 - **Pre-configured**:
   - Prometheus datasource
   - PostgreSQL datasource (for direct database queries)
-- **Dashboards**: `monitoring/grafana/dashboards/` (to be created)
+  - TimescaleDB datasource (for quality_metrics hypertables)
+- **Dashboards**: 
+  - `monitoring/grafana/dashboards/quality_monitoring.json` - Data quality metrics (Phase 5.6)
+  - (More dashboards to be created)
 
 ### 4. **Tailscale VPN**
 - **Purpose**: Secure remote access to services

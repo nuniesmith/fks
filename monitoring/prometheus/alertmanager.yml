@@ -1,0 +1,49 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'symbol']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'discord-quality'
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'discord-quality'
+      continue: true
+    
+    # Warning alerts - batched notifications
+    - match:
+        severity: warning
+      receiver: 'discord-quality'
+      group_wait: 30s
+      group_interval: 5m
+
+receivers:
+  - name: 'discord-quality'
+    webhook_configs:
+      - url: '${DISCORD_WEBHOOK_URL}'
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        # Discord webhook format (requires discord-webhook-proxy or custom formatter)
+        # For direct Discord integration, use a webhook proxy like:
+        # https://github.com/prometheus-msteams/prometheus-msteams
+        # or create custom formatter in src/notifications/discord.py
+
+inhibit_rules:
+  # Don't send warning if critical is already firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'symbol']
+  
+  # Don't send quality score alerts if checks are failing
+  - source_match:
+      alertname: 'QualityChecksFailing'
+    target_match_re:
+      alertname: 'Quality.*'
+    equal: ['symbol']

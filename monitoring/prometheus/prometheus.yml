@@ -7,15 +7,16 @@ global:
     monitor: 'fks-trading'
     environment: 'local'
 
-# Alertmanager configuration (optional - add when needed)
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets: ['alertmanager:9093']
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
 
 # Load rules once and periodically evaluate them
 rule_files:
   - 'alerts.yml'
+  - 'rules/quality_alerts.yml'
 
 # Scrape configurations
 scrape_configs:

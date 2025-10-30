@@ -1,0 +1,99 @@
+groups:
+  - name: data_quality
+    interval: 30s
+    rules:
+      # Alert when quality score drops below 50 (poor quality)
+      - alert: QualityScoreLow
+        expr: data_quality_score < 50
+        for: 5m
+        labels:
+          severity: critical
+          category: data_quality
+        annotations:
+          summary: "Low data quality score for {{ $labels.symbol }}"
+          description: "Quality score for {{ $labels.symbol }} is {{ $value | humanize }}%, which is below the acceptable threshold of 50%. This indicates serious data quality issues that need immediate attention."
+          recommended_action: "1. Check outlier detection results\n2. Verify data freshness (check last update time)\n3. Validate completeness (missing OHLCV fields)\n4. Review quality_metrics table in TimescaleDB for details"
+
+      # Alert when quality score drops below 70 (fair quality)
+      - alert: QualityScoreFair
+        expr: data_quality_score >= 50 and data_quality_score < 70
+        for: 10m
+        labels:
+          severity: warning
+          category: data_quality
+        annotations:
+          summary: "Fair data quality score for {{ $labels.symbol }}"
+          description: "Quality score for {{ $labels.symbol }} is {{ $value | humanize }}%, which is between 50-70 (fair). Consider investigating to prevent further degradation."
+          recommended_action: "1. Monitor score trends in Grafana\n2. Check for recent data issues\n3. Review component scores (outlier/freshness/completeness)"
+
+      # Alert when data becomes stale (freshness issue)
+      - alert: DataStale
+        expr: time() - data_quality_last_check_timestamp > 900
+        for: 2m
+        labels:
+          severity: critical
+          category: data_freshness
+        annotations:
+          summary: "Data for {{ $labels.symbol }} is stale"
+          description: "Data for {{ $labels.symbol }} hasn't been updated in over 15 minutes. Last check was {{ $value | humanizeDuration }} ago."
+          recommended_action: "1. Check data collection service (fks_data)\n2. Verify exchange API connectivity\n3. Check Celery workers are running\n4. Review market_data_collector logs"
+
+      # Alert when completeness drops below 90%
+      - alert: CompletenessLow
+        expr: (data_quality_score{component=\"completeness\"} < 90) or on() vector(0)
+        for: 5m
+        labels:
+          severity: warning
+          category: data_completeness
+        annotations:
+          summary: "Low data completeness for {{ $labels.symbol }}"
+          description: "Data completeness for {{ $labels.symbol }} is below 90%. Some OHLCV fields may be missing or NULL."
+          recommended_action: "1. Query quality_metrics table for missing fields\n2. Check API response format from exchange\n3. Validate data transformation pipeline\n4. Review completeness_validator logs"
+
+      # Alert when many issues detected
+      - alert: HighIssueCount
+        expr: data_quality_issues > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: data_quality
+        annotations:
+          summary: "High number of quality issues for {{ $labels.symbol }}"
+          description: "{{ $labels.symbol }} has {{ $value | humanize }} quality issues detected. This may indicate systematic data problems."
+          recommended_action: "1. Query quality_metrics.issues column for details\n2. Group issues by type and severity\n3. Check for patterns (e.g., same issue recurring)\n4. Review quality_collector logs for error traces"
+
+      # Alert when quality checks are failing
+      - alert: QualityChecksFailing
+        expr: rate(data_quality_checks_total[5m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Quality checks have stopped"
+          description: "No quality checks have been performed in the last 5 minutes. Quality monitoring may be down."
+          recommended_action: "1. Check QualityCollector service status\n2. Verify Celery Beat scheduler is running\n3. Check for errors in quality_collector logs\n4. Restart quality monitoring if needed"
+
+      # Alert when check duration is high
+      - alert: QualityCheckSlow
+        expr: rate(data_quality_check_duration_seconds_sum[5m]) / rate(data_quality_check_duration_seconds_count[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow quality checks for {{ $labels.symbol }}"
+          description: "Quality checks for {{ $labels.symbol }} are taking {{ $value | humanizeDuration }} on average, which exceeds the 1-second target."
+          recommended_action: "1. Profile quality_scorer.score() method\n2. Check database query performance\n3. Review validator algorithm complexity\n4. Consider caching or optimization"
+
+      # Alert on outlier detection threshold breaches
+      - alert: HighOutlierCount
+        expr: (data_quality_score{component=\"outlier\"} < 80) or on() vector(0)
+        for: 5m
+        labels:
+          severity: warning
+          category: outlier_detection
+        annotations:
+          summary: "High outlier count for {{ $labels.symbol }}"
+          description: "Outlier score for {{ $labels.symbol }} is below 80, indicating many anomalous data points."
+          recommended_action: "1. Review outlier_detector results (z-score, IQR, MAD methods)\n2. Check for flash crashes or data spikes\n3. Validate exchange data feed\n4. Consider adjusting outlier thresholds if false positives"

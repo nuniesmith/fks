@@ -29,6 +29,14 @@ except ImportError:
     HAS_TALIB = False
     logging.warning("TA-Lib not available - using numpy implementations")
 
+# Redis caching
+try:
+    from ..cache.feature_cache import get_cache_instance, FeatureCache
+    HAS_CACHE = True
+except ImportError:
+    HAS_CACHE = False
+    logging.warning("Redis cache not available - features will not be cached")
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,7 +56,8 @@ class FeatureProcessor:
         self,
         cache_enabled: bool = True,
         batch_size: int = 10000,
-        min_periods: int = 100
+        min_periods: int = 100,
+        redis_url: Optional[str] = None,
     ):
         """Initialize feature processor.
         
@@ -56,21 +65,39 @@ class FeatureProcessor:
             cache_enabled: Enable feature caching for performance
             batch_size: Batch size for large dataset processing
             min_periods: Minimum periods required for indicator calculation
+            redis_url: Redis connection URL (optional, uses default if None)
         """
-        self.cache_enabled = cache_enabled
+        self.cache_enabled = cache_enabled and HAS_CACHE
         self.batch_size = batch_size
         self.min_periods = min_periods
-        self.feature_cache: Dict[str, pd.DataFrame] = {}
+        self.feature_cache: Dict[str, pd.DataFrame] = {}  # Legacy in-memory cache
         self.use_talib = HAS_TALIB
         self.logger = logger
         
-        logger.info(f"FeatureProcessor initialized (cache={cache_enabled}, batch_size={batch_size}, talib={self.use_talib})")
+        # Initialize Redis cache
+        if self.cache_enabled and HAS_CACHE:
+            try:
+                self.redis_cache = get_cache_instance(redis_url=redis_url, namespace="features")
+                logger.info(f"✅ Redis cache initialized for FeatureProcessor")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to initialize Redis cache: {e}, falling back to in-memory")
+                self.redis_cache = None
+                self.cache_enabled = False
+        else:
+            self.redis_cache = None
+        
+        logger.info(
+            f"FeatureProcessor initialized "
+            f"(cache={'Redis' if self.redis_cache else 'Memory' if cache_enabled else 'Disabled'}, "
+            f"batch_size={batch_size}, talib={self.use_talib})"
+        )
     
     def process_ohlcv_features(
         self,
         data: pd.DataFrame,
         symbol: str = "",
-        timeframe: str = "1m"
+        timeframe: str = "1m",
+        use_cache: bool = True,
     ) -> pd.DataFrame:
         """Process comprehensive OHLCV features.
         
@@ -78,6 +105,7 @@ class FeatureProcessor:
             data: DataFrame with OHLCV columns (open, high, low, close, volume)
             symbol: Trading symbol for caching
             timeframe: Data timeframe (1m, 5m, 1h, etc.)
+            use_cache: Whether to use Redis cache (default: True)
             
         Returns:
             DataFrame with original data plus engineered features
@@ -86,7 +114,17 @@ class FeatureProcessor:
             logger.warning(f"Insufficient data for {symbol} ({len(data)} < {self.min_periods})")
             return data
         
-        logger.info(f"Processing {len(data)} OHLCV records for {symbol} ({timeframe})")
+        # Check Redis cache first (if enabled and symbol provided)
+        if use_cache and self.redis_cache and symbol:
+            cached_features = self.redis_cache.get(symbol, timeframe, "ohlcv_features")
+            if cached_features is not None and len(cached_features) == len(data):
+                # Verify data hasn't changed by checking last timestamp
+                if 'timestamp' in data.columns and 'timestamp' in cached_features.columns:
+                    if data['timestamp'].iloc[-1] == cached_features['timestamp'].iloc[-1]:
+                        logger.info(f"✅ Using cached features for {symbol} ({timeframe})")
+                        return cached_features
+        
+        logger.info(f"🔄 Computing features for {len(data)} OHLCV records: {symbol} ({timeframe})")
         start_time = time.time()
         
         # Make a copy to avoid modifying original
@@ -116,13 +154,21 @@ class FeatureProcessor:
         # 6. Market microstructure features
         df = self._add_microstructure_features(df)
         
-        # Cache results if enabled
+        duration = time.time() - start_time
+        logger.info(f"✅ Processed {len(df.columns)} features for {symbol} in {duration:.2f}s")
+        
+        # Store in Redis cache if enabled
+        if use_cache and self.redis_cache and symbol:
+            try:
+                self.redis_cache.set(symbol, timeframe, "ohlcv_features", df)
+                logger.debug(f"💾 Cached features for {symbol} ({timeframe})")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to cache features: {e}")
+        
+        # Also store in legacy memory cache for backwards compatibility
         if self.cache_enabled and symbol:
             cache_key = f"{symbol}_{timeframe}"
             self.feature_cache[cache_key] = df.copy()
-        
-        duration = time.time() - start_time
-        logger.info(f"✅ Processed {len(df.columns)} features for {symbol} in {duration:.2f}s")
         
         return df
     
@@ -370,12 +416,32 @@ class FeatureProcessor:
         return importance_df
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
-        if not self.cache_enabled:
-            return {"cache_enabled": False}
+        """Get cache statistics.
         
-        cache_stats = {
-            "cache_enabled": True,
+        Returns:
+            Dictionary with cache stats including Redis and in-memory stats
+        """
+        stats = {
+            "cache_enabled": self.cache_enabled,
+            "cache_type": "redis" if self.redis_cache else "memory",
+        }
+        
+        # Redis cache stats
+        if self.redis_cache:
+            try:
+                redis_stats = self.redis_cache.get_stats()
+                stats["redis"] = redis_stats
+                redis_info = self.redis_cache.get_info()
+                stats["redis_info"] = {
+                    "key_count": redis_info.get("key_count", 0),
+                    "connected": redis_info.get("connected", False),
+                }
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to get Redis cache stats: {e}")
+                stats["redis"] = {"error": str(e)}
+        
+        # In-memory cache stats
+        stats["memory"] = {
             "cached_symbols": len(self.feature_cache),
             "total_memory_mb": sum(
                 df.memory_usage(deep=True).sum() / 1024 / 1024 
@@ -384,25 +450,36 @@ class FeatureProcessor:
             "cache_keys": list(self.feature_cache.keys())
         }
         
-        return cache_stats
+        return stats
     
-    def clear_cache(self, symbol: Optional[str] = None):
-        """Clear feature cache.
+    def clear_cache(self, symbol: Optional[str] = None, timeframe: Optional[str] = None):
+        """Clear feature cache (both Redis and in-memory).
         
         Args:
             symbol: Specific symbol to clear, or None to clear all
+            timeframe: Specific timeframe to clear, or None to clear all
         """
+        # Clear Redis cache
+        if self.redis_cache:
+            try:
+                deleted = self.redis_cache.invalidate(symbol=symbol, timeframe=timeframe)
+                logger.info(f"🗑️ Cleared {deleted} Redis cache entries")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to clear Redis cache: {e}")
+        
+        # Clear in-memory cache
         if symbol:
-            # Clear specific symbol
-            keys_to_remove = [key for key in self.feature_cache.keys() if key.startswith(symbol)]
+            # Clear specific symbol (and optionally timeframe)
+            pattern = f"{symbol}_{timeframe}" if timeframe else symbol
+            keys_to_remove = [key for key in self.feature_cache.keys() if key.startswith(pattern)]
             for key in keys_to_remove:
                 del self.feature_cache[key]
-            logger.info(f"Cleared cache for {symbol} ({len(keys_to_remove)} entries)")
+            logger.info(f"Cleared in-memory cache for {symbol} ({len(keys_to_remove)} entries)")
         else:
-            # Clear all cache
+            # Clear all in-memory cache
             cache_size = len(self.feature_cache)
             self.feature_cache.clear()
-            logger.info(f"Cleared all cache ({cache_size} entries)")
+            logger.info(f"Cleared all in-memory cache ({cache_size} entries)")
 
 
 def create_feature_matrix(

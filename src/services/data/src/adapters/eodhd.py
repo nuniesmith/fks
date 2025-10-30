@@ -8,28 +8,163 @@ EODHD provides comprehensive fundamental data including:
 
 API Documentation: https://eodhistoricaldata.com/financial-apis/
 Rate Limits: 100,000 requests/day for paid plans, 20 requests/day for free
+
+Phase 5.4: Includes Redis caching for API responses to reduce rate limit consumption
 """
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 import os
+import json
+import logging
 from .base import APIAdapter, DataFetchError
+
+# Import Redis caching
+try:
+    import redis
+    HAS_REDIS = True
+except ImportError:
+    HAS_REDIS = False
+    logging.warning("Redis not available - EODHD responses will not be cached")
+
+logger = logging.getLogger(__name__)
 
 
 class EODHDAdapter(APIAdapter):
-    """EODHD API adapter for fundamental data."""
+    """EODHD API adapter for fundamental data with Redis caching."""
     
     name = "eodhd"
     base_url = "https://eodhistoricaldata.com/api"
     rate_limit_per_sec = 1.0  # Conservative rate limiting (1 req/sec = 86,400/day)
     
-    def __init__(self, http=None, *, timeout: Optional[float] = None):
+    # Cache TTLs by data type (in seconds)
+    CACHE_TTL = {
+        "fundamentals": 86400,  # 24 hours (daily updates)
+        "earnings": 3600,       # 1 hour (more frequent updates)
+        "economic": 3600,       # 1 hour (economic events change frequently)
+        "insider_transactions": 14400,  # 4 hours (less frequent)
+    }
+    
+    def __init__(
+        self, 
+        http=None, 
+        *, 
+        timeout: Optional[float] = None,
+        enable_cache: bool = True,
+        redis_url: Optional[str] = None,
+    ):
         super().__init__(http, timeout=timeout)
+        
         # API key from environment variable
         self.api_key = os.getenv("EODHD_API_KEY")
         if not self.api_key:
             raise DataFetchError(self.name, "EODHD_API_KEY environment variable not set")
+        
+        # Initialize Redis cache
+        self.enable_cache = enable_cache and HAS_REDIS
+        self.redis_client = None
+        
+        if self.enable_cache:
+            try:
+                redis_url = redis_url or os.getenv("REDIS_URL", "redis://:@redis:6379/1")
+                self.redis_client = redis.from_url(redis_url, decode_responses=True)
+                self.redis_client.ping()
+                logger.info(f"✅ EODHD adapter initialized with Redis cache")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to initialize Redis cache: {e}")
+                self.redis_client = None
+                self.enable_cache = False
+    
+    def _build_cache_key(self, **kwargs) -> str:
+        """Build cache key from request parameters.
+        
+        Args:
+            **kwargs: Request parameters
+            
+        Returns:
+            Cache key string
+        """
+        data_type = kwargs.get("data_type", "fundamentals")
+        symbol = kwargs.get("symbol", "")
+        
+        # Include relevant params in cache key
+        key_parts = [f"eodhd", data_type]
+        
+        if symbol:
+            key_parts.append(symbol.replace("/", "").upper())
+        
+        # Add date range for time-sensitive queries
+        if kwargs.get("from_date"):
+            key_parts.append(f"from_{kwargs['from_date']}")
+        if kwargs.get("to_date"):
+            key_parts.append(f"to_{kwargs['to_date']}")
+        
+        # Add country for economic data
+        if kwargs.get("country"):
+            key_parts.append(kwargs["country"].upper())
+        
+        return ":".join(key_parts)
+    
+    def fetch(self, **kwargs) -> Dict[str, Any]:
+        """Fetch EODHD data with Redis caching.
+        
+        Args:
+            **kwargs: Request parameters
+            
+        Returns:
+            Normalized data dictionary
+        """
+        # Check cache first
+        if self.enable_cache and self.redis_client:
+            cache_key = self._build_cache_key(**kwargs)
+            
+            try:
+                cached_data = self.redis_client.get(cache_key)
+                if cached_data:
+                    logger.debug(f"📦 Cache HIT: {cache_key}")
+                    return json.loads(cached_data)
+                else:
+                    logger.debug(f"❌ Cache MISS: {cache_key}")
+            except Exception as e:
+                logger.warning(f"⚠️ Cache GET error: {e}")
+        
+        # Fetch from API (using parent class implementation)
+        try:
+            result = super().fetch(**kwargs)
+            
+            # Store in cache
+            if self.enable_cache and self.redis_client and result:
+                cache_key = self._build_cache_key(**kwargs)
+                data_type = kwargs.get("data_type", "fundamentals")
+                ttl = self.CACHE_TTL.get(data_type, 3600)
+                
+                try:
+                    self.redis_client.setex(
+                        cache_key,
+                        ttl,
+                        json.dumps(result, default=str)
+                    )
+                    logger.debug(f"💾 Cached: {cache_key} (TTL={ttl}s)")
+                except Exception as e:
+                    logger.warning(f"⚠️ Cache SET error: {e}")
+            
+            return result
+            
+        except Exception as e:
+            # On API error, try to return stale cache if available
+            if self.enable_cache and self.redis_client:
+                cache_key = self._build_cache_key(**kwargs)
+                try:
+                    cached_data = self.redis_client.get(cache_key)
+                    if cached_data:
+                        logger.warning(f"⚠️ API error, using stale cache: {cache_key}")
+                        return json.loads(cached_data)
+                except Exception:
+                    pass
+            
+            # Re-raise if no fallback available
+            raise
     
     def _build_request(self, **kwargs) -> tuple[str, Dict[str, Any], Optional[Dict[str, str]]]:
         """Build EODHD API request.

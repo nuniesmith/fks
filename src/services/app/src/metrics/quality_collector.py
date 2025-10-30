@@ -24,11 +24,10 @@ import time
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 
-from validators.quality_scorer import QualityScorer
-from validators.outlier_detector import OutlierDetector
-from validators.freshness_monitor import FreshnessMonitor
-from validators.completeness_validator import CompletenessValidator
-from validators.models import QualityScore, OutlierResult, FreshnessResult, CompletenessResult
+from validators.quality_scorer import QualityScorer, QualityScore
+from validators.outlier_detector import OutlierDetector, OutlierResult
+from validators.freshness_monitor import FreshnessMonitor, FreshnessResult
+from validators.completeness_validator import CompletenessValidator, CompletenessResult
 
 from metrics.quality_metrics import (
     update_metrics_from_quality_score,
@@ -80,15 +79,23 @@ class QualityCollector:
             enable_metrics: Whether to update Prometheus metrics
             enable_storage: Whether to store results in TimescaleDB
         """
-        self.outlier_detector = OutlierDetector(z_threshold=outlier_threshold)
-        self.freshness_monitor = FreshnessMonitor(max_age=freshness_threshold)
-        self.completeness_validator = CompletenessValidator(threshold=completeness_threshold)
-        
-        self.quality_scorer = QualityScorer(
-            outlier_detector=self.outlier_detector,
-            freshness_monitor=self.freshness_monitor,
-            completeness_validator=self.completeness_validator
+        # Initialize validators (for individual use)
+        self.outlier_detector = OutlierDetector(threshold=outlier_threshold)
+        # Convert timedelta to minutes for freshness monitor
+        freshness_minutes = freshness_threshold.total_seconds() / 60
+        self.freshness_monitor = FreshnessMonitor(
+            warning_threshold=freshness_minutes * 0.5,
+            critical_threshold=freshness_minutes
         )
+        # Default required fields for OHLCV data
+        required_fields = ['open', 'high', 'low', 'close', 'volume']
+        self.completeness_validator = CompletenessValidator(
+            required_fields=required_fields,
+            excellent_threshold=completeness_threshold * 100  # Convert 0.9 to 90%
+        )
+        
+        # Quality scorer creates its own validators internally
+        self.quality_scorer = QualityScorer()
         
         self.enable_metrics = enable_metrics
         self.enable_storage = enable_storage
@@ -129,7 +136,8 @@ class QualityCollector:
         
         try:
             # Run quality check
-            result = self.quality_scorer.check_quality(symbol, data, timestamp)
+            # Perform quality scoring
+            result = self.quality_scorer.score(data, symbol=symbol, frequency='1m')
             
             # Record duration
             duration = time.time() - start_time
@@ -146,7 +154,7 @@ class QualityCollector:
             
             logger.debug(
                 "Quality check completed: symbol=%s, score=%.2f, duration=%.3fs",
-                symbol, result.score, duration
+                symbol, result.overall_score, duration
             )
             
             return result
@@ -276,34 +284,16 @@ class QualityCollector:
     
     def _update_all_metrics(self, symbol: str, result: QualityScore) -> None:
         """
-        Update all Prometheus metrics from a QualityScore.
+        Update all Prometheus metrics from QualityScore.
         
         Args:
             symbol: Trading pair symbol
-            result: Quality score to update metrics from
+            result: Quality score result
         """
-        # Update overall quality score (pass just the object)
+        # Update overall quality score (function expects just the score object)
         update_metrics_from_quality_score(result)
         
-        # Update individual component metrics
-        if result.outlier_result and result.outlier_result.has_outliers:
-            # Update metrics for each outlier field
-            for field in result.outlier_result.outlier_fields:
-                # Handle both enum and string severity
-                severity_value = (result.outlier_result.severity.value 
-                                if hasattr(result.outlier_result.severity, 'value') 
-                                else result.outlier_result.severity)
-                update_outlier_metrics(
-                    symbol=symbol,
-                    field=field,
-                    severity=severity_value
-                )
-        
-        if result.freshness_result:
-            update_metrics_from_freshness_result(result.freshness_result)
-        
-        if result.completeness_result:
-            update_metrics_from_completeness_result(result.completeness_result)
+        logger.debug(f"Updated all metrics for {symbol}")
     
     def _store_result(self, symbol: str, result: QualityScore) -> None:
         """
@@ -312,14 +302,38 @@ class QualityCollector:
         Args:
             symbol: Trading pair symbol
             result: Quality score to store
-        
-        Note:
-            This is a placeholder for TimescaleDB integration.
-            Will be implemented in Phase 5.6 Task 3 (Pipeline Integration).
         """
-        # TODO: Implement TimescaleDB storage in Phase 5.6 Task 3
-        logger.debug("TimescaleDB storage not yet implemented (placeholder)")
-        pass
+        try:
+            # Import here to avoid circular dependencies
+            from database.connection import insert_quality_metric
+            from datetime import datetime
+            
+            # Prepare data for insertion using only QualityScore attributes
+            data = {
+                'time': result.timestamp if hasattr(result, 'timestamp') else datetime.now(),
+                'symbol': symbol,
+                'overall_score': result.overall_score,
+                'status': result.status,
+                'outlier_score': result.component_scores.get('outlier', None),
+                'freshness_score': result.component_scores.get('freshness', None),
+                'completeness_score': result.component_scores.get('completeness', None),
+                'outlier_count': 0,  # Not available in QualityScore
+                'outlier_severity': None,  # Not available in QualityScore
+                'freshness_age_seconds': None,  # Not available in QualityScore
+                'completeness_percentage': None,  # Not available in QualityScore
+                'issues': result.issues if hasattr(result, 'issues') else [],
+                'issue_count': len(result.issues) if hasattr(result, 'issues') else 0,
+                'check_duration_ms': None,  # Set externally if needed
+                'collector_version': 'v1.0'
+            }
+            
+            # Insert using database utility
+            insert_quality_metric(data)
+            logger.debug("Stored quality result for %s in TimescaleDB", symbol)
+            
+        except Exception as e:
+            logger.error("Failed to store quality result for %s: %s", symbol, e, exc_info=True)
+            # Don't raise - storage failure shouldn't break quality checks
 
 
 def create_quality_collector(

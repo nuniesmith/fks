@@ -1,0 +1,1522 @@
+{
+  "best_trial": 0,
+  "best_params": {
+    "depth": 8,
+    "confidence_threshold": 0.19260714596148742,
+    "position_size_pct": 0.03927975767245621,
+    "stop_loss_pct": 0.01018390181036444,
+    "take_profit_pct": 0.00812037280884873,
+    "decay_rate": 0.9914039506830258,
+    "min_observations": 3
+  },
+  "best_value": -999.0,
+  "baseline_value": 0.0,
+  "improvement_pct": 0.0,
+  "total_trials": 50,
+  "completed_trials": 50,
+  "pruned_trials": 0,
+  "failed_trials": 0,
+  "optimize_metric": "calmar_ratio",
+  "all_trials": [
+    {
+      "trial": 0,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.19260714596148742,
+        "position_size_pct": 0.03927975767245621,
+        "stop_loss_pct": 0.01018390181036444,
+        "take_profit_pct": 0.00812037280884873,
+        "decay_rate": 0.9914039506830258,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 1,
+      "params": {
+        "depth": 12,
+        "confidence_threshold": 0.14016725176148134,
+        "position_size_pct": 0.03832290311184182,
+        "stop_loss_pct": 0.0032470139315496295,
+        "take_profit_pct": 0.024398197043239887,
+        "decay_rate": 0.9974919837672038,
+        "min_observations": 4
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 2,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.07751067647801507,
+        "position_size_pct": 0.02216968971838151,
+        "stop_loss_pct": 0.009297077179586853,
+        "take_profit_pct": 0.013638900372842315,
+        "decay_rate": 0.9926210622617824,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 3,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.09382169728028272,
+        "position_size_pct": 0.02465447373174767,
+        "stop_loss_pct": 0.00847283981060443,
+        "take_profit_pct": 0.020703519227860272,
+        "decay_rate": 0.9917970640394252,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 4,
+      "params": {
+        "depth": 10,
+        "confidence_threshold": 0.05696756190799966,
+        "position_size_pct": 0.03430179407605754,
+        "stop_loss_pct": 0.005046289484247499,
+        "take_profit_pct": 0.00630103185970559,
+        "decay_rate": 0.99853996983528,
+        "min_observations": 10
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 5,
+      "params": {
+        "depth": 11,
+        "confidence_threshold": 0.09569206537600561,
+        "position_size_pct": 0.013906884560255354,
+        "stop_loss_pct": 0.011210796318145883,
+        "take_profit_pct": 0.013803049874792025,
+        "decay_rate": 0.991098344113603,
+        "min_observations": 6
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 6,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.18639806031181733,
+        "position_size_pct": 0.020351199264000676,
+        "stop_loss_pct": 0.010950267412247784,
+        "take_profit_pct": 0.01123422152178822,
+        "decay_rate": 0.9946806121906003,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 7,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.19543769416468382,
+        "position_size_pct": 0.041005312934444586,
+        "stop_loss_pct": 0.01427398729877027,
+        "take_profit_pct": 0.022896547008552978,
+        "decay_rate": 0.9953810998092998,
+        "min_observations": 10
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 8,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.07939742936287178,
+        "position_size_pct": 0.011809091556421522,
+        "stop_loss_pct": 0.006903963969159172,
+        "take_profit_pct": 0.01277354579378964,
+        "decay_rate": 0.9924421412859651,
+        "min_observations": 9
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 9,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.09214017645310713,
+        "position_size_pct": 0.03170784332632994,
+        "stop_loss_pct": 0.004691090699697152,
+        "take_profit_pct": 0.021043939615080793,
+        "decay_rate": 0.9906709557931179,
+        "min_observations": 10
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 10,
+      "params": {
+        "depth": 9,
+        "confidence_threshold": 0.1559200477933595,
+        "position_size_pct": 0.04878148443151463,
+        "stop_loss_pct": 0.01418748410294145,
+        "take_profit_pct": 0.005307354746562087,
+        "decay_rate": 0.9935823900799815,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 11,
+      "params": {
+        "depth": 12,
+        "confidence_threshold": 0.1440325467359852,
+        "position_size_pct": 0.03953622178900083,
+        "stop_loss_pct": 0.0031888938350416924,
+        "take_profit_pct": 0.017349089459860422,
+        "decay_rate": 0.9971844453543568,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 12,
+      "params": {
+        "depth": 9,
+        "confidence_threshold": 0.16709769391247323,
+        "position_size_pct": 0.046624241425652926,
+        "stop_loss_pct": 0.011688039701138351,
+        "take_profit_pct": 0.009043230383332893,
+        "decay_rate": 0.9961105325840871,
+        "min_observations": 5
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 13,
+      "params": {
+        "depth": 12,
+        "confidence_threshold": 0.12544893039070898,
+        "position_size_pct": 0.03885944465363482,
+        "stop_loss_pct": 0.007535170040844736,
+        "take_profit_pct": 0.024808721246954473,
+        "decay_rate": 0.9980445964276853,
+        "min_observations": 4
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 14,
+      "params": {
+        "depth": 10,
+        "confidence_threshold": 0.1272455621031415,
+        "position_size_pct": 0.0437278655036579,
+        "stop_loss_pct": 0.010054507842275764,
+        "take_profit_pct": 0.017383357548081853,
+        "decay_rate": 0.9965316101490492,
+        "min_observations": 4
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 15,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.16892324772081327,
+        "position_size_pct": 0.034847855954111474,
+        "stop_loss_pct": 0.012696792413365975,
+        "take_profit_pct": 0.008918579771036907,
+        "decay_rate": 0.9937805141729344,
+        "min_observations": 5
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 16,
+      "params": {
+        "depth": 11,
+        "confidence_threshold": 0.14427906261850346,
+        "position_size_pct": 0.028093052515104338,
+        "stop_loss_pct": 0.0048859413077979846,
+        "take_profit_pct": 0.016791970036915186,
+        "decay_rate": 0.9900315524104906,
+        "min_observations": 4
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 17,
+      "params": {
+        "depth": 9,
+        "confidence_threshold": 0.18073234277266856,
+        "position_size_pct": 0.03645431246917523,
+        "stop_loss_pct": 0.0066188499553873304,
+        "take_profit_pct": 0.009229490017419188,
+        "decay_rate": 0.9972384654146625,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 18,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.1153202975497684,
+        "position_size_pct": 0.04362148766913247,
+        "stop_loss_pct": 0.0032580135298014294,
+        "take_profit_pct": 0.01968621513998999,
+        "decay_rate": 0.995036543037871,
+        "min_observations": 5
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 19,
+      "params": {
+        "depth": 11,
+        "confidence_threshold": 0.19831611353332507,
+        "position_size_pct": 0.029658125115737566,
+        "stop_loss_pct": 0.012855258266627164,
+        "take_profit_pct": 0.015785455578292636,
+        "decay_rate": 0.9989835453443563,
+        "min_observations": 6
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 20,
+      "params": {
+        "depth": 10,
+        "confidence_threshold": 0.1452133023019853,
+        "position_size_pct": 0.049880869649043286,
+        "stop_loss_pct": 0.008514826087965914,
+        "take_profit_pct": 0.011396474524193108,
+        "decay_rate": 0.9934345835043852,
+        "min_observations": 4
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 21,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.054785738796292685,
+        "position_size_pct": 0.019539488582129047,
+        "stop_loss_pct": 0.009641489320846528,
+        "take_profit_pct": 0.007062197577770466,
+        "decay_rate": 0.9922355650305436,
+        "min_observations": 8
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 22,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.11153306338839647,
+        "position_size_pct": 0.023736840399118296,
+        "stop_loss_pct": 0.009795410924515307,
+        "take_profit_pct": 0.014073210715005745,
+        "decay_rate": 0.9928774656822981,
+        "min_observations": 8
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 23,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.07208920395001943,
+        "position_size_pct": 0.01817152438378699,
+        "stop_loss_pct": 0.007850025050833952,
+        "take_profit_pct": 0.011374851919923136,
+        "decay_rate": 0.9914835176861352,
+        "min_observations": 6
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 24,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.10723011627483316,
+        "position_size_pct": 0.025212272936613527,
+        "stop_loss_pct": 0.005983041280595302,
+        "take_profit_pct": 0.01972586175977217,
+        "decay_rate": 0.9903902827605758,
+        "min_observations": 8
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 25,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.06968011970558785,
+        "position_size_pct": 0.032513233345612555,
+        "stop_loss_pct": 0.009420803449470544,
+        "take_profit_pct": 0.02439209727650221,
+        "decay_rate": 0.9942457858218335,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 26,
+      "params": {
+        "depth": 9,
+        "confidence_threshold": 0.13482262032279033,
+        "position_size_pct": 0.037332940277540395,
+        "stop_loss_pct": 0.010455484844202233,
+        "take_profit_pct": 0.0076433655431405075,
+        "decay_rate": 0.9925992967207052,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 27,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.17402860204979165,
+        "position_size_pct": 0.04271660262975626,
+        "stop_loss_pct": 0.0121024750710286,
+        "take_profit_pct": 0.01867739444072343,
+        "decay_rate": 0.9914115705936722,
+        "min_observations": 5
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 28,
+      "params": {
+        "depth": 12,
+        "confidence_threshold": 0.15443250705972492,
+        "position_size_pct": 0.02874958076953652,
+        "stop_loss_pct": 0.00851848552186794,
+        "take_profit_pct": 0.015338992601255635,
+        "decay_rate": 0.9957804086099348,
+        "min_observations": 4
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 29,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.09681473640034027,
+        "position_size_pct": 0.022970320861940077,
+        "stop_loss_pct": 0.007722467976103254,
+        "take_profit_pct": 0.02172752405450534,
+        "decay_rate": 0.9920265182552885,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 30,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.08409706288731227,
+        "position_size_pct": 0.01665399957227574,
+        "stop_loss_pct": 0.008804944947436423,
+        "take_profit_pct": 0.010248062216504022,
+        "decay_rate": 0.9930347660744242,
+        "min_observations": 9
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 31,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.06262422383876688,
+        "position_size_pct": 0.0263127020374039,
+        "stop_loss_pct": 0.010527789038024671,
+        "take_profit_pct": 0.022361973860612998,
+        "decay_rate": 0.9917940190463076,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 32,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.10263977783366454,
+        "position_size_pct": 0.033034314720197855,
+        "stop_loss_pct": 0.004523203230276991,
+        "take_profit_pct": 0.023366118878343358,
+        "decay_rate": 0.9914875494556359,
+        "min_observations": 6
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 33,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.08968297817562879,
+        "position_size_pct": 0.022399315466496383,
+        "stop_loss_pct": 0.005843107116105268,
+        "take_profit_pct": 0.02068549416162876,
+        "decay_rate": 0.9908161278475026,
+        "min_observations": 8
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 34,
+      "params": {
+        "depth": 10,
+        "confidence_threshold": 0.07492522375973634,
+        "position_size_pct": 0.026052731250742416,
+        "stop_loss_pct": 0.011216354390700248,
+        "take_profit_pct": 0.02379880930377502,
+        "decay_rate": 0.994309965144549,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 35,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.050575555657264605,
+        "position_size_pct": 0.021229674438973462,
+        "stop_loss_pct": 0.003951010387784764,
+        "take_profit_pct": 0.0132556542968046,
+        "decay_rate": 0.9911290275750905,
+        "min_observations": 9
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 36,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.1887636115865942,
+        "position_size_pct": 0.015046353486614471,
+        "stop_loss_pct": 0.005770092850916309,
+        "take_profit_pct": 0.005061421958554406,
+        "decay_rate": 0.9931577021125777,
+        "min_observations": 6
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 37,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.06326683022091358,
+        "position_size_pct": 0.011014263937577068,
+        "stop_loss_pct": 0.006802111773043295,
+        "take_profit_pct": 0.018513872915932622,
+        "decay_rate": 0.9924560682018333,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 38,
+      "params": {
+        "depth": 11,
+        "confidence_threshold": 0.08340112787290116,
+        "position_size_pct": 0.03475743246812488,
+        "stop_loss_pct": 0.008971445556956248,
+        "take_profit_pct": 0.012320375837915298,
+        "decay_rate": 0.9939152502467867,
+        "min_observations": 6
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 39,
+      "params": {
+        "depth": 7,
+        "confidence_threshold": 0.11695088627523488,
+        "position_size_pct": 0.04653283620132952,
+        "stop_loss_pct": 0.01486880449018051,
+        "take_profit_pct": 0.014697946585108417,
+        "decay_rate": 0.995119450643337,
+        "min_observations": 7
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 40,
+      "params": {
+        "depth": 9,
+        "confidence_threshold": 0.09830547228807329,
+        "position_size_pct": 0.031182569405375678,
+        "stop_loss_pct": 0.011138823612529656,
+        "take_profit_pct": 0.02234338792536504,
+        "decay_rate": 0.9977454681173356,
+        "min_observations": 5
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 41,
+      "params": {
+        "depth": 10,
+        "confidence_threshold": 0.06017785040551502,
+        "position_size_pct": 0.040225043449880905,
+        "stop_loss_pct": 0.0039640782077032585,
+        "take_profit_pct": 0.006107316211743498,
+        "decay_rate": 0.9989025407497838,
+        "min_observations": 9
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 42,
+      "params": {
+        "depth": 12,
+        "confidence_threshold": 0.08874170454863212,
+        "position_size_pct": 0.03581876416880965,
+        "stop_loss_pct": 0.0030639198752358612,
+        "take_profit_pct": 0.007227790879656771,
+        "decay_rate": 0.9982716129561074,
+        "min_observations": 10
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 43,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.1574744894118718,
+        "position_size_pct": 0.03807335836065331,
+        "stop_loss_pct": 0.005099906534852537,
+        "take_profit_pct": 0.006254310440305416,
+        "decay_rate": 0.9967561178905416,
+        "min_observations": 10
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 44,
+      "params": {
+        "depth": 11,
+        "confidence_threshold": 0.07527749996156734,
+        "position_size_pct": 0.03393532258277136,
+        "stop_loss_pct": 0.0037866447883701786,
+        "take_profit_pct": 0.008635315281378193,
+        "decay_rate": 0.9985205923863024,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 45,
+      "params": {
+        "depth": 6,
+        "confidence_threshold": 0.06592611694077272,
+        "position_size_pct": 0.04154675560115213,
+        "stop_loss_pct": 0.00803223170853661,
+        "take_profit_pct": 0.010647328365716382,
+        "decay_rate": 0.9975927684073388,
+        "min_observations": 4
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 46,
+      "params": {
+        "depth": 10,
+        "confidence_threshold": 0.0806936228956765,
+        "position_size_pct": 0.04568227264602197,
+        "stop_loss_pct": 0.010534516459694929,
+        "take_profit_pct": 0.01636336585810236,
+        "decay_rate": 0.9918461697726905,
+        "min_observations": 8
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 47,
+      "params": {
+        "depth": 9,
+        "confidence_threshold": 0.056910290654249886,
+        "position_size_pct": 0.03041094098913697,
+        "stop_loss_pct": 0.013223598372520773,
+        "take_profit_pct": 0.008069184613094122,
+        "decay_rate": 0.990683815669465,
+        "min_observations": 9
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 48,
+      "params": {
+        "depth": 12,
+        "confidence_threshold": 0.1325727395725777,
+        "position_size_pct": 0.027318602464688743,
+        "stop_loss_pct": 0.007326178741391433,
+        "take_profit_pct": 0.00976010249022374,
+        "decay_rate": 0.9967642236271681,
+        "min_observations": 5
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    },
+    {
+      "trial": 49,
+      "params": {
+        "depth": 8,
+        "confidence_threshold": 0.1913809720800578,
+        "position_size_pct": 0.03820574361861093,
+        "stop_loss_pct": 0.009466332804322438,
+        "take_profit_pct": 0.020866715068606333,
+        "decay_rate": 0.9901876190757262,
+        "min_observations": 3
+      },
+      "metrics": {
+        "total_trades": 0,
+        "winning_trades": 0,
+        "losing_trades": 0,
+        "win_rate": 0.0,
+        "total_pnl": 0.0,
+        "total_return_pct": 0.0,
+        "avg_win": 0.0,
+        "avg_loss": 0.0,
+        "profit_factor": 0.0,
+        "sharpe_ratio": 0.0,
+        "max_drawdown": 0.0,
+        "max_drawdown_pct": 0.0,
+        "calmar_ratio": 0.0,
+        "avg_trade_duration_seconds": 0.0,
+        "trades_per_day": 0.0
+      },
+      "value": 0.0
+    }
+  ]
+}

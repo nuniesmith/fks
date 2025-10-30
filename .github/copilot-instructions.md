@@ -3,9 +3,9 @@
 ## Quick Reference
 **Architecture:** 8-Service Microservices | **Main Stack:** Python 3.13 + FastAPI + Django  
 **Database:** PostgreSQL + TimescaleDB + pgvector | **AI/ML:** PyTorch + Ollama (local LLM)  
-**Test:** `docker-compose exec fks_api pytest tests/` | **Lint:** `make lint` | **Format:** `make format`  
+**Test:** `docker-compose exec fks_app pytest tests/unit/strategies/asmbtr/` | **Lint:** `make lint` | **Format:** `make format`  
 **Run:** `make up` (standard 8 services) or `make gpu-up` (with Ollama LLM + GPU ML)  
-**Current Status:** ✅ 15/16 services operational (93.75%) - Architecture deployed, AI enhancement plan documented (Oct 28, 2025)
+**Current Status:** ✅ Phase 3 Complete - ASMBTR Baseline 100% Tested (108/108 tests passing - Oct 29, 2025)
 
 ## Project Overview
 **FKS Main** is the **orchestrator and monitoring hub** for an **8-service microservices architecture**. It provides centralized authentication, service registry, health monitoring, and Celery Beat scheduling for the entire trading ecosystem.
@@ -23,23 +23,29 @@ FKS uses a **monorepo architecture** with multiple Docker containers under `serv
 7. **fks_ai** (Port 8006) - GPU-accelerated ML/RAG: local LLM (Ollama), regime detection, forecasting
 8. **fks_web** (Port 3001) - Django/Vite web UI with Bootstrap 5 templates
 
-### Current Phase: System Operational & AI Enhancement Planning
-- **Status**: Phase 1 Complete ✅ - 15/16 services running (93.75% operational)
-- **Current Reality**: Monorepo with microservice code in `services/` directory
-  - Services exist as separate FastAPI/Django apps running in docker-compose stack
+### Current Phase: Phase 3 Complete - Ready for AI Enhancement
+- **Status**: Phase 3 Complete ✅ - ASMBTR Baseline Fully Tested (108/108 tests passing - 100%)
+- **Achievement**: Complete test suite for ASMBTR strategy framework (Oct 29, 2025)
+  - 28 BTR encoding tests (state creation, encoding, edge cases)
+  - 19 state encoder tests (tick processing, multi-symbol support)
+  - 26 prediction table tests (observation, decay, statistics, save/load)
+  - 35 strategy tests (position management, signals, backtesting, performance metrics)
+- **Infrastructure**: Monorepo with microservice code in `src/services/` directory
   - Core services healthy: fks_main, fks_api, fks_app, fks_data
   - Infrastructure operational: TimescaleDB, Redis, Prometheus, Grafana, Nginx
   - Disabled services: fks_execution (Rust runtime issue), fks_web_ui (architectural review needed)
-- **Priority**: Begin Advanced AI Enhancement Plan (12 phases, 12-16 weeks)
-- **Next**: Phase 1 - Data preparation for ASMBTR baseline, multi-agent foundation
-- **Focus**: Paper trading, rigorous backtesting, ethical AI implementation
+- **Next Steps**: Begin Advanced AI Enhancement Plan (12 phases, 12-16 weeks)
+  - Phase 1: Data preparation for ASMBTR baseline (high-frequency FX/crypto data)
+  - Phase 2: Multi-agent foundation (LangGraph + Ollama setup)
+  - Phase 3: Regime detection models (VAE + Transformer)
+- **Focus**: Paper trading validation, rigorous backtesting, ethical AI implementation
 
 **Important**: When working with services, note that:
-- Code is in `services/[service_name]/src/` (e.g., `services/api/src/main.py`)
+- Code is in `src/services/[service_name]/src/` (e.g., `src/services/api/src/main.py`)
 - Each service has its own README.md with detailed architecture
 - Services communicate via HTTP within docker-compose network
-- Django settings are in `services/web/src/django/settings.py` (NOT `src/web/django/settings.py`)
-- Root `manage.py` sets `DJANGO_SETTINGS_MODULE=web.django.settings` to find settings in services/web/
+- Django settings are in `src/services/web/src/django/settings.py`
+- Root `manage.py` sets `DJANGO_SETTINGS_MODULE=services.web.src.django.settings`
 
 ## Architecture Essentials
 
@@ -62,20 +68,20 @@ NinjaTrader: fks_app (signal) → fks_ninja (bridge) → NinjaTrader 8 → Prop 
    - Celery Beat scheduler for periodic tasks
    - **NO business logic, NO exchange communication, NO data storage**
 
-2. **fks_api** (Gateway - `services/api/`):
+2. **fks_api** (Gateway - `src/services/api/`):
    - Route requests to fks_app, fks_data, fks_execution
    - JWT auth and API key validation
    - Rate limiting and throttling
    - **Pure gateway pattern - NO domain logic**
 
-3. **fks_app** (Business Logic - `services/app/`):
+3. **fks_app** (Business Logic - `src/services/app/`):
    - Strategy development and backtesting
    - Signal generation (RSI, MACD, Bollinger Bands)
    - Portfolio optimization with Optuna
    - Queries fks_ai for ML predictions and RAG insights
    - **ALL trading intelligence lives here**
 
-4. **fks_ai** (ML/RAG - `services/ai/`):
+4. **fks_ai** (ML/RAG - `src/services/ai/`):
    - Local LLM inference with Ollama/llama.cpp (CUDA)
    - RAG system with pgvector semantic search
    - Embeddings (sentence-transformers + OpenAI fallback)
@@ -83,24 +89,24 @@ NinjaTrader: fks_app (signal) → fks_ninja (bridge) → NinjaTrader 8 → Prop 
    - **Regime detection**, **LLM strategy generation**, **forecasting**
    - Zero-cost AI inference (no API fees)
 
-5. **fks_data** (Data Collection - `services/data/`):
+5. **fks_data** (Data Collection - `src/services/data/`):
    - Continuous market data collection (CCXT + Binance)
    - TimescaleDB hypertables for time-series storage
    - Redis caching for fast queries
    - **Other services query fks_data, NEVER exchanges directly**
 
-6. **fks_execution** (Execution Engine - `services/execution/`):
+6. **fks_execution** (Execution Engine - `src/services/execution/`):
    - Rust-based high-performance order execution
    - **ONLY service that talks to exchanges/brokers**
    - Order lifecycle management with FSM
    - Position tracking and updates
 
-7. **fks_ninja** (NinjaTrader Bridge - `services/ninja/`):
+7. **fks_ninja** (NinjaTrader Bridge - `src/services/ninja/`):
    - C# .NET bridge to NinjaTrader 8
    - Forward signals from fks_app to NT8
    - Support prop firm accounts (FXIFY, Topstep)
 
-8. **fks_web** (Web UI - `services/web/`):
+8. **fks_web** (Web UI - `src/services/web/`):
    - Dashboard, strategies, signals, portfolio views
    - Bootstrap 5 templates with Mermaid diagrams
    - **All data fetched via fks_api** (no direct DB queries)
@@ -116,20 +122,20 @@ fks/  (THIS REPOSITORY)
 ├── Makefile                   # Development commands (make up, make gpu-up, etc.)
 ├── manage.py                  # Django management (in root for orchestrator)
 │
-├── services/                  # Microservices code (monorepo - each service has own README)
-│   ├── api/                  # fks_api service (FastAPI gateway)
-│   ├── app/                  # fks_app service (business logic)
-│   ├── ai/                   # fks_ai service (GPU ML/RAG)
-│   ├── data/                 # fks_data service (market data collection)
-│   ├── execution/            # fks_execution service (Rust order execution)
-│   ├── ninja/                # fks_ninja service (.NET NinjaTrader bridge)
-│   └── web/                  # fks_web service (Django UI templates)
-│
-├── src/                       # FKS Main orchestrator code (Django apps)
-│   ├── monitor/              # Service registry & health checks
-│   ├── authentication/       # Centralized auth
-│   ├── core/                 # Core models, exceptions, database
-│   ├── framework/            # Middleware, config, patterns, services
+├── src/                       # All source code (monorepo)
+│   ├── services/             # Microservices code (each service has own README)
+│   │   ├── api/              # fks_api service (FastAPI gateway)
+│   │   ├── app/              # fks_app service (business logic)
+│   │   ├── ai/               # fks_ai service (GPU ML/RAG)
+│   │   ├── data/             # fks_data service (market data collection)
+│   │   ├── execution/        # fks_execution service (Rust order execution)
+│   │   ├── ninja/            # fks_ninja service (.NET NinjaTrader bridge)
+│   │   └── web/              # fks_web service (Django UI templates)
+│   │
+│   ├── monitor/              # Service registry & health checks (fks_main)
+│   ├── authentication/       # Centralized auth (fks_main)
+│   ├── core/                 # Core models, exceptions, database (fks_main)
+│   ├── framework/            # Middleware, config, patterns, services (fks_main)
 │   ├── manage.py             # Django management (symlinked from root)
 │   └── tests/                # Unit/integration tests for orchestrator
 │
@@ -613,15 +619,15 @@ docker-compose exec web pytest tests/unit/test_trading/test_strategies.py -v
 
 ## Key Files to Reference
 
-- **Orchestrator Config**: Django settings in `services/web/src/django/settings.py`
-- **Root Management**: `manage.py` (sets DJANGO_SETTINGS_MODULE=web.django.settings)
+- **Orchestrator Config**: Django settings in `src/services/web/src/django/settings.py`
+- **Root Management**: `manage.py` (sets DJANGO_SETTINGS_MODULE=services.web.src.django.settings)
 - **Docker Orchestration**: `docker-compose.yml` (8 services), `docker-compose.gpu.yml` (GPU overrides)
 - **AI Strategy Plans**: `docs/AI_STRATEGY_INTEGRATION.md`, `docs/CRYPTO_REGIME_BACKTESTING.md`
-- **Celery**: `services/web/src/django/celery.py` (Beat scheduler), task definitions in service-specific code
+- **Celery**: `src/services/web/src/django/celery.py` (Beat scheduler), task definitions in service-specific code
 - **Models**: `src/core/database/models.py` (shared orchestrator models)
-- **Service Code**: All microservice implementations in `services/[service_name]/src/`
+- **Service Code**: All microservice implementations in `src/services/[service_name]/src/`
 - **Makefile**: Development commands (`make up`, `make gpu-up`, `make logs`)
-- **Testing**: `pytest.ini`, `tests/unit/` (69 passing tests), service-specific tests in `services/*/tests/`
+- **Testing**: `pytest.ini`, `tests/unit/` (69 passing tests), service-specific tests in `src/services/*/tests/`
 
 ## When Making Changes
 
@@ -629,7 +635,7 @@ docker-compose exec web pytest tests/unit/test_trading/test_strategies.py -v
 1. **Identify target service** - Determine which microservice needs changes (fks_main, fks_api, fks_app, fks_ai, fks_data, fks_execution, fks_ninja, fks_web)
 2. **Review service boundaries** - Ensure changes respect service responsibilities (no business logic in fks_api, no DB queries in fks_web)
 3. **Check existing tests** - Understand test patterns before adding new code
-4. **Review service code** - All service code is in `services/[service_name]/`
+4. **Review service code** - All service code is in `src/services/[service_name]/`
 
 ### Development Workflow
 1. **Write tests first** - TDD approach, create test cases before implementation
@@ -856,12 +862,44 @@ When working on this codebase, prioritize in this order:
 
 ## Test Status Summary
 
-- ✅ **69 passing** - Security, signals, strategies, optimizer (Phase 3.1 complete)
-- ⏳ **Some blocked** - Python 3.13 type hint issues (non-critical)
-- 🎯 **Goal**: Expand test coverage to all microservices (80%+ each)
+- ✅ **108/108 passing** - ASMBTR baseline fully tested (100% pass rate - Phase 3 complete, Oct 29, 2025)
+- ✅ **All test suites passing**: BTR encoding (28), state encoder (19), prediction table (26), strategy (35)
+- 🎯 **Next Goal**: Expand test coverage to all microservices (80%+ each)
 
-**Current Test Results**: 69 passing tests (FKS Main orchestrator)  
+**Current Test Results**: 
+- **ASMBTR Framework**: 108/108 passing (100%) - Complete test coverage
+- **Test Location**: `tests/unit/strategies/asmbtr/` (test_btr.py, test_encoder.py, test_predictor.py, test_strategy.py)
+- **Container**: Tests run in `fks_app` Docker container via `docker-compose exec fks_app pytest`
+
 **Target**: 80%+ coverage across all 8 microservices
+
+### ASMBTR Test Suite Details (Phase 3 Complete)
+
+**Test Categories**:
+1. **BTR Encoding (28 tests)**: State creation, decimal conversion, encoder initialization, movement tracking, buffer management, edge cases
+2. **State Encoder (19 tests)**: Tick processing, multi-symbol support, price change detection, zero-change handling, statistics
+3. **Prediction Table (26 tests)**: State observation, probability calculation, decay application, save/load, edge cases
+4. **Strategy (35 tests)**: Position management, signal generation, PnL tracking, stop-loss/take-profit, backtesting, performance metrics
+
+**Key Test Learnings** (Oct 29, 2025):
+- **Zero price changes are skipped**: `StateEncoder` only adds movements when price actually changes (not treated as DOWN)
+- **Buffer is FIFO**: `BTREncoder` keeps last N movements in rolling window, dropping oldest when full
+- **Dataclass properties**: `StatePrediction.prediction` and `confidence` are computed `@property`, not `__init__` parameters
+- **API naming**: Production uses `save_to_dict()`/`load_from_dict()`, not `save()`/`load()`
+- **Attribute names**: `StateEncoder.encoder` (not `btr_encoder`), `PredictionTable.state_counts` (not `table`)
+- **Decay rate validation**: Must be 0.9-1.0 (not 0.5), enforced in `PredictionTable.__init__`
+
+**Test Execution**:
+```bash
+# Run all ASMBTR tests
+docker-compose exec fks_app pytest tests/unit/strategies/asmbtr/ -v
+
+# Run specific test file
+docker-compose exec fks_app pytest tests/unit/strategies/asmbtr/test_encoder.py -v
+
+# Run with coverage
+docker-compose exec fks_app pytest tests/unit/strategies/asmbtr/ --cov=strategies.asmbtr --cov-report=term-missing
+```
 
 ## Advanced AI Trading System Enhancement Plan (2025-2026)
 
@@ -1411,6 +1449,14 @@ Expected output: [acceptance_criteria]."
 - **Solution**: Ensure test files are named `test_*.py` and in `tests/` directory
 - **Config**: Check `pytest.ini` for test discovery settings
 
+**ASMBTR Test Failures (Fixed Oct 29, 2025)**
+- **Zero price changes**: StateEncoder skips them entirely (not treated as DOWN movement)
+- **Attribute mismatches**: Use `StateEncoder.encoder` (not `btr_encoder`), `PredictionTable.state_counts` (not `table`)
+- **Dataclass parameters**: `StatePrediction` has no `prediction` parameter - it's a computed `@property`
+- **Save/Load methods**: Use `save_to_dict()`/`load_from_dict()`, not `save()`/`load()`
+- **Decay rate range**: Must be 0.9-1.0, not 0.5 (enforced in `PredictionTable.__init__`)
+- **Error message patterns**: Match actual production messages (e.g., "must have same length" not "must have the same length")
+
 **Docker/Container Issues**
 - **Problem**: Services won't start or connection errors
 - **Solution**: 
@@ -1433,5 +1479,5 @@ Expected output: [acceptance_criteria]."
 - **Tests**: Run specific test files to isolate issues: `pytest tests/unit/test_X.py -v`
 
 ---
-*Generated: October 2025 | Based on 8-Service Microservices Architecture | Status: Architecture Documented (AI Strategy Planned)*  
-*Last Updated: 2025-10-28 | Copilot Instructions v4.0 - Advanced AI Trading Enhancement Plan Added*
+*Generated: October 2025 | Based on 8-Service Microservices Architecture | Status: Phase 3 Complete (ASMBTR 100% Tested)*  
+*Last Updated: 2025-10-29 | Copilot Instructions v4.1 - ASMBTR Test Suite Complete (108/108 passing)*

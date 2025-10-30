@@ -53,6 +53,16 @@ scrape_configs:
           service: 'web'
     metrics_path: '/metrics'
 
+  # FKS App - ASMBTR metrics (Phase 4)
+  - job_name: 'fks_app'
+    static_configs:
+      - targets: ['fks_app:8002']
+        labels:
+          service: 'fks_app'
+          strategy: 'asmbtr'
+    metrics_path: '/metrics'
+    scrape_interval: 30s  # More frequent for trading signals
+
   # Celery metrics (if exposed)
   - job_name: 'celery'
     static_configs:

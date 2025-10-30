@@ -312,41 +312,14 @@ class QualityCollector:
         Args:
             symbol: Trading pair symbol
             result: Quality score to store
+        
+        Note:
+            This is a placeholder for TimescaleDB integration.
+            Will be implemented in Phase 5.6 Task 3 (Pipeline Integration).
         """
-        try:
-            # Import here to avoid circular dependencies
-            from database.connection import insert_quality_metric
-            from datetime import datetime
-            
-            # Prepare data for insertion
-            data = {
-                'time': result.timestamp if hasattr(result, 'timestamp') else datetime.now(),
-                'symbol': symbol,
-                'overall_score': result.overall_score if hasattr(result, 'overall_score') else result.score,
-                'status': result.status.value if hasattr(result.status, 'value') else result.status,
-                'outlier_score': result.component_scores.get('outlier') if hasattr(result, 'component_scores') else None,
-                'freshness_score': result.component_scores.get('freshness') if hasattr(result, 'component_scores') else None,
-                'completeness_score': result.component_scores.get('completeness') if hasattr(result, 'component_scores') else None,
-                'outlier_count': result.outlier_result.outlier_count if result.outlier_result else 0,
-                'outlier_severity': (result.outlier_result.severity.value 
-                                   if result.outlier_result and hasattr(result.outlier_result.severity, 'value')
-                                   else result.outlier_result.severity if result.outlier_result 
-                                   else None),
-                'freshness_age_seconds': result.freshness_result.age_seconds if result.freshness_result else None,
-                'completeness_percentage': result.completeness_result.completeness_percentage if result.completeness_result else None,
-                'issues': result.issues if hasattr(result, 'issues') else [],
-                'issue_count': len(result.issues) if hasattr(result, 'issues') else 0,
-                'check_duration_ms': None,  # Set externally if needed
-                'collector_version': 'v1.0'
-            }
-            
-            # Insert using database utility
-            insert_quality_metric(data)
-            logger.debug("Stored quality result for %s in TimescaleDB", symbol)
-            
-        except Exception as e:
-            logger.error("Failed to store quality result for %s: %s", symbol, e, exc_info=True)
-            # Don't raise - storage failure shouldn't break quality checks
+        # TODO: Implement TimescaleDB storage in Phase 5.6 Task 3
+        logger.debug("TimescaleDB storage not yet implemented (placeholder)")
+        pass
 
 
 def create_quality_collector(

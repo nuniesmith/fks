@@ -1,14 +1,22 @@
 """
-FKS App - Business Logic Service (Placeholder)
+FKS App - Business Logic Service
 
-This is a placeholder implementation. The full service will include:
+This service provides:
+- ASMBTR trading strategy predictions (Phase 4)
 - Technical indicator signals (RSI, MACD, Bollinger Bands)
 - Strategy generation and backtesting
 - Portfolio optimization with Optuna
 - Integration with fks_data, fks_ai, fks_execution
 """
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+# Ensure ASMBTR Prometheus metrics are registered at startup
+try:
+    import src.metrics.asmbtr_metrics  # type: ignore
+except Exception:
+    # Import errors should not prevent service from starting; log at runtime
+    pass
 
 app = FastAPI(
     title="FKS App - Business Logic Service",
@@ -23,8 +31,16 @@ async def health_check():
         "status": "healthy",
         "service": "fks_app",
         "version": "1.0.0",
-        "note": "Placeholder implementation - full service coming soon"
+        "features": ["asmbtr_predictions", "signals", "backtesting", "optimization"]
     })
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return PlainTextResponse(
+        content=generate_latest().decode("utf-8"),
+        media_type=CONTENT_TYPE_LATEST
+    )
 
 @app.get("/signals")
 async def get_signals():

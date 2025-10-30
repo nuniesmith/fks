@@ -5,10 +5,12 @@ from typing import Dict, Type
 from .base import APIAdapter
 from .binance import BinanceAdapter
 from .polygon import PolygonAdapter
+from .eodhd import EODHDAdapter
 
 _ADAPTERS: Dict[str, Type[APIAdapter]] = {
     BinanceAdapter.name: BinanceAdapter,
     PolygonAdapter.name: PolygonAdapter,
+    EODHDAdapter.name: EODHDAdapter,
 }
 
 

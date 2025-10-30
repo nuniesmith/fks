@@ -21,8 +21,15 @@ app.config_from_object("django.conf:settings", namespace="CELERY")
 # Load task modules from all registered Django apps.
 app.autodiscover_tasks()
 
-# Celery Beat schedule - All 16 tasks configured
+# Celery Beat schedule - All 17 tasks configured
 app.conf.beat_schedule = {
+    # ASMBTR Predictions (Every 60 seconds - Phase 4)
+    'asmbtr-predictions': {
+        'task': 'asmbtr.predict',
+        'schedule': 60.0,  # Every 60 seconds
+        'kwargs': {'symbols': ['BTC/USDT', 'ETH/USDT']},
+    },
+    
     # Market Data & Core (Every 5-15 minutes)
     'sync-market-data': {
         'task': 'trading.tasks.sync_market_data_task',

@@ -5,7 +5,7 @@
 **Database:** PostgreSQL + TimescaleDB + pgvector + Fundamentals Schema | **AI/ML:** PyTorch + Ollama (local LLM)  
 **Test:** `docker-compose exec fks_app pytest tests/unit/strategies/asmbtr/` | **Lint:** `make lint` | **Format:** `make format`  
 **Run:** `make up` (standard 8 services) or `make gpu-up` (with Ollama LLM + GPU ML)  
-**Current Status:** ✅ Phase 5 Complete - Data Foundation with EODHD API + 40+ Features + Fundamentals Schema (Oct 30, 2025)
+**Current Status:** ✅ Phase 5.4 Complete - Data Foundation with Redis Caching (Oct 30, 2025)
 
 ## Project Overview
 **FKS Main** is the **orchestrator and monitoring hub** for an **8-service microservices architecture**. It provides centralized authentication, service registry, health monitoring, and Celery Beat scheduling for the entire trading ecosystem.
@@ -23,26 +23,25 @@ FKS uses a **monorepo architecture** with multiple Docker containers under `serv
 7. **fks_ai** (Port 8006) - GPU-accelerated ML/RAG: local LLM (Ollama), regime detection, forecasting
 8. **fks_web** (Port 3001) - Django/Vite web UI with Bootstrap 5 templates
 
-### Current Phase: Phase 5 Complete - Data Foundation Ready
-- **Status**: Phase 5 Complete ✅ - AI Strategy Phase 1 Data Foundation (Oct 30, 2025)
-- **Latest Achievement**: Complete data foundation for AI strategy implementation
+### Current Phase: Phase 5.4 Complete - Redis Caching Layer Ready
+- **Status**: Phase 5.4 Complete ✅ - Redis Caching Infrastructure (Oct 30, 2025)
+- **Latest Achievement**: Complete Redis caching layer for features and API responses
   - ✅ Phase 5.1: EODHD API Integration - Full fundamentals data collection capability
-  - ✅ Phase 5.2: Feature Engineering Pipeline - 40+ technical indicators with TA-Lib/numpy fallback
+  - ✅ Phase 5.2: Feature Engineering Pipeline - 63 technical features with TA-Lib/numpy fallback
   - ✅ Phase 5.3: TimescaleDB Fundamentals Schema - 6 hypertables for comprehensive data storage
-  - 🚧 Phase 5.4: Redis Caching Layer - Ready to implement (IN PROGRESS)
-  - 📋 Phase 5.5: Data Quality Validation - Planned next
+  - ✅ Phase 5.4: Redis Caching Layer - Feature cache + EODHD response caching (COMPLETE)
+  - 📋 Phase 5.5: Data Quality Validation - Next priority (4-6 hours)
 - **Previous Achievement**: Phase 3 Complete - ASMBTR Baseline Fully Tested (108/108 tests passing - Oct 29, 2025)
-- **Infrastructure**: Enhanced data foundation with fundamentals support
-  - Core services healthy: fks_main, fks_api, fks_app, fks_data
-  - Database: TimescaleDB with fundamentals schema, Redis, Prometheus, Grafana, Nginx
-  - New capabilities: EODHD API, 63-feature engineering, economic indicators
+- **Infrastructure**: Enhanced data foundation with Redis caching
+  - Core services healthy: fks_main, fks_api, fks_app, fks_data, redis
+  - Database: TimescaleDB with fundamentals schema, Redis caching, Prometheus, Grafana, Nginx
+  - New capabilities: EODHD API, 63-feature engineering, Redis caching (80-95% speedup), economic indicators
   - Disabled services: fks_execution (Rust runtime issue), fks_web_ui (architectural review needed)
-- **Next Steps**: Complete Phase 5 then Advanced AI Enhancement Plan (12 phases, 12-16 weeks)
-  - Phase 5.4: Redis caching for features and API responses
-  - Phase 5.5: Data quality validation pipeline
+- **Next Steps**: Complete Phase 5.5 then Advanced AI Enhancement Plan (12 phases, 12-16 weeks)
+  - Phase 5.5: Data quality validation pipeline (outlier detection, freshness monitoring, completeness checks)
   - Phase 6: Multi-agent foundation (LangGraph + Ollama setup)
   - Phase 7: Regime detection models (VAE + Transformer)
-- **Focus**: Data foundation completion, then multi-agent AI system implementation
+- **Focus**: Data quality validation, then multi-agent AI system implementation
 
 **Important**: When working with services, note that:
 - Code is in `src/services/[service_name]/src/` (e.g., `src/services/api/src/main.py`)

@@ -1,6 +1,17 @@
 """Metrics module for data quality monitoring.
 
 Phase: AI Enhancement Plan Phase 5.6 - Metrics Integration
+
+This module provides:
+- QualityCollector: Main collector class with automatic metrics updates
+- Prometheus metrics for quality scores, outliers, freshness, completeness
+- Integration functions for batch updates from validator results
+
+Usage:
+    from metrics import QualityCollector
+    
+    collector = QualityCollector()
+    result = collector.check_quality('BTCUSDT', market_data)
 """
 
 from .quality_metrics import (
@@ -30,12 +41,18 @@ from .quality_metrics import (
     
     # Batch update functions
     update_metrics_from_quality_score,
-    update_metrics_from_outlier_results,
+    update_metrics_from_outlier_results,  # Note: takes List[OutlierResult]
     update_metrics_from_freshness_result,
     update_metrics_from_completeness_result,
 )
 
+from .quality_collector import QualityCollector, create_quality_collector
+
 __all__ = [
+    # Collector
+    'QualityCollector',
+    'create_quality_collector',
+    
     # Gauge metrics
     'quality_score',
     'outlier_score',
@@ -62,7 +79,7 @@ __all__ = [
     
     # Batch update functions
     'update_metrics_from_quality_score',
-    'update_metrics_from_outlier_results',
+    'update_metrics_from_outlier_results',  # Takes List[OutlierResult]
     'update_metrics_from_freshness_result',
     'update_metrics_from_completeness_result',
 ]

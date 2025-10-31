@@ -4,7 +4,7 @@ Bull Agent - Optimistic Trading Perspective
 Advocates for LONG positions and bullish scenarios.
 """
 
-from ..base import create_agent
+from agents.base import create_agent
 
 BULL_AGENT_PROMPT = """You are the Bull Agent, advocating for LONG positions and bullish market scenarios.
 

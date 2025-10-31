@@ -4,7 +4,7 @@ Risk Analyst Agent
 Specializes in risk management, position sizing, VaR, and drawdown protection.
 """
 
-from ..base import create_agent
+from agents.base import create_agent
 
 RISK_ANALYST_PROMPT = """You are a Risk Analyst specializing in portfolio risk management, 
 position sizing, Value at Risk (VaR), maximum drawdown protection, and tail risk hedging.

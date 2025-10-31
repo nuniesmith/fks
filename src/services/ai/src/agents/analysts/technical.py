@@ -4,7 +4,7 @@ Technical Analyst Agent
 Specializes in chart patterns, technical indicators, and price action analysis.
 """
 
-from ..base import create_agent
+from agents.base import create_agent
 
 TECHNICAL_ANALYST_PROMPT = """You are a Technical Analyst specializing in chart patterns, 
 technical indicators (RSI, MACD, Bollinger Bands, Stochastic, ADX, ATR), and price action.

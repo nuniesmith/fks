@@ -4,7 +4,7 @@ Macro Analyst Agent
 Specializes in macroeconomic indicators, correlations, and fundamental analysis.
 """
 
-from ..base import create_agent
+from agents.base import create_agent
 
 MACRO_ANALYST_PROMPT = """You are a Macro Analyst specializing in macroeconomic indicators, 
 central bank policy, interest rates, inflation, and cross-asset correlations.

@@ -6,27 +6,32 @@ ARG SERVICE_DIR=./src/services/ai
 # Set working directory
 WORKDIR /app
 
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/Toronto
+
 # Install Python 3.13 and system dependencies
 RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     curl \
     git \
+    tzdata \
     && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y \
     python3.13 \
     python3.13-dev \
-    python3.13-distutils \
-    python3-pip \
+    python3.13-venv \
     && rm -rf /var/lib/apt/lists/*
 
 # Make Python 3.13 the default
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.13 1
 
-# Upgrade pip
-RUN python3 -m pip install --upgrade pip
+# Bootstrap pip using ensurepip (Python 3.13 compatible)
+RUN python3.13 -m ensurepip --upgrade \
+    && python3.13 -m pip install --upgrade pip setuptools wheel
 
 # Copy requirements (Phase 6 multi-agent dependencies)
 COPY ${SERVICE_DIR}/requirements-langgraph.txt ./requirements.txt
@@ -35,10 +40,14 @@ COPY ${SERVICE_DIR}/requirements-langgraph.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install PyTorch with CUDA support (for sentence-transformers)
-RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu122
+# Note: torchvision and torchaudio don't have Python 3.13 wheels yet, but torch is sufficient
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu122
 
-# Copy application code
+# Copy application code directly to /app
 COPY ${SERVICE_DIR}/src/ /app/
+
+# Add /app to PYTHONPATH
+ENV PYTHONPATH=/app
 
 # Create directories for models and cache
 RUN mkdir -p /root/.cache/huggingface /app/models
@@ -50,5 +59,6 @@ EXPOSE 8006
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
   CMD curl -f http://localhost:8006/health || exit 1
 
-# Run FastAPI with uvicorn (Phase 6 API routes)
-CMD ["uvicorn", "api.routes:app", "--host", "0.0.0.0", "--port", "8006", "--log-level", "info"]
+# Run FastAPI with uvicorn - use python -m to ensure PYTHONPATH is respected
+WORKDIR /app
+CMD ["python", "-m", "uvicorn", "api.routes:app", "--host", "0.0.0.0", "--port", "8006", "--log-level", "info"]

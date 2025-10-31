@@ -30,7 +30,7 @@ from agents.analysts.risk import risk_analyst
 from agents.debaters.bull import bull_agent
 from agents.debaters.bear import bear_agent
 from agents.debaters.manager import manager_agent
-from memory.memory_manager import TradingMemory
+from memory import TradingMemory
 from processors.signal_processor import SignalProcessor
 
 # Configure logging

@@ -4,7 +4,7 @@ Manager Agent - Objective Synthesis
 Synthesizes Bull and Bear debates into final trading decision.
 """
 
-from ..base import create_agent
+from agents.base import create_agent
 
 MANAGER_AGENT_PROMPT = """You are the Manager Agent, responsible for objectively synthesizing 
 Bull and Bear debate into a final trading decision.

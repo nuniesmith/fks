@@ -6,7 +6,7 @@ Creates Ollama-based agents with configurable prompts and parameters.
 
 from typing import Optional
 from langchain_ollama import ChatOllama
-from langchain.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 
 

@@ -4,7 +4,7 @@ Sentiment Analyst Agent
 Specializes in market sentiment, fear/greed index, and news analysis.
 """
 
-from ..base import create_agent
+from agents.base import create_agent
 
 SENTIMENT_ANALYST_PROMPT = """You are a Sentiment Analyst specializing in market psychology, 
 fear/greed indicators, social media sentiment, and news impact analysis.

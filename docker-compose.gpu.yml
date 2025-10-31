@@ -151,7 +151,7 @@ services:
       args:
         - SERVICE_DIR=./src/services/ai
     volumes:
-      - ./src/services/ai:/app
+      # Don't mount source code - use built image
       - ./logs/ai:/app/logs
       - ~/.cache/huggingface:/root/.cache/huggingface
     environment:

@@ -5,7 +5,7 @@ LangGraph orchestration connecting analysts, debaters, and decision-making.
 """
 
 from langgraph.graph import StateGraph, END
-from ..agents.state import AgentState
+from agents.state import AgentState
 from .nodes import (
     run_analysts,
     debate_node,
@@ -93,7 +93,7 @@ async def analyze_symbol(
         ... )
         >>> print(result['final_decision'])
     """
-    from ..agents.state import create_initial_state
+    from agents.state import create_initial_state
     
     # Create initial state
     initial_state = create_initial_state(symbol, market_data)

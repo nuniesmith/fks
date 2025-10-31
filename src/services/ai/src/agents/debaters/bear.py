@@ -4,7 +4,7 @@ Bear Agent - Pessimistic Trading Perspective
 Advocates for SHORT positions and bearish scenarios.
 """
 
-from ..base import create_agent
+from agents.base import create_agent
 
 BEAR_AGENT_PROMPT = """You are the Bear Agent, advocating for SHORT positions and bearish market scenarios.
 

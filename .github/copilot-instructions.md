@@ -20,10 +20,10 @@
 | **Database** | `make migrate` | Run Django migrations |
 | | `make db-shell` | PostgreSQL psql shell |
 
-**Current Status:** ✅ Phase 6 COMPLETE - Multi-Agent AI System DEPLOYED (Oct 31, 2025)  
-**Next Phase:** 🎯 Phase 7 - Evaluation Framework & Advanced Models  
+**Current Status:** ✅ Phase 7.1 COMPLETE - Evaluation Framework DEPLOYED (Oct 31, 2025)  
+**Next Phase:** 🎯 Phase 7.2 - LLM-Judge Audits  
 **Architecture:** 8-Service Microservices | **Stack:** Python 3.13, FastAPI, Django, PostgreSQL, TimescaleDB, Redis  
-**Test Status:** 276/276 passing (ASMBTR: 108, Redis: 20, Validators: 34, Monitoring: 40, AI: 70 unit + 18 integration)
+**Test Status:** 282/282 passing (ASMBTR: 108, Redis: 20, Validators: 34, Monitoring: 40, AI: 88, Evaluation: 6 integration)
 
 ## 📋 Project Overview
 
@@ -44,11 +44,11 @@ FKS uses a **monorepo architecture** with Docker containers under `src/services/
 | **fks_ai** | 8006 | Multi-agent AI: LangGraph, Ollama, ChromaDB, 7 agents | ✅ Phase 6 complete |
 | **fks_web** | 3001 | Django/Vite web UI with Bootstrap 5 | ⏸️ Architecture review |
 
-### Current Status: Phase 6 COMPLETE ✅ (Oct 31, 2025)
+### Current Status: Phase 7.1 COMPLETE ✅ (Oct 31, 2025)
 
-**Latest Achievement**: Multi-agent AI system DEPLOYED with LangGraph + Ollama + ChromaDB
-- ✅ **Phase 6.1**: Agentic Foundation - LangGraph, AgentState, ChromaDB memory
-- ✅ **Phase 6.2**: Multi-Agent Debate - 7 agents (4 analysts + 3 debaters)
+**Latest Achievement**: Evaluation framework with confusion matrices and statistical testing
+- ✅ **Phase 6.1-6.5**: Multi-agent AI system DEPLOYED (LangGraph + Ollama + ChromaDB)
+- ✅ **Phase 7.1**: Evaluation Framework - ModelEvaluator, Bonferroni/BH corrections, chi-square testing
 - ✅ **Phase 6.3**: Graph Orchestration - StateGraph with conditional routing
 - ✅ **Phase 6.4**: Testing & API - 88 tests (70 unit + 18 integration), 4 FastAPI endpoints
 - ✅ **Phase 6.5**: Deployment - Docker build, Ollama llama3.2:3b (2GB), services operational
@@ -525,10 +525,14 @@ All custom exceptions inherit from `FKSException` in `src/core/exceptions/__init
 
 ### Medium-Term: Advanced AI (Weeks 5-12)
 
-**Phase 7: Evaluation Framework** (3-5 days)
-- Confusion matrices for ASMBTR/ML models
-- LLM-judge audits for factual consistency
-- Ground truth backtests vs. reality
+**Phase 7: Evaluation Framework** (3-5 days) - ✅ COMPLETE Oct 31, 2025
+- ✅ Confusion matrices for ASMBTR/ML models - ModelEvaluator implemented
+- ✅ Bonferroni & Benjamini-Hochberg p-value corrections
+- ✅ Chi-square statistical testing
+- ⏳ LLM-judge audits for factual consistency (Phase 7.2 next)
+- ⏳ Ground truth backtests vs. reality (Phase 7.3)
+- **Files**: confusion_matrix.py (502 lines), statistical_tests.py (219 lines), tests (461 lines)
+- **Validation**: All 6 integration tests passing in fks_app container
 
 **Phase 8: Hybrid Models & Risk** (5-7 days)
 - LLM vetoes for signal validation

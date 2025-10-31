@@ -696,7 +696,7 @@ services:
       - TS_AUTHKEY=${TAILSCALE_AUTH_KEY}
       - TS_STATE_DIR=/var/lib/tailscale
       - TS_SOCKET=/var/run/tailscale/tailscaled.sock
-      - TS_EXTRA_ARGS=--advertise-tags=tag:fks-trading --accept-routes
+      - TS_EXTRA_ARGS=--advertise-tags=tag:fks --accept-routes
     volumes:
       - tailscale_data:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun

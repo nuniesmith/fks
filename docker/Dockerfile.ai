@@ -44,7 +44,13 @@ RUN pip install --no-cache-dir \
     accelerate \
     ollama \
     scikit-learn \
-    optuna
+    optuna \
+    langchain \
+    langgraph \
+    langchain-core \
+    langchain-community \
+    langchain-ollama \
+    chromadb
 
 # Copy application code
 COPY ${SERVICE_DIR}/src/ ./src/

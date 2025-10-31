@@ -28,32 +28,17 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
 # Upgrade pip
 RUN python3 -m pip install --upgrade pip
 
-# Copy requirements
-COPY ${SERVICE_DIR}/requirements.txt .
+# Copy requirements (Phase 6 multi-agent dependencies)
+COPY ${SERVICE_DIR}/requirements-langgraph.txt ./requirements.txt
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install PyTorch with CUDA support
+# Install PyTorch with CUDA support (for sentence-transformers)
 RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu122
 
-# Install ML libraries
-RUN pip install --no-cache-dir \
-    sentence-transformers \
-    transformers \
-    accelerate \
-    ollama \
-    scikit-learn \
-    optuna \
-    langchain \
-    langgraph \
-    langchain-core \
-    langchain-community \
-    langchain-ollama \
-    chromadb
-
 # Copy application code
-COPY ${SERVICE_DIR}/src/ ./src/
+COPY ${SERVICE_DIR}/src/ /app/
 
 # Create directories for models and cache
 RUN mkdir -p /root/.cache/huggingface /app/models
@@ -65,5 +50,5 @@ EXPOSE 8006
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \
   CMD curl -f http://localhost:8006/health || exit 1
 
-# Run FastAPI with uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8006"]
+# Run FastAPI with uvicorn (Phase 6 API routes)
+CMD ["uvicorn", "api.routes:app", "--host", "0.0.0.0", "--port", "8006", "--log-level", "info"]

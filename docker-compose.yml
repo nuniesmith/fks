@@ -408,56 +408,55 @@ services:
     networks:
       - fks-network
 
-  # TEMPORARILY DISABLED - GPU service takes long to build, enable with make gpu-up
-  # fks_ai:
-  #   build:
-  #     context: ./src/services/ai
-  #     dockerfile: ../../docker/Dockerfile.ai
-  #   container_name: fks_ai
-  #   expose:
-  #     - "8006"
-  #   volumes:
-  #     - ./src/services/ai:/app
-  #     - ./logs/ai:/app/logs
-  #   environment:
-  #     - TZ=America/Toronto
-  #     - PYTHONUNBUFFERED=1
-  #     - SERVICE_NAME=fks_ai
-  #     - SERVICE_VERSION=1.0.0
-  #     - MONITOR_URL=http://web:8000/monitor/api/discover/
-  #     - POSTGRES_DB=${POSTGRES_DB:-trading_db}
-  #     - POSTGRES_USER=${POSTGRES_USER:-postgres}
-  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-  #     - POSTGRES_HOST=db
-  #     - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/6
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - CUDA_VISIBLE_DEVICES=0
-  #     - OLLAMA_HOST=http://ollama:11434
-  #   env_file:
-  #     - .env
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     web:
-  #       condition: service_healthy
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #     start_period: 60s
-  #   restart: unless-stopped
-  #   networks:
-  #     - fks-network
+  # Phase 6 Multi-Agent AI Service (LangGraph + Ollama + ChromaDB)
+  # Enable with: make gpu-up (includes Ollama service)
+  fks_ai:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.ai
+      args:
+        - SERVICE_DIR=./src/services/ai
+    container_name: fks_ai
+    expose:
+      - "8006"
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./src/services/ai/src:/app
+      - ./logs/ai:/app/logs
+    environment:
+      - TZ=America/Toronto
+      - PYTHONUNBUFFERED=1
+      - SERVICE_NAME=fks_ai
+      - SERVICE_VERSION=1.0.0
+      - SERVICE_PORT=8006
+      - MONITOR_URL=http://web:8000/monitor/api/discover/
+      - POSTGRES_DB=${POSTGRES_DB:-trading_db}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/6
+      - OLLAMA_HOST=http://ollama:11434
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CUDA_VISIBLE_DEVICES=0
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - fks-network
 
   # TODO: fks_execution Rust binary exits silently - needs debugging
   # Binary builds successfully but exits immediately with no logs

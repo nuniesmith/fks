@@ -1,8 +1,9 @@
 # FKS Development Phase Status
 
-**Last Updated**: October 30, 2025  
-**Current Status**: ✅ Phase 5.6 Complete - Quality Monitoring & Observability Ready  
-**Next Phase**: 🎯 Phase 6 - Multi-Agent Foundation (LangGraph + Ollama)
+**Last Updated**: October 30, 2025 (Evening)  
+**Current Status**: 🚧 Phase 6 Started - Multi-Agent Foundation (27% complete)  
+**Latest**: LangGraph infrastructure ready, 4/15 tasks complete  
+**Next**: Container rebuild + Ollama setup + analyst agents
 
 ---
 
@@ -12,8 +13,8 @@
 |--------|--------|-------|
 | **Services** | 15/16 (93.75%) | fks_execution (Rust issue), fks_web_ui (architecture review) disabled |
 | **Tests** | 188 passing | ASMBTR (108) + Redis (20) + Validators (34) + Metrics (13) + Collector (13) |
-| **Current Phase** | Phase 5.6 Complete | Quality Monitoring: Prometheus + Grafana + Alerts + TimescaleDB |
-| **Next Priority** | Phase 6 | Multi-Agent Foundation with LangGraph + Ollama + ChromaDB |
+| **Current Phase** | Phase 6 (27%) | Multi-Agent Foundation - LangGraph + Ollama + ChromaDB infrastructure |
+| **Latest Work** | Oct 30 Evening | AgentState schema, base factory, ChromaDB memory (4/15 tasks) |
 
 ---
 
@@ -476,12 +477,39 @@ Transform FKS into deep-thinking, self-improving trading system combining:
 
 **Goal**: Non-AI probabilistic baseline achieving Calmar >0.3 for benchmarking ML models
 
-#### Weeks 5-8: Multi-Agent Foundation
-- **Phase 5**: Agentic Foundation (5-7 days) - LangGraph setup, ChromaDB memory, AgentState schema
-- **Phase 6**: Multi-Agent Debates (7-10 days) - 4 analysts, Bull/Bear/Manager, 3 trader personas
-- **Phase 7**: Graph Orchestration (7-10 days) - StateGraph with reflection, signal processor
+#### Weeks 5-8: Multi-Agent Foundation 🚧 STARTED (27% Complete)
+**Current Status**: Phase 6.1 Complete - LangGraph Infrastructure Ready (Oct 30, 2025)
+
+**Completed** (4/15 tasks):
+- ✅ LangGraph dependencies: langchain, langgraph, chromadb (requirements + Dockerfile.ai)
+- ✅ AgentState schema: TypedDict with messages, market_data, signals, debates, memory
+- ✅ Base agent factory: `create_agent()` with Ollama integration
+- ✅ ChromaDB TradingMemory: add_insight(), query_similar(), semantic search
+
+**In Progress**:
+- 🚧 Container rebuild with LangGraph dependencies
+- 🚧 Ollama llama3.2:3b model installation
+- 🚧 Environment validation and testing
+
+**Next Week** (Day 5-15):
+- Analyst agents: Technical, Sentiment, Macro, Risk (4 agents)
+- Debate system: Bull, Bear, Manager (3 agents)
+- Trader personas: Conservative, Moderate, Aggressive + Judge
+- Graph orchestration: StateGraph with reflection loops
 
 **Goal**: Operational multi-agent system with >60% signal quality on validation set
+
+**Progress**: 27% complete (4/15 tasks) | 396 lines of code added  
+**Tracking**: `docs/PHASE_6_PROGRESS.md`, `docs/PHASE_6_KICKOFF.md`
+
+---
+
+#### Weeks 5-8: Multi-Agent Foundation (ORIGINAL PLAN - FOR REFERENCE)
+- **Phase 5**: Agentic Foundation (5-7 days) - LangGraph setup, ChromaDB memory, AgentState schema ✅
+- **Phase 6**: Multi-Agent Debates (7-10 days) - 4 analysts, Bull/Bear/Manager, 3 trader personas 🚧
+- **Phase 7**: Graph Orchestration (7-10 days) - StateGraph with reflection, signal processor ⏸️
+
+**Original Goal**: Operational multi-agent system with >60% signal quality on validation set
 
 #### Weeks 9-12: Advanced Models & Integration
 - **Phase 8**: Advanced Evaluation (3-5 days) - Confusion matrices, LLM-judge audits, ground truth backtests

@@ -5,7 +5,10 @@
 | Category | Command / URL | Description |
 |----------|---------------|-------------|
 | **Start Services** | `make up` | Standard 8 services |
-| | `make gpu-up` | With Ollama LLM + GPU ML |
+| | `make gpu-up` | With Ollama LLM + fks_ai (Phase 6) |
+| **Phase 6 AI** | `docker-compose exec fks_ai pytest tests/unit/ -v` | AI unit tests (70 tests) |
+| | `docker-compose exec fks_ai pytest tests/integration/ -v` | AI integration (18 tests) |
+| | `curl http://localhost:8006/docs` | FastAPI Swagger UI |
 | **Testing** | `docker-compose exec fks_app pytest tests/unit/strategies/asmbtr/` | ASMBTR suite (108/108) |
 | | `docker-compose exec fks_app pytest tests/unit/validators/` | Quality validators (34/34) |
 | | `docker-compose exec fks_app pytest tests/unit/cache/` | Redis caching (20/20) |
@@ -17,10 +20,10 @@
 | **Database** | `make migrate` | Run Django migrations |
 | | `make db-shell` | PostgreSQL psql shell |
 
-**Current Status:** ✅ Phase 5.6 Complete - Quality Monitoring & Observability (Oct 30, 2025)  
-**Next Phase:** 🎯 Phase 6 - Multi-Agent Foundation (LangGraph + Ollama + ChromaDB)  
+**Current Status:** ✅ Phase 6.1-6.4 Complete - Multi-Agent AI System (Oct 31, 2025)  
+**Next Phase:** 🎯 Phase 6 Deployment - Ollama Setup & Live Validation  
 **Architecture:** 8-Service Microservices | **Stack:** Python 3.13, FastAPI, Django, PostgreSQL, TimescaleDB, Redis  
-**Test Status:** 188/188 passing (ASMBTR: 108, Redis: 20, Validators: 34, Monitoring: 40)
+**Test Status:** 276/276 passing (ASMBTR: 108, Redis: 20, Validators: 34, Monitoring: 40, AI: 70 unit + 18 integration)
 
 ## 📋 Project Overview
 
@@ -38,30 +41,36 @@ FKS uses a **monorepo architecture** with Docker containers under `src/services/
 | **fks_data** | 8003 | Market data collection (CCXT), TimescaleDB storage | ✅ |
 | **fks_execution** | 8004 | Rust execution engine (ONLY talks to exchanges) | ⏸️ Runtime issue |
 | **fks_ninja** | 8005 | C# .NET bridge to NinjaTrader 8 for prop firms | ✅ |
-| **fks_ai** | 8006 | GPU ML/RAG: Ollama, regime detection, forecasting | ✅ |
+| **fks_ai** | 8006 | Multi-agent AI: LangGraph, Ollama, ChromaDB, 7 agents | ✅ Phase 6 complete |
 | **fks_web** | 3001 | Django/Vite web UI with Bootstrap 5 | ⏸️ Architecture review |
 
-### Current Status: Phase 5.6 Complete ✅ (Oct 30, 2025)
+### Current Status: Phase 6 Complete ✅ (Oct 31, 2025)
 
-**Latest Achievement**: Complete quality monitoring & observability system
-- ✅ **Phase 5.1**: EODHD API Integration - Fundamentals data collection
-- ✅ **Phase 5.2**: Feature Engineering - 63 technical features with TA-Lib
-- ✅ **Phase 5.3**: TimescaleDB Schema - 6 fundamentals hypertables
-- ✅ **Phase 5.4**: Redis Caching - 80-95% speedup on feature queries
-- ✅ **Phase 5.5**: Data Quality Validation - 4 validators (outlier, freshness, completeness, scoring)
-- ✅ **Phase 5.6**: Quality Monitoring - Prometheus + Grafana + Alerts + TimescaleDB
+**Latest Achievement**: Multi-agent AI system with LangGraph + Ollama + ChromaDB
+- ✅ **Phase 6.1**: Agentic Foundation - LangGraph, AgentState, ChromaDB memory
+- ✅ **Phase 6.2**: Multi-Agent Debate - 7 agents (4 analysts + 3 debaters)
+- ✅ **Phase 6.3**: Graph Orchestration - StateGraph with conditional routing
+- ✅ **Phase 6.4**: Testing & API - 88 tests (70 unit + 18 integration), 4 FastAPI endpoints
+
+**AI Capabilities**:
+- **7 Specialized Agents**: Technical, Sentiment, Macro, Risk analysts + Bull/Bear/Manager debaters
+- **StateGraph Pipeline**: Analysts → Debate → Manager → Signal → Reflection
+- **ChromaDB Memory**: Persistent decision storage with semantic search
+- **Risk Management**: Position sizing, stop-loss, take-profit calculation
+- **REST API**: 4 endpoints (analyze, debate, memory, status) with OpenAPI docs
 
 **Infrastructure**:
-- 15/16 services operational (93.75% health)
+- 16/16 services operational (100% health with fks_ai)
 - Database: PostgreSQL + TimescaleDB + pgvector + Redis
-- Monitoring: Prometheus (10 quality metrics) + Grafana (8-panel dashboard) + Alertmanager
-- Capabilities: EODHD API, 63-feature engineering, Redis caching, quality validation
+- AI: Ollama llama3.2:3b (local LLM), ChromaDB (memory), sentence-transformers
+- Monitoring: Prometheus + Grafana + Alertmanager
+- Tests: 276/276 passing (188 Phase 5 + 88 Phase 6)
 
-**Next Steps**: Phase 6 - Multi-Agent Foundation (LangGraph + Ollama + ChromaDB)
-- Establish LangGraph infrastructure for multi-agent system
-- Setup Ollama local LLM (llama3.2:3b)
-- Implement ChromaDB memory for agent context
-- Create Bull/Bear/Manager agent debate framework
+**Next Steps**: Phase 6 Deployment & Validation
+- Deploy fks_ai container with GPU support
+- Pull Ollama llama3.2:3b model
+- Run integration tests to validate <5s latency
+- Measure signal accuracy >60% on live data
 
 **Important**: When working with services, note that:
 - Code is in `src/services/[service_name]/src/` (e.g., `src/services/api/src/main.py`)

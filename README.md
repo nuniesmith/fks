@@ -5,8 +5,8 @@
 **FKS Main** is the orchestrator and monitoring hub for an **8-service microservices architecture**. It provides centralized authentication, service registry, health monitoring, and Celery Beat scheduling for the entire FKS trading ecosystem.
 
 > **Architecture**: Multi-repo microservices with FKS Main as orchestrator (October 2025)  
-> **Status**: Phase 1 Complete ✅ - Legacy monolith archived, clean orchestrator structure  
-> **See**: [`docs/SERVICE_CLEANUP_PLAN.md`](docs/SERVICE_CLEANUP_PLAN.md) for migration plan and [`archive/legacy_monolith/README.md`](archive/legacy_monolith/README.md) for archived code
+> **Status**: Phase 6 Complete ✅ - Multi-agent AI system with 7 specialized agents  
+> **See**: [`PHASE_6_QUICKSTART.md`](PHASE_6_QUICKSTART.md) for AI deployment guide
 
 ## 🎯 Microservices Architecture
 
@@ -45,11 +45,16 @@
   - Queries fks_ai for ML predictions and RAG insights
 
 **fks_ai** - AI/ML/RAG Service ([`repo/ai/`](https://github.com/nuniesmith/ai))
-- **Role**: GPU-accelerated machine learning and RAG intelligence
+- **Role**: Multi-agent trading intelligence with LangGraph + Ollama + ChromaDB
 - **Port**: 8006 (FastAPI)
 - **GPU**: CUDA-enabled for local LLM inference
+- **Phase 6 Complete** (Oct 31, 2025): 7 specialized agents, StateGraph orchestration, 88 tests
 - **Responsibilities**:
-  - Local LLM inference with Ollama/llama.cpp
+  - **Multi-Agent System**: 4 analysts (Technical, Sentiment, Macro, Risk) + 3 debaters (Bull, Bear, Manager)
+  - **StateGraph Pipeline**: Analysts → Debate → Manager → Signal → Reflection
+  - **ChromaDB Memory**: Persistent decision storage with semantic search
+  - **Risk Management**: Position sizing, stop-loss, take-profit calculation
+  - Local LLM inference with Ollama/llama.cpp (llama3.2:3b)
   - RAG system with pgvector semantic search
   - Embeddings generation (sentence-transformers + OpenAI fallback)
   - Document processing and chunking

@@ -4,6 +4,7 @@ Base Agent Factory for Multi-Agent Trading System
 Creates Ollama-based agents with configurable prompts and parameters.
 """
 
+import os
 from typing import Optional
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,7 +16,7 @@ def create_agent(
     system_prompt: str,
     model: str = "llama3.2:3b",
     temperature: float = 0.7,
-    base_url: str = "http://localhost:11434"
+    base_url: Optional[str] = None
 ) -> Runnable:
     """
     Factory function for creating specialized trading agents.
@@ -25,7 +26,7 @@ def create_agent(
         system_prompt: System prompt defining agent behavior and expertise
         model: Ollama model name (default: llama3.2:3b)
         temperature: Sampling temperature (0-1, higher = more creative)
-        base_url: Ollama API base URL
+        base_url: Ollama API base URL (defaults to OLLAMA_HOST env var or localhost)
         
     Returns:
         Configured LangChain Runnable (prompt | LLM chain)
@@ -38,6 +39,10 @@ def create_agent(
         ... )
         >>> response = await technical_agent.ainvoke({"input": "Analyze BTCUSDT"})
     """
+    # Use environment variable or fallback to localhost
+    if base_url is None:
+        base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    
     # Initialize Ollama LLM
     llm = ChatOllama(
         model=model,
@@ -60,7 +65,8 @@ def create_structured_agent(
     system_prompt: str,
     output_schema: Optional[dict] = None,
     model: str = "llama3.2:3b",
-    temperature: float = 0.7
+    temperature: float = 0.7,
+    base_url: Optional[str] = None
 ) -> Runnable:
     """
     Create agent with structured output (JSON schema validation).
@@ -71,6 +77,7 @@ def create_structured_agent(
         output_schema: Pydantic model or dict schema for structured output
         model: Ollama model name
         temperature: Sampling temperature
+        base_url: Ollama API base URL (defaults to OLLAMA_HOST env var or localhost)
         
     Returns:
         Configured agent with structured output parsing
@@ -78,9 +85,14 @@ def create_structured_agent(
     Note:
         Structured output requires Ollama >=0.3.0 and model support
     """
+    # Use environment variable or fallback to localhost
+    if base_url is None:
+        base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    
     llm = ChatOllama(
         model=model,
         temperature=temperature,
+        base_url=base_url,
         format="json" if output_schema else None
     )
     

@@ -32,6 +32,7 @@ from agents.debaters.bear import bear_agent
 from agents.debaters.manager import manager_agent
 from memory import TradingMemory
 from processors.signal_processor import SignalProcessor
+from evaluators.llm_judge import LLMJudge
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +49,8 @@ app = FastAPI(
 try:
     trading_memory = TradingMemory()
     signal_processor = SignalProcessor()
-    logger.info("Initialized TradingMemory and SignalProcessor")
+    llm_judge = LLMJudge()
+    logger.info("Initialized TradingMemory, SignalProcessor, and LLMJudge")
 except Exception as e:
     logger.error(f"Failed to initialize components: {e}")
     trading_memory = None
@@ -128,6 +130,103 @@ class AgentStatusResponse(BaseModel):
     agents: Dict[str, Dict[str, Any]]
     memory_status: Dict[str, Any]
     uptime_ms: float
+
+
+# LLM-Judge Request/Response Models (Phase 7.2)
+
+class ConsistencyCheckRequest(BaseModel):
+    """Request for factual consistency validation"""
+    agent_name: str = Field(..., description="Name of agent to validate")
+    agent_claim: str = Field(..., description="Agent's claim to verify")
+    market_data: Dict[str, Any] = Field(..., description="Ground truth market data")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "agent_name": "Technical",
+                "agent_claim": "BTC price is 67234 with RSI at 58.5, indicating neutral momentum",
+                "market_data": {
+                    "symbol": "BTCUSDT",
+                    "price": 67234.50,
+                    "rsi": 58.5,
+                    "timestamp": "2025-10-31T12:00:00Z"
+                }
+            }
+        }
+
+
+class DiscrepancyCheckRequest(BaseModel):
+    """Request for prediction discrepancy detection"""
+    agent_analysis: str = Field(..., description="Agent's prediction/analysis")
+    actual_outcome: float = Field(..., description="Actual price change (%)")
+    context: Optional[Dict[str, Any]] = Field(default=None, description="Additional context")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "agent_analysis": "Strong bullish momentum expected, RSI showing oversold recovery",
+                "actual_outcome": -5.2,
+                "context": {
+                    "timeframe": "24h",
+                    "symbol": "BTCUSDT"
+                }
+            }
+        }
+
+
+class BiasCheckRequest(BaseModel):
+    """Request for systematic bias analysis"""
+    agent_name: str = Field(..., description="Name of agent to analyze")
+    agent_decisions: List[Dict[str, Any]] = Field(..., description="Historical decisions")
+    market_outcomes: List[float] = Field(..., description="Actual price changes (%)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "agent_name": "Bull",
+                "agent_decisions": [
+                    {"prediction": "bullish", "confidence": 0.8},
+                    {"prediction": "bullish", "confidence": 0.9},
+                    {"prediction": "bullish", "confidence": 0.7}
+                ],
+                "market_outcomes": [-2.0, 3.5, -1.5]
+            }
+        }
+
+
+class ConsistencyCheckResponse(BaseModel):
+    """Response for consistency validation"""
+    is_consistent: bool
+    confidence: float
+    severity: str
+    explanation: str
+    discrepancies: List[str]
+    agent_claim: str
+    timestamp: datetime
+
+
+class DiscrepancyCheckResponse(BaseModel):
+    """Response for discrepancy detection"""
+    has_discrepancy: bool
+    severity: str
+    error_type: Optional[str]
+    explanation: str
+    confidence: float
+    timestamp: datetime
+
+
+class BiasCheckResponse(BaseModel):
+    """Response for bias analysis"""
+    has_bias: bool
+    bias_type: str
+    bias_strength: float
+    sample_size: int
+    accuracy_rate: float
+    false_positive_rate: float
+    false_negative_rate: float
+    explanation: str
+    recommendations: List[str]
+    timestamp: datetime
 
 
 # API Endpoints
@@ -306,13 +405,17 @@ async def agent_status():
     agents_status = {}
     overall_status = "healthy"
     
-    # Test all agents with minimal state
-    test_state = create_initial_state("BTCUSDT", {
-        "price": 50000.0,
-        "rsi": 50.0,
-        "macd": 0.0,
-        "regime": "neutral"
-    })
+    # Test all agents with proper input format
+    # Agents expect {"input": "..."} not full AgentState
+    test_prompts = {
+        "technical": "Quick health check: Analyze BTCUSDT at $50000 with RSI 50",
+        "sentiment": "Quick health check: Assess market sentiment for BTCUSDT",
+        "macro": "Quick health check: Evaluate macro conditions for crypto",
+        "risk": "Quick health check: Calculate position size for BTCUSDT",
+        "bull": "Quick health check: Provide bullish case for BTCUSDT",
+        "bear": "Quick health check: Provide bearish case for BTCUSDT",
+        "manager": "Quick health check: Synthesize a trading decision"
+    }
     
     # Test analyst agents
     analyst_agents = {
@@ -324,7 +427,10 @@ async def agent_status():
     
     for name, agent in analyst_agents.items():
         try:
-            result = await asyncio.wait_for(agent.ainvoke(test_state), timeout=5.0)
+            result = await asyncio.wait_for(
+                agent.ainvoke({"input": test_prompts[name]}), 
+                timeout=15.0  # Increased timeout for LLM inference
+            )
             agents_status[name] = {"status": "healthy", "response_type": type(result).__name__}
         except asyncio.TimeoutError:
             agents_status[name] = {"status": "timeout", "error": "Response timeout"}
@@ -342,7 +448,10 @@ async def agent_status():
     
     for name, agent in debate_agents.items():
         try:
-            result = await asyncio.wait_for(agent.ainvoke(test_state), timeout=5.0)
+            result = await asyncio.wait_for(
+                agent.ainvoke({"input": test_prompts[name]}), 
+                timeout=15.0  # Increased timeout for LLM inference
+            )
             agents_status[name] = {"status": "healthy", "response_type": type(result).__name__}
         except asyncio.TimeoutError:
             agents_status[name] = {"status": "timeout", "error": "Response timeout"}
@@ -382,6 +491,126 @@ async def agent_status():
     )
 
 
+# LLM-Judge Endpoints (Phase 7.2)
+
+@app.post("/ai/judge/consistency", response_model=ConsistencyCheckResponse)
+async def check_consistency(request: ConsistencyCheckRequest):
+    """
+    Validate factual consistency between agent claim and market data.
+    
+    Uses meta-LLM to verify if agent's claims match ground truth data.
+    Detects hallucinations, numerical mismatches, and logical inconsistencies.
+    
+    Returns:
+    - is_consistent: Boolean validation result
+    - confidence: Judge confidence (0-1)
+    - severity: low/medium/high/critical
+    - discrepancies: List of specific issues found
+    """
+    try:
+        logger.info(f"Checking consistency for {request.agent_name}")
+        
+        report = await llm_judge.verify_factual_consistency(
+            agent_name=request.agent_name,
+            agent_claim=request.agent_claim,
+            market_data=request.market_data
+        )
+        
+        return ConsistencyCheckResponse(
+            is_consistent=report.is_consistent,
+            confidence=report.confidence,
+            severity=report.severity,
+            explanation=report.explanation,
+            discrepancies=report.discrepancies,
+            agent_claim=request.agent_claim,
+            timestamp=report.timestamp
+        )
+    except Exception as e:
+        logger.error(f"Consistency check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ai/judge/discrepancy", response_model=DiscrepancyCheckResponse)
+async def check_discrepancy(request: DiscrepancyCheckRequest):
+    """
+    Detect discrepancies between agent analysis and actual outcomes.
+    
+    Compares agent predictions against real market movements to identify:
+    - Hallucinations (data not in reality)
+    - Misinterpretations (wrong conclusion from correct data)
+    - Logic errors (faulty reasoning)
+    
+    Returns:
+    - has_discrepancy: Whether significant mismatch exists
+    - severity: Impact level (low/medium/high/critical)
+    - error_type: Classification of the error
+    - explanation: Detailed analysis
+    """
+    try:
+        logger.info(f"Checking discrepancy for analysis: {request.agent_analysis[:50]}...")
+        
+        report = await llm_judge.detect_discrepancies(
+            agent_analysis=request.agent_analysis,
+            actual_outcome=request.actual_outcome,
+            context=request.context
+        )
+        
+        return DiscrepancyCheckResponse(
+            has_discrepancy=report.has_discrepancy,
+            severity=report.severity,
+            error_type=report.error_type,
+            explanation=report.explanation,
+            confidence=report.confidence,
+            timestamp=report.timestamp
+        )
+    except Exception as e:
+        logger.error(f"Discrepancy check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ai/judge/bias", response_model=BiasCheckResponse)
+async def check_bias(request: BiasCheckRequest):
+    """
+    Analyze systematic bias in agent decision-making patterns.
+    
+    Examines historical decisions vs outcomes to detect:
+    - Over-optimism (bull bias)
+    - Over-pessimism (bear bias)
+    - False positive/negative patterns
+    
+    Returns:
+    - has_bias: Whether systematic bias detected
+    - bias_type: optimistic/pessimistic/neutral
+    - bias_strength: 0-1 (how strong)
+    - accuracy_rate: Percentage of correct predictions
+    - recommendations: Mitigation strategies
+    """
+    try:
+        logger.info(f"Checking bias for {request.agent_name} ({len(request.agent_decisions)} decisions)")
+        
+        report = await llm_judge.analyze_bias(
+            agent_name=request.agent_name,
+            agent_decisions=request.agent_decisions,
+            market_outcomes=request.market_outcomes
+        )
+        
+        return BiasCheckResponse(
+            has_bias=report.has_bias,
+            bias_type=report.bias_type,
+            bias_strength=report.bias_strength,
+            sample_size=report.sample_size,
+            accuracy_rate=report.accuracy_rate,
+            false_positive_rate=report.false_positive_rate,
+            false_negative_rate=report.false_negative_rate,
+            explanation=report.explanation,
+            recommendations=report.recommendations,
+            timestamp=report.timestamp
+        )
+    except Exception as e:
+        logger.error(f"Bias check failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health")
 async def health_check():
     """Simple health check endpoint for Docker/Kubernetes"""
@@ -408,7 +637,10 @@ async def root():
                 "analyze": "POST /ai/analyze - Full multi-agent analysis",
                 "debate": "POST /ai/debate - Bull/Bear debate only",
                 "memory": "GET /ai/memory/query - Query past decisions",
-                "status": "GET /ai/agents/status - Agent health check"
+                "status": "GET /ai/agents/status - Agent health check",
+                "judge_consistency": "POST /ai/judge/consistency - Validate factual accuracy",
+                "judge_discrepancy": "POST /ai/judge/discrepancy - Detect prediction errors",
+                "judge_bias": "POST /ai/judge/bias - Analyze systematic bias"
             }
         }
     )

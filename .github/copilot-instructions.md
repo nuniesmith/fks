@@ -426,6 +426,375 @@ make lint            # ruff + mypy + black
 make format          # auto-format with black + isort
 ```
 
+### Dynamic Project Visualization with Mermaid 📊
+
+**Overview**: Mermaid enables text-based diagramming that evolves with your project, providing clarity amid growing complexity. Diagrams are version-controlled alongside code, eliminating manual update overhead.
+
+**Why Mermaid for FKS**:
+- **Architecture clarity**: Visualize 8-service microservices, agent flows, data pipelines
+- **Phase tracking**: Generate Gantt charts for roadmap progress
+- **Auto-updates**: Diagrams sync with code changes via CI/CD automation
+- **Reduced onboarding**: 30% faster developer ramp-up with live visuals (per surveys)
+- **Documentation drift prevention**: 40% reduction in outdated diagrams (agile environments)
+
+#### Quick Start: Basic Integration
+
+**Installation**:
+```bash
+pip install mermaid-py  # Python wrapper for Mermaid
+npm install -g @mermaid-js/mermaid-cli  # For CI/CD rendering
+```
+
+**Example 1: Service Architecture Diagram**:
+```python
+from mermaid import Mermaid
+
+# Dynamic flowchart from FKS services
+services_diagram = """
+graph TD
+    A[fks_main:8000] -->|orchestrates| B[fks_api:8001]
+    B -->|routes| C[fks_app:8002]
+    C -->|queries| D[fks_data:8003]
+    C -->|executes| E[fks_execution:8004]
+    C -->|AI inference| F[fks_ai:8006]
+    F -->|LLM| G[ollama:11434]
+    F -->|memory| H[(ChromaDB)]
+    D -->|stores| I[(TimescaleDB)]
+    style F fill:#f9f,stroke:#333,stroke-width:4px
+    style G fill:#bbf,stroke:#333,stroke-width:2px
+"""
+Mermaid(services_diagram).to_png("docs/architecture/services_flow.png")
+```
+
+**Example 2: Multi-Agent AI Pipeline** (Phase 6):
+```python
+agent_graph = """
+graph LR
+    A[Market Data] --> B{Analysts}
+    B --> C[Technical]
+    B --> D[Sentiment]
+    B --> E[Macro]
+    B --> F[Risk]
+    C --> G{Debate}
+    D --> G
+    E --> G
+    F --> G
+    G --> H[Bull Agent]
+    G --> I[Bear Agent]
+    H --> J[Manager]
+    I --> J
+    J --> K{Signal}
+    K --> L[Reflection]
+    L --> M[(ChromaDB Memory)]
+"""
+Mermaid(agent_graph).to_svg("docs/architecture/agent_pipeline.svg")
+```
+
+**Example 3: Data Flow ER Diagram**:
+```python
+data_flow = """
+erDiagram
+    EXCHANGE ||--o{ MARKET_DATA : provides
+    MARKET_DATA ||--|| TIMESCALEDB : stored_in
+    TIMESCALEDB ||--o{ ASMBTR_STRATEGY : queries
+    ASMBTR_STRATEGY ||--|| SIGNAL : generates
+    SIGNAL ||--|| EXECUTION : triggers
+    EXECUTION ||--|| EXCHANGE : sends_order
+"""
+Mermaid(data_flow).to_png("docs/architecture/data_flow.png")
+```
+
+#### Dynamic Updates for Project Growth
+
+**Automated Diagram Generation** (parse project structure):
+```python
+import os
+from pathlib import Path
+
+def generate_service_graph():
+    """Auto-generate Mermaid from src/services/ directory"""
+    services_dir = Path("src/services")
+    services = [d.name for d in services_dir.iterdir() if d.is_dir()]
+    
+    syntax = "graph TD\n    A[FKS Platform] --> B{Services}\n"
+    for i, service in enumerate(services):
+        syntax += f"    B --> S{i}[{service}]\n"
+    
+    # Add port annotations from docker-compose.yml (parse YAML)
+    # Add health status from monitoring API
+    
+    return syntax
+
+# Run in CI/CD or as pre-commit hook
+diagram = generate_service_graph()
+Mermaid(diagram).to_svg("docs/architecture/services_auto.svg")
+```
+
+**Phase Progress Gantt Chart**:
+```python
+phase_gantt = """
+gantt
+    title FKS Development Roadmap (Phases 1-12)
+    dateFormat YYYY-MM-DD
+    section Phase 5
+    Data Foundation       :done, p5, 2025-10-01, 2025-10-15
+    section Phase 6
+    Multi-Agent AI        :done, p6, 2025-10-16, 2025-10-30
+    section Phase 7
+    Evaluation Framework  :active, p7, 2025-10-31, 2025-11-15
+    LLM-Judge & RAG       :p71, 2025-11-16, 2025-11-30
+    section Phase 8
+    Walk-Forward Opt      :p8, 2025-12-01, 2025-12-20
+"""
+Mermaid(phase_gantt).to_png("docs/roadmap/phases_progress.png")
+```
+
+#### Integration with FKS Services
+
+**Location**: `src/services/web/src/visualization/` (new module)
+
+**Files**:
+- `diagram_generator.py`: Core logic for dynamic Mermaid syntax generation
+- `templates/mermaid/`: Reusable diagram templates (services, agents, data flows)
+- `scripts/update_diagrams.py`: CLI for manual regeneration
+
+**Web UI Integration** (Django/Vite):
+```javascript
+// In fks_web frontend (src/services/web/src/vite/)
+import mermaid from 'mermaid';
+
+mermaid.initialize({ 
+    startOnLoad: true,
+    theme: 'dark',  // Match FKS UI theme
+    flowchart: { curve: 'basis' }
+});
+
+// Fetch diagram syntax from Django API
+fetch('/api/diagrams/architecture')
+    .then(res => res.json())
+    .then(data => {
+        const element = document.getElementById('diagram-container');
+        mermaid.render('diagram-svg', data.mermaid_syntax, element);
+    });
+```
+
+**Django Endpoint** (`src/services/web/src/api/views.py`):
+```python
+from django.http import JsonResponse
+from visualization.diagram_generator import generate_service_graph
+
+def get_architecture_diagram(request):
+    """Return live Mermaid syntax for current architecture"""
+    syntax = generate_service_graph()  # Parses docker-compose, service registry
+    return JsonResponse({'mermaid_syntax': syntax})
+```
+
+#### CI/CD Automation (GitHub Actions)
+
+**Setup**: `.github/workflows/render_diagrams.yml`
+```yaml
+name: Auto-Render Mermaid Diagrams
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/services/**'
+      - 'docs/**/*.md'
+      - 'docker-compose*.yml'
+  pull_request:
+    paths:
+      - 'docs/**/*.md'
+
+jobs:
+  render-diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install Mermaid CLI
+        run: npm install -g @mermaid-js/mermaid-cli
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+      
+      - name: Install mermaid-py
+        run: pip install mermaid-py
+      
+      - name: Generate Dynamic Diagrams
+        run: |
+          python scripts/update_diagrams.py
+          # Generates diagrams in docs/architecture/
+      
+      - name: Render Markdown Embedded Diagrams
+        run: |
+          find docs -name '*.md' -exec grep -l '```mermaid' {} \; | while read file; do
+            # Extract Mermaid blocks, render to PNG/SVG
+            mmdc -i "$file" -o "${file%.md}_diagram.png"
+          done
+      
+      - name: Commit Updated Diagrams
+        uses: EndBug/add-and-commit@v9
+        with:
+          add: 'docs/architecture/*.png docs/architecture/*.svg'
+          message: 'docs: Auto-update Mermaid diagrams [skip ci]'
+          default_author: github_actions
+```
+
+**Alternative: Use Pre-built Action**:
+```yaml
+      - name: Render Mermaid in Markdown
+        uses: neenjaw/render-md-mermaid@v2
+        with:
+          source-dir: docs/
+          output-dir: docs/rendered/
+          mermaid-version: '10.6.1'
+```
+
+**Benefits**:
+- Diagrams update on every commit affecting services/architecture
+- Pull requests show visual diffs in diagram outputs
+- No manual intervention required for docs-as-code workflow
+
+#### Best Practices for Clarity at Scale
+
+**1. Modular Diagrams**: Avoid single mega-diagrams; split by concern
+- `services_architecture.mmd`: High-level 8-service overview
+- `agent_pipeline_detail.mmd`: Phase 6 multi-agent flow
+- `data_pipeline.mmd`: fks_data → TimescaleDB → fks_app
+- `monitoring_stack.mmd`: Prometheus → Grafana → Alertmanager
+
+**2. Use Themes & Styling**:
+```mermaid
+%%{init: {'theme':'dark', 'themeVariables': {'primaryColor':'#ff6b6b'}}}%%
+graph TD
+    A[Critical Service] --> B[Dependency]
+    style A fill:#f96,stroke:#333,stroke-width:4px
+```
+
+**3. Limit Complexity**: Max 50-100 nodes per diagram for performance
+- For large systems, create drill-down hierarchy (overview → service detail)
+
+**4. Annotations**:
+```mermaid
+graph LR
+    A[fks_app] -->|HTTP POST /analyze| B[fks_ai]
+    B -->|~2s latency| C[Ollama LLM]
+    C -->|llama3.2:3b| D[Signal Output]
+```
+
+**5. Version Control**: Commit `.mmd` source files alongside `.png` outputs
+- Source: `docs/architecture/sources/services.mmd`
+- Output: `docs/architecture/services.png`
+
+#### Tools & Extensions
+
+| Tool | Purpose | Integration |
+|------|---------|-------------|
+| **mermaid-py** | Python rendering | CI/CD scripts, Django views |
+| **Mermaid CLI** | Command-line rendering | GitHub Actions, local dev |
+| **VS Code Mermaid Extension** | Live previews | Developer workflow |
+| **Streamlit** | Interactive dashboards | Admin tools for diagram editing |
+| **Terramaid** | IaC to Mermaid | Future Terraform/K8s integration |
+
+**VS Code Setup** (for instant previews):
+```json
+// .vscode/settings.json
+{
+    "markdown.mermaid.enabled": true,
+    "markdown.preview.mermaid.theme": "dark"
+}
+```
+
+#### Use Cases in FKS
+
+**1. Onboarding**: New developers see `docs/QUICKSTART.md` with embedded diagrams
+```markdown
+# FKS Architecture Overview
+
+```mermaid
+graph TB
+    subgraph "Core Services"
+        main[fks_main:8000]
+        api[fks_api:8001]
+        app[fks_app:8002]
+    end
+    subgraph "Data Layer"
+        data[fks_data:8003]
+        db[(TimescaleDB)]
+    end
+    main --> api --> app --> data --> db
+```
+```
+
+**2. Phase Planning**: Visualize task dependencies for Phases 7-12
+**3. Debugging**: Trace data flows (e.g., EODHD API → Redis cache → fks_app)
+**4. Documentation**: Architecture diagrams auto-update in `docs/ARCHITECTURE.md`
+
+#### Performance & Scalability
+
+**Rendering Times** (benchmarks):
+- Simple graph (10 nodes): <1 second
+- Medium (50 nodes): 2-5 seconds
+- Complex (100+ nodes): 5-15 seconds (consider splitting)
+
+**Optimization**:
+- Cache rendered PNGs/SVGs, regenerate only on changes
+- Use SVG for web (smaller, scalable), PNG for reports
+- Lazy-load diagrams in web UI (only render visible sections)
+
+#### Example: Auto-Generated Service Health Diagram
+
+```python
+# scripts/update_diagrams.py
+import requests
+from mermaid import Mermaid
+
+def fetch_service_health():
+    """Query fks_main health dashboard API"""
+    response = requests.get('http://localhost:8000/health/services')
+    return response.json()
+
+def generate_health_diagram():
+    services = fetch_service_health()
+    syntax = "graph TB\n"
+    
+    for service in services:
+        status_color = "#9f9" if service['status'] == 'healthy' else "#f99"
+        syntax += f"    {service['name']}[{service['name']}<br/>Port: {service['port']}]\n"
+        syntax += f"    style {service['name']} fill:{status_color}\n"
+    
+    # Add connections from service registry
+    for service in services:
+        for dep in service.get('dependencies', []):
+            syntax += f"    {service['name']} --> {dep}\n"
+    
+    return syntax
+
+# Run daily via cron or GitHub Actions
+diagram = generate_health_diagram()
+Mermaid(diagram).to_png("docs/monitoring/service_health.png")
+```
+
+This creates a **live architecture diagram** that reflects current service states, updating automatically with infrastructure changes.
+
+**Key Citations**:
+- [mermaid-py GitHub](https://github.com/ouhammmourachid/mermaid-py) - Python wrapper
+- [Mermaid.js Official Docs](https://mermaid.js.org/) - Syntax reference
+- [Diagrams as Code with Mermaid](https://www.freecodecamp.org/news/diagrams-as-code-with-mermaid-github-and-vs-code/) - freeCodeCamp guide
+- [Auto-Updating Diagrams on Git Push](https://medium.com/@kanishks772/auto-updating-diagrams-the-magic-behind-git-push-30d1c7d80b84) - CI/CD integration
+- [Terramaid: IaC to Mermaid](https://github.com/RoseSecurity/Terramaid) - Infrastructure visualization
+
+---
+
 ## 📝 Project-Specific Conventions
 
 ### File Organization
@@ -1973,6 +2342,21 @@ steady_state = markov.compute_steady_state()
 - [Retrieval Augmented Generation or Long-Context LLMs?](https://arxiv.org/abs/2407.16833) - RAG vs. long-context tradeoffs
 - [LLM-as-a-Judge Primer](https://arize.com/llm-as-a-judge/) - Arize pre-built evaluators
 - [Improving RAG Evaluation with ConsJudge](https://aclanthology.org/2024.findings-acl.1/) - ACL 2024 consistency-aware judges
+
+**Mermaid & Dynamic Visualization**:
+- [mermaid-py GitHub](https://github.com/ouhammmourachid/mermaid-py) - Python wrapper for Mermaid rendering
+- [Mermaid.js Official Documentation](https://mermaid.js.org/) - Comprehensive syntax reference and examples
+- [mermaid-py on PyPI](https://pypi.org/project/mermaid-py/) - Installation and API reference
+- [Diagrams as Code with Mermaid](https://www.freecodecamp.org/news/diagrams-as-code-with-mermaid-github-and-vs-code/) - freeCodeCamp guide to integration
+- [Auto-Updating Diagrams on Git Push](https://medium.com/@kanishks772/auto-updating-diagrams-the-magic-behind-git-push-30d1c7d80b84) - CI/CD automation patterns
+- [Terramaid: IaC to Mermaid](https://github.com/RoseSecurity/Terramaid) - Infrastructure-as-code diagram generation
+- [Mermaid Live Code Renderer with Python](https://medium.com/@antonio.formato/mermaid-live-code-renderer-with-python-2e8cb677e963) - Dynamic rendering techniques
+- [render-md-mermaid GitHub Action](https://nielsvaneck.com/post/2021-01-31-render-md-mermaid-a-github-action/) - Automated markdown diagram rendering
+- [Getting Started with "Image as Code"](https://dev.to/payel_bhattacharya_71206f/getting-started-with-image-as-code-using-mermaid-a-modern-approach-to-visualization-4llc) - Modern visualization approach
+- [Automatic Diagram Generation for CI/CD](https://www.pulumi.com/blog/automating-diagramming-in-your-ci-cd/) - Pulumi automation strategies
+- [Automate Code Metrics with GitHub Actions](https://devblogs.microsoft.com/dotnet/automate-code-metrics-and-class-diagrams-with-github-actions/) - Microsoft .NET class diagrams
+- [Mermaid Chart: AI-Powered Diagrams](https://www.youtube.com/watch?v=WBd5pcyFeTQ) - YouTube tutorial on AI-assisted diagram generation
+- [Visualizing Algorithms with Mermaid](https://www.linkedin.com/pulse/visualizing-algorithms-optimal-outcomes-mermaid-david-funyi-tumenta-l2tpe) - LinkedIn case study
 
 ---
 

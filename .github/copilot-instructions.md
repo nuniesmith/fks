@@ -1406,12 +1406,24 @@ docker-compose exec fks_ai ollama run llama3.2:3b-q4_k_m "Analyze BTC sentiment"
 ---
 
 #### Task 7.2.2: LLM-Judge Factual Consistency Audits ✅ COMPLETE
-**Description**: Create judge agent using Ollama to score outputs for factual consistency, discrepancies, and bias. Chain with ground truth validator.
+**Description**: Create judge agent using Ollama to score outputs for factual consistency, discrepancies, and bias. Chain with ground truth validator. LLM-Judge leverages one LLM to evaluate outputs from another, automating consistency checks on strategy recommendations, market forecasts, and trading signals.
+
+**Core Concept**: LLM-Judge acts as a "second opinion" mechanism, simulating debate-like reasoning where a judge model scrutinizes primary outputs against factual sources (e.g., earnings reports, SEC filings, on-chain metrics). Research shows 15-30% improvement in factual consistency over standalone inference.
 
 **Implementation**:
 - Location: `src/services/ai/src/evaluators/llm_judge.py`
 - Methods: `verify_factual_consistency()`, `detect_discrepancies()`, `analyze_bias()`
 - API: POST `/ai/judge/{consistency,discrepancy,bias}`
+- **Judge Architecture**:
+  - Single-judge (one LLM evaluator) for speed
+  - Multi-judge ensemble for consensus on controversial predictions
+  - Prompt-based evaluation with trading-specific rubrics
+
+**Key Evaluation Criteria**:
+- **Factual Accuracy**: Match outputs to real-time data (e.g., EODHD market data, BLS CPI)
+- **Logical Coherence**: Ensure signal reasoning follows market realities
+- **Neutrality**: Detect sentiment bias in market analyses
+- **Compliance**: Avoid market manipulation claims, align with SEC guidelines
 
 **Dependencies**:
 - Phase 7.2 complete
@@ -1419,9 +1431,223 @@ docker-compose exec fks_ai ollama run llama3.2:3b-q4_k_m "Analyze BTC sentiment"
 
 **Effort**: 5-10 days
 
-**Rationale**: Anthropic research shows judge systems improve reliability by 30%, addressing hallucination risks in agent reasoning.
+**Rationale**: Anthropic research shows judge systems improve reliability by 30%, addressing hallucination risks in agent reasoning. In financial contexts, reduces errors in volatile environments where inaccurate data could lead to significant losses. AWS benchmarks show 25% reduction in trading signal errors with multi-perspective validation.
 
 **Status**: ✅ Complete (Oct 31, 2025) - 592 lines, 3 endpoints, 20+ tests
+
+---
+
+#### Task 7.2.3: RAG-Enhanced LLM-Judge (Expansion) 🎯 RECOMMENDED
+**Description**: Integrate Retrieval-Augmented Generation (RAG) with existing LLM-Judge to provide contextual evidence from external sources (market data, SEC filings, economic indicators) before rendering judgments.
+
+**Core Concept**: RAG addresses judge LLMs relying solely on parametric knowledge by introducing a retrieval step using vector databases. Judge retrieves relevant documents/data before evaluation, reducing hallucinations by 20-30% and improving agreement with human judges from 70% to 85%+.
+
+**Implementation**:
+- Location: `src/services/ai/src/evaluators/rag_judge.py` (new)
+- Architecture:
+  ```python
+  # RAG-Judge Pipeline
+  1. Primary model generates output (e.g., buy/sell signal)
+  2. RAG retrieval: Query ChromaDB/Pinecone for relevant context
+     - Market reports (EODHD API)
+     - SEC filings (EDGAR database)
+     - Economic indicators (BLS CPI, Fed rates)
+  3. Judge LLM evaluates with retrieved context
+  4. Output: Consistency score + evidence citations
+  ```
+
+**Retrieval Layer**:
+- Vector DB: ChromaDB (existing) or Pinecone for indexing market documents
+- Embeddings: sentence-transformers (existing) for cosine similarity
+- Query modes:
+  - Keyword search: Exact matches (ticker symbols, dates)
+  - Semantic search: Broader context (sentiment analysis, regime shifts)
+- Top-k retrieval: 3-5 most relevant chunks per evaluation
+
+**Judge Prompting Template**:
+```python
+prompt = """
+Given retrieved context:
+{chunks}
+
+Evaluate if the trading signal/output:
+{agent_output}
+
+is factually consistent based on:
+1. Accuracy: Does it match retrieved data?
+2. Completeness: Covers key factors from context?
+3. Neutrality: Avoids bias/manipulation?
+
+Score: [0-10]
+Explanation: [cite specific chunks]
+"""
+```
+
+**Integration Points**:
+- Chain with existing `llm_judge.py`: RAG as preprocessing step
+- Connect to ground truth validator (Phase 7.3) for cross-verification
+- Multi-judge ensemble: GPT-4 + Claude + Ollama vote with shared RAG context
+
+**Use Cases in Trading**:
+- **Signal Verification**: Validate ASMBTR predictions against historical volatility data
+- **Regime Detection**: Verify bull/bear shifts against CPI reports, unemployment data
+- **Macro Analysis**: Cross-check forecasts with retrieved Fed meeting minutes
+- **Earnings Audits**: Compare sentiment analysis to actual SEC 10-K filings
+
+**Dependencies**:
+- Phase 7.2 complete (LLM-Judge base)
+- ChromaDB operational (Phase 6)
+- EODHD adapter (Phase 5)
+- Vector search infrastructure
+
+**Effort**: 7-12 days
+- Days 1-3: RAG retrieval layer (ChromaDB indexing, embedding pipeline)
+- Days 4-6: Judge prompt engineering with context injection
+- Days 7-9: Integration testing on historical trading signals
+- Days 10-12: Meta-evaluation against human expert judgments
+
+**Expected Impact**:
+- Precision improvement: 10-20% based on Snowflake/Evidently AI benchmarks
+- Reduced manual reviews: 80% reduction in compliance audits (Galileo AI)
+- Hallucination reduction: 20-30% via grounded context
+- Latency: <3s per judgment with optimized retrieval
+
+**Acceptance Criteria**:
+- [ ] RAG pipeline retrieves relevant context in <1s (top-5 chunks)
+- [ ] Judge outputs include evidence citations from retrieved documents
+- [ ] Precision vs. human experts: ≥80% agreement on test set
+- [ ] Integration tests: 20+ scenarios (regime shifts, earnings surprises)
+- [ ] Grafana dashboard: RAG retrieval quality, judge latency metrics
+
+**Best Practices**:
+- Hybrid retrieval: Combine keyword (exact) + semantic (context)
+- Chunk size: 256-512 tokens for trading docs (balance context vs. noise)
+- Irrelevant filtering: Use reranking models (e.g., Cohere rerank) to reduce noise
+- Primary sources: Prioritize SEC filings, BLS data over news articles
+- Human-in-loop: Meta-evaluation every 100 judgments for drift detection
+
+**Challenges & Mitigations**:
+| Challenge | Mitigation |
+|-----------|------------|
+| Retrieval quality (irrelevant chunks) | Use reranking + metadata filters (date, ticker) |
+| Scalability (high latency) | Cache frequent queries, batch evaluations |
+| Cost overruns (API calls) | Use local Ollama for judge, limit to critical signals |
+| Bias from retrieved data | Diverse sources, temporal coverage (avoid recency bias) |
+
+**Python Implementation Sketch**:
+```python
+from evaluators.llm_judge import LLMJudge
+from memory.chroma_memory import ChromaMemory
+import requests
+
+class RAGJudge(LLMJudge):
+    def __init__(self, chroma_memory: ChromaMemory, eodhd_api_key: str):
+        super().__init__()
+        self.memory = chroma_memory
+        self.eodhd_key = eodhd_api_key
+    
+    def evaluate_with_rag(self, agent_output: str, symbol: str, 
+                          criteria: List[str]) -> Dict:
+        # 1. Retrieve context
+        query = f"Market data for {symbol}: {agent_output[:200]}"
+        chunks = self.memory.query(query, top_k=5)
+        
+        # 2. Fetch real-time data
+        fundamentals = self._fetch_eodhd_fundamentals(symbol)
+        
+        # 3. Build context
+        context = "\n".join([c['content'] for c in chunks])
+        context += f"\nReal-time PE: {fundamentals['PE']}, EPS: {fundamentals['EPS']}"
+        
+        # 4. Judge evaluation
+        prompt = self._build_judge_prompt(agent_output, context, criteria)
+        score, explanation = self._evaluate(prompt)
+        
+        return {
+            'score': score,
+            'explanation': explanation,
+            'evidence': [c['metadata'] for c in chunks],
+            'fundamentals': fundamentals
+        }
+```
+
+**Key Citations**:
+- [Evaluating RAG with LLM-as-a-Judge](https://www.nb-data.com/p/evaluating-rag-with-llm-as-a-judge) - Ragas framework
+- [LLM As a Judge: Tutorial](https://www.patronus.ai/llm-testing/llm-as-a-judge) - Patronus AI best practices
+- [ConsJudge: Improving RAG Evaluation](https://aclanthology.org/2024.findings-acl.1/) - ACL 2024 consistency-aware judges
+- [LLM-Judge for Financial Governance](https://galileo.ai/blog/llm-as-a-judge-the-missing-piece-in-financial-services-ai-governance) - 80% reduction in compliance reviews
+- [Snowflake RAG Benchmarking](https://www.snowflake.com/blog/llm-judge-rag-triad-metrics/) - 10-20% precision gains
+
+**Status**: 🎯 Recommended expansion (builds on Phase 7.2 foundation)
+
+---
+
+#### Task 7.2.4: Detailed LLM-Judge Subtasks (Modular Expansion) 📋 OPTIONAL
+**Description**: Break down LLM-Judge into granular subtasks for phased implementation, building on existing Phase 7.2 foundation.
+
+**Subtask Breakdown**:
+
+| Subtask ID | Description | Dependencies | Effort | Expected Impact |
+|------------|-------------|--------------|--------|-----------------|
+| 7.2.1.1 | Design Judge Prompt Templates | src/services/ai/src/agents/; PHASE_7_2 complete | 2-3d | Standardizes evaluations; 20% consistency improvement (AWS benchmarks) |
+| 7.2.1.2 | Integrate Meta-Evaluation Metrics | tests/unit/evaluation/; Add AUC, precision for judge outputs | 3-5d | Enables benchmarking vs. human audits; 15% reliability gains |
+| 7.2.1.3 | Add Debate Mechanism | graph/trading_graph.py; Chain bull/bear agents with judge | 4-7d | Multi-perspective validation; 25% error reduction in signals |
+| 7.2.1.4 | Production Safeguards (Token Limits) | api/routes.py; Monitor via Grafana | 2-4d | Prevents cost overruns; essential for scalable finance AI |
+| 7.2.1.5 | Fine-Tune for Trading Domain | Use Ollama; Train on SEC filings/market data | 5-10d | 30% domain accuracy boost (Galileo AI) |
+
+**Subtask 7.2.1.1: Judge Prompt Templates** (2-3 days)
+```python
+# Example templates for different evaluation types
+FACTUAL_CONSISTENCY_TEMPLATE = """
+Evaluate the following trading signal for factual accuracy:
+
+Signal: {agent_output}
+Symbol: {symbol}
+Timeframe: {timeframe}
+
+Check against:
+1. Historical price data: {price_context}
+2. Fundamental metrics: {fundamentals}
+3. Economic indicators: {macro_data}
+
+Score (0-10): 
+Explanation:
+Inconsistencies found:
+"""
+
+BIAS_DETECTION_TEMPLATE = """
+Analyze the following market analysis for sentiment bias:
+
+Analysis: {agent_output}
+
+Criteria:
+1. Over-optimistic language (bull bias)
+2. Over-pessimistic language (bear bias)
+3. Balanced presentation of risks/opportunities
+
+Bias Score (0=neutral, +10=extreme bull, -10=extreme bear):
+Evidence:
+"""
+```
+
+**Subtask 7.2.1.3: Debate Mechanism** (4-7 days)
+- Integrate with existing Bull/Bear/Manager agents from Phase 6
+- Judge evaluates debate outputs for factual grounding
+- Consensus scoring: Weight judge evaluation in manager decision
+
+**Meta-Evaluation Best Practices**:
+- Benchmark against human expert judgments (finance professionals)
+- Track judge-human agreement rates (target: ≥80%)
+- Regular calibration: Every 100 evaluations, sample for human review
+- A/B testing: Compare judge variants (single vs. ensemble, with/without RAG)
+
+**Production Deployment Considerations**:
+- Token budgets: Max 8K tokens per judgment (prevent cost explosions)
+- Rate limiting: Cap at 100 judgments/hour (prevent API overload)
+- Circuit breakers: Halt if judge accuracy drops below 70% agreement
+- Monitoring: Grafana dashboards for judge latency, accuracy trends, cost per judgment
+
+**Status**: 📋 Optional modular expansion (for teams needing granular milestones)
 
 ---
 
@@ -1632,15 +1858,17 @@ steady_state = markov.compute_steady_state()
 | 🔥 **P0** | 5.1.1 | 3-5d | High | 5 | Retrofit (drift detection) |
 | ⚡ **P1** | 6.1.1 | 5-8d | Medium | 6 | Retrofit (memory isolation) |
 | ⚡ **P1** | 8.1.1 | 6-9d | High | 8 | New (CPI-Gold hedge) |
+| ⚡ **P1** | 7.2.3 | 7-12d | High | 7 | New (RAG-Judge expansion) |
 | 📊 **P2** | 5.2.1 | 4-7d | Medium | 5 | Retrofit (signature kernels) |
 | 📊 **P2** | 6.2.1 | 3-6d | Medium | 6 | Retrofit (phase gates) |
 | 📊 **P2** | 8.2.1 | 4-7d | Medium | 8 | New (Markov modules) |
 | 🔧 **P3** | 6.3.1 | 4-7d | Low | 6 | Retrofit (Ollama quantization) |
 | 🔧 **P3** | 5.3.1 | 2-4d | Low | 5 | Retrofit (on-chain schema) |
+| 🔧 **P3** | 7.2.4 | 16-29d | Low | 7 | Optional (detailed judge subtasks) |
 | 🚀 **P4** | 9.1.1 | 5-8d | Medium | 9 | New (K8s auto-scale) |
 | 🌳 **P5** | 9.2.1 | 3-5d | Low | 9 | New (multi-repo templates) |
 
-**Total Effort**: 50-88 developer-days (~10-18 weeks with 1 developer, 5-9 weeks with 2)
+**Total Effort**: 73-122 developer-days (~15-24 weeks with 1 developer, 7-12 weeks with 2)
 
 ### Implementation Sequence
 
@@ -1681,6 +1909,8 @@ steady_state = markov.compute_steady_state()
 | 6.1.1 | fks_ai | - | LangGraph, ChromaDB, state management |
 | 6.2.1 | fks_ai | fks_api | MCP standards, error handling, gates |
 | 6.3.1 | fks_ai | ollama | GGUF, quantization, GPU optimization |
+| 7.2.3 | fks_ai | fks_data | RAG pipelines, ChromaDB, embeddings, EODHD API |
+| 7.2.4 | fks_ai | fks_app | Prompt engineering, meta-eval, debate mechanisms |
 | 7.4.1 | fks_app | fks_data | Optuna, WFO, backtesting |
 | 8.1.1 | fks_app | fks_data | APIs (BLS, yfinance), hedging theory |
 | 8.2.1 | fks_app | notebooks | Markov chains, linear algebra, stats |
@@ -1727,6 +1957,22 @@ steady_state = markov.compute_steady_state()
 - Anthropic: Claude Judge Systems (30% Reliability Improvement)
 - Stanford ML Group: Statistical Corrections in Model Evaluation
 - Uber Engineering: Monorepo Lessons at Scale
+
+**LLM-Judge & RAG Evaluation**:
+- [The Rise of Agent-as-a-Judge Evaluation for LLMs](https://arxiv.org/html/2508.02994v1) - Multi-agent judge architectures
+- [LLM-as-a-judge for enterprises: evaluate model alignment at scale](https://snorkel.ai/llm-as-judge-for-enterprises/) - Snorkel AI enterprise frameworks
+- [Improve factual consistency with LLM Debates](https://aws.amazon.com/blogs/machine-learning/improve-factual-consistency-with-llm-debates/) - AWS ML debate mechanisms
+- [LLM-as-a-Judge: Essential AI Governance for Financial Services](https://galileo.ai/blog/llm-as-a-judge-the-missing-piece-in-financial-services-ai-governance) - Financial compliance audits
+- [Using Large Language Models for Automated Evaluation](https://air-governance-framework.finos.org/mitigations/mi-15_using-large-language-models-for-automated-evaluation-llm-as-a-judge-.html) - FINOS governance framework
+- [LLMs-as-Judges: A Comprehensive Survey](https://arxiv.org/html/2412.05579v2) - 5-perspective categorization
+- [Ensuring AI trustworthiness using LLM as a judge](https://dialonce.ai/en/blog-ai/trends/ensuring-ai-trustworthiness-llm-judge.html) - Trust mechanisms
+- [Building Reliable LLM-as-a-Judge Systems](https://dzone.com/articles/llm-as-a-judge-ai-evaluation) - DZone best practices
+- [Evaluating RAG with LLM-as-a-Judge](https://www.nb-data.com/p/evaluating-rag-with-llm-as-a-judge) - Ragas framework
+- [LLM As a Judge: Tutorial and Best Practices](https://www.patronus.ai/llm-testing/llm-as-a-judge) - Patronus AI implementation
+- [LLM-as-a-judge: a complete guide](https://www.evidentlyai.com/llm-guide/llm-as-a-judge) - Evidently AI hybrid retrieval
+- [Retrieval Augmented Generation or Long-Context LLMs?](https://arxiv.org/abs/2407.16833) - RAG vs. long-context tradeoffs
+- [LLM-as-a-Judge Primer](https://arize.com/llm-as-a-judge/) - Arize pre-built evaluators
+- [Improving RAG Evaluation with ConsJudge](https://aclanthology.org/2024.findings-acl.1/) - ACL 2024 consistency-aware judges
 
 ---
 

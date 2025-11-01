@@ -611,6 +611,163 @@ async def check_bias(request: BiasCheckRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# Ground Truth Validation Endpoints (Phase 7.3)
+# ============================================================================
+
+from evaluators.ground_truth import GroundTruthValidator, ValidationResult
+
+
+class GroundTruthRequest(BaseModel):
+    """Request model for ground truth validation"""
+    agent_name: str = Field(..., description="Name of agent to validate")
+    symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT)")
+    start_date: str = Field(..., description="Start date (ISO format: YYYY-MM-DD)")
+    end_date: str = Field(..., description="End date (ISO format: YYYY-MM-DD)")
+    timeframe: str = Field(default="1h", description="Timeframe (e.g., 1h, 4h, 1d)")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "agent_name": "technical_analyst",
+                "symbol": "BTCUSDT",
+                "start_date": "2024-10-01",
+                "end_date": "2024-10-31",
+                "timeframe": "1h"
+            }
+        }
+
+
+class GroundTruthResponse(BaseModel):
+    """Response model for ground truth validation"""
+    agent_name: str
+    symbol: str
+    start_date: str
+    end_date: str
+    timeframe: str
+    total_predictions: int
+    total_optimal_trades: int
+    true_positives: int
+    false_positives: int
+    true_negatives: int
+    false_negatives: int
+    accuracy: float
+    precision: float
+    recall: float
+    f1_score: float
+    confusion_matrix: List[List[int]]
+    agent_total_profit_percent: float
+    optimal_total_profit_percent: float
+    efficiency_ratio: float
+    correct_predictions: int
+    incorrect_predictions: int
+    missed_opportunities: int
+    avg_confidence_correct: float
+    avg_confidence_incorrect: float
+    prediction_distribution: Dict[str, int]
+
+
+# Initialize ground truth validator (global instance)
+try:
+    ground_truth_validator = GroundTruthValidator(
+        min_confidence=0.6,
+        profit_threshold=2.0,
+        slippage_percent=0.1,
+        fee_percent=0.1
+    )
+    logger.info("Initialized GroundTruthValidator")
+except Exception as e:
+    logger.error(f"Failed to initialize GroundTruthValidator: {e}")
+    ground_truth_validator = None
+
+
+@app.post("/ai/validate/ground-truth", response_model=GroundTruthResponse)
+async def validate_ground_truth(request: GroundTruthRequest):
+    """
+    Validate agent predictions against optimal trades (perfect hindsight).
+    
+    Compares historical agent predictions from ChromaDB to optimal trades
+    calculated from TimescaleDB price data. Provides comprehensive metrics:
+    - Accuracy, Precision, Recall, F1 Score
+    - Confusion Matrix (TP, FP, TN, FN)
+    - Profitability comparison (agent vs optimal)
+    - Efficiency ratio (how well agent captured max profit)
+    
+    Example:
+        POST /ai/validate/ground-truth
+        {
+            "agent_name": "technical_analyst",
+            "symbol": "BTCUSDT",
+            "start_date": "2024-10-01",
+            "end_date": "2024-10-31",
+            "timeframe": "1h"
+        }
+    """
+    if ground_truth_validator is None:
+        raise HTTPException(
+            status_code=503,
+            detail="GroundTruthValidator not initialized"
+        )
+    
+    try:
+        # Parse dates
+        start_date = datetime.fromisoformat(request.start_date)
+        end_date = datetime.fromisoformat(request.end_date)
+        
+        # Validate date range
+        if start_date >= end_date:
+            raise HTTPException(
+                status_code=400,
+                detail="start_date must be before end_date"
+            )
+        
+        # Run validation
+        logger.info(f"Running ground truth validation for {request.agent_name} on {request.symbol}")
+        result = await ground_truth_validator.validate_agent(
+            agent_name=request.agent_name,
+            symbol=request.symbol,
+            start_date=start_date,
+            end_date=end_date,
+            timeframe=request.timeframe
+        )
+        
+        # Convert to response model
+        return GroundTruthResponse(
+            agent_name=result.agent_name,
+            symbol=result.symbol,
+            start_date=result.start_date.isoformat(),
+            end_date=result.end_date.isoformat(),
+            timeframe=result.timeframe,
+            total_predictions=result.total_predictions,
+            total_optimal_trades=result.total_optimal_trades,
+            true_positives=result.true_positives,
+            false_positives=result.false_positives,
+            true_negatives=result.true_negatives,
+            false_negatives=result.false_negatives,
+            accuracy=result.accuracy,
+            precision=result.precision,
+            recall=result.recall,
+            f1_score=result.f1_score,
+            confusion_matrix=result.confusion_matrix,
+            agent_total_profit_percent=result.agent_total_profit_percent,
+            optimal_total_profit_percent=result.optimal_total_profit_percent,
+            efficiency_ratio=result.efficiency_ratio,
+            correct_predictions=result.correct_predictions,
+            incorrect_predictions=result.incorrect_predictions,
+            missed_opportunities=result.missed_opportunities,
+            avg_confidence_correct=result.avg_confidence_correct,
+            avg_confidence_incorrect=result.avg_confidence_incorrect,
+            prediction_distribution=result.prediction_distribution
+        )
+        
+    except ValueError as e:
+        logger.error(f"Invalid date format: {e}")
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {e}")
+    except Exception as e:
+        logger.error(f"Ground truth validation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/health")
 async def health_check():
     """Simple health check endpoint for Docker/Kubernetes"""
@@ -640,7 +797,8 @@ async def root():
                 "status": "GET /ai/agents/status - Agent health check",
                 "judge_consistency": "POST /ai/judge/consistency - Validate factual accuracy",
                 "judge_discrepancy": "POST /ai/judge/discrepancy - Detect prediction errors",
-                "judge_bias": "POST /ai/judge/bias - Analyze systematic bias"
+                "judge_bias": "POST /ai/judge/bias - Analyze systematic bias",
+                "ground_truth": "POST /ai/validate/ground-truth - Backtest predictions vs optimal trades"
             }
         }
     )

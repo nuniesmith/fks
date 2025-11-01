@@ -46,6 +46,9 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 # Copy application code directly to /app
 COPY ${SERVICE_DIR}/src/ /app/
 
+# Copy tests directory for pytest
+COPY ${SERVICE_DIR}/tests/ /app/tests/
+
 # Add /app to PYTHONPATH
 ENV PYTHONPATH=/app
 

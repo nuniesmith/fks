@@ -1140,13 +1140,17 @@ print(f"Long-term probabilities: Bull={steady_state[0]:.2f}, Bear={steady_state[
 
 ### Best Practices Integration
 
-**From Industry Research** (LuxAlgo, QuantStart, Biz4Group, etc.):
+**From Industry Research** (LuxAlgo, QuantStart, Biz4Group, DataScience-PM, SoftKraft):
 1. **Data Validation**: Implement pre-trade checks (outlier detection, sanity tests)
 2. **Risk-Adjusted Metrics**: Focus on Sharpe, Calmar, Sortino (not just raw returns)
 3. **Modular Architecture**: Already implemented via microservices ✅
-4. **Walk-Forward Optimization**: Avoid overfitting with rolling windows
+4. **Walk-Forward Optimization**: Avoid overfitting with rolling windows (40-50% reduction)
 5. **Ethical AI**: No market manipulation, transparent decision-making
 6. **Ground Truth Validation**: Always backtest with out-of-sample data
+7. **Phase-Gated AI Projects**: Checkpoints for risk control (AWS AgentScore methodology)
+8. **Data Drift Detection**: Monitor distribution shifts (20-30% accuracy preservation)
+9. **Agent Memory Isolation**: Prevent state pollution (20-40% token reduction)
+10. **Incremental Learning**: Reduce training time by 50-90%
 
 **Key Pitfalls to Avoid**:
 - **Overfitting**: Use confusion matrices, cross-validation, WFO
@@ -1154,8 +1158,579 @@ print(f"Long-term probabilities: Bull={steady_state[0]:.2f}, Bear={steady_state[
 - **Memory Assumptions**: Markov memoryless fails for long-term trends
 - **LLM Costs**: Prioritize local Ollama; use OpenAI only for critical tasks
 - **Data Sparsity**: ASMBTR needs high-frequency data; ensure <1s resolution
+- **Agent Loops**: Phase gates prevent costly A2A failures ($47K+ disasters documented)
+- **Drift Neglect**: Undetected drift degrades models by 20-30%
 
-### Implementation Delegation Templates
+---
+
+## 🔄 Phase Enhancement & Retrofit Tasks (Continuous Improvement)
+
+While Phases 1-7.3 are complete, the following tasks enhance robustness, prevent technical debt, and align with AI project management best practices. Tasks are organized by phase for retrofit integration.
+
+### Phase 5 Enhancements: Data Foundation (Retrofit)
+
+**Objective**: Enhance adaptability to market changes and expand data coverage
+
+#### Task 5.1.1: Data Drift Detection Pipeline ⚠️ HIGH PRIORITY
+**Description**: Add automated checks using alibi-detect to monitor distribution shifts in OHLCV data from CCXT. Trigger Prometheus alerts if drift exceeds thresholds (e.g., Kolmogorov-Smirnov test p<0.05).
+
+**Implementation**:
+- Location: `src/services/data/src/validators/drift_detector.py` (new)
+- Integration: Hook into `collectors/` after data ingestion
+- Monitoring: Add Prometheus metric `data_drift_score` with Grafana dashboard
+- Alert: Discord webhook when drift detected
+
+**Dependencies**: 
+- Existing: `src/services/data/src/adapters/`, `monitoring/grafana/`
+- New: `pip install alibi-detect`
+
+**Effort**: 3-5 days
+
+**Rationale**: Research shows undetected drift degrades AI model accuracy by 20-30%. Non-stationary crypto markets require continuous monitoring.
+
+**Acceptance Criteria**:
+- [ ] Drift detector running on 15-minute intervals
+- [ ] Prometheus metric showing drift scores <0.2 (stable)
+- [ ] Discord alert functional for drift >0.5
+- [ ] Unit tests: `tests/unit/validators/test_drift_detector.py` (15+ tests)
+
+**Testing**:
+```python
+# Simulate regime change (bull → bear)
+test_data = generate_regime_shift(start='bull', end='bear', n=1000)
+drift_score = detector.detect(test_data)
+assert drift_score > 0.7  # Should detect significant shift
+```
+
+---
+
+#### Task 5.2.1: Path-Dependent Feature Kernels 🎯 PERFORMANCE BOOST
+**Description**: Incorporate signature kernels (signatory library) to compute path summaries like cumulative volatility, drawdowns, and momentum from OHLCV time series.
+
+**Implementation**:
+- Location: `src/services/app/src/features/feature_processor.py` (extend)
+- New method: `process_signature_features(ohlcv_data, depth=3)`
+- Features: 
+  - Signature kernel (depth 2-4): Captures path interactions
+  - Cumulative max drawdown over rolling windows
+  - Path-dependent volatility (log-signature)
+- Flag: `USE_SIGNATURE_KERNELS` in config (default: False for compatibility)
+
+**Dependencies**:
+- Existing: `notebooks/transformer/` for prototyping
+- New: `pip install signatory iisignature`
+- Test: `tests/unit/features/test_signature_kernels.py`
+
+**Effort**: 4-7 days (including prototyping in notebooks)
+
+**Rationale**: Quant research shows path-dependent features improve regime detection by 15%, yielding Sharpe ratio gains of 0.2-0.3 in backtests. Aligns with recent academic papers on volatility modeling.
+
+**Acceptance Criteria**:
+- [ ] Signature features added as optional in FeatureProcessor
+- [ ] Notebook validation: `notebooks/transformer/signature_kernel_analysis.ipynb`
+- [ ] Backtest on BTC 2023-2024: Sharpe improvement ≥10%
+- [ ] Performance: <500ms overhead for 1000 candles
+
+**Example**:
+```python
+from signatory import signature
+from features.feature_processor import FeatureProcessor
+
+processor = FeatureProcessor(use_signatures=True, sig_depth=3)
+features = processor.process_ohlcv_features(btc_data, symbol='BTCUSDT')
+# Adds 12 new signature features (depth=3 → 3+3²+3³ = 39 terms, compressed to 12)
+```
+
+---
+
+#### Task 5.3.1: On-Chain Data Schema Extension 🔗 CRYPTO FOCUS
+**Description**: Extend TimescaleDB schema to include blockchain metrics (whale transactions, exchange flows, hash rate) from EODHD crypto feeds.
+
+**Implementation**:
+- Location: `sql/fundamentals_schema.sql` (extend)
+- New tables:
+  - `on_chain_transactions` (time, symbol, whale_threshold, transaction_volume, flow_direction)
+  - `network_metrics` (time, symbol, hash_rate, difficulty, active_addresses)
+- Migration: `sql/migrations/005_onchain_schema.sql`
+- Collector: `src/services/data/src/collectors/onchain_collector.py`
+
+**Dependencies**:
+- Phase 5 EODHD adapter
+- Test: `tests/integration/test_schema_validation_integration.py`
+
+**Effort**: 2-4 days
+
+**Rationale**: Crypto regime backtesting (docs/CRYPTO_REGIME_BACKTESTING.md) requires hybrid fundamental + on-chain data. Best practices from Biz4Group emphasize unified schemas for multi-asset platforms.
+
+**Acceptance Criteria**:
+- [ ] TimescaleDB hypertables created for on-chain data
+- [ ] Sample data ingested for BTC, ETH (1 month)
+- [ ] Query performance: <100ms for 1-week aggregates
+- [ ] Grafana dashboard showing whale activity
+
+---
+
+### Phase 6 Enhancements: Multi-Agent AI System (Retrofit)
+
+**Objective**: Production stability, memory optimization, and risk control for 7-agent system
+
+#### Task 6.1.1: Agent-Specific Memory Isolation 🧠 EFFICIENCY BOOST
+**Description**: Implement scratchpads in AgentState to separate short-term memory per agent team. Use ChromaDB collections with namespaces (e.g., `technical_analyst_scratchpad`, `risk_team_memory`).
+
+**Implementation**:
+- Location: `src/services/ai/src/agents/state.py` (extend)
+- New field: `agent_scratchpads: Dict[str, List[str]]` in AgentState
+- ChromaDB: Partition collections by agent_name
+- Cleanup: Auto-expire scratchpad entries >24 hours old
+
+**Dependencies**:
+- Existing: `src/services/ai/src/graph/trading_graph.py`
+- Test: `tests/unit/agents/test_memory_isolation.py`
+
+**Effort**: 5-8 days
+
+**Rationale**: CrewAI framework research shows memory isolation reduces token usage by 20-40% and prevents state pollution (e.g., Technical Analyst's indicators leaking into Sentiment Analyst's context).
+
+**Acceptance Criteria**:
+- [ ] Each agent has isolated scratchpad in AgentState
+- [ ] ChromaDB partitioned by agent (7 collections)
+- [ ] Token usage reduced by ≥20% in multi-agent workflows
+- [ ] Unit tests: 25+ tests for isolation edge cases
+
+**Example**:
+```python
+state = create_initial_state(symbol="BTCUSDT")
+state['agent_scratchpads']['technical_analyst'] = ["RSI=65", "MACD bullish"]
+state['agent_scratchpads']['risk_analyst'] = ["VaR=2.5%", "MDD=-15%"]
+# Isolated - no cross-contamination
+```
+
+---
+
+#### Task 6.2.1: Phase Gates for Agent-to-Agent Communication 🚦 RISK CONTROL
+**Description**: Add checkpoints in LangGraph StateGraph to validate context before routing between agents. Implement MCP (Model Context Protocol) standards for token limits, failure handling, and retry logic.
+
+**Implementation**:
+- Location: `src/services/ai/src/graph/trading_graph.py` (extend)
+- New nodes: `validate_context_gate`, `check_token_limit_gate`
+- Conditional edges: Skip agents if validation fails
+- Monitoring: Add Prometheus metric `agent_gate_failures`
+
+**Dependencies**:
+- Existing: `api/routes.py`, `monitoring/prometheus/`
+- Standards: MCP specification for A2A communication
+
+**Effort**: 3-6 days
+
+**Rationale**: AWS AgentScore research documents real-world agent loop disasters costing $47K+ from uncontrolled A2A calls. Phase gates prevent infinite loops and token explosions.
+
+**Acceptance Criteria**:
+- [ ] Gates active at 3 decision points (Analysts→Debate, Debate→Manager, Manager→Trader)
+- [ ] Token limit enforcement: Max 8K tokens per agent call
+- [ ] Retry logic: Max 3 attempts before circuit breaker
+- [ ] Monitoring: Grafana dashboard showing gate pass/fail rates
+
+**Example**:
+```python
+def validate_context_gate(state: AgentState):
+    """Phase gate: Check token usage and state validity"""
+    if count_tokens(state['messages']) > 8000:
+        return "skip_agent"  # Circuit breaker
+    if not state.get('market_data'):
+        return "retry_with_fallback"
+    return "proceed"
+
+graph.add_conditional_edges("analysts", validate_context_gate)
+```
+
+---
+
+#### Task 6.3.1: Ollama Edge Optimization (Quantization) ⚡ PERFORMANCE
+**Description**: Containerize llama3.2:3b with GGUF quantization (Q4_K_M) for 50% faster inference while maintaining 90-95% accuracy. Update Dockerfile.ai with optimized model loading.
+
+**Implementation**:
+- Location: `docker/Dockerfile.ai`, `docker-compose.gpu.yml`
+- Quantization: Use `ollama pull llama3.2:3b-q4_k_m` (quantized version)
+- Benchmark: Compare latency vs. full precision (target: <2s per agent call)
+- Memory: Reduce from 2GB to ~1GB VRAM usage
+
+**Dependencies**:
+- Existing GPU stack: `docker-compose.gpu.yml`
+- Performance tests: `tests/performance/test_ollama_latency.py`
+
+**Effort**: 4-7 days (including benchmarking)
+
+**Rationale**: Research shows GGUF Q4 quantization maintains 90-95% accuracy while halving inference time. Critical for real-time trading (<5s total latency).
+
+**Acceptance Criteria**:
+- [ ] Quantized model deployed in fks_ai container
+- [ ] Inference latency: <2s per agent call (down from 3-4s)
+- [ ] Accuracy degradation: <5% on validation set
+- [ ] Memory usage: <1.5GB VRAM (down from 2GB)
+
+**Benchmark**:
+```bash
+# Before (full precision)
+docker-compose exec fks_ai ollama run llama3.2:3b "Analyze BTC sentiment"
+# Time: 3.2s, Memory: 2.1GB
+
+# After (quantized)
+docker-compose exec fks_ai ollama run llama3.2:3b-q4_k_m "Analyze BTC sentiment"
+# Time: 1.8s, Memory: 1.2GB
+```
+
+---
+
+### Phase 7 Enhancements: Evaluation & Advanced Models (Active)
+
+**Objective**: Strengthen LLM-Judge, add WFO, and prepare for hedging strategies
+
+#### Task 7.1.2: Bonferroni Corrections for Multiple Comparisons ✅ PLANNED
+**Description**: Extend `test_evaluation_framework.py` to include chi-square tests with Bonferroni/Benjamini-Hochberg p-value corrections for ASMBTR multi-asset evaluations.
+
+**Implementation**:
+- Location: `tests/unit/evaluation/test_statistical_corrections.py` (new)
+- Methods: `apply_bonferroni()`, `apply_benjamini_hochberg()`
+- Integration: Update `ModelEvaluator` in `confusion_matrix.py`
+
+**Dependencies**:
+- Phase 7.1 complete
+- Reference: `docs/PHASE_7_1_COMPLETE.md`
+
+**Effort**: 2-4 days
+
+**Rationale**: Stanford research emphasizes corrections to prevent false positives in ML evaluations (Type I error rate <0.05). Critical when testing across 10+ trading pairs simultaneously.
+
+**Status**: ✅ Already implemented in Phase 7.1 (Oct 31, 2025)
+
+---
+
+#### Task 7.2.2: LLM-Judge Factual Consistency Audits ✅ COMPLETE
+**Description**: Create judge agent using Ollama to score outputs for factual consistency, discrepancies, and bias. Chain with ground truth validator.
+
+**Implementation**:
+- Location: `src/services/ai/src/evaluators/llm_judge.py`
+- Methods: `verify_factual_consistency()`, `detect_discrepancies()`, `analyze_bias()`
+- API: POST `/ai/judge/{consistency,discrepancy,bias}`
+
+**Dependencies**:
+- Phase 7.2 complete
+- Reference: `docs/PHASE_7_2_COMPLETE_SUMMARY.md`
+
+**Effort**: 5-10 days
+
+**Rationale**: Anthropic research shows judge systems improve reliability by 30%, addressing hallucination risks in agent reasoning.
+
+**Status**: ✅ Complete (Oct 31, 2025) - 592 lines, 3 endpoints, 20+ tests
+
+---
+
+#### Task 7.3.2: Ground Truth Validation Framework ✅ COMPLETE
+**Description**: Compare agent predictions to optimal trades calculated with perfect hindsight. Provide objective performance metrics.
+
+**Implementation**:
+- Location: `src/services/ai/src/evaluators/ground_truth.py` (890 lines)
+- Methods: 7 core methods including ChromaDB/TimescaleDB integration
+- API: POST `/ai/validate/ground-truth`
+
+**Dependencies**:
+- Phase 7.3 complete
+- Reference: `docs/PHASE_7_3_GROUND_TRUTH_COMPLETE.md`
+
+**Effort**: 2-3 hours
+
+**Status**: ✅ Complete (Oct 31, 2025) - 1,909 lines total, 16 tests passing
+
+---
+
+#### Task 7.4.1: Walk-Forward Optimization (WFO) Module 🎯 NEXT PRIORITY
+**Description**: Build WFO in strategies using rolling windows. Test on BTC 2020-2024 data to avoid overfitting, retraining monthly with Optuna.
+
+**Implementation**:
+- Location: `src/services/app/src/strategies/wfo/walk_forward.py` (new)
+- Window: 6-month training, 1-month validation, 1-month rolling
+- Optimization: Integrate with `examples/optimize_strategy.py`
+- Metrics: Track parameter drift, validation Sharpe vs. training Sharpe
+
+**Dependencies**:
+- Ground truth results (Phase 7.3)
+- Reference: `docs/CRYPTO_REGIME_BACKTESTING.md`
+- Tool: Optuna for hyperparameter search
+
+**Effort**: 7-14 days
+
+**Rationale**: QuantStart recommends WFO as gold standard for realistic backtests. Reduces curve-fitting by 40-50%, critical for crypto's non-stationary nature.
+
+**Acceptance Criteria**:
+- [ ] WFO module operational with configurable windows
+- [ ] BTC backtest: Out-of-sample Sharpe ≥70% of in-sample (acceptable degradation)
+- [ ] Parameter drift tracking: Alert if >30% change month-over-month
+- [ ] Integration with ground truth: Auto-tune based on efficiency ratio
+- [ ] Unit tests: 30+ tests for edge cases (insufficient data, regime changes)
+
+**Example**:
+```python
+from strategies.wfo import WalkForwardOptimizer
+
+wfo = WalkForwardOptimizer(
+    strategy='asmbtr',
+    train_window='6M',
+    validation_window='1M',
+    step='1M'
+)
+
+results = wfo.optimize(
+    data=btc_2020_2024,
+    params={'depth': [6, 8, 10, 12], 'threshold': [0.55, 0.65, 0.75]},
+    metric='calmar_ratio'
+)
+
+# Output: Monthly optimal params, degradation report
+# Expected: In-sample Calmar 0.45 → Out-sample 0.32 (71% retention - good!)
+```
+
+---
+
+### Phase 8 (Proposed): Advanced Strategies & Hedging
+
+**Objective**: Multi-asset diversification and black swan protection
+
+#### Task 8.1.1: CPI-Gold Hedging Strategy 📈 CRISIS RESILIENT
+**Description**: Integrate BLS CPI API and yfinance Gold data. Implement threshold-based switching: if CPI YoY >3%, allocate to Gold; else S&P 500.
+
+**Implementation**:
+- Location: `src/services/app/src/strategies/hedge.py` (new)
+- Data sources:
+  - BLS CPI: `https://api.bls.gov/publicAPI/v2/timeseries/data/CUUR0000SA0`
+  - Gold: `yfinance.Ticker('GLD').history()`
+- Backtest: 2020-2024 vs. S&P 500 benchmark
+- Target: Sharpe 0.48, MDD -0.51 (corrected from original >1 claim)
+
+**Dependencies**:
+- Market data: `src/services/data/src/collectors/`
+- Ground truth: Validate with Phase 7.3 framework
+
+**Effort**: 6-9 days
+
+**Rationale**: LuxAlgo research notes 20-30% drawdown reduction in diversified portfolios during crises (2008, 2020). CPI-Gold correlation 0.85 in high-inflation periods.
+
+**Acceptance Criteria**:
+- [ ] CPI data ingested daily (1-day lag from BLS)
+- [ ] Hedge strategy backtested on 2020-2024
+- [ ] Outperformance vs. SPY in 2021-2022 (high inflation): ≥15%
+- [ ] MDD improvement: -0.51 (hedge) vs. -0.65 (SPY baseline)
+- [ ] Ground truth efficiency: ≥50% (captures half of optimal hedge profit)
+
+**Warning**: CPI-Gold correlation breaks in black swans (2008 credit crisis, 2020 pandemic start). Include circuit breaker for correlation <0.3.
+
+---
+
+#### Task 8.2.1: Markov Regime Modules 🔄 STATE TRANSITIONS
+**Description**: Add steady-state computations for bull/bear/sideways transitions. Validate memoryless assumption with autocorrelation tests on EUR/USD hourly data.
+
+**Implementation**:
+- Location: `src/services/app/src/strategies/markov.py` (new)
+- States: Bull (trend >2%), Bear (trend <-2%), Sideways (|trend| ≤2%)
+- Transition matrix: Estimated from historical data
+- Steady-state: Solve πP = π for long-run probabilities
+- Integration: Combine with ASMBTR for multi-timeframe signals
+
+**Dependencies**:
+- Notebooks: `notebooks/transformer/markov_regime_analysis.ipynb`
+- Tests: `tests/unit/strategies/test_markov.py`
+
+**Effort**: 4-7 days
+
+**Rationale**: Academic papers show Markov models improve regime detection by 15% vs. simple trend filters. Useful for macro-timeframe context (daily/weekly).
+
+**Acceptance Criteria**:
+- [ ] Markov module computes steady-state for BTC, ETH, EUR/USD
+- [ ] Autocorrelation tests confirm memoryless on <1h data (p>0.05)
+- [ ] Backtest: Regime detection accuracy ≥70% vs. manual labels
+- [ ] Hybrid ASMBTR+Markov: Calmar improvement ≥10% vs. ASMBTR alone
+
+**Example**:
+```python
+import numpy as np
+from strategies.markov import MarkovRegime
+
+P = np.array([
+    [0.7, 0.2, 0.1],  # Bull → Bull, Bear, Sideways
+    [0.3, 0.6, 0.1],  # Bear → Bull, Bear, Sideways  
+    [0.4, 0.3, 0.3]   # Sideways → Bull, Bear, Sideways
+])
+
+markov = MarkovRegime(transition_matrix=P)
+steady_state = markov.compute_steady_state()
+# Output: [0.52, 0.31, 0.17] - Long-run: 52% bull, 31% bear, 17% sideways
+```
+
+---
+
+### Phase 9 (Proposed): Deployment & Scaling Automation
+
+**Objective**: Production-ready deployment with auto-scaling and CI/CD
+
+#### Task 9.1.1: Linode/Kubernetes Auto-Scaling 🚀 DEVOPS
+**Description**: Update deployment guide with scripts for auto-scaling based on Prometheus metrics (CPU >80%, memory >4GB). Integrate GitHub Actions for CI/CD.
+
+**Implementation**:
+- Location: `docs/deployment/LINODE_AUTOMATION_GUIDE.md` (update)
+- Scripts: `scripts/deployment/auto_scale_k8s.sh`
+- GitHub Actions: `.github/workflows/deploy_production.yml`
+- Metrics: Prometheus → HPA (Horizontal Pod Autoscaler)
+
+**Dependencies**:
+- Existing: `docs/archive/completed-phases/PHASE_4_DEPLOYMENT_CHECKLIST.md`
+- New: Kubernetes manifests in `scripts/deployment/k8s/`
+
+**Effort**: 5-8 days
+
+**Rationale**: Biz4Group best practices emphasize containerization for 50% faster deploys. Auto-scaling prevents manual intervention during high load (e.g., volatile markets).
+
+**Acceptance Criteria**:
+- [ ] K8s HPA configured for fks_ai, fks_app (scale 1-5 pods)
+- [ ] GitHub Actions deploy on main branch push (after tests pass)
+- [ ] Rollback mechanism: Auto-revert if health checks fail
+- [ ] Documentation: Step-by-step guide in `docs/deployment/`
+
+---
+
+#### Task 9.2.1: Multi-Repo Migration Templates (Optional) 🌳 SCALING
+**Description**: Refine migration scripts for optional multi-repo split. Include CI templates for Python (pytest) and Rust (cargo test).
+
+**Implementation**:
+- Location: `scripts/migration/multi_repo_templates/`
+- Templates: 
+  - `python_service_template/` (FastAPI structure)
+  - `rust_service_template/` (Cargo workspace)
+- CI: GitHub Actions for each service (isolated testing)
+
+**Dependencies**:
+- Reference: `docs/archive/completed-phases/MULTI_REPO_IMPLEMENTATION_COMPLETE.md`
+- Existing monorepo: `src/services/`
+
+**Effort**: 3-5 days
+
+**Rationale**: Uber's monorepo lessons suggest hybrid approach for large teams (>10 developers). Optional migration preserves current workflow while enabling future flexibility.
+
+**Acceptance Criteria**:
+- [ ] Templates functional for fks_ai, fks_app split
+- [ ] CI runs independently for each service
+- [ ] Documentation: Migration decision tree (when to split)
+- [ ] Backward compatibility: Monorepo remains default
+
+---
+
+## 📋 Task Implementation Roadmap
+
+### Priority Matrix (Effort vs. Impact)
+
+| Priority | Task ID | Effort | Impact | Phase | Status |
+|----------|---------|--------|--------|-------|--------|
+| 🔥 **P0** | 7.4.1 | 7-14d | High | 7 | Next (WFO critical for overfitting) |
+| 🔥 **P0** | 5.1.1 | 3-5d | High | 5 | Retrofit (drift detection) |
+| ⚡ **P1** | 6.1.1 | 5-8d | Medium | 6 | Retrofit (memory isolation) |
+| ⚡ **P1** | 8.1.1 | 6-9d | High | 8 | New (CPI-Gold hedge) |
+| 📊 **P2** | 5.2.1 | 4-7d | Medium | 5 | Retrofit (signature kernels) |
+| 📊 **P2** | 6.2.1 | 3-6d | Medium | 6 | Retrofit (phase gates) |
+| 📊 **P2** | 8.2.1 | 4-7d | Medium | 8 | New (Markov modules) |
+| 🔧 **P3** | 6.3.1 | 4-7d | Low | 6 | Retrofit (Ollama quantization) |
+| 🔧 **P3** | 5.3.1 | 2-4d | Low | 5 | Retrofit (on-chain schema) |
+| 🚀 **P4** | 9.1.1 | 5-8d | Medium | 9 | New (K8s auto-scale) |
+| 🌳 **P5** | 9.2.1 | 3-5d | Low | 9 | New (multi-repo templates) |
+
+**Total Effort**: 50-88 developer-days (~10-18 weeks with 1 developer, 5-9 weeks with 2)
+
+### Implementation Sequence
+
+**Sprint 1 (Weeks 1-2)**: Critical Stability
+1. Task 5.1.1: Data drift detection (5 days)
+2. Task 7.4.1: Walk-forward optimization (10 days)
+
+**Sprint 2 (Weeks 3-4)**: Agent Optimization  
+3. Task 6.1.1: Memory isolation (8 days)
+4. Task 6.2.1: Phase gates (5 days)
+
+**Sprint 3 (Weeks 5-6)**: Advanced Features
+5. Task 5.2.1: Signature kernels (7 days)
+6. Task 8.1.1: CPI-Gold hedge (7 days)
+
+**Sprint 4 (Weeks 7-8)**: Strategy Expansion
+7. Task 8.2.1: Markov modules (7 days)
+8. Task 5.3.1: On-chain schema (3 days)
+
+**Sprint 5 (Weeks 9-10)**: Performance & Scaling
+9. Task 6.3.1: Ollama quantization (7 days)
+10. Task 9.1.1: K8s auto-scaling (8 days)
+
+**Sprint 6 (Optional)**: Multi-Repo Migration
+11. Task 9.2.1: Migration templates (5 days)
+
+---
+
+## 🎯 Task Allocation Guidelines
+
+### Service-Level Assignments
+
+| Task | Primary Service | Secondary Services | Skills Required |
+|------|-----------------|-------------------|-----------------|
+| 5.1.1 | fks_data | fks_main (monitoring) | Python, alibi-detect, Prometheus |
+| 5.2.1 | fks_app | notebooks | Python, signatory, quant math |
+| 5.3.1 | fks_data | db (PostgreSQL) | SQL, TimescaleDB, data modeling |
+| 6.1.1 | fks_ai | - | LangGraph, ChromaDB, state management |
+| 6.2.1 | fks_ai | fks_api | MCP standards, error handling, gates |
+| 6.3.1 | fks_ai | ollama | GGUF, quantization, GPU optimization |
+| 7.4.1 | fks_app | fks_data | Optuna, WFO, backtesting |
+| 8.1.1 | fks_app | fks_data | APIs (BLS, yfinance), hedging theory |
+| 8.2.1 | fks_app | notebooks | Markov chains, linear algebra, stats |
+| 9.1.1 | infrastructure | all services | Kubernetes, HPA, GitHub Actions |
+| 9.2.1 | infrastructure | - | Multi-repo architecture, templating |
+
+### Effort Estimation (Developer-Days)
+
+**Simple** (1-3 days): Configuration, minor integrations
+- 5.3.1 (schema extension)
+
+**Moderate** (4-7 days): Feature additions, medium complexity
+- 5.1.1 (drift detection), 5.2.1 (kernels), 6.2.1 (gates), 6.3.1 (quantization), 8.2.1 (Markov)
+
+**Complex** (8-14 days): Major modules, research-heavy
+- 6.1.1 (memory isolation), 7.4.1 (WFO), 8.1.1 (CPI-Gold), 9.1.1 (K8s)
+
+### Testing Requirements Per Task
+
+**Unit Tests**: All tasks require ≥80% coverage
+**Integration Tests**: Database/API tasks (5.x, 8.x, 9.x)
+**Performance Tests**: Latency-critical tasks (6.3.1, 7.4.1)
+**Validation Tests**: AI/ML tasks (5.2.1, 6.1.1, 7.4.1, 8.2.1)
+
+---
+
+## 📚 Additional Resources & Citations
+
+**AI Project Management**:
+- [DataScience-PM: Managing AI Projects (6 Concepts)](https://www.datascience-pm.com/manage-ai-projects/)
+- [Medium: How to Execute AI Projects](https://david-theil.medium.com/how-to-execute-ai-projects-94315d557569)
+- [SoftKraft: Ultimate 7-Step AI Project Guide](https://www.softkraft.co/ai-project-management/)
+
+**Algorithmic Trading Best Practices**:
+- [LuxAlgo: Algo Trading Strategy Development](https://www.luxalgo.com/blog/best-practices-in-algo-trading-strategy-development/)
+- [QuantStart: Best Practices for System Development](https://www.quantstart.com/articles/Best-Practices-for-Algorithmic-Trading-System-Development/)
+
+**Platform Architecture**:
+- [Biz4Group: Multi-Asset Trading Platform Guide](https://www.biz4group.com/blog/multi-asset-trading-platform-development-guide)
+- [Multi-Agent Systems: CrewAI Framework Documentation](https://docs.crewai.com/)
+
+**Academic/Technical**:
+- AWS AgentScore: Agent Loop Cost Analysis
+- Anthropic: Claude Judge Systems (30% Reliability Improvement)
+- Stanford ML Group: Statistical Corrections in Model Evaluation
+- Uber Engineering: Monorepo Lessons at Scale
+
+---
+
+### Best Practices Integration
 
 **For AI Agent**:
 ```

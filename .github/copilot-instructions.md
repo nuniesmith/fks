@@ -2162,32 +2162,761 @@ steady_state = markov.compute_steady_state()
 
 ---
 
+## 🚀 Monorepo CI/CD Optimization for Solo Development
+
+### Overview: Streamlining Microservices in a Monorepo
+
+Managing a monorepo with 8 microservices (fks_main, fks_api, fks_app, fks_data, fks_execution, fks_ninja, fks_ai, fks_web) presents unique challenges for solo developers. Without proper automation, build times balloon, deployments become error-prone, and cognitive overhead increases. Research from DigitalOcean, Graphite, and Codefresh demonstrates that strategic CI/CD optimizations can reduce build times by 20-50% while improving scalability and maintainability.
+
+**Core Principles**:
+- **Selective Processing**: Only build/test/deploy affected services (40-60% fewer pipeline runs)
+- **Parallel Execution**: Concurrent service builds (halves pipeline duration)
+- **Aggressive Caching**: Docker layers + dependencies (30-50% faster builds)
+- **Incremental K8s Migration**: Docker Compose for dev, gradual K8s rollout for production
+
+### Organization and Structure Fixes
+
+#### Path-Based Triggers for Selective Builds ⚡ HIGH IMPACT
+
+**Problem**: Full monorepo builds on every commit waste time and resources.
+
+**Solution**: Implement GitHub Actions path filters to rebuild only affected services.
+
+**Implementation**:
+```yaml
+# .github/workflows/build_services.yml
+name: Build Microservices
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/services/**'
+      - 'docker/**'
+      - 'requirements*.txt'
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            fks_api:
+              - 'src/services/api/**'
+            fks_app:
+              - 'src/services/app/**'
+            fks_ai:
+              - 'src/services/ai/**'
+            fks_data:
+              - 'src/services/data/**'
+  
+  build:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    steps:
+      - name: Build ${{ matrix.service }}
+        run: |
+          docker build -f docker/Dockerfile.${{ matrix.service }} \
+            -t fks_${{ matrix.service }}:${{ github.sha }} \
+            src/services/${{ matrix.service }}
+```
+
+**Benefits**:
+- 40-60% reduction in unnecessary builds (Graphite research)
+- Faster feedback loops for focused changes
+- Reduced CI/CD costs on paid tiers
+
+**FKS-Specific Application**:
+- Trigger fks_ai rebuild only when `src/services/ai/**` changes
+- Trigger fks_app rebuild for strategy updates in `src/services/app/src/strategies/**`
+- Shared dependency changes (e.g., `requirements.txt`) rebuild all Python services
+
+---
+
+#### Shared Workflows with Modular YAML 🔧 MAINTAINABILITY
+
+**Problem**: Duplicated CI/CD logic across services creates maintenance overhead.
+
+**Solution**: Centralize common steps in reusable workflow templates.
+
+**Implementation**:
+```yaml
+# .github/workflows/reusable_test.yml
+name: Reusable Test Workflow
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        required: true
+        type: string
+      python_version:
+        required: false
+        type: string
+        default: '3.13'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements.dev.txt
+      
+      - name: Run Tests
+        run: |
+          pytest src/services/${{ inputs.service_name }}/tests/ \
+            --cov=src/services/${{ inputs.service_name }}/src \
+            --cov-report=xml
+      
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: ${{ inputs.service_name }}
+```
+
+**Usage in Service-Specific Workflows**:
+```yaml
+# .github/workflows/test_fks_ai.yml
+name: Test fks_ai
+on:
+  push:
+    paths: ['src/services/ai/**']
+
+jobs:
+  test:
+    uses: ./.github/workflows/reusable_test.yml
+    with:
+      service_name: ai
+      python_version: '3.13'
+```
+
+**Benefits**:
+- DRY principle: Update test logic once, applies to all services
+- Consistency: Uniform test environments across microservices
+- Faster onboarding: New services inherit proven templates
+
+---
+
+#### Dependency Management with Monorepo Tools 📦 ADVANCED
+
+**Problem**: Interdependent services create circular dependencies and version conflicts.
+
+**Solution**: Use workspace models or tools like Nx/Turborepo for Python monorepos.
+
+**Implementation (Poetry Workspaces)**:
+```toml
+# pyproject.toml (root)
+[tool.poetry]
+name = "fks-platform"
+version = "1.0.0"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+ruff = "^0.5.0"
+
+# Define workspaces
+[tool.poetry.workspace]
+members = [
+    "src/services/api",
+    "src/services/app",
+    "src/services/ai",
+    "src/services/data"
+]
+```
+
+**Benefits**:
+- Unified dependency resolution across services
+- Shared virtual environment reduces disk usage
+- Simplified updates: `poetry update` affects all services
+
+**Alternative: Nx for Advanced Caching**:
+```bash
+# Install Nx for Python monorepos
+npm install -g nx
+
+# Configure nx.json for task caching
+nx run-many --target=test --all --parallel=4
+```
+
+**Expected Impact**: 30-40% faster local builds via computation caching (Nx benchmarks)
+
+---
+
+### CI/CD Automations to Maximize Efficiency
+
+#### Caching Strategies 🚄 CRITICAL PERFORMANCE
+
+**Docker Layer Caching**:
+```yaml
+- name: Build and Push Docker Image
+  uses: docker/build-push-action@v5
+  with:
+    context: src/services/${{ matrix.service }}
+    file: docker/Dockerfile.${{ matrix.service }}
+    push: true
+    tags: ghcr.io/nuniesmith/fks_${{ matrix.service }}:${{ github.sha }}
+    cache-from: type=gha
+    cache-to: type=gha,mode=max
+```
+
+**Python Dependency Caching**:
+```yaml
+- name: Cache Python Dependencies
+  uses: actions/cache@v4
+  with:
+    path: |
+      ~/.cache/pip
+      .venv
+    key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+    restore-keys: |
+      ${{ runner.os }}-pip-
+```
+
+**Impact**: 30-50% build time reduction (Beon Tech benchmarks)
+
+---
+
+#### Parallel Job Execution ⚡ SPEED BOOST
+
+**Matrix Strategy for Multi-Service Builds**:
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, app, ai, data, execution, ninja, web]
+        include:
+          - service: ai
+            dockerfile: Dockerfile.ai
+            gpu: true
+          - service: execution
+            dockerfile: Dockerfile.execution
+            language: rust
+      fail-fast: false  # Continue building other services if one fails
+      max-parallel: 4   # Limit concurrency to avoid resource contention
+    steps:
+      - name: Build ${{ matrix.service }}
+        run: |
+          docker build -f docker/${{ matrix.dockerfile || 'Dockerfile.' + matrix.service }} \
+            -t fks_${{ matrix.service }}:${{ github.sha }} .
+```
+
+**Dependency-Aware Ordering**:
+```yaml
+jobs:
+  build-base:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Base Images
+        run: docker build -t fks_base:latest -f docker/Dockerfile .
+  
+  build-services:
+    needs: build-base  # Wait for base image
+    strategy:
+      matrix:
+        service: [api, app, ai, data]
+    steps:
+      - name: Build Service
+        run: docker build --build-arg BASE_IMAGE=fks_base:latest ...
+```
+
+**Impact**: Halves pipeline duration (CodeCapers case study)
+
+---
+
+#### Automated Testing and Deployment 🧪 QUALITY GATES
+
+**Comprehensive Test Pipeline**:
+```yaml
+name: CI Pipeline
+on: [push, pull_request]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint with Ruff
+        run: ruff check src/
+  
+  unit-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, app, ai, data]
+    steps:
+      - name: Run Unit Tests
+        run: pytest src/services/${{ matrix.service }}/tests/unit/
+  
+  integration-tests:
+    needs: [lint, unit-tests]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+      redis:
+        image: redis:7-alpine
+    steps:
+      - name: Run Integration Tests
+        run: pytest tests/integration/ --docker-compose
+  
+  deploy:
+    needs: integration-tests
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Staging
+        run: kubectl apply -f k8s/staging/
+```
+
+**Staged Rollouts with Health Checks**:
+```yaml
+- name: Deploy with Canary
+  run: |
+    kubectl set image deployment/fks-app fks-app=fks_app:${{ github.sha }}
+    kubectl rollout status deployment/fks-app --timeout=5m
+    
+    # Run smoke tests
+    curl -f http://staging.fks.com/health || kubectl rollout undo deployment/fks-app
+```
+
+**Notifications on Failures**:
+```yaml
+- name: Notify on Failure
+  if: failure()
+  uses: 8398a7/action-slack@v3
+  with:
+    status: ${{ job.status }}
+    text: 'Build failed for ${{ matrix.service }}'
+    webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+---
+
+### Migration to Kubernetes (Incremental Approach)
+
+#### Hybrid Local/Prod Setup 🔄 GRADUAL MIGRATION
+
+**Phase 1: Docker Compose for Development** (Current State)
+```yaml
+# docker-compose.yml
+services:
+  fks_api:
+    build: ./docker/Dockerfile.api
+    ports: ["8001:8001"]
+    depends_on: [postgres, redis]
+```
+
+**Phase 2: Convert with Kompose**
+```bash
+# Generate K8s manifests from Compose
+kompose convert -f docker-compose.yml -o k8s/generated/
+
+# Customize for production
+cp k8s/generated/* k8s/production/
+# Edit k8s/production/* to add resource limits, secrets, etc.
+```
+
+**Phase 3: Hybrid Deployment**
+```yaml
+# Local: docker-compose.yml (development)
+# Staging: k8s/staging/ (testing K8s configs)
+# Production: k8s/production/ (final rollout)
+```
+
+**Migration Timeline**:
+1. Week 1-2: Convert non-critical services (fks_ninja, fks_web) to K8s staging
+2. Week 3-4: Migrate data layer (fks_data, postgres, redis)
+3. Week 5-6: Core services (fks_api, fks_app, fks_ai)
+4. Week 7-8: Production rollout with monitoring
+
+---
+
+#### Helm for Service Management 📦 PRODUCTION READY
+
+**Create Helm Chart for FKS Platform**:
+```bash
+helm create fks-platform
+```
+
+**Chart Structure**:
+```yaml
+# fks-platform/values.yaml
+replicaCount: 2
+
+services:
+  api:
+    image: ghcr.io/nuniesmith/fks_api
+    port: 8001
+    resources:
+      limits: { cpu: "1", memory: "1Gi" }
+  
+  app:
+    image: ghcr.io/nuniesmith/fks_app
+    port: 8002
+    resources:
+      limits: { cpu: "2", memory: "2Gi" }
+  
+  ai:
+    image: ghcr.io/nuniesmith/fks_ai
+    port: 8006
+    gpu: true
+    resources:
+      limits: { nvidia.com/gpu: "1", memory: "8Gi" }
+```
+
+**Deploy with Helm**:
+```bash
+# Install
+helm install fks-staging fks-platform/ -f values-staging.yaml
+
+# Update
+helm upgrade fks-staging fks-platform/ --set services.api.replicas=3
+
+# Rollback
+helm rollback fks-staging 1
+```
+
+**Benefits**:
+- Version-controlled deployments
+- Easy rollback (helm rollback)
+- Environment-specific configs (dev/staging/prod)
+
+---
+
+### Automation Comparison Table
+
+| Automation Area | Tool/Method | Implementation | Expected Benefit | Solo Dev Impact |
+|-----------------|-------------|----------------|------------------|-----------------|
+| **Selective Builds** | GitHub Actions path filters | `paths: ['src/services/ai/**']` | 40-60% fewer full runs | Focus on changed services only |
+| **Caching** | Docker layer cache + pip cache | `cache-from: type=gha` | 30-50% faster builds | Critical for quick iterations |
+| **Parallel Execution** | Matrix strategies | `strategy: matrix: service: [...]` | Halves pipeline duration | All services build simultaneously |
+| **Testing** | Pytest + coverage + gates | `pytest --cov --cov-fail-under=80` | Early bug detection | Maintains quality solo |
+| **Deployment** | build-push-action + kubectl | `docker/build-push-action@v5` | Zero-downtime updates | Automated production deploys |
+| **Monitoring** | Slack notifications + Dependabot | `8398a7/action-slack@v3` | Reduces manual oversight | Alerts on failures |
+| **K8s Migration** | Kompose + Helm | `kompose convert` | Gradual transition | No "big bang" rewrites |
+| **Dependency Updates** | Dependabot PRs | `.github/dependabot.yml` | Keeps project secure | Auto-updates with tests |
+
+---
+
+### Real-World Implementation: FKS-Specific Workflow
+
+**Complete Production Pipeline** (`.github/workflows/production.yml`):
+```yaml
+name: Production CI/CD
+on:
+  push:
+    branches: [main]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            api: 'src/services/api/**'
+            app: 'src/services/app/**'
+            ai: 'src/services/ai/**'
+            data: 'src/services/data/**'
+  
+  build-and-test:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.services != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJSON(needs.detect-changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Cache Dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt') }}
+      
+      - name: Run Tests
+        run: pytest src/services/${{ matrix.service }}/tests/ --cov
+      
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: src/services/${{ matrix.service }}
+          push: true
+          tags: ghcr.io/nuniesmith/fks_${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+  
+  deploy-staging:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to K8s Staging
+        run: |
+          kubectl set image deployment/fks-${{ matrix.service }} \
+            fks-${{ matrix.service }}=ghcr.io/nuniesmith/fks_${{ matrix.service }}:${{ github.sha }} \
+            --namespace=staging
+          kubectl rollout status deployment/fks-${{ matrix.service }} -n staging
+  
+  smoke-tests:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Smoke Tests
+        run: |
+          curl -f https://staging.fks.com/health || exit 1
+          pytest tests/smoke/ --url=https://staging.fks.com
+  
+  deploy-production:
+    needs: smoke-tests
+    if: success()
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to Production
+        run: helm upgrade fks-production fks-platform/ --set image.tag=${{ github.sha }}
+      
+      - name: Notify Success
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: 'Deployed ${{ github.sha }} to production'
+```
+
+**Expected Results**:
+- Build time: 8-12 minutes (down from 20-30 without caching)
+- Deployment frequency: Multiple times per day (vs. weekly manual deploys)
+- Failure detection: <5 minutes (automated smoke tests)
+- Rollback time: <2 minutes (helm rollback)
+
+---
+
+### Best Practices for Solo Developers
+
+**1. Start Small, Automate Incrementally**:
+- Week 1: Path-based triggers + caching
+- Week 2: Parallel builds + automated tests
+- Week 3: Staging deployments
+- Week 4: Production pipeline with rollback
+
+**2. Monitor Pipeline Costs**:
+- Use GitHub Actions free tier (2,000 minutes/month)
+- Optimize with `if: changed-files` conditions
+- Cache aggressively to reduce build minutes
+
+**3. Local Testing with `act`**:
+```bash
+# Test workflows locally before pushing
+act -j build-and-test -s GITHUB_TOKEN=$GITHUB_TOKEN
+```
+
+**4. Document Runbooks**:
+- Create `docs/deployment/RUNBOOK.md` with:
+  - Manual rollback procedures
+  - Common pipeline failures + fixes
+  - Emergency deploy process
+
+**5. Use Pre-commit Hooks**:
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    hooks:
+      - id: ruff
+      - id: ruff-format
+```
+
+---
+
+### Key Citations & Resources
+
+**Monorepo CI/CD Best Practices**:
+- [How to Containerize Your Monorepo Application](https://www.digitalocean.com/community/tutorials/how-to-containerize-monorepo-apps) - DigitalOcean guide
+- [Deploying only changed Microservices](https://www.reddit.com/r/devops/comments/rxzath/deploying_only_the_microservices_that_have_changes/) - Reddit DevOps community
+- [CI/CD Pipelines for Microservices](https://codefresh.io/blog/ci-cd-pipelines-microservices/) - Codefresh comprehensive guide
+- [Automating CI/CD in Kubernetes for Microservices](https://overcast.blog/automating-ci-cd-pipelines-in-kubernetes-for-microservices-architecture-4880f744fdd6) - Architecture patterns
+- [Separate CD Pipelines with GitHub Actions](https://www.codecapers.com.au/separate-cd-pipelines-for-microservices-in-a-monorepo/) - CodeCapers implementation
+- [Building Monorepo CI/CD with Helm on K8s](https://www.infracloud.io/blogs/monorepo-ci-cd-helm-kubernetes/) - InfraCloud guide
+- [CI/CD for .NET Microservices with Azure DevOps](https://medium.com/@venkataramanaguptha/ci-cd-for-net-microservices-with-azure-devops-end-to-end-automation-749fc127aae5) - End-to-end automation
+- [Monorepo Guide: Managing Repositories & Microservices](https://www.aviator.co/blog/monorepo-a-hands-on-guide-for-managing-repositories-and-microservices/) - Aviator hands-on guide
+- [Faire's CI Pipeline Transformation](https://www.linkedin.com/posts/danielepolencic_when-your-ci-pipeline-is-5000-lines-of-activity-7378756149896138752-uWwB) - LinkedIn case study
+- [Implement CI/CD Strategies for Monorepos](https://graphite.dev/guides/implement-cicd-strategies-monorepos) - Graphite detailed guide
+- [CI/CD for Microservices using Mono Repository](https://medium.com/@chatla-hari/ci-cd-for-microservices-architecture-using-mono-repository-ed612a2d072e) - Medium implementation
+- [Best CI/CD Triggering Strategies for Monorepo](https://www.reddit.com/r/github/comments/1im6f71/best_cicd_triggering_strategies_for_a/) - Reddit GitHub community
+- [Optimize CI/CD Pipeline for Microservices](https://gole.ms/blog/how-optimize-cicd-pipeline-microservices-architecture) - Optimization techniques
+- [Automating Docker Builds with GitHub Actions](https://beon.tech/blog/automating-docker-builds-monorepo-github-actions/) - Beon Tech tutorial
+- [Docker Monorepo CI/CD in Azure Pipelines](https://stackoverflow.com/questions/69846184/docker-microservice-monorepo-ci-cd-in-azure-pipelines) - Stack Overflow solutions
+- [Monorepo Architecture and Build Pipeline](https://www.abrahamberg.com/blog/monorepo-architecture-ci-cd-and-build-pipeline/) - Architecture deep dive
+- [Why Monorepo and CI/CD in Monorepo](https://informediq.com/why-monorepo-and-how-to-use-ci-cd-in-monorepo/) - Informed IQ rationale
+- [CI/CD for Microservices - Microsoft Learn](https://learn.microsoft.com/en-us/azure/architecture/microservices/ci-cd) - Azure architecture guide
+
+---
+
 ### Phase 9 (Proposed): Deployment & Scaling Automation
 
 **Objective**: Production-ready deployment with auto-scaling and CI/CD
 
-#### Task 9.1.1: Linode/Kubernetes Auto-Scaling 🚀 DEVOPS
-**Description**: Update deployment guide with scripts for auto-scaling based on Prometheus metrics (CPU >80%, memory >4GB). Integrate GitHub Actions for CI/CD.
+#### Task 9.1.1: Kubernetes Auto-Scaling + CI/CD Pipeline 🚀 CRITICAL
+**Description**: Production-ready CI/CD pipeline with path-based triggers, caching, and Kubernetes auto-scaling. Implements best practices from monorepo CI/CD optimization guide (see above section).
 
 **Implementation**:
-- Location: `docs/deployment/LINODE_AUTOMATION_GUIDE.md` (update)
-- Scripts: `scripts/deployment/auto_scale_k8s.sh`
-- GitHub Actions: `.github/workflows/deploy_production.yml`
-- Metrics: Prometheus → HPA (Horizontal Pod Autoscaler)
+- **Location**: `.github/workflows/production.yml` (production pipeline)
+- **K8s Manifests**: `scripts/deployment/k8s/` (deployments, services, HPA)
+- **Helm Chart**: `scripts/deployment/helm/fks-platform/` (production-ready charts)
+- **Scripts**: `scripts/deployment/auto_scale_k8s.sh` (HPA configuration)
+
+**CI/CD Pipeline Components**:
+
+1. **Path-Based Triggers** (40-60% fewer runs):
+```yaml
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/services/**'
+      - 'docker/**'
+      - 'requirements*.txt'
+```
+
+2. **Change Detection** (selective builds):
+```yaml
+jobs:
+  detect-changes:
+    uses: dorny/paths-filter@v2
+    filters: |
+      api: 'src/services/api/**'
+      app: 'src/services/app/**'
+      ai: 'src/services/ai/**'
+      data: 'src/services/data/**'
+```
+
+3. **Caching** (30-50% faster builds):
+   - Docker layer caching: `cache-from: type=gha`
+   - Python dependencies: `actions/cache@v4` with pip cache
+   - Expected impact: 8-12 minute builds (down from 20-30)
+
+4. **Parallel Execution** (halves duration):
+   - Matrix strategy for concurrent service builds
+   - Dependency-aware ordering (base images first)
+   - `max-parallel: 4` to avoid resource contention
+
+5. **Quality Gates**:
+   - Ruff linting before builds
+   - Pytest unit tests per service
+   - Integration tests with Docker Compose services
+   - Coverage reports uploaded to Codecov
+
+6. **Staged Deployment**:
+   - Stage 1: Deploy to K8s staging namespace
+   - Stage 2: Smoke tests (health checks, basic API calls)
+   - Stage 3: Helm upgrade to production with canary rollout
+   - Stage 4: Monitor rollout status (5-minute timeout)
+
+7. **Kubernetes Auto-Scaling**:
+```yaml
+# HPA configuration
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fks-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fks-app
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 4Gi
+```
+
+8. **Rollback Mechanism**:
+```yaml
+- name: Deploy with Health Check
+  run: |
+    kubectl rollout status deployment/fks-app --timeout=5m
+    curl -f https://staging.fks.com/health || kubectl rollout undo deployment/fks-app
+```
+
+9. **Notifications**:
+   - Slack/Discord webhook on failures
+   - Success notifications for production deploys
+   - Alerts for rollback triggers
 
 **Dependencies**:
+- Reference monorepo CI/CD optimization section above
 - Existing: `docs/archive/completed-phases/PHASE_4_DEPLOYMENT_CHECKLIST.md`
-- New: Kubernetes manifests in `scripts/deployment/k8s/`
+- New: Kubernetes manifests, Helm charts, GitHub Actions workflows
+- Tools: Kompose (Compose → K8s conversion), Helm 3, kubectl
 
-**Effort**: 5-8 days
+**Effort**: 7-10 days (increased for comprehensive CI/CD setup)
 
-**Rationale**: Biz4Group best practices emphasize containerization for 50% faster deploys. Auto-scaling prevents manual intervention during high load (e.g., volatile markets).
+**Rationale**: 
+- Research shows 20-50% build time reduction with caching + selective builds (DigitalOcean, Graphite)
+- Path-based triggers reduce unnecessary runs by 40-60% (Graphite guide)
+- Auto-scaling prevents manual intervention during volatile markets (Biz4Group best practices)
+- Helm enables version-controlled deploys with <2 minute rollbacks
+
+**Migration Strategy** (Gradual K8s Adoption):
+- Week 1-2: Implement GitHub Actions CI/CD with path-based triggers
+- Week 3-4: Convert services to K8s with Kompose, deploy to staging
+- Week 5-6: Helm chart creation, production namespace setup
+- Week 7-8: HPA configuration, monitoring integration, production rollout
 
 **Acceptance Criteria**:
-- [ ] K8s HPA configured for fks_ai, fks_app (scale 1-5 pods)
-- [ ] GitHub Actions deploy on main branch push (after tests pass)
-- [ ] Rollback mechanism: Auto-revert if health checks fail
-- [ ] Documentation: Step-by-step guide in `docs/deployment/`
+- [ ] GitHub Actions pipeline with path-based triggers operational
+- [ ] Docker layer caching reducing builds by ≥30%
+- [ ] Parallel service builds halving pipeline duration
+- [ ] K8s HPA configured for fks_ai, fks_app, fks_data (scale 1-5 pods)
+- [ ] Helm chart deployable to staging/production namespaces
+- [ ] Rollback mechanism tested (auto-revert on health check failure)
+- [ ] Smoke tests running post-deployment (<5 minutes)
+- [ ] Slack/Discord notifications functional
+- [ ] Documentation: Complete runbook in `docs/deployment/CICD_RUNBOOK.md`
+- [ ] Deployment frequency: ≥3 deploys/day achievable
+
+**Expected Impact**:
+- Build time: 8-12 minutes (vs. 20-30 manual)
+- Deployment frequency: Multiple/day (vs. weekly)
+- Failure detection: <5 minutes (automated tests)
+- Rollback time: <2 minutes (Helm rollback)
+- Cost reduction: 40-60% fewer CI/CD minutes (selective builds)
 
 ---
 

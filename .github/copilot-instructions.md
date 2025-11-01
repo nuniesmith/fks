@@ -110,6 +110,666 @@ NinjaTrader: fks_app (signal) → fks_ninja (bridge) → NT8 → Prop Firm
 | **fks_ninja** | C# NinjaTrader 8 bridge | Forward signals to prop firm platforms |
 | **fks_web** | Django UI with Bootstrap 5 | Fetch ALL data via fks_api |
 
+---
+
+## 🏦 fks_ninja: Bitcoin-First Prop Firm Integration
+
+### Overview: Progressive Wealth Growth Strategy
+
+**fks_ninja** is the C# bridge to NinjaTrader 8 (NT8) that enables **automated prop firm trading** with a **Bitcoin-first philosophy**. The service implements a **progressive scaling model**: Start with a hardware wallet tracking your BTC holdings, grow through spending wallets (Shakepay, Crypto.com, Netcoins), scale to multiple prop firm accounts, and execute synchronized trades across all active accounts when FKS signals fire.
+
+**Core Philosophy**:
+- **Bitcoin as Base Currency**: All wealth tracking and recommendations use BTC as the foundation
+- **Hardware Wallet First**: Users must set up a hardware wallet (Ledger, Trezor) to track public keys in fks_app
+- **Progressive Scaling**: System adapts recommendations based on total capital (hardware + spending wallets + prop accounts)
+- **Multi-Account Execution**: Single FKS signal → automated execution across all eligible prop accounts
+- **Crypto-Native**: Prioritize crypto prop firms (HyroTrader, Crypto Funded Trader) with direct API access
+
+### Architecture: Three-Layer Integration
+
+```
+Layer 1: Wallet Tracking (fks_app)
+  ├─ Hardware Wallet (BTC pub key monitoring)
+  ├─ Spending Wallets (Shakepay/Crypto.com/Netcoins APIs)
+  └─ Total Capital Calculation → Dynamic Recommendations
+
+Layer 2: Signal Distribution (fks_ninja)
+  ├─ FKS Signal Reception (socket/file-based)
+  ├─ Account Filtering (asset availability check)
+  └─ Multi-Account Routing
+
+Layer 3: Execution
+  ├─ Traditional: NT8 → Rithmic/Tradovate (Apex, Take Profit Trader, OneStep)
+  └─ Crypto: Direct API → Bybit/Exchange (HyroTrader, Crypto Funded Trader)
+```
+
+### Wallet Integration (Layer 1)
+
+#### Hardware Wallet Setup
+
+**User Onboarding Flow**:
+1. **Prompt User**: "To start tracking your wealth, please set up a hardware wallet (recommended: Ledger Nano X, Trezor Model T)"
+2. **Obtain Public Key**: User provides BTC extended public key (xpub/zpub)
+3. **Store in fks_app**: Save to `user_wallets` table in PostgreSQL
+4. **Background Monitoring**: Celery task queries blockchain APIs (Blockstream, BlockCypher) every 15 minutes
+
+**Implementation** (`src/services/app/src/wallets/hardware_wallet.py`):
+```python
+from blockstream import BlockstreamAPI
+from typing import Dict, List
+
+class HardwareWalletTracker:
+    def __init__(self, xpub: str, wallet_type: str = 'ledger'):
+        self.xpub = xpub
+        self.api = BlockstreamAPI()
+    
+    async def get_balance(self) -> Dict[str, float]:
+        """Query BTC balance from extended public key"""
+        addresses = self.derive_addresses(self.xpub, count=20)  # First 20 addresses
+        balances = await self.api.get_balances(addresses)
+        
+        total_btc = sum(balances.values())
+        usd_price = await self.get_btc_price()  # From fks_data
+        
+        return {
+            'btc': total_btc,
+            'usd': total_btc * usd_price,
+            'last_updated': datetime.now()
+        }
+    
+    def derive_addresses(self, xpub: str, count: int) -> List[str]:
+        """Derive Bitcoin addresses from xpub using BIP32"""
+        # Use bitcoinlib or similar for BIP32 derivation
+        pass
+```
+
+**Database Schema** (`src/services/app/src/models/wallet.py`):
+```python
+from django.db import models
+from authentication.models import User
+
+class UserWallet(models.Model):
+    WALLET_TYPES = [
+        ('hardware_btc', 'Hardware Wallet (BTC)'),
+        ('shakepay', 'Shakepay'),
+        ('crypto_com', 'Crypto.com'),
+        ('netcoins', 'Netcoins'),
+    ]
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    wallet_type = models.CharField(max_length=20, choices=WALLET_TYPES)
+    public_key = models.CharField(max_length=255)  # xpub for hardware, API key ref for exchanges
+    balance_btc = models.DecimalField(max_digits=18, decimal_places=8)
+    balance_usd = models.DecimalField(max_digits=18, decimal_places=2)
+    last_synced = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('user', 'wallet_type', 'public_key')
+```
+
+#### Spending Wallet Integration
+
+**Supported Platforms**:
+- **Shakepay**: Canadian exchange, BTC/ETH only, no official API (use browser automation or CSV imports)
+- **Crypto.com**: REST API with OAuth2, supports 100+ assets
+- **Netcoins**: Canadian fiat on-ramp, limited API (manual tracking initially)
+
+**Implementation** (`src/services/app/src/wallets/spending_wallet.py`):
+```python
+import requests
+from cryptography.fernet import Fernet
+
+class CryptoComWallet:
+    BASE_URL = 'https://api.crypto.com/v2/'
+    
+    def __init__(self, api_key: str, api_secret: str):
+        self.api_key = api_key
+        self.api_secret = api_secret
+    
+    async def get_balances(self) -> Dict[str, float]:
+        """Fetch all asset balances"""
+        headers = self._generate_auth_headers()
+        response = requests.get(f"{self.BASE_URL}private/get-account-summary", headers=headers)
+        
+        data = response.json()['result']['accounts']
+        return {
+            account['currency']: float(account['balance'])
+            for account in data
+        }
+    
+    def _generate_auth_headers(self) -> Dict[str, str]:
+        """Generate HMAC-SHA256 signature for API requests"""
+        # Implement Crypto.com's authentication scheme
+        pass
+```
+
+**Security Note**: Store API keys encrypted in PostgreSQL using `django-encrypted-model-fields`:
+```python
+from encrypted_model_fields.fields import EncryptedCharField
+
+class WalletAPIKey(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    platform = models.CharField(max_length=20)
+    api_key = EncryptedCharField(max_length=255)
+    api_secret = EncryptedCharField(max_length=255)
+```
+
+#### Dynamic Recommendations Engine
+
+**Capital Tiers & Recommendations**:
+
+| Total Capital (BTC) | Total Capital (USD) | Recommended Action | Prop Firm Target |
+|---------------------|---------------------|-------------------|------------------|
+| 0.001 - 0.01 BTC | $50 - $500 | Focus on accumulation via spending wallets | None (too small) |
+| 0.01 - 0.1 BTC | $500 - $5,000 | Open first crypto prop account (HyroTrader $5K) | 1 account |
+| 0.1 - 0.5 BTC | $5,000 - $25,000 | Scale to 2-3 prop accounts (HyroTrader $25K + futures) | 2-3 accounts |
+| 0.5 - 2 BTC | $25,000 - $100,000 | Diversify: 5+ prop accounts across crypto/futures | 5-8 accounts |
+| 2+ BTC | $100,000+ | Max scaling: 10+ accounts, consider personal capital deployment | 10+ accounts |
+
+**Implementation** (`src/services/app/src/recommendations/wealth_advisor.py`):
+```python
+class WealthAdvisor:
+    def __init__(self, user_id: int):
+        self.user = User.objects.get(id=user_id)
+        self.total_btc = self._calculate_total_btc()
+    
+    def _calculate_total_btc(self) -> float:
+        """Sum BTC across all wallets (hardware + spending)"""
+        wallets = UserWallet.objects.filter(user=self.user)
+        return sum([w.balance_btc for w in wallets])
+    
+    def get_recommendations(self) -> Dict:
+        """Dynamic recommendations based on capital tier"""
+        btc_price = self.get_btc_price()
+        usd_total = self.total_btc * btc_price
+        
+        if usd_total < 500:
+            return {
+                'tier': 'accumulation',
+                'action': 'Focus on DCA (dollar-cost averaging) via Shakepay/Netcoins',
+                'prop_accounts': 0,
+                'next_milestone': '$500 (0.01 BTC) to qualify for first prop account'
+            }
+        elif usd_total < 5000:
+            return {
+                'tier': 'starter',
+                'action': 'Open HyroTrader $5K account (one-time $99 fee)',
+                'prop_accounts': 1,
+                'prop_details': [
+                    {'name': 'HyroTrader', 'size': '$5,000', 'split': '90%', 'fee': '$99'}
+                ],
+                'next_milestone': '$5,000 (0.1 BTC) to scale to multiple accounts'
+            }
+        elif usd_total < 25000:
+            return {
+                'tier': 'scaling',
+                'action': 'Add 2nd prop account: HyroTrader $25K or Apex futures',
+                'prop_accounts': 2,
+                'prop_details': [
+                    {'name': 'HyroTrader', 'size': '$25,000', 'split': '90%', 'fee': '$199'},
+                    {'name': 'Apex (futures)', 'size': '$25,000', 'split': '90%', 'fee': '$147'}
+                ],
+                'next_milestone': '$25,000 (0.5 BTC) to diversify across 5+ accounts'
+            }
+        # ... additional tiers
+```
+
+**User Interface** (`src/services/web/templates/dashboard/wealth_overview.html`):
+```html
+<div class="wealth-dashboard">
+    <h2>Your Bitcoin Wealth</h2>
+    
+    <div class="total-holdings">
+        <span class="btc-amount">{{ total_btc|floatformat:8 }} BTC</span>
+        <span class="usd-amount">${{ total_usd|floatformat:2 }}</span>
+    </div>
+    
+    <div class="wallet-breakdown">
+        <h3>Wallet Breakdown</h3>
+        {% for wallet in wallets %}
+        <div class="wallet-row">
+            <span>{{ wallet.wallet_type }}</span>
+            <span>{{ wallet.balance_btc|floatformat:8 }} BTC</span>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="recommendations">
+        <h3>Recommended Next Steps</h3>
+        <p>{{ recommendations.action }}</p>
+        <p>Target Prop Accounts: {{ recommendations.prop_accounts }}</p>
+    </div>
+</div>
+```
+
+### Signal Distribution & Execution (Layers 2-3)
+
+#### NT8 Strategy Listener (Traditional Prop Firms)
+
+**Supported Firms**:
+- **Apex Trader Funding**: Rithmic connection, trailing drawdown, 90% split
+- **Take Profit Trader**: Tradovate connection, 100% profit split, no EOD rule
+- **OneStep Funding**: Rithmic, 90% split, instant funding
+
+**Implementation** (`src/services/ninja/src/Strategies/FKS_Listener.cs`):
+```csharp
+using System;
+using System.Net.Sockets;
+using System.Text.Json;
+using NinjaTrader.NinjaScript.Strategies;
+
+namespace NinjaTrader.NinjaScript.Strategies
+{
+    public class FKS_Listener : Strategy
+    {
+        private TcpClient _client;
+        private const string FKS_HOST = "localhost";
+        private const int FKS_PORT = 8007;  // fks_ninja signal port
+        
+        protected override void OnStateChange()
+        {
+            if (State == State.SetDefaults)
+            {
+                Description = "FKS Signal Listener for Prop Firm Trading";
+                Name = "FKS_Listener";
+                Calculate = Calculate.OnBarClose;
+                EntriesPerDirection = 1;
+                EntryHandling = EntryHandling.AllEntries;
+            }
+            else if (State == State.Configure)
+            {
+                _client = new TcpClient(FKS_HOST, FKS_PORT);
+            }
+        }
+        
+        protected override void OnBarUpdate()
+        {
+            // Check for new signals from FKS
+            if (IsSignalAvailable())
+            {
+                var signal = ReceiveSignal();
+                ExecuteSignal(signal);
+            }
+            
+            // EOD timeout: Close all positions 15 mins before session end
+            if (IsNearEOD())
+            {
+                ExitLong();
+                ExitShort();
+            }
+        }
+        
+        private FKSSignal ReceiveSignal()
+        {
+            byte[] buffer = new byte[1024];
+            int bytesRead = _client.GetStream().Read(buffer, 0, buffer.Length);
+            string json = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+            
+            return JsonSerializer.Deserialize<FKSSignal>(json);
+        }
+        
+        private void ExecuteSignal(FKSSignal signal)
+        {
+            if (signal.Action == "buy" && signal.Instrument == Instrument.FullName)
+            {
+                EnterLongLimit(0, true, 1, signal.Price, "FKS_Long");
+                SetProfitTarget("FKS_Long", CalculationMode.Ticks, signal.TPPoints);
+                SetStopLoss("FKS_Long", CalculationMode.Ticks, signal.SLPoints, false);
+            }
+            else if (signal.Action == "sell" && signal.Instrument == Instrument.FullName)
+            {
+                EnterShortLimit(0, true, 1, signal.Price, "FKS_Short");
+                SetProfitTarget("FKS_Short", CalculationMode.Ticks, signal.TPPoints);
+                SetStopLoss("FKS_Short", CalculationMode.Ticks, signal.SLPoints, false);
+            }
+        }
+        
+        private bool IsNearEOD()
+        {
+            // Check if within 15 minutes of session close
+            var sessionEnd = SessionIterator.ActualSessionEnd;
+            return (sessionEnd - Time[0]).TotalMinutes <= 15;
+        }
+    }
+    
+    public class FKSSignal
+    {
+        public string Action { get; set; }  // "buy" or "sell"
+        public string Instrument { get; set; }  // "ES 03-25"
+        public double Price { get; set; }
+        public int TPPoints { get; set; }  // Take profit in ticks
+        public int SLPoints { get; set; }  // Stop loss in ticks
+    }
+}
+```
+
+**Signal Server** (`src/services/ninja/src/signal_server.py`):
+```python
+import asyncio
+import json
+from typing import List
+
+class SignalServer:
+    """TCP server to send signals to NT8 instances"""
+    
+    def __init__(self, host='0.0.0.0', port=8007):
+        self.host = host
+        self.port = port
+        self.clients: List[asyncio.StreamWriter] = []
+    
+    async def start(self):
+        server = await asyncio.start_server(self.handle_client, self.host, self.port)
+        async with server:
+            await server.serve_forever()
+    
+    async def handle_client(self, reader, writer):
+        """Register NT8 client"""
+        self.clients.append(writer)
+        print(f"NT8 client connected from {writer.get_extra_info('peername')}")
+        
+        # Keep connection alive
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            self.clients.remove(writer)
+    
+    async def broadcast_signal(self, signal: dict):
+        """Send signal to all connected NT8 instances"""
+        message = json.dumps(signal).encode('utf-8')
+        
+        for writer in self.clients:
+            try:
+                writer.write(message)
+                await writer.drain()
+            except Exception as e:
+                print(f"Failed to send to client: {e}")
+                self.clients.remove(writer)
+```
+
+#### Crypto Prop Firm Direct API (Preferred for Bitcoin Trading)
+
+**Supported Platforms**:
+- **HyroTrader**: Crypto-only, Bybit API, up to $200K funding, 90% split
+- **Crypto Funded Trader**: Multi-exchange, API support, instant payouts
+
+**Implementation** (`src/services/ninja/src/crypto_execution.py`):
+```python
+import ccxt
+from typing import Dict, List
+
+class HyroTraderExecutor:
+    """Direct Bybit API execution for HyroTrader accounts"""
+    
+    def __init__(self, api_key: str, api_secret: str, testnet: bool = False):
+        self.exchange = ccxt.bybit({
+            'apiKey': api_key,
+            'secret': api_secret,
+            'enableRateLimit': True,
+            'options': {'defaultType': 'swap'}  # Perpetual futures
+        })
+        
+        if testnet:
+            self.exchange.set_sandbox_mode(True)
+    
+    async def execute_signal(self, signal: Dict):
+        """Execute FKS signal on Bybit"""
+        symbol = signal['symbol']  # e.g., 'BTC/USDT:USDT'
+        side = 'buy' if signal['action'] == 'long' else 'sell'
+        amount = self.calculate_position_size(signal)
+        
+        # Place limit order
+        order = await self.exchange.create_limit_order(
+            symbol=symbol,
+            side=side,
+            amount=amount,
+            price=signal['price']
+        )
+        
+        # Set TP/SL using Bybit's bracket orders
+        await self.set_tp_sl(order['id'], signal['tp_price'], signal['sl_price'])
+        
+        return order
+    
+    def calculate_position_size(self, signal: Dict) -> float:
+        """Calculate position size based on account balance and risk %"""
+        balance = self.exchange.fetch_balance()
+        btc_balance = balance['BTC']['free']
+        
+        risk_per_trade = 0.02  # 2% risk per trade
+        btc_risk = btc_balance * risk_per_trade
+        
+        # Calculate position size based on stop loss distance
+        sl_distance = abs(signal['price'] - signal['sl_price'])
+        position_size = btc_risk / sl_distance
+        
+        return position_size
+    
+    async def set_tp_sl(self, order_id: str, tp_price: float, sl_price: float):
+        """Set take profit and stop loss for existing order"""
+        await self.exchange.edit_order(
+            id=order_id,
+            params={
+                'takeProfit': tp_price,
+                'stopLoss': sl_price
+            }
+        )
+```
+
+#### Multi-Account Signal Router
+
+**Implementation** (`src/services/ninja/src/account_manager.py`):
+```python
+from typing import List, Dict
+from dataclasses import dataclass
+
+@dataclass
+class PropAccount:
+    id: int
+    user_id: int
+    firm_name: str  # 'hyrotrader', 'apex', 'takeprofit'
+    account_type: str  # 'crypto' or 'futures'
+    api_credentials: Dict
+    active: bool
+    supported_assets: List[str]
+
+class MultiAccountRouter:
+    """Routes FKS signals to all eligible prop accounts"""
+    
+    def __init__(self, user_id: int):
+        self.user_id = user_id
+        self.accounts = self.load_accounts()
+    
+    def load_accounts(self) -> List[PropAccount]:
+        """Load all active prop accounts for user"""
+        return PropAccount.objects.filter(
+            user_id=self.user_id,
+            active=True
+        ).all()
+    
+    async def route_signal(self, signal: Dict):
+        """Send signal to all accounts that support the asset"""
+        asset = signal['symbol'].split('/')[0]  # Extract BTC from BTC/USDT
+        
+        eligible_accounts = [
+            acc for acc in self.accounts
+            if asset in acc.supported_assets
+        ]
+        
+        results = []
+        for account in eligible_accounts:
+            if account.account_type == 'crypto':
+                executor = HyroTraderExecutor(**account.api_credentials)
+                result = await executor.execute_signal(signal)
+            else:  # futures via NT8
+                result = await self.send_to_nt8(account, signal)
+            
+            results.append({
+                'account': account.firm_name,
+                'order': result
+            })
+        
+        return results
+    
+    async def send_to_nt8(self, account: PropAccount, signal: Dict):
+        """Send signal to NT8 via signal server"""
+        server = SignalServer()  # Connect to running server
+        await server.broadcast_signal({
+            'action': signal['action'],
+            'instrument': signal['nt8_instrument'],  # e.g., 'ES 03-25'
+            'price': signal['price'],
+            'tp_points': signal['tp_points'],
+            'sl_points': signal['sl_points']
+        })
+```
+
+### Progressive Scaling Example
+
+**User Journey: Sarah's Bitcoin Growth**
+
+**Month 1: Accumulation Phase**
+- Sarah sets up Ledger Nano X, adds xpub to FKS
+- Hardware wallet: 0.005 BTC ($250)
+- Shakepay DCA: Buys $50/week BTC
+- FKS recommendation: "Keep accumulating, need $500 to start prop trading"
+
+**Month 3: First Prop Account**
+- Total: 0.012 BTC ($600)
+- FKS recommendation: "You qualify for HyroTrader $5K account!"
+- Sarah pays $99 one-time fee, passes evaluation
+- Now eligible for FKS automated trading on 1 account
+
+**Month 6: Multi-Account Scaling**
+- Total: 0.08 BTC ($4,000) across hardware + Shakepay + HyroTrader profits
+- FKS recommendation: "Scale to 2 accounts: Add Apex futures or HyroTrader $25K"
+- Opens Apex $25K account ($147 fee)
+- Now trading 2 accounts simultaneously
+
+**Month 12: Mature Portfolio**
+- Total: 0.4 BTC ($20,000)
+- Active accounts: 5 (2x HyroTrader crypto, 2x Apex futures, 1x Take Profit Trader)
+- FKS executes: BTC long signal → Fires on HyroTrader accounts only (asset match)
+- ES short signal → Fires on Apex + Take Profit Trader (futures match)
+
+### Security & Compliance
+
+**Hardware Wallet Best Practices**:
+- **Never store private keys in FKS**: Only public keys (xpub/zpub)
+- **User education**: Prompt to verify addresses on device before sharing
+- **Backup reminders**: Celery task sends monthly reminder to verify seed phrase backup
+
+**API Key Storage**:
+- Encrypt at rest using Fernet (symmetric encryption)
+- Decrypt only in memory during API calls
+- Implement key rotation every 90 days
+
+**Prop Firm Compliance**:
+- **EOD Rules**: Always close positions before session end (Apex trailing drawdown)
+- **Max Contracts**: Respect firm limits (e.g., 10 contracts for Apex $25K)
+- **No Martingale**: FKS signals are independent, no position averaging
+- **Audit Trail**: Log every signal, execution, and P&L to TimescaleDB
+
+### Development Roadmap
+
+**Phase 1: Wallet Tracking (2-3 weeks)**
+- [ ] Implement hardware wallet xpub monitoring
+- [ ] Integrate Crypto.com API for spending wallets
+- [ ] Build wealth aggregation dashboard
+- [ ] Add dynamic recommendation engine
+
+**Phase 2: Single Account Execution (2-3 weeks)**
+- [ ] Build NT8 signal server (TCP sockets)
+- [ ] Develop FKS_Listener.cs strategy with TP/SL/EOD
+- [ ] Test on Apex/Take Profit Trader simulations
+- [ ] Implement HyroTrader direct API executor
+
+**Phase 3: Multi-Account Scaling (3-4 weeks)**
+- [ ] Create PropAccount model and manager
+- [ ] Build multi-account signal router
+- [ ] Implement asset filtering (crypto vs. futures)
+- [ ] Add account health monitoring (balance, drawdown)
+
+**Phase 4: Advanced Features (ongoing)**
+- [ ] Portfolio rebalancing suggestions
+- [ ] Risk analytics (correlation across accounts)
+- [ ] Tax reporting (crypto gains tracking)
+- [ ] Social features (connect with other FKS prop traders)
+
+### Testing Strategy
+
+**Unit Tests** (`src/services/ninja/tests/test_wallet_tracker.py`):
+```python
+import pytest
+from wallets.hardware_wallet import HardwareWalletTracker
+
+@pytest.mark.asyncio
+async def test_xpub_balance_query():
+    # Use testnet xpub
+    tracker = HardwareWalletTracker(xpub='tpub...')
+    balance = await tracker.get_balance()
+    
+    assert 'btc' in balance
+    assert 'usd' in balance
+    assert balance['btc'] >= 0
+```
+
+**Integration Tests** (`src/services/ninja/tests/integration/test_signal_execution.py`):
+```python
+@pytest.mark.integration
+async def test_hyrotrader_signal_execution():
+    # Use Bybit testnet
+    executor = HyroTraderExecutor(
+        api_key='testnet_key',
+        api_secret='testnet_secret',
+        testnet=True
+    )
+    
+    signal = {
+        'symbol': 'BTC/USDT:USDT',
+        'action': 'long',
+        'price': 50000,
+        'tp_price': 51000,
+        'sl_price': 49500
+    }
+    
+    order = await executor.execute_signal(signal)
+    assert order['status'] == 'open'
+```
+
+**NT8 Simulation Tests**:
+- Run FKS_Listener on NinjaTrader SIM
+- Send test signals via signal server
+- Verify limit orders placed correctly
+- Confirm TP/SL brackets attached
+
+### Key Citations & Resources
+
+**NinjaTrader Integration**:
+- [Ninjatrader, IB, Python integration](https://forum.ninjatrader.com/forum/ninjatrader-8/platform-technical-support-aa/1091482-ninjatrader-ib-python-integration-backtest-and-live-trading-environment)
+- [Using Python in NinjaTrader](https://forum.ninjatrader.com/forum/ninjatrader-8/add-on-development/1315563-using-python-in-ninjatrader)
+- [Python.NET in NT8](https://forum.ninjatrader.com/forum/ninjatrader-8/add-on-development/1248249-python-runtime-in-ninjatrader-8)
+- [CSharpNinja-Python Connector](https://github.com/TheSnowGuru/CSharpNinja-Python-NinjaTrader8-trading-api-connector-drag-n-drop)
+- [Enhancing NT8 with Python](https://blog.stackademic.com/enhancing-ninjatrader-strategies-integrating-c-with-python-for-advanced-trading-automation-805a7f434513)
+
+**Prop Firm Setup**:
+- [NT8 Prop Firm Connection Guide](https://crosstrade.io/blog/ninjatrader-8-prop-firm-connection-guide/)
+- [Rithmic Multi-Firm Setup](https://www.quantvps.com/blog/connect-to-different-rithmic-prop-firms-on-ninjatrader)
+- [Take Profit Trader Tradovate Setup](https://www.youtube.com/watch?v=BXCA71YNq-w)
+- [All Prop Firms with NinjaTrader](https://www.livingfromtrading.com/prop-firms/platforms/ninjatrader/)
+
+**Crypto Prop Firms**:
+- [HyroTrader Crypto API Trading](https://www.hyrotrader.com/blog/crypto-api-trading/)
+- [HyroTrader Funded Programs Guide](https://www.hyrotrader.com/blog/funded-trader-programs/)
+- [Crypto Funded Trader Program](https://www.hyrotrader.com/crypto-funded-trader/)
+- [Best Crypto Prop Firms - Coinpedia](https://coinpedia.org/sponsored/best-crypto-prop-trading-firms/)
+
+**Hardware Wallet Integration**:
+- [Blockstream API Documentation](https://github.com/Blockstream/esplora/blob/master/API.md)
+- [BIP32 HD Wallet Derivation](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
+- [Ledger Developer Docs](https://developers.ledger.com/)
+
+---
+
 ## 🤖 Agent Usage Guide (Best Practices for AI Development)
 
 ### Core Development Philosophy

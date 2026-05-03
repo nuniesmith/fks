@@ -109,7 +109,7 @@ edition = "2024"
 authors = ["nuniesmith"]
 license = "MIT"
 repository = "https://github.com/nuniesmith/fks"
-rust-version = "1.92.0"
+rust-version = "1.94.1"
 publish = false
 
 # ============================================================================

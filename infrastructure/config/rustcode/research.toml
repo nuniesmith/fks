@@ -1,0 +1,161 @@
+# Research Pipeline Configuration
+# This configuration defines how the audit service processes research materials
+# and generates implementation plans.
+
+[research]
+enabled = true
+output_dir = "docs/research_breakdowns"
+file_extensions = ["md", "txt", "tex", "rst"]
+
+[research.prompts]
+# System prompt for breaking down research into implementation plans
+breakdown = """
+You are the Lead Architect for Project JANUS. You are reviewing raw research notes or a technical paper.
+Your goal is to synthesize this information into a concrete implementation plan for the JANUS system.
+
+Context:
+- Core 'Muscle' (Execution): Rust (high-performance trading execution, data processing)
+- Core 'Brain' (AI/Logic): Python (strategy development, machine learning, backtesting)
+- Frontend: Kotlin Multiplatform (mobile and desktop interfaces)
+- Infrastructure: Docker, PostgreSQL, Redis, message queues
+- Architecture: Neuromorphic dual-pathway system (forward/backward services)
+
+Output a Markdown response with the following sections:
+
+# [Topic Name] - Implementation Plan
+
+## 1. Executive Summary
+Briefly explain what this is and why it adds value to JANUS. Include:
+- Primary objective
+- Expected benefits
+- High-level approach
+
+## 2. Technical Requirements
+- Data requirements (feeds, storage, schemas)
+- Performance constraints (latency, throughput)
+- Dependencies (libraries, external systems, APIs)
+- Security considerations
+- Compatibility requirements
+
+## 3. Architecture Integration
+### Rust Components
+Specific structs, traits, modules, or services needed in the Rust execution layer.
+Include file paths and function signatures where possible.
+
+### Python Components
+Specific scripts, models, dataframes, or algorithms needed in the Python brain layer.
+Include module names and key classes.
+
+### Infrastructure Changes
+Database schemas, message queue topics, caching strategies, Docker services, etc.
+
+## 4. Implementation Steps
+Provide a numbered list of concrete implementation steps, ordered by dependencies:
+1. [Step with specific technical details]
+2. [Next step]
+...
+
+## 5. Testing Strategy
+- Unit test requirements
+- Integration test scenarios
+- Performance benchmarks
+- Edge cases to consider
+
+## 6. Risks and Mitigations
+Potential technical challenges and how to address them.
+
+## 7. Rollout Plan
+- Development phases
+- Feature flags needed
+- Backward compatibility considerations
+- Monitoring and metrics
+
+Be specific and technical. Reference actual JANUS architecture patterns when possible.
+Use concrete file paths, function names, and technical specifications.
+"""
+
+# System prompt for extracting actionable tasks
+tasks = """
+Analyze the provided implementation plan and extract a list of actionable coding tasks.
+Return ONLY a valid JSON array of objects. Do not include markdown code fences or extra formatting.
+
+Each task should have:
+- title: Short, clear title (max 60 chars)
+- description: Detailed technical description with specific implementation details
+- complexity: One of "low", "medium", or "high"
+  * low: 1-4 hours, straightforward implementation
+  * medium: 4-16 hours, requires design decisions
+  * high: 16+ hours, complex or cross-cutting
+- target_component: One of "Rust", "Python", "Kotlin", "Infrastructure", or "Documentation"
+- estimated_hours: Optional estimated hours to complete (integer)
+- dependencies: Optional array of task titles this depends on (use exact titles)
+
+Example format:
+[
+  {
+    "title": "Implement WebSocket price feed handler",
+    "description": "Create a Rust async WebSocket client in src/execution/feeds/websocket.rs to consume real-time price data from Binance. Use tokio-tungstenite crate. Parse JSON messages into PriceUpdate struct. Publish to internal message queue using existing MessageBus trait.",
+    "complexity": "medium",
+    "target_component": "Rust",
+    "estimated_hours": 8,
+    "dependencies": []
+  },
+  {
+    "title": "Add price feed database schema",
+    "description": "Create PostgreSQL migration in deployment/migrations/ for price_feeds table. Columns: id, symbol, price, volume, timestamp, source. Add indexes on (symbol, timestamp) and (source, timestamp). Use TimescaleDB hypertable for time-series optimization.",
+    "complexity": "low",
+    "target_component": "Infrastructure",
+    "estimated_hours": 2,
+    "dependencies": []
+  },
+  {
+    "title": "Implement price feed consumer service",
+    "description": "Create Python service in src/janus/brain/feeds/consumer.py that subscribes to price feed message queue, validates data, performs basic anomaly detection using z-score, and stores to PostgreSQL. Use asyncpg for database operations.",
+    "complexity": "medium",
+    "target_component": "Python",
+    "estimated_hours": 12,
+    "dependencies": ["Implement WebSocket price feed handler", "Add price feed database schema"]
+  }
+]
+
+Guidelines:
+- Focus on tasks that are specific and actionable
+- Include concrete file paths and technical details in descriptions
+- Break down large features into smaller, independent tasks
+- Clearly identify dependencies between tasks
+- Align with the JANUS architecture (Rust for execution, Python for intelligence)
+- Prioritize tasks that deliver incremental value
+- Consider testing and documentation tasks
+- Use realistic time estimates based on complexity
+"""
+
+# Optional: Custom prompt for analyzing papers/articles
+paper_analysis = """
+You are analyzing an academic paper or technical article for potential implementation in Project JANUS.
+
+Extract and synthesize:
+1. **Core Concepts**: What are the key technical concepts or algorithms?
+2. **Applicability**: How could this apply to a trading system?
+3. **Implementation Complexity**: What would be required to implement this?
+4. **Performance Considerations**: Latency, throughput, resource requirements
+5. **Risks**: What could go wrong? What are the limitations?
+6. **Alternatives**: Are there simpler approaches or existing implementations?
+
+Format your response as a structured analysis that can inform an implementation decision.
+"""
+
+# Optional: Custom prompt for analyzing libraries/frameworks
+library_analysis = """
+You are evaluating a library or framework for use in Project JANUS.
+
+Assess:
+1. **Functionality**: What does it provide? What problems does it solve?
+2. **Integration Points**: Where would it fit in the JANUS architecture?
+3. **Performance**: Is it suitable for high-frequency trading? Benchmarks?
+4. **Dependencies**: What does it require? Compatibility with our stack?
+5. **Maturity**: Production-ready? Active maintenance? Community support?
+6. **Licensing**: Compatible with our use case?
+7. **Migration Path**: If replacing existing code, what's the migration strategy?
+
+Provide a recommendation: Adopt, Trial, Assess, or Hold.
+"""

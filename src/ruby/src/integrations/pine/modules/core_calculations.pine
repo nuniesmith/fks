@@ -1,0 +1,19 @@
+// ── Module: core_calculations ───────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 2. CORE INDICATORS
+// ══════════════════════════════════════════════════════════════════════════════
+ema9   = ta.ema(close, 9)
+atr14  = ta.atr(14)
+volAvg = ta.sma(volume, 20)
+ao     = ta.sma(hl2, 5) - ta.sma(hl2, 34)    // Awesome Oscillator
+rsi14  = ta.rsi(close, 14)
+
+// VWAP with SMA(20) fallback for assets / timeframes where VWAP is not available
+// (e.g. daily chart or non-intraday feeds where ta.vwap() returns na).
+// vwap_valid lets downstream code distinguish the real VWAP from the proxy.
+_vwap_raw  = ta.vwap(hlc3)
+_vwap_sma  = ta.sma(close, 20)
+vwap       = na(_vwap_raw) ? _vwap_sma : _vwap_raw
+vwap_valid = not na(_vwap_raw)

@@ -1,0 +1,483 @@
+syntax = "proto3";
+
+package fks.forward.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/forward/v1;forwardv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.forward.v1";
+
+import "fks/common/v1/common.proto";
+
+// ============================================================================
+// Forward Service — Real-time Trading Engine (Wake State)
+//
+// NOTE: There is a naming overlap between this service and the high-level
+// orchestration `ForwardService` defined in `fks/janus/v1/janus.proto`.
+//
+//   fks.janus.v1.ForwardService  — high-level orchestration API (Start/Stop/
+//                                   Status/UpdateConfig). Used by the janus-core
+//                                   orchestration layer to manage engine instances.
+//
+//   fks.forward.v1.ForwardService — detailed trading engine API with full event
+//                                    streaming, metrics, and multi-engine management.
+//                                    Used directly by clients that need low-level
+//                                    engine control.
+//
+// TODO(STRUCT-C): Consolidate these into a single canonical ForwardService once
+// the janus-core and forward-service boundaries are clarified.
+// ============================================================================
+service ForwardService {
+  // Start trading engine for a symbol
+  rpc Start(StartRequest) returns (StartResponse);
+
+  // Stop trading engine
+  rpc Stop(StopRequest) returns (StopResponse);
+
+  // Get current engine status
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+
+  // Update engine configuration
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+
+  // Stream trading events
+  rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
+
+  // Get performance metrics
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+
+  // Health check — uses shared type from fks.common.v1
+  rpc HealthCheck(fks.common.v1.HealthCheckRequest) returns (fks.common.v1.HealthCheckResponse);
+}
+
+// ============================================================================
+// Request / Response Messages
+// ============================================================================
+
+message StartRequest {
+  // Trading symbol (e.g., "BTCUSD")
+  string symbol = 1;
+
+  // Risk factor (0.0 to 1.0)
+  double risk_factor = 2;
+
+  // Exchange to use
+  string exchange = 3;
+
+  // Strategy configuration
+  map<string, string> config = 4;
+
+  // Execution mode — shared type from fks.common.v1
+  fks.common.v1.ExecutionMode mode = 5;
+
+  // Optional: Initial capital allocation
+  double capital = 6;
+}
+
+message StartResponse {
+  // Unique engine instance ID
+  string engine_id = 1;
+
+  // Success flag
+  bool success = 2;
+
+  // Status message
+  string message = 3;
+
+  // Timestamp when started
+  int64 started_at = 4;
+}
+
+message StopRequest {
+  // Engine instance ID to stop
+  string engine_id = 1;
+
+  // Force stop (close all positions immediately)
+  bool force = 2;
+
+  // Reason for stopping
+  string reason = 3;
+}
+
+message StopResponse {
+  // Success flag
+  bool success = 1;
+
+  // Status message
+  string message = 2;
+
+  // Timestamp when stopped
+  int64 stopped_at = 3;
+
+  // Final P&L
+  double final_pnl = 4;
+
+  // Number of open positions closed
+  int32 positions_closed = 5;
+}
+
+message GetStatusRequest {
+  // Engine instance ID (empty string = all engines)
+  string engine_id = 1;
+}
+
+message GetStatusResponse {
+  // Engine statuses (one or more)
+  repeated EngineStatus engines = 1;
+}
+
+message UpdateConfigRequest {
+  // Engine instance ID
+  string engine_id = 1;
+
+  // Configuration updates
+  map<string, string> config = 2;
+
+  // Apply immediately (vs. wait for next cycle)
+  bool apply_immediately = 3;
+}
+
+message UpdateConfigResponse {
+  // Success flag
+  bool success = 1;
+
+  // Status message
+  string message = 2;
+
+  // Updated configuration
+  map<string, string> updated_config = 3;
+}
+
+message StreamEventsRequest {
+  // Engine instance ID (empty = all engines)
+  string engine_id = 1;
+
+  // Event types to receive (empty = all)
+  repeated EventType event_types = 2;
+}
+
+message StreamEventsResponse {
+  // Event type
+  EventType type = 1;
+
+  // Engine instance ID
+  string engine_id = 2;
+
+  // Timestamp (Unix milliseconds)
+  int64 timestamp = 3;
+
+  // Event payload
+  oneof event {
+    SignalEvent signal = 4;
+    OrderEvent order = 5;
+    FillEvent fill = 6;
+    PositionEvent position = 7;
+    ErrorEvent error = 8;
+    MetricEvent metric = 9;
+  }
+}
+
+message GetMetricsRequest {
+  // Engine instance ID (empty = all engines)
+  string engine_id = 1;
+
+  // Time range for metrics
+  int64 start_timestamp = 2;
+  int64 end_timestamp = 3;
+}
+
+message GetMetricsResponse {
+  // Metrics by engine
+  repeated EngineMetrics metrics = 1;
+
+  // Aggregated metrics (across all engines)
+  AggregatedMetrics aggregated = 2;
+}
+
+// ============================================================================
+// Core Data Types
+// ============================================================================
+
+message EngineStatus {
+  // Engine instance ID
+  string engine_id = 1;
+
+  // Current state
+  EngineState state = 2;
+
+  // Trading symbol
+  string symbol = 3;
+
+  // Exchange
+  string exchange = 4;
+
+  // Running status
+  bool is_running = 5;
+
+  // Performance metrics
+  int64 ticks_processed = 6;
+  int64 signals_generated = 7;
+  int64 orders_submitted = 8;
+  int64 orders_filled = 9;
+
+  // P&L tracking
+  double realized_pnl = 10;
+  double unrealized_pnl = 11;
+  double total_pnl = 12;
+
+  // Current position — uses shared PositionSide from fks.common.v1
+  EnginePosition current_position = 13;
+
+  // Risk metrics
+  double current_drawdown = 14;
+  double max_drawdown = 15;
+  double sharpe_ratio = 16;
+
+  // Timestamps
+  int64 started_at = 17;
+  int64 last_update = 18;
+
+  // Configuration
+  map<string, string> config = 19;
+}
+
+// Engine-local position snapshot (subset of fks.common.v1.Position).
+// Uses fks.common.v1.PositionSide for the side field.
+message EnginePosition {
+  // Symbol
+  string symbol = 1;
+
+  // Side (LONG, SHORT, FLAT) — shared type from fks.common.v1
+  fks.common.v1.PositionSide side = 2;
+
+  // Quantity
+  double quantity = 3;
+
+  // Entry price
+  double entry_price = 4;
+
+  // Current price
+  double current_price = 5;
+
+  // Unrealized P&L
+  double unrealized_pnl = 6;
+
+  // Entry timestamp (Unix milliseconds)
+  int64 opened_at = 7;
+}
+
+message SignalEvent {
+  // Signal ID
+  string signal_id = 1;
+
+  // Signal direction
+  SignalType signal_type = 2;
+
+  // Confidence score (0.0–1.0)
+  double confidence = 3;
+
+  // Price at signal generation
+  double price = 4;
+
+  // Indicators that triggered signal
+  map<string, double> indicators = 5;
+}
+
+message OrderEvent {
+  // Order ID
+  string order_id = 1;
+
+  // Order status — reconciled with fks.execution.v1.OrderStatus
+  OrderStatus status = 2;
+
+  // Order type description
+  string order_type = 3;
+
+  // Side
+  string side = 4;
+
+  // Quantity
+  double quantity = 5;
+
+  // Price (if limit order)
+  double price = 6;
+
+  // Status message
+  string message = 7;
+}
+
+message FillEvent {
+  // Fill ID
+  string fill_id = 1;
+
+  // Order ID
+  string order_id = 2;
+
+  // Filled quantity
+  double quantity = 3;
+
+  // Fill price
+  double price = 4;
+
+  // Fee
+  double fee = 5;
+
+  // Side
+  string side = 6;
+}
+
+message PositionEvent {
+  // Position snapshot
+  EnginePosition position = 1;
+
+  // Event reason
+  string reason = 2;
+
+  // P&L change
+  double pnl_change = 3;
+}
+
+message ErrorEvent {
+  // Error code
+  string error_code = 1;
+
+  // Error message
+  string message = 2;
+
+  // Context
+  map<string, string> context = 3;
+
+  // Severity
+  ErrorSeverity severity = 4;
+}
+
+message MetricEvent {
+  // Metric name
+  string name = 1;
+
+  // Metric value
+  double value = 2;
+
+  // Unit
+  string unit = 3;
+}
+
+message EngineMetrics {
+  // Engine instance ID
+  string engine_id = 1;
+
+  // Symbol
+  string symbol = 2;
+
+  // Trading metrics
+  int64 total_trades = 3;
+  int64 winning_trades = 4;
+  int64 losing_trades = 5;
+  double win_rate = 6;
+
+  // P&L metrics
+  double total_pnl = 7;
+  double average_win = 8;
+  double average_loss = 9;
+  double profit_factor = 10;
+
+  // Risk metrics
+  double max_drawdown = 11;
+  double sharpe_ratio = 12;
+  double sortino_ratio = 13;
+
+  // Execution metrics
+  double average_slippage = 14;
+  double average_fill_time_ms = 15;
+
+  // Time metrics
+  int64 uptime_seconds = 16;
+  int64 active_trading_seconds = 17;
+}
+
+message AggregatedMetrics {
+  // Total across all engines
+  int64 total_engines = 1;
+  int64 active_engines = 2;
+
+  // Aggregated P&L
+  double total_pnl = 3;
+  double total_realized_pnl = 4;
+  double total_unrealized_pnl = 5;
+
+  // Aggregated trades
+  int64 total_trades = 6;
+  double overall_win_rate = 7;
+
+  // Best/worst engine
+  string best_engine_id = 8;
+  double best_engine_pnl = 9;
+  string worst_engine_id = 10;
+  double worst_engine_pnl = 11;
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+// NOTE: ExecutionMode and PositionSide are imported from fks.common.v1.
+// Use fks.common.v1.ExecutionMode and fks.common.v1.PositionSide directly.
+
+enum EngineState {
+  ENGINE_STATE_UNSPECIFIED = 0;
+  ENGINE_STATE_INITIALIZING = 1;
+  ENGINE_STATE_RUNNING = 2;
+  ENGINE_STATE_PAUSED = 3;
+  ENGINE_STATE_STOPPING = 4;
+  ENGINE_STATE_STOPPED = 5;
+  ENGINE_STATE_ERROR = 6;
+}
+
+// SignalType is the forward-service-local signal direction enum.
+// NOTE: fks.common.v1.SignalAction covers the same concept with slightly
+// different naming (BUY/SELL vs Buy/Sell convention). Consider migrating
+// to fks.common.v1.SignalAction in a future cleanup pass.
+enum SignalType {
+  SIGNAL_TYPE_UNSPECIFIED = 0;
+  SIGNAL_TYPE_BUY = 1;
+  SIGNAL_TYPE_SELL = 2;
+  SIGNAL_TYPE_CLOSE = 3;
+  SIGNAL_TYPE_CLOSE_LONG = 4;
+  SIGNAL_TYPE_CLOSE_SHORT = 5;
+}
+
+// OrderStatus — reconciled with fks.execution.v1.OrderStatus.
+// Field numbers and names now match execution.proto so the two can be
+// compared/mapped without ambiguity.
+//
+// Changes from the previous forward.proto version:
+//   OLD ORDER_STATUS_PENDING = 1  →  NEW ORDER_STATUS_NEW = 1 (same wire value)
+//   Added ORDER_STATUS_PENDING_CANCEL = 8 (matches execution.proto)
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_NEW = 1;             // Order created but not yet submitted
+  ORDER_STATUS_SUBMITTED = 2;       // Submitted to exchange
+  ORDER_STATUS_PARTIALLY_FILLED = 3;
+  ORDER_STATUS_FILLED = 4;
+  ORDER_STATUS_CANCELLED = 5;
+  ORDER_STATUS_REJECTED = 6;
+  ORDER_STATUS_EXPIRED = 7;
+  ORDER_STATUS_PENDING_CANCEL = 8;  // Cancel request submitted, awaiting confirmation
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_SIGNAL = 1;
+  EVENT_TYPE_ORDER = 2;
+  EVENT_TYPE_FILL = 3;
+  EVENT_TYPE_POSITION = 4;
+  EVENT_TYPE_ERROR = 5;
+  EVENT_TYPE_METRIC = 6;
+}
+
+enum ErrorSeverity {
+  ERROR_SEVERITY_UNSPECIFIED = 0;
+  ERROR_SEVERITY_INFO = 1;
+  ERROR_SEVERITY_WARNING = 2;
+  ERROR_SEVERITY_ERROR = 3;
+  ERROR_SEVERITY_CRITICAL = 4;
+}

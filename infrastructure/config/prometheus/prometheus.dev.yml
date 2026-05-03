@@ -1,0 +1,131 @@
+# ============================================================================
+# Prometheus Configuration for FKS Services
+# ============================================================================
+# Comprehensive monitoring for all FKS components including Data Factory
+# ============================================================================
+
+global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+    scrape_timeout: 10s
+    external_labels:
+        cluster: "fks-production"
+        environment: "production"
+
+# ============================================================================
+# Alerting Configuration
+# ============================================================================
+alerting:
+    alertmanagers:
+        - static_configs:
+              - targets:
+                    - "alertmanager:9093"
+          timeout: 10s
+
+# ============================================================================
+# Alert Rules
+# ============================================================================
+rule_files:
+    - "/etc/prometheus/alerts/*.yml"
+
+# ============================================================================
+# Scrape Configurations
+# ============================================================================
+scrape_configs:
+    # --------------------------------------------------------------------------
+    # FKS Data Factory (Janus) - Market Data Ingestion & Processing
+    # --------------------------------------------------------------------------
+    - job_name: "data-factory"
+      static_configs:
+          - targets: ["data-factory:8080"]
+      metrics_path: "/metrics"
+      scrape_interval: 15s
+      scrape_timeout: 10s
+      metric_relabel_configs:
+          # Preserve all SLI/SLO metrics
+          - source_labels: [__name__]
+            regex: "(data_completeness_percent|ingestion_latency_.*|circuit_breaker_.*|gap_detection_.*|rate_limiter_.*|websocket_.*|questdb_.*|backfill_.*)"
+            action: keep
+
+    # --------------------------------------------------------------------------
+    # FKS Core Services
+    # --------------------------------------------------------------------------
+    - job_name: "fks-janus"
+      static_configs:
+          - targets: ["janus:8000"]
+      metrics_path: "/metrics"
+      scrape_interval: 15s
+      scrape_timeout: 10s
+
+    - job_name: "fks-app"
+      static_configs:
+          - targets: ["app:8002"]
+      metrics_path: "/metrics"
+      scrape_interval: 15s
+      scrape_timeout: 10s
+
+    - job_name: "fks-monitor"
+      static_configs:
+          - targets: ["monitor:8009"]
+      metrics_path: "/metrics"
+      scrape_interval: 15s
+      scrape_timeout: 10s
+
+    - job_name: "fks-muscle"
+      static_configs:
+          - targets: ["muscle:8500"]
+      metrics_path: "/metrics"
+      scrape_interval: 15s
+      scrape_timeout: 10s
+
+    # ============================================================================
+    # Infrastructure Services
+    # ============================================================================
+    - job_name: "prometheus"
+      static_configs:
+          - targets: ["localhost:9090"]
+      scrape_interval: 15s
+
+    - job_name: "questdb"
+      static_configs:
+          - targets: ["questdb:9003"]
+      metrics_path: "/metrics"
+      scrape_interval: 30s
+      scrape_timeout: 10s
+
+    - job_name: "redis"
+      static_configs:
+          - targets: ["redis-exporter:9121"]
+      # Requires redis_exporter sidecar container
+      scrape_interval: 30s
+      scrape_timeout: 10s
+
+    - job_name: "postgres"
+      static_configs:
+          - targets: ["postgres-exporter:9187"]
+      # Requires postgres_exporter sidecar container
+      scrape_interval: 30s
+      scrape_timeout: 10s
+
+    # --------------------------------------------------------------------------
+    # System Metrics
+    # --------------------------------------------------------------------------
+    - job_name: "node-exporter"
+      static_configs:
+          - targets: ["node-exporter:9100"]
+      scrape_interval: 30s
+      scrape_timeout: 10s
+
+# ============================================================================
+# Remote Write (Optional - for long-term storage)
+# ============================================================================
+# remote_write:
+#   - url: "http://cortex:9009/api/v1/push"
+#   - url: "http://thanos-receive:19291/api/v1/receive"
+
+# ============================================================================
+# Storage Configuration
+# ============================================================================
+# Retention is configured via command-line flags in docker-compose:
+# --storage.tsdb.retention.time=30d
+# --storage.tsdb.retention.size=10GB

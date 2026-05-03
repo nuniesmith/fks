@@ -1,0 +1,447 @@
+# FKS Latency Alerting Rules
+# ==========================
+#
+# Prometheus alerting rules for latency monitoring across the FKS execution subsystem.
+# These rules use histogram-based percentile calculations for accurate latency alerting.
+#
+# Installation:
+#   1. Copy to your Prometheus rules directory (e.g., /etc/prometheus/rules/)
+#   2. Update prometheus.yml to include: rule_files: ["rules/*.yaml"]
+#   3. Reload Prometheus: curl -X POST http://localhost:9090/-/reload
+#
+# Thresholds:
+#   - P50: Median latency - should be consistently low
+#   - P95: Tail latency - affects 5% of requests
+#   - P99: Extreme tail - affects 1% of requests, critical for SLA
+
+groups:
+  # ===========================================================================
+  # Order Execution Latency Alerts
+  # ===========================================================================
+  - name: fks-latency-order-execution
+    interval: 30s
+    rules:
+      # WARNING: Order placement P95 latency is high
+      - alert: OrderPlacementLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_order_placement_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 500
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: order_placement
+          metric_type: latency
+        annotations:
+          summary: "High P95 order placement latency on {{ $labels.exchange }}: {{ $value | humanizeDuration }}ms"
+          description: |
+            The 95th percentile order placement latency on {{ $labels.exchange }} has exceeded 500ms
+            for the last 5 minutes. Current P95: {{ $value }}ms.
+            This may indicate API degradation or network issues.
+          runbook_url: "https://docs.fks.internal/runbooks/order-latency"
+          dashboard_url: "https://grafana.fks.internal/d/fks-latency-histograms"
+
+      # CRITICAL: Order placement P95 latency is very high
+      - alert: OrderPlacementLatencyP95Critical
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_order_placement_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 2000
+        for: 3m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: order_placement
+          metric_type: latency
+        annotations:
+          summary: "Critical P95 order placement latency on {{ $labels.exchange }}: {{ $value }}ms"
+          description: |
+            The 95th percentile order placement latency on {{ $labels.exchange }} has exceeded 2 seconds
+            for the last 3 minutes. Current P95: {{ $value }}ms.
+            Trading execution is severely impacted. Immediate investigation required.
+          runbook_url: "https://docs.fks.internal/runbooks/order-latency"
+
+      # WARNING: Order placement P99 latency is high
+      - alert: OrderPlacementLatencyP99High
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(execution_order_placement_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 2000
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: order_placement
+          metric_type: latency
+        annotations:
+          summary: "High P99 order placement latency on {{ $labels.exchange }}: {{ $value }}ms"
+          description: |
+            The 99th percentile order placement latency on {{ $labels.exchange }} has exceeded 2 seconds.
+            1% of orders are experiencing significant delays.
+
+      # WARNING: Order fill latency is high
+      - alert: OrderFillLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_order_fill_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 5000
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: order_fill
+          metric_type: latency
+        annotations:
+          summary: "High P95 order fill latency on {{ $labels.exchange }}: {{ $value }}ms"
+          description: |
+            The 95th percentile time from order submission to fill on {{ $labels.exchange }}
+            has exceeded 5 seconds. This may indicate low liquidity or aggressive pricing.
+
+      # CRITICAL: End-to-end trade latency is very high
+      - alert: TradeE2ELatencyP95Critical
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_trade_e2e_latency_ms_bucket[5m])) by (le)
+          ) > 10000
+        for: 5m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: trade_e2e
+          metric_type: latency
+        annotations:
+          summary: "Critical end-to-end trade latency: {{ $value }}ms"
+          description: |
+            The 95th percentile end-to-end trade latency (signal to fill) has exceeded 10 seconds.
+            Trading strategy performance is severely degraded.
+          runbook_url: "https://docs.fks.internal/runbooks/e2e-latency"
+
+  # ===========================================================================
+  # WebSocket Latency Alerts
+  # ===========================================================================
+  - name: fks-latency-websocket
+    interval: 30s
+    rules:
+      # WARNING: WebSocket message latency P50 is elevated
+      - alert: WebSocketLatencyP50Elevated
+        expr: |
+          histogram_quantile(0.50,
+            sum(rate(exchange_ws_message_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: websocket
+          metric_type: latency
+        annotations:
+          summary: "Elevated WebSocket P50 latency on {{ $labels.exchange }}: {{ $value }}ms"
+          description: |
+            The median WebSocket message processing latency on {{ $labels.exchange }}
+            has exceeded 10ms for 10 minutes. This may indicate processing bottlenecks.
+
+      # WARNING: WebSocket message latency P95 is high
+      - alert: WebSocketLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(exchange_ws_message_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: websocket
+          metric_type: latency
+        annotations:
+          summary: "High WebSocket P95 latency on {{ $labels.exchange }}: {{ $value }}ms"
+          description: |
+            The 95th percentile WebSocket message latency on {{ $labels.exchange }}
+            has exceeded 50ms. Market data may be stale for some updates.
+          dashboard_url: "https://grafana.fks.internal/d/fks-latency-histograms"
+
+      # CRITICAL: WebSocket message latency P95 is very high
+      - alert: WebSocketLatencyP95Critical
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(exchange_ws_message_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 200
+        for: 3m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: websocket
+          metric_type: latency
+        annotations:
+          summary: "Critical WebSocket P95 latency on {{ $labels.exchange }}: {{ $value }}ms"
+          description: |
+            The 95th percentile WebSocket message latency on {{ $labels.exchange }}
+            has exceeded 200ms. Market data is significantly delayed.
+            This can lead to stale pricing and poor execution quality.
+          runbook_url: "https://docs.fks.internal/runbooks/websocket-latency"
+
+      # WARNING: WebSocket message latency P99 is very high
+      - alert: WebSocketLatencyP99High
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(exchange_ws_message_latency_ms_bucket[5m])) by (le, exchange)
+          ) > 500
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: websocket
+          metric_type: latency
+        annotations:
+          summary: "High WebSocket P99 latency on {{ $labels.exchange }}: {{ $value }}ms"
+          description: |
+            The 99th percentile WebSocket message latency on {{ $labels.exchange }}
+            has exceeded 500ms. Some messages are experiencing severe delays.
+
+  # ===========================================================================
+  # API Call Latency Alerts
+  # ===========================================================================
+  - name: fks-latency-api
+    interval: 30s
+    rules:
+      # WARNING: API call latency P95 is high
+      - alert: APICallLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_api_call_latency_ms_bucket[5m])) by (le, operation)
+          ) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: api
+          metric_type: latency
+        annotations:
+          summary: "High API P95 latency for {{ $labels.operation }}: {{ $value }}ms"
+          description: |
+            The 95th percentile API call latency for operation '{{ $labels.operation }}'
+            has exceeded 1 second. This may impact trading performance.
+
+      # CRITICAL: API call latency P95 is very high
+      - alert: APICallLatencyP95Critical
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_api_call_latency_ms_bucket[5m])) by (le, operation)
+          ) > 5000
+        for: 3m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: api
+          metric_type: latency
+        annotations:
+          summary: "Critical API P95 latency for {{ $labels.operation }}: {{ $value }}ms"
+          description: |
+            The 95th percentile API call latency for operation '{{ $labels.operation }}'
+            has exceeded 5 seconds. API calls are timing out.
+          runbook_url: "https://docs.fks.internal/runbooks/api-latency"
+
+  # ===========================================================================
+  # Best Execution & Signal Processing Latency Alerts
+  # ===========================================================================
+  - name: fks-latency-processing
+    interval: 30s
+    rules:
+      # WARNING: Best execution analysis latency is high
+      - alert: BestExecutionAnalysisLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_best_execution_analysis_latency_ms_bucket[5m])) by (le)
+          ) > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: best_execution
+          metric_type: latency
+        annotations:
+          summary: "High best execution analysis P95 latency: {{ $value }}ms"
+          description: |
+            The 95th percentile best execution analysis latency has exceeded 100ms.
+            Execution decisions may be based on stale analysis.
+
+      # WARNING: Signal processing latency is high
+      - alert: SignalProcessingLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_signal_processing_latency_ms_bucket[5m])) by (le)
+          ) > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: signal_processing
+          metric_type: latency
+        annotations:
+          summary: "High signal processing P95 latency: {{ $value }}ms"
+          description: |
+            The 95th percentile signal processing latency has exceeded 50ms.
+            Trading signals may not be executed promptly.
+
+      # CRITICAL: Signal processing latency is very high
+      - alert: SignalProcessingLatencyCritical
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(execution_signal_processing_latency_ms_bucket[5m])) by (le)
+          ) > 200
+        for: 3m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: signal_processing
+          metric_type: latency
+        annotations:
+          summary: "Critical signal processing P95 latency: {{ $value }}ms"
+          description: |
+            The 95th percentile signal processing latency has exceeded 200ms.
+            Trading signals are significantly delayed. Immediate investigation required.
+          runbook_url: "https://docs.fks.internal/runbooks/signal-latency"
+
+  # ===========================================================================
+  # Latency Degradation / Anomaly Alerts
+  # ===========================================================================
+  - name: fks-latency-degradation
+    interval: 60s
+    rules:
+      # WARNING: Order placement latency increased significantly
+      - alert: OrderPlacementLatencyDegradation
+        expr: |
+          (
+            histogram_quantile(0.95, sum(rate(execution_order_placement_latency_ms_bucket[5m])) by (le, exchange))
+            /
+            histogram_quantile(0.95, sum(rate(execution_order_placement_latency_ms_bucket[1h] offset 1h)) by (le, exchange))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: order_placement
+          metric_type: degradation
+        annotations:
+          summary: "Order placement latency degraded on {{ $labels.exchange }}"
+          description: |
+            The P95 order placement latency on {{ $labels.exchange }} has increased by more than
+            2x compared to 1 hour ago. Current ratio: {{ $value | humanize }}x.
+            Investigate for API changes, network issues, or increased load.
+
+      # WARNING: WebSocket latency increased significantly
+      - alert: WebSocketLatencyDegradation
+        expr: |
+          (
+            histogram_quantile(0.95, sum(rate(exchange_ws_message_latency_ms_bucket[5m])) by (le, exchange))
+            /
+            histogram_quantile(0.95, sum(rate(exchange_ws_message_latency_ms_bucket[1h] offset 1h)) by (le, exchange))
+          ) > 3
+        for: 10m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: websocket
+          metric_type: degradation
+        annotations:
+          summary: "WebSocket latency degraded on {{ $labels.exchange }}"
+          description: |
+            The P95 WebSocket message latency on {{ $labels.exchange }} has increased by more than
+            3x compared to 1 hour ago. Current ratio: {{ $value | humanize }}x.
+            This may indicate connection issues or exchange-side problems.
+
+      # INFO: Average latency trending up
+      - alert: LatencyTrendingUp
+        expr: |
+          (
+            sum(rate(execution_order_placement_latency_ms_sum[30m]))
+            /
+            sum(rate(execution_order_placement_latency_ms_count[30m]))
+          )
+          >
+          1.5 * (
+            sum(rate(execution_order_placement_latency_ms_sum[30m] offset 2h))
+            /
+            sum(rate(execution_order_placement_latency_ms_count[30m] offset 2h))
+          )
+        for: 30m
+        labels:
+          severity: info
+          service: fks-execution
+          component: order_placement
+          metric_type: trend
+        annotations:
+          summary: "Order placement average latency trending up"
+          description: |
+            The average order placement latency has increased by more than 50%
+            compared to 2 hours ago. Monitor for continued degradation.
+
+  # ===========================================================================
+  # SLA / SLO Latency Alerts
+  # ===========================================================================
+  - name: fks-latency-slo
+    interval: 60s
+    rules:
+      # WARNING: Order execution SLO at risk (99% under 2s)
+      - alert: OrderExecutionSLOAtRisk
+        expr: |
+          (
+            sum(rate(execution_order_placement_latency_ms_bucket{le="2000"}[1h]))
+            /
+            sum(rate(execution_order_placement_latency_ms_count[1h]))
+          ) < 0.99
+        for: 15m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: slo
+          metric_type: slo
+        annotations:
+          summary: "Order execution SLO at risk"
+          description: |
+            Less than 99% of orders are completing within 2 seconds over the last hour.
+            Current compliance: {{ $value | humanizePercentage }}.
+            SLO target: 99% of orders under 2 seconds.
+
+      # CRITICAL: Order execution SLO breached
+      - alert: OrderExecutionSLOBreach
+        expr: |
+          (
+            sum(rate(execution_order_placement_latency_ms_bucket{le="2000"}[1h]))
+            /
+            sum(rate(execution_order_placement_latency_ms_count[1h]))
+          ) < 0.95
+        for: 15m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: slo
+          metric_type: slo
+        annotations:
+          summary: "Order execution SLO breached"
+          description: |
+            Less than 95% of orders are completing within 2 seconds over the last hour.
+            Current compliance: {{ $value | humanizePercentage }}.
+            This is a significant SLO breach requiring immediate attention.
+          runbook_url: "https://docs.fks.internal/runbooks/slo-breach"
+
+      # WARNING: WebSocket freshness SLO at risk (99% under 100ms)
+      - alert: WebSocketFreshnessSLOAtRisk
+        expr: |
+          (
+            sum(rate(exchange_ws_message_latency_ms_bucket{le="100"}[1h]))
+            /
+            sum(rate(exchange_ws_message_latency_ms_count[1h]))
+          ) < 0.99
+        for: 15m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: slo
+          metric_type: slo
+        annotations:
+          summary: "WebSocket freshness SLO at risk"
+          description: |
+            Less than 99% of WebSocket messages are being processed within 100ms.
+            Current compliance: {{ $value | humanizePercentage }}.
+            Market data freshness is degraded.

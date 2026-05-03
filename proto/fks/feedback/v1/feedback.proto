@@ -1,0 +1,188 @@
+// ============================================================================
+// FKS Position Feedback Protocol Buffer Definitions
+// ============================================================================
+// Defines the feedback loop from the execution layer (Python/Ruby) back to
+// Janus for real-time trade guidance and building execution memories.
+//
+// Service topology:
+//   Python / Ruby (execution layer)
+//       └── PositionFeedbackService client
+//               ├── StreamPositionUpdates — stream live position state
+//               ├── ReportPosition        — single periodic update
+//               └── RecordTradeOutcome    — completed trade for memory
+//
+//   Janus (Rust)
+//       └── implements PositionFeedbackService
+//               ├── ingests position state for real-time guidance
+//               └── stores trade outcomes as execution memories
+//
+// Key design decisions:
+//   - PositionFeedback carries all live position fields so Janus can
+//     reason about the trade without additional lookups.
+//   - TradeGuidance is the response Janus sends back with suggested
+//     actions (hold, exit, trail stop, scale, hedge, etc.).
+//   - TradeOutcome captures the full lifecycle of a completed trade
+//     for post-hoc analysis and memory/learning.
+//   - All enum zero values are UNSPECIFIED to honour proto3 defaults and
+//     allow safe version-to-version additions.
+// ============================================================================
+
+syntax = "proto3";
+
+package fks.feedback.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/feedback/v1;feedbackv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.feedback.v1";
+
+import "fks/common/v1/common.proto";
+
+// PositionFeedbackService — streams live position state from the execution
+// layer (Python/Ruby) back to Janus for real-time trade guidance and
+// building execution memories.
+service PositionFeedbackService {
+  // Stream live position updates from execution to Janus
+  rpc StreamPositionUpdates(stream PositionFeedback) returns (TradeGuidance);
+
+  // Send a single position update (simpler, for periodic updates)
+  rpc ReportPosition(PositionFeedback) returns (TradeGuidance);
+
+  // Record a completed trade for memory/learning
+  rpc RecordTradeOutcome(TradeOutcome) returns (TradeOutcomeAck);
+}
+
+// ── Position State ─────────────────────────────────────────────
+
+message PositionFeedback {
+  string signal_id = 1;
+  string symbol = 2;
+  string account_id = 3;
+
+  PositionState state = 4;
+  fks.common.v1.PositionSide side = 5;
+
+  double entry_price = 10;
+  double current_price = 11;
+  double unrealized_pnl = 12;
+  double realized_pnl = 13;
+  double quantity = 14;
+  double avg_fill_price = 15;
+
+  double stop_loss = 20;
+  double take_profit_1 = 21;
+  double take_profit_2 = 22;
+  double take_profit_3 = 23;
+
+  // Execution quality metrics
+  double slippage_bps = 30;
+  double fill_ratio = 31;
+  int64 time_to_fill_ms = 32;
+
+  int64 opened_at_ms = 40;
+  int64 updated_at_ms = 41;
+
+  string account_type = 50;  // "prop-firm", "personal-crypto", "hardware-wallet"
+  string exchange = 51;      // "rithmic", "kraken", "crypto.com"
+
+  map<string, string> metadata = 100;
+}
+
+enum PositionState {
+  POSITION_STATE_UNSPECIFIED = 0;
+  POSITION_STATE_PENDING = 1;      // Order submitted, not yet filled
+  POSITION_STATE_OPEN = 2;         // Position is live
+  POSITION_STATE_PARTIAL = 3;      // Partially filled
+  POSITION_STATE_CLOSING = 4;      // Close order submitted
+  POSITION_STATE_CLOSED = 5;       // Fully closed
+  POSITION_STATE_CANCELLED = 6;    // Order was cancelled before fill
+  POSITION_STATE_ERROR = 7;        // Error state
+}
+
+// PositionSide removed — use fks.common.v1.PositionSide (FLAT=1, LONG=2, SHORT=3)
+// to avoid wire-value mismatch with common.proto.
+
+// ── Trade Guidance (Janus → Python) ────────────────────────────
+
+message TradeGuidance {
+  string signal_id = 1;
+
+  GuidanceAction action = 2;
+  string reason = 3;
+
+  // Suggested adjustments
+  double suggested_stop = 10;
+  double suggested_take_profit = 11;
+  double suggested_scale_factor = 12;  // 0.0 = close, 1.0 = hold, >1.0 = add
+
+  double confidence = 20;
+  string regime = 21;
+
+  int64 timestamp_ms = 30;
+
+  map<string, string> metadata = 100;
+}
+
+enum GuidanceAction {
+  GUIDANCE_ACTION_UNSPECIFIED = 0;
+  GUIDANCE_ACTION_HOLD = 1;          // Stay in position
+  GUIDANCE_ACTION_TAKE_PROFIT = 2;   // Close at profit target
+  GUIDANCE_ACTION_TRAIL_STOP = 3;    // Tighten stop loss
+  GUIDANCE_ACTION_ADD = 4;           // Scale into position
+  GUIDANCE_ACTION_REDUCE = 5;        // Scale out partially
+  GUIDANCE_ACTION_EXIT = 6;          // Close entire position
+  GUIDANCE_ACTION_HEDGE = 7;         // Open opposing hedge
+}
+
+// ── Trade Outcome (for memory/learning) ────────────────────────
+
+message TradeOutcome {
+  string signal_id = 1;
+  string symbol = 2;
+  string account_id = 3;
+
+  fks.common.v1.PositionSide side = 4;
+  OutcomeResult result = 5;
+
+  double entry_price = 10;
+  double exit_price = 11;
+  double pnl = 12;
+  double pnl_percent = 13;
+  double max_favorable_excursion = 14;  // Best unrealized P&L during trade
+  double max_adverse_excursion = 15;    // Worst unrealized P&L during trade
+
+  double quantity = 20;
+  double slippage_entry_bps = 21;
+  double slippage_exit_bps = 22;
+
+  int64 opened_at_ms = 30;
+  int64 closed_at_ms = 31;
+  int64 duration_ms = 32;
+
+  // Context at time of signal
+  string strategy = 40;
+  string regime = 41;
+  double signal_confidence = 42;
+  double signal_strength = 43;
+  string timeframe = 44;
+
+  // What actually happened
+  string exit_reason = 50;   // "take_profit", "stop_loss", "manual", "trailing_stop", "timeout"
+  string account_type = 51;
+  string exchange = 52;
+
+  map<string, string> metadata = 100;
+}
+
+enum OutcomeResult {
+  OUTCOME_RESULT_UNSPECIFIED = 0;
+  OUTCOME_RESULT_WIN = 1;
+  OUTCOME_RESULT_LOSS = 2;
+  OUTCOME_RESULT_BREAKEVEN = 3;
+  OUTCOME_RESULT_PARTIAL = 4;  // Partially closed, rest still open
+}
+
+message TradeOutcomeAck {
+  string signal_id = 1;
+  bool stored = 2;
+  string memory_id = 3;  // ID of the stored execution memory
+}

@@ -1,0 +1,37 @@
+# =============================================================================
+# Simulation Template: CME Futures Scalping
+# =============================================================================
+
+# Template metadata
+id: cme-futures-scalping
+name: "CME Futures Scalping"
+description: >
+  Fast-paced scalping sim on CME micro futures. Uses MES, MNQ, and MGC with
+  ORB and momentum strategies. 50k starting balance for realistic margin
+  simulation.
+category: futures
+icon: "📈"
+accent: "#00ff88"
+
+# Session defaults (maps 1:1 to CreateSessionRequest fields)
+session:
+  name: "CME Futures Scalp"
+  initial_balance: 50000.0
+  symbols:
+    - MES
+    - MNQ
+    - MGC
+  data_source: massive
+  tags:
+    - futures
+    - cme
+    - scalping
+  risk:
+    max_position_size: 5000.0
+    max_daily_loss: -2000.0
+    max_open_positions: 3
+  janus_ai:
+    enabled: false
+    min_confidence: 0.65
+    auto_execute: false
+    auto_execute_threshold: 0.85

@@ -1,0 +1,1796 @@
+# =============================================================================
+# nuniesmith/fks — Unified CI/CD Pipeline
+# =============================================================================
+# Covers two sub-projects living in a single repository, deployed to ONE server:
+#
+#   FKS  — Rust algorithmic trading system (Janus)
+#   Ruby — Python ML / data engine + GPU trainer
+#
+# Both share DockerHub repo: nuniesmith/fks
+#   FKS  tags → janus, auth, nginx, redis, postgres
+#   Ruby tags → data, engine, web, trainer, charting, prometheus, grafana
+#
+# Pipeline Flow:
+#   1.  Setup                 — Detect changed sub-projects, determine deploy gate
+#   ── FKS (Rust) ────────────────────────────────────────────────────────────
+#   2.  fks-lint              — rustfmt + clippy
+#   3.  fks-test-*            — 6 parallel test groups (core, neuro, services …)
+#   ── Ruby (Python) ─────────────────────────────────────────────────────────
+#   4.  ruby-lint             — ruff + mypy
+#   5.  ruby-test             — pytest
+#   ── Shared Docker ─────────────────────────────────────────────────────────
+#   6.  docker-build-services — Unified matrix → DockerHub (all FKS + Ruby images)
+#   ── Deploy (unified) ──────────────────────────────────────────────────────
+#   7.  deploy                — Tailscale → DNS → SSL → SSH → all services → Health checks
+#   ── Summary ───────────────────────────────────────────────────────────────
+#   8.  pipeline-summary      — Unified results across both sub-projects
+#
+# ── Repo layout assumption ───────────────────────────────────────────────────
+# This workflow assumes the merged monorepo looks like:
+#
+#   /                         ← FKS Rust workspace root
+#   ├─ Cargo.toml / Cargo.lock
+#   ├─ pyproject.toml         ← Python project root (futures-lib)
+#   ├─ docker-compose.yml     ← Unified compose (all services)
+#   ├─ src/                   ← Rust crates + Python source
+#   │   └─ ruby/              ← Python ML sub-project source
+#   │       ├─ src/           ← Python packages (lib, entrypoints)
+#   │       ├─ models/
+#   │       └─ static/
+#   ├─ infrastructure/        ← Docker / Compose overrides / monitoring
+#   │   └─ docker/services/   ← All Dockerfiles (data, engine, web, trainer …)
+#   ├─ docker-compose.prod.yml ← Production Compose overrides (loopback ports, resource limits)
+#   └─ scripts/               ← Shared helper scripts
+#
+# ── DockerHub tags ───────────────────────────────────────────────────────────
+# FKS:  nuniesmith/fks:janus           nuniesmith/fks:janus-<sha>
+
+#       nuniesmith/fks:nginx            nuniesmith/fks:redis
+# Ruby: nuniesmith/fks:data            nuniesmith/fks:data-<sha7>
+#       nuniesmith/fks:engine           nuniesmith/fks:web
+#       nuniesmith/fks:trainer          nuniesmith/fks:charting
+#       nuniesmith/fks:prometheus       nuniesmith/fks:grafana
+#
+# ── Required Secrets ─────────────────────────────────────────────────────────
+# Connection (one prod server):
+#   TAILSCALE_OAUTH_CLIENT_ID, TAILSCALE_OAUTH_SECRET
+#   PROD_TAILSCALE_IP          ← Single production server Tailscale IP
+#   PROD_SSH_KEY               ← SSH private key for deployment user
+#   PROD_SSH_USER (opt, default: actions)
+#   PROD_SSH_PORT (opt, default: 22)
+#   PROD_ROOT_SSH_KEY          ← Root SSH key (fallback deploy)
+#
+# Docker:
+#   DOCKER_USERNAME, DOCKER_TOKEN
+#   DOCKER_IMAGE_NAME (opt, default: nuniesmith/fks)
+#
+# DNS:
+#   PROD_DOMAIN (opt, default: fkstrading.xyz)
+#
+# Notifications:
+#   DISCORD_WEBHOOK_ACTIONS
+#   DISCORD_WEBHOOK_GENERAL
+#   DISCORD_BOT_TOKEN (opt)
+#
+# API Keys (injected into .env on deploy):
+#   KRAKEN_API_KEY, KRAKEN_API_SECRET (opt)
+#   XAI_API_KEY, MASSIVE_API_KEY (opt)
+#   MASSIVE_S3_KEY_ID, MASSIVE_S3_SECRET (opt)
+#   FINNHUB_API_KEY, ALPHA_VANTAGE_API_KEY (opt)
+#
+# Auto-generated on server (never need secrets):
+#   API_KEY              — internal service-to-service auth
+#   TRAINER_API_KEY      — trainer → data service auth
+#   POSTGRES_PASSWORD, REDIS_PASSWORD
+# =============================================================================
+
+name: 🚀 CI/CD Pipeline
+
+# NOTE: Changes to this workflow file always trigger a full dual-pipeline run
+# (both FKS and Ruby paths) because the file itself matches all path filters.
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".github/workflows/llm-audit.yml"
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      # ── Shared ─────────────────────────────────────────────────────
+      skip_tests:
+        description: "Skip all tests (FKS + Ruby)"
+        required: false
+        type: boolean
+        default: false
+      run_fks:
+        description: "Run FKS (Rust) pipeline"
+        required: false
+        type: boolean
+        default: true
+      run_ruby:
+        description: "Run FKS Ruby (Python) pipeline"
+        required: false
+        type: boolean
+        default: true
+      # ── Deploy ─────────────────────────────────────────────────────
+      skip_deploy:
+        description: "Skip deployment (FKS + Ruby)"
+        required: false
+        type: boolean
+        default: false
+
+      build_strategy:
+        description: "Docker build strategy"
+        required: false
+        type: choice
+        options:
+          - dockerhub
+          - server-build
+        default: dockerhub
+      skip_docker_ruby:
+        description: "Skip FKS Ruby Docker build"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  checks: write
+  actions: read
+  security-events: write
+
+env:
+  RUST_VERSION: "1.92.0"
+  PYTHON_VERSION: "3.13"
+  CARGO_TERM_COLOR: always
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKER_IMAGE_NAME || 'nuniesmith/fks' }}
+  DOMAIN: ${{ secrets.PROD_DOMAIN || 'fkstrading.xyz' }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # =========================================================================
+  # STAGE 1: SETUP
+  # =========================================================================
+  setup:
+    name: 📋 Setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      # ── Change detection ───────────────────────────────────────────
+      fks_changed: ${{ steps.detect.outputs.fks_changed }}
+      ruby_changed: ${{ steps.detect.outputs.ruby_changed }}
+      deploy_only: ${{ steps.detect.outputs.deploy_only }}
+      # ── Deployment ─────────────────────────────────────────────────
+      target_domain: ${{ steps.env.outputs.domain }}
+      build_strategy: ${{ steps.env.outputs.build_strategy }}
+      should_test: ${{ steps.env.outputs.should_test }}
+      should_deploy: ${{ steps.env.outputs.should_deploy }}
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 🔍 Detect changed sub-projects
+        id: detect
+        run: |
+          # workflow_dispatch: respect explicit run_fks / run_ruby inputs
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            FKS_CHANGED="${{ inputs.run_fks != false && 'true' || 'false' }}"
+            RUBY_CHANGED="${{ inputs.run_ruby != false && 'true' || 'false' }}"
+            echo "fks_changed=$FKS_CHANGED"  >> "$GITHUB_OUTPUT"
+            echo "ruby_changed=$RUBY_CHANGED" >> "$GITHUB_OUTPUT"
+            echo "deploy_only=false"          >> "$GITHUB_OUTPUT"
+            echo "🎯 Manual dispatch — FKS=$FKS_CHANGED Ruby=$RUBY_CHANGED"
+            exit 0
+          fi
+
+          # For push / PR: diff against previous commit
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "ALL")
+
+          if [ "$CHANGED" = "ALL" ]; then
+            echo "⚠️  Cannot determine diff — running both pipelines"
+            echo "fks_changed=true"  >> "$GITHUB_OUTPUT"
+            echo "ruby_changed=true" >> "$GITHUB_OUTPUT"
+            echo "deploy_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          # FKS: Rust workspace files outside src/ruby/, plus FKS-specific Dockerfiles
+          # Note: infrastructure/config/ and root docker-compose.prod.yml are deploy-only
+          # and handled by the deploy job — they should NOT trigger Rust lint/tests.
+          FKS_CHANGED="false"
+          if echo "$CHANGED" | grep -vE '^src/ruby/' | grep -qE \
+               '(Cargo\.(toml|lock)|\.rs$|infrastructure/docker/(base/rust|services/(janus|auth|nginx|redis|postgres))/)'; then
+            FKS_CHANGED="true"
+          fi
+
+          # Ruby: anything under src/ruby/, Python project files at root,
+          # or Ruby-specific Dockerfiles / infra
+          RUBY_CHANGED="false"
+          if echo "$CHANGED" | grep -qE \
+               '^src/ruby/|^(pyproject\.toml|setup\.py|requirements.*\.txt)$|^infrastructure/docker/services/(data|engine|web|trainer|charting|prometheus|grafana)/'; then
+            RUBY_CHANGED="true"
+          fi
+
+          # Deploy-only changes: compose files, configs, monitoring, scripts
+          # These should trigger deploy but NOT Rust/Python lint+tests
+          DEPLOY_ONLY="false"
+          if echo "$CHANGED" | grep -qE '^(infrastructure/config/|scripts/|docker-compose\.yml$|docker-compose\.prod\.yml$)'; then
+            DEPLOY_ONLY="true"
+          fi
+
+          # Fallback: if nothing matched and no deploy-only, run both as safety net
+          if [ "$FKS_CHANGED" = "false" ] && [ "$RUBY_CHANGED" = "false" ]; then
+            if [ "$DEPLOY_ONLY" = "true" ]; then
+              echo "📦 Deploy-only changes detected — skipping lint/tests"
+            else
+              echo "⚠️  No project-specific changes detected — running both"
+              FKS_CHANGED="true"
+              RUBY_CHANGED="true"
+            fi
+          fi
+
+          echo "fks_changed=$FKS_CHANGED"  >> "$GITHUB_OUTPUT"
+          echo "ruby_changed=$RUBY_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "deploy_only=$DEPLOY_ONLY"   >> "$GITHUB_OUTPUT"
+          echo "🦀 FKS changed:  $FKS_CHANGED"
+          echo "🐍 Ruby changed: $RUBY_CHANGED"
+          echo "📦 Deploy only:  $DEPLOY_ONLY"
+
+      - name: 🎯 Determine deployment configuration
+        id: env
+        env:
+          PROD_TAILSCALE_IP: ${{ secrets.PROD_TAILSCALE_IP }}
+          INPUT_STRATEGY: ${{ inputs.build_strategy }}
+          INPUT_SKIP_DEPLOY: ${{ inputs.skip_deploy }}
+          INPUT_SKIP_TESTS: ${{ inputs.skip_tests }}
+          GITHUB_REF_VAR: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          PROD_DOMAIN: ${{ env.DOMAIN }}
+          FKS_CHANGED: ${{ steps.detect.outputs.fks_changed }}
+          RUBY_CHANGED: ${{ steps.detect.outputs.ruby_changed }}
+          DEPLOY_ONLY: ${{ steps.detect.outputs.deploy_only }}
+        run: |
+          if [ -z "$PROD_TAILSCALE_IP" ]; then
+            echo "❌ FATAL: PROD_TAILSCALE_IP is not set!"
+            cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## ❌ Missing Required Secret
+          `PROD_TAILSCALE_IP` must be set under **Settings → Secrets → Actions**.
+          EOF
+            exit 1
+          fi
+
+          DOMAIN="$PROD_DOMAIN"
+          # Strip any whitespace/control characters
+          DOMAIN=$(echo "$DOMAIN" | tr -d '[:space:][:cntrl:]')
+          # Fallback if empty or doesn't look like a domain
+          if [ -z "$DOMAIN" ] || ! echo "$DOMAIN" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}$'; then
+            echo "⚠️ DOMAIN='$DOMAIN' looks invalid — using default fkstrading.xyz"
+            DOMAIN="fkstrading.xyz"
+          fi
+          echo "🌐 Resolved domain: $DOMAIN"
+
+          STRATEGY="${INPUT_STRATEGY:-dockerhub}"
+
+          # Skip tests if explicitly requested OR if only deploy/infra files changed
+          if [ "$INPUT_SKIP_TESTS" = "true" ]; then
+            SHOULD_TEST="false"
+          elif [ "$DEPLOY_ONLY" = "true" ] && [ "$FKS_CHANGED" != "true" ] && [ "$RUBY_CHANGED" != "true" ]; then
+            SHOULD_TEST="false"
+            echo "📦 Deploy-only changes — skipping tests"
+          else
+            SHOULD_TEST="true"
+          fi
+
+          # Unified deploy gate: push/dispatch on main or develop, not skipped,
+          # and at least one sub-project changed
+          SHOULD_DEPLOY="false"
+          if [ "$INPUT_SKIP_DEPLOY" != "true" ]; then
+            if [ "$FKS_CHANGED" = "true" ] || [ "$RUBY_CHANGED" = "true" ] || [ "$DEPLOY_ONLY" = "true" ]; then
+              if [ "$EVENT_NAME" = "push" ] || [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+                if [ "$GITHUB_REF_VAR" = "refs/heads/main" ] || \
+                   [ "$GITHUB_REF_VAR" = "refs/heads/develop" ]; then
+                  SHOULD_DEPLOY="true"
+                fi
+              fi
+            fi
+          fi
+
+          echo "🦀 FKS changed:  $FKS_CHANGED"
+          echo "🐍 Ruby changed: $RUBY_CHANGED"
+          echo "🚀 Deploy: $SHOULD_DEPLOY  (domain=$DOMAIN strategy=$STRATEGY)"
+          echo "🧪 Tests: $SHOULD_TEST"
+
+          {
+            echo "domain=$DOMAIN"
+            echo "build_strategy=$STRATEGY"
+            echo "should_test=$SHOULD_TEST"
+            echo "should_deploy=$SHOULD_DEPLOY"
+          } >> "$GITHUB_OUTPUT"
+
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## 🎯 Pipeline Configuration
+          | Property | Value |
+          |----------|-------|
+          | 🦀 FKS Changed | \`$FKS_CHANGED\` |
+          | 🐍 Ruby Changed | \`$RUBY_CHANGED\` |
+          | Domain | \`$DOMAIN\` |
+          | Strategy | \`$STRATEGY\` |
+          | Deploy | \`$SHOULD_DEPLOY\` |
+          | Tests | \`$SHOULD_TEST\` |
+          | Branch | \`${{ github.ref_name }}\` |
+          | Trigger | \`${{ github.event_name }}\` |
+          EOF
+
+  # =========================================================================
+  # Rust — STAGE 2: LINT (fast gate — blocks all FKS test jobs)
+  # =========================================================================
+  fks-lint:
+    name: 🦀 Rust Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [setup]
+    if: needs.setup.outputs.fks_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ✨ Check Rust formatting (rustfmt)
+        id: fmt
+        uses: nuniesmith/actions/.github/actions/rust-ci@main
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: rustfmt
+          install-protobuf: "true"
+          run-fmt: "true"
+          run-clippy: "false"
+          run-tests: "false"
+          run-build: "false"
+          workspace: "true"
+          all-features: "false"
+
+      - name: 🦀 Run Clippy lints
+        if: success()
+        uses: nuniesmith/actions/.github/actions/rust-ci@main
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          components: clippy
+          install-protobuf: "true"
+          run-fmt: "false"
+          run-clippy: "true"
+          run-tests: "false"
+          run-build: "false"
+          workspace: "true"
+          all-features: "false"
+          clippy-args: "--all-targets"
+
+  # =========================================================================
+  # Rust — STAGE 3: TESTS (parallel groups, all gated by fks-lint)
+  # =========================================================================
+  fks-test-core:
+    name: 🧱 Rust Tests — Core & Libraries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [setup, fks-lint]
+    if: needs.setup.outputs.fks_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-core-
+            ${{ runner.os }}-cargo-
+      - uses: taiki-e/install-action@nextest
+      - name: 🧪 Run core & library tests
+        run: |
+          cargo nextest run --profile ci \
+            -p janus-core -p common -p fks-proto -p janus-health \
+            -p janus-indicators -p janus-models -p janus-compliance \
+            -p janus-gap-detection -p janus-rate-limiter \
+            -p janus-questdb-writer -p janus-bybit-client \
+            -p logic -p memory -p training \
+            -p janus-data-quality -p janus-dsp -p janus-ltn \
+            -p janus-risk -p janus-exchanges -p apalis-redis \
+            --color always
+      - uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: "🧱 Rust — Core & Libraries"
+          report_paths: "target/nextest/ci/junit.xml"
+          include_passed: true
+          detailed_summary: true
+          fail_on_failure: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-fks-core
+          path: target/nextest/ci/junit.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  fks-test-neuro-core:
+    name: 🧠 Rust Tests — Neuromorphic (Core)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [setup, fks-lint]
+    if: needs.setup.outputs.fks_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-neuro-core-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-neuro-core-
+            ${{ runner.os }}-cargo-neuro-
+            ${{ runner.os }}-cargo-
+      - uses: taiki-e/install-action@nextest
+      - name: 🧪 Run neuromorphic core tests (~5100 tests, excluding ViViT)
+        run: |
+          cargo nextest run --profile ci \
+            -p janus-neuromorphic \
+            -E 'not test(~visual_cortex::vivit)' \
+            --color always
+      - uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: "🧠 Rust — Neuromorphic (Core)"
+          report_paths: "target/nextest/ci/junit.xml"
+          include_passed: true
+          detailed_summary: true
+          fail_on_failure: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-fks-neuro-core
+          path: target/nextest/ci/junit.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  fks-test-neuro-vivit:
+    name: 🧠 Rust Tests — Neuromorphic (ViViT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [setup, fks-lint]
+    if: needs.setup.outputs.fks_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-neuro-vivit-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-neuro-vivit-
+            ${{ runner.os }}-cargo-neuro-
+            ${{ runner.os }}-cargo-
+      - uses: taiki-e/install-action@nextest
+      - name: 🧪 Run ViViT tests (ci-heavy profile — extended timeouts)
+        run: |
+          cargo nextest run --profile ci-heavy \
+            -p janus-neuromorphic \
+            -E 'test(~visual_cortex::vivit)' \
+            --run-ignored all \
+            --color always
+      - uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: "🧠 Rust — Neuromorphic (ViViT)"
+          report_paths: "target/nextest/ci-heavy/junit-heavy.xml"
+          include_passed: true
+          detailed_summary: true
+          fail_on_failure: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-fks-neuro-vivit
+          path: target/nextest/ci-heavy/junit-heavy.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  fks-test-services:
+    name: ⚙️ Rust Tests — Services
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [setup, fks-lint]
+    if: needs.setup.outputs.fks_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-svc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-svc-
+            ${{ runner.os }}-cargo-
+      - uses: taiki-e/install-action@nextest
+      - name: 🧪 Run service tests
+        run: |
+          cargo nextest run --profile ci \
+            -p janus-forward -p janus-execution -p janus-data \
+            -p janus-gateway -p janus-api -p janus-backward \
+            -p janus-cns-service -p janus-optimizer-service \
+            -p janus-registry-lib -p janus-registry-service \
+            --color always
+      - uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: "⚙️ Rust — Services"
+          report_paths: "target/nextest/ci/junit.xml"
+          include_passed: true
+          detailed_summary: true
+          fail_on_failure: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-fks-services
+          path: target/nextest/ci/junit.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  fks-test-trading:
+    name: 📈 Rust Tests — Trading & ML
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [setup, fks-lint]
+    if: needs.setup.outputs.fks_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-trading-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-trading-
+            ${{ runner.os }}-cargo-
+      - uses: taiki-e/install-action@nextest
+      - name: 🧪 Run trading & ML tests
+        run: |
+          cargo nextest run --profile ci \
+            -p janus-strategies -p janus-cns -p janus-ml \
+            -p janus-regime -p janus-optimizer \
+            -p janus-backtest -p janus-lob \
+            --color always
+      - uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: "📈 Rust — Trading & ML"
+          report_paths: "target/nextest/ci/junit.xml"
+          include_passed: true
+          detailed_summary: true
+          fail_on_failure: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-fks-trading
+          path: target/nextest/ci/junit.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  fks-test-integration:
+    name: 🔗 Rust Tests — Integration (DB)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [setup, fks-lint]
+    if: needs.setup.outputs.fks_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      questdb:
+        image: questdb/questdb:9.3.2
+        ports:
+          - 9000:9000
+          - 9009:9009
+        options: >-
+          --health-cmd "curl -sf http://localhost:9000/exec?query=SELECT%201 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+          --health-start-period 30s
+    env:
+      CARGO_BUILD_JOBS: 4
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-D warnings"
+      QUESTDB_HOST: localhost
+      QUESTDB_ILP_PORT: 9009
+      REDIS_URL: "redis://localhost:6379"
+      RUN_INTEGRATION_TESTS: "1"
+      KRAKEN_API_KEY: ${{ secrets.KRAKEN_API_KEY }}
+      KRAKEN_API_SECRET: ${{ secrets.KRAKEN_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler libprotobuf-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-integ-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-integ-
+            ${{ runner.os }}-cargo-
+      - uses: taiki-e/install-action@nextest
+      - name: 🧪 Run integration tests (Redis + QuestDB + Kraken)
+        run: |
+          cargo nextest run --profile ci \
+            --run-ignored ignored-only \
+            -p janus-data -p janus-rate-limiter \
+            -p apalis-redis -p janus-execution \
+            --color always
+      - uses: mikepenz/action-junit-report@v5
+        if: always()
+        with:
+          check_name: "🔗 Rust — Integration (DB + Kraken)"
+          report_paths: "target/nextest/ci/junit.xml"
+          include_passed: true
+          detailed_summary: true
+          fail_on_failure: false
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-fks-integration
+          path: target/nextest/ci/junit.xml
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # =========================================================================
+  # RUBY — LINT
+  # =========================================================================
+  ruby-lint:
+    name: 🐍 Python Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [setup]
+    if: needs.setup.outputs.ruby_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📣 Notify Ruby CI started
+        continue-on-error: true
+        uses: nuniesmith/actions/.github/actions/discord-notify@main
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_ACTIONS }}
+          title: "🔨 Ruby CI/CD Started"
+          description: "Running lint and format checks"
+          status: started
+          include-repo-info: "true"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: 📦 Install linting tools
+        run: pip install "ruff>=0.15.5,<1" "mypy>=1.19.1,<2" types-requests types-PyYAML types-pytz types-redis
+
+      - name: 🔧 Ruff — auto-fix & format
+        run: |
+          ruff check src/ruby/ scripts/ --fix
+          ruff format src/ruby/ scripts/
+
+      - name: 💾 Commit ruff auto-fixes
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No ruff fixes to commit."
+          else
+            git commit -m "style: apply ruff auto-fixes [skip ci]"
+            git push origin HEAD:${{ github.head_ref || github.ref_name }}
+            echo "Committed and pushed ruff auto-fixes."
+          fi
+
+      - name: ✨ Ruff lint check
+        id: ruff
+        continue-on-error: true
+        run: ruff check src/ruby/ scripts/ --output-format=github
+
+      - name: 🔍 mypy type check
+        id: mypy
+        continue-on-error: true
+        run: |
+          pip install -e ".[dev]" --no-deps 2>/dev/null || pip install -e . --no-deps 2>/dev/null || true
+          mypy src/ruby/src scripts
+
+      - name: 🧹 Clean .mypy_cache after type check
+        if: always()
+        run: find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+
+      - name: ❌ Fail if linting errors remain
+        if: steps.ruff.outcome == 'failure' || steps.mypy.outcome == 'failure'
+        run: |
+          [ "${{ steps.ruff.outcome }}" = "failure" ] && echo "::error::ruff reported unfixable errors — review the annotations above"
+          [ "${{ steps.mypy.outcome }}" = "failure" ] && echo "::error::mypy reported type errors — review the output above"
+          exit 1
+
+  # =========================================================================
+  # RUBY — STAGE 3: TEST
+  # =========================================================================
+  ruby-test:
+    name: 🧪 Python Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: [setup, ruby-lint]
+    if: needs.setup.outputs.ruby_changed == 'true' && needs.setup.outputs.should_test == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: 📦 Install CPU-only PyTorch (no CUDA overhead)
+        run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: 📦 Install dependencies
+        run: pip install -e ".[dev,test]"
+
+      - name: 🧪 Run tests
+        run: pytest --cov=src/ruby/src --cov-report=xml --cov-report=term-missing -v
+
+      - name: ✅ Notify Ruby tests passed
+        if: success()
+        continue-on-error: true
+        uses: nuniesmith/actions/.github/actions/discord-notify@main
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_ACTIONS }}
+          title: "✅ Python Tests Passed"
+          description: "All Python tests and lint checks passed"
+          status: success
+
+      - name: ❌ Notify Ruby tests failed
+        if: failure()
+        continue-on-error: true
+        uses: nuniesmith/actions/.github/actions/discord-notify@main
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_ACTIONS }}
+          title: "❌ Python Tests Failed"
+          description: "Python tests or lint checks failed"
+          status: failure
+
+  # =========================================================================
+  # STAGE: BUILD ALL SERVICE IMAGES (unified FKS + Ruby matrix)
+  # =========================================================================
+  #
+  # FIX #1: Each matrix entry now carries an explicit `cache_extra` field
+  # (either a valid cache ref string or empty string ""). The build step reads
+  # this field directly, so the cache-from block never contains a blank line.
+  #
+  # FIX #2: Each matrix entry carries `has_build_contexts: true/false` so the
+  # build-contexts input is only passed when it contains a real value, avoiding
+  # the empty-string argument that some buildx versions misparse.
+  #
+  # FIX #3: FKS image push is now decoupled from build_strategy. Images are
+  # always pushed when fks_changed==true so pinned SHA tags are published and
+  # available for rollbacks regardless of whether the deploy uses dockerhub or
+  # server-build strategy.
+  # =========================================================================
+  docker-build-services:
+    name: 🐳 Build :${{ matrix.image_tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs:
+      - setup
+      - fks-lint
+      - fks-test-core
+      - fks-test-neuro-core
+      - fks-test-neuro-vivit
+      - fks-test-services
+      - fks-test-trading
+      - fks-test-integration
+      - ruby-lint
+      - ruby-test
+    if: |
+      always() &&
+      needs.setup.result == 'success' &&
+      (needs.setup.outputs.fks_changed == 'true' || needs.setup.outputs.ruby_changed == 'true' || needs.setup.outputs.deploy_only == 'true') &&
+      (needs.fks-lint.result == 'success' || needs.fks-lint.result == 'skipped') &&
+      (needs.fks-test-core.result == 'success' || needs.fks-test-core.result == 'skipped') &&
+      (needs.fks-test-neuro-core.result == 'success' || needs.fks-test-neuro-core.result == 'skipped') &&
+      (needs.fks-test-neuro-vivit.result == 'success' || needs.fks-test-neuro-vivit.result == 'skipped') &&
+      (needs.fks-test-services.result == 'success' || needs.fks-test-services.result == 'skipped') &&
+      (needs.fks-test-trading.result == 'success' || needs.fks-test-trading.result == 'skipped') &&
+      (needs.fks-test-integration.result == 'success' || needs.fks-test-integration.result == 'skipped') &&
+      (needs.ruby-lint.result == 'success' || needs.ruby-lint.result == 'skipped') &&
+      (needs.ruby-test.result == 'success' || needs.ruby-test.result == 'skipped') &&
+      needs.setup.outputs.should_deploy == 'true'
+    # ⚠️ DockerHub Rate Limits: Free tier allows 200 pulls / 6 hours.
+    # With 13 parallel matrix jobs each doing pull + push (~26 API calls),
+    # multiple concurrent CI runs or rapid re-runs can exhaust this quota.
+    # Mitigations:
+    #   1. Registry cache (cache-from/cache-to) reduces redundant pulls
+    #   2. deploy_only path skips builds entirely (see deploy-only-check step)
+    #   3. If rate-limited, builds fall back to local cache (no --no-cache)
+    #   4. Consider upgrading to Docker Pro ($5/mo) for 5000 pulls/day if
+    #      this becomes a recurring issue
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          # ── FKS Rust services ──────────────────────────────────────
+          # cache_extra:       extra cache-from line (empty = no extra source)
+          # has_build_contexts: whether build-contexts should be passed to buildx
+          - image_tag: janus
+            project: fks
+            dockerfile: infrastructure/docker/base/rust/Dockerfile
+            context: .
+            target: workspace
+            build_args: SERVICE_NAME=janus
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64
+
+          - image_tag: nginx
+            project: fks
+            dockerfile: infrastructure/docker/services/nginx/Dockerfile
+            context: .
+            target: production
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64
+          - image_tag: redis
+            project: fks
+            dockerfile: infrastructure/docker/services/redis/Dockerfile
+            context: .
+            target: production
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64
+          - image_tag: postgres
+            project: fks
+            dockerfile: infrastructure/docker/services/postgres/Dockerfile
+            context: .
+            target: ""
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64
+          - image_tag: alertmanager-discord
+            project: fks
+            dockerfile: infrastructure/docker/services/alertmanager-discord/Dockerfile
+            context: .
+            target: ""
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64
+          # ── ruby — consolidated Python CPU container ──────────────
+          # Single multi-target Dockerfile replaces data/engine/web.
+          # No build-contexts needed — base/python/Dockerfile is self-contained.
+          - image_tag: ruby
+            project: ruby
+            dockerfile: infrastructure/docker/base/python/Dockerfile
+            context: .
+            target: ruby
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64
+          # ── trainer — GPU multi-target Dockerfile ──────────────────
+          - image_tag: trainer
+            project: ruby
+            dockerfile: infrastructure/docker/base/python-gpu/Dockerfile
+            context: .
+            target: trainer
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64
+          - image_tag: charting
+            project: ruby
+            dockerfile: infrastructure/docker/services/charting/Dockerfile
+            context: .
+            target: ""
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64,linux/arm64
+          - image_tag: prometheus
+            project: ruby
+            dockerfile: infrastructure/docker/services/prometheus/Dockerfile
+            context: .
+            target: ""
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64,linux/arm64
+          - image_tag: grafana
+            project: ruby
+            dockerfile: infrastructure/docker/services/grafana/Dockerfile
+            context: .
+            target: ""
+            build_args: ""
+            build_contexts: ""
+            has_build_contexts: false
+            cache_extra: ""
+            platforms: linux/amd64,linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🧹 Clean Python caches before build
+        run: |
+          find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "__pycache__"  -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name ".ruff_cache"  -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+          echo "✅ Python caches cleaned"
+
+      - name: ⏩ Skip build for deploy-only changes
+        if: needs.setup.outputs.deploy_only == 'true' && needs.setup.outputs.fks_changed != 'true' && needs.setup.outputs.ruby_changed != 'true'
+        run: |
+          echo "📦 Deploy-only change detected — skipping Docker build for :${{ matrix.image_tag }}"
+          echo "   Only config/compose/script files changed; existing images are sufficient."
+          echo "skip_build=true" >> "$GITHUB_OUTPUT"
+        id: deploy-only-check
+
+      - name: 📥 Pull existing image (deploy-only)
+        if: steps.deploy-only-check.outputs.skip_build == 'true'
+        continue-on-error: true
+        run: |
+          docker pull ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }} || echo "⚠️ Pull failed — image may not exist yet"
+
+      - name: 🔢 Short SHA
+        id: vars
+        run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # FIX #3: Push decision is now independent of build_strategy.
+      # FKS images are always pushed when fks_changed==true so that pinned
+      # SHA tags are available in DockerHub for rollbacks. The deploy job
+      # separately decides whether to pull from DockerHub or build on-server.
+      - name: 🚦 Resolve push flag
+        id: push-flag
+        run: |
+          PROJECT="${{ matrix.project }}"
+          SHOULD_DEPLOY="${{ needs.setup.outputs.should_deploy }}"
+
+          if [[ "$SHOULD_DEPLOY" != "true" ]]; then
+            echo "push=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$PROJECT" == "fks" ]]; then
+            # Push whenever FKS source changed — strategy is irrelevant here.
+            # The deploy job handles server-build fallback independently.
+            if [[ "${{ needs.setup.outputs.fks_changed }}" == "true" ]]; then
+              echo "push=true"  >> "$GITHUB_OUTPUT"
+            else
+              echo "push=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            # Ruby: push when ruby changed and docker ruby not skipped
+            if [[ "${{ needs.setup.outputs.ruby_changed }}" == "true" && \
+                  "${{ inputs.skip_docker_ruby }}" != "true" ]]; then
+              echo "push=true"  >> "$GITHUB_OUTPUT"
+            else
+              echo "push=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      # FIX #1: cache-from uses the explicit matrix.cache_extra field.
+      # When cache_extra is empty the line is simply absent — no blank entry.
+      # FIX #2: build-contexts is only passed when has_build_contexts==true,
+      # eliminating the empty-string argument that can confuse buildx.
+      - name: 🐳 Build and Push :${{ matrix.image_tag }} (with build-contexts)
+        if: matrix.has_build_contexts == true && steps.deploy-only-check.outputs.skip_build != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: ${{ matrix.build_args }}
+          build-contexts: ${{ matrix.build_contexts }}
+          platforms: ${{ matrix.platforms }}
+          push: ${{ steps.push-flag.outputs.push }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-${{ steps.vars.outputs.sha_short }}
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-production
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-latest
+          cache-from: |
+            ${{ matrix.cache_extra }}
+            type=registry,ref=${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-buildcache,mode=max
+
+      - name: 🐳 Build and Push :${{ matrix.image_tag }}
+        if: matrix.has_build_contexts != true && steps.deploy-only-check.outputs.skip_build != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: ${{ matrix.build_args }}
+          platforms: ${{ matrix.platforms }}
+          push: ${{ steps.push-flag.outputs.push }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-${{ steps.vars.outputs.sha_short }}
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-production
+            ${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-latest
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:${{ matrix.image_tag }}-buildcache,mode=max
+
+      - name: ✅ Notify :${{ matrix.image_tag }} pushed
+        if: success() && steps.push-flag.outputs.push == 'true'
+        continue-on-error: true
+        uses: nuniesmith/actions/.github/actions/discord-notify@main
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_ACTIONS }}
+          title: "🐳 :${{ matrix.image_tag }} Pushed"
+          description: "Image pushed to DockerHub"
+          status: success
+          fields: |
+            [
+              {"name": "Tags",      "value": "`${{ matrix.image_tag }}` · `${{ matrix.image_tag }}-${{ steps.vars.outputs.sha_short }}`", "inline": true},
+              {"name": "Platforms", "value": "`${{ matrix.platforms }}`", "inline": true}
+            ]
+
+      - name: ❌ Notify :${{ matrix.image_tag }} failed
+        if: failure()
+        continue-on-error: true
+        uses: nuniesmith/actions/.github/actions/discord-notify@main
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_ACTIONS }}
+          title: "❌ :${{ matrix.image_tag }} Build Failed"
+          description: "Failed to build or push :${{ matrix.image_tag }}"
+          status: failure
+
+  # =========================================================================
+  # STAGE: DEPLOY
+  # =========================================================================
+  deploy:
+    name: 🚀 Deploy → production
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs:
+      - setup
+      # ── Docker ──────────────────────────────────────────────────
+      - docker-build-services
+      # ── FKS (Rust) ──────────────────────────────────────────────
+      - fks-lint
+      - fks-test-core
+      - fks-test-neuro-core
+      - fks-test-neuro-vivit
+      - fks-test-services
+      - fks-test-trading
+      - fks-test-integration
+      # ── Ruby (Python) ───────────────────────────────────────────
+      - ruby-lint
+      - ruby-test
+    if: |
+      always() &&
+      needs.setup.result == 'success' &&
+      needs.setup.outputs.should_deploy == 'true' &&
+      (needs.docker-build-services.result == 'success' || needs.docker-build-services.result == 'skipped') &&
+      (needs.fks-lint.result == 'success' || needs.fks-lint.result == 'skipped') &&
+      (needs.fks-test-core.result == 'success' || needs.fks-test-core.result == 'skipped') &&
+      (needs.fks-test-neuro-core.result == 'success' || needs.fks-test-neuro-core.result == 'skipped') &&
+      (needs.fks-test-neuro-vivit.result == 'success' || needs.fks-test-neuro-vivit.result == 'skipped') &&
+      (needs.fks-test-services.result == 'success' || needs.fks-test-services.result == 'skipped') &&
+      (needs.fks-test-trading.result == 'success' || needs.fks-test-trading.result == 'skipped') &&
+      (needs.fks-test-integration.result == 'success' || needs.fks-test-integration.result == 'skipped') &&
+      (needs.ruby-lint.result == 'success' || needs.ruby-lint.result == 'skipped') &&
+      (needs.ruby-test.result == 'success' || needs.ruby-test.result == 'skipped')
+    environment:
+      name: production
+      url: https://${{ needs.setup.outputs.target_domain }}
+    outputs:
+      deployed: ${{ steps.deploy.outputs.deployed }}
+      http_health: ${{ steps.health-checks.outputs.healthy }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 🌐 Validate domain
+        id: validate-domain
+        run: |
+          DOMAIN="${{ needs.setup.outputs.target_domain }}"
+          if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "null" ]; then
+            DOMAIN="${{ env.DOMAIN }}"
+          fi
+          if [ -z "$DOMAIN" ]; then
+            DOMAIN="fkstrading.xyz"
+          fi
+          echo "validated_domain=$DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "🌐 Using domain: $DOMAIN"
+
+      - name: 🎯 Resolve target host
+        id: resolve-host
+        env:
+          PROD_IP: ${{ secrets.PROD_TAILSCALE_IP }}
+        run: |
+          [ -z "$PROD_IP" ] && echo "❌ PROD_TAILSCALE_IP not set" && exit 1
+          echo "target_host=$PROD_IP" >> "$GITHUB_OUTPUT"
+          echo "✅ Target: $PROD_IP (production)"
+
+      - name: 🔌 Connect to Tailscale
+        id: tailscale
+        uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+        with:
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          target-ip: ${{ steps.resolve-host.outputs.target_host }}
+          target-ssh-port: ${{ secrets.PROD_SSH_PORT || '22' }}
+
+      - name: 🔐 Setup SSH Key
+        id: ssh-key-setup
+        if: steps.tailscale.outputs.connected == 'true'
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          SSH_HOST: ${{ steps.resolve-host.outputs.target_host }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT || '22' }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          if [ -z "$SSH_KEY" ]; then
+            echo "key_ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          cat >> ~/.ssh/config << SSHEOF
+          Host $SSH_HOST
+              StrictHostKeyChecking no
+              UserKnownHostsFile /dev/null
+              ConnectTimeout 15
+              ServerAliveInterval 15
+              ServerAliveCountMax 6
+              Port $SSH_PORT
+              LogLevel ERROR
+          SSHEOF
+          echo "key_ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: 🚀 Deploy all services via SSH
+        id: deploy
+        uses: nuniesmith/actions/.github/actions/ssh-deploy@main
+        with:
+          host: ${{ steps.resolve-host.outputs.target_host }}
+          port: ${{ secrets.PROD_SSH_PORT || '22' }}
+          username: ${{ secrets.PROD_SSH_USER || 'actions' }}
+          ssh-key: ${{ secrets.PROD_SSH_KEY }}
+          ssh-retries: "3"
+          ssh-retry-delay: "10"
+          command-timeout: "600"
+          project-path: ~/fks
+          git-pull: "true"
+          git-branch: ${{ github.ref_name }}
+          git-repo-url: "https://github.com/nuniesmith/fks.git"
+          build-strategy: ${{ needs.setup.outputs.build_strategy }}
+          docker-registry: docker.io
+          docker-username: ${{ secrets.DOCKER_USERNAME }}
+          docker-password: ${{ secrets.DOCKER_TOKEN }}
+          docker-image-prefix: ${{ env.IMAGE_NAME }}
+          docker-image-tag: ${{ github.sha }}
+          compose-files: "docker-compose.yml docker-compose.prod.yml"
+          compose-project: fks
+          compose-env-file: .env
+          app-services: "janus ruby nginx charting trainer"
+          infra-services: "redis postgres questdb prometheus grafana alertmanager-discord alertmanager"
+          docker-prune: "true"
+          pre-deploy-command: |
+            echo "🚀 PRE-DEPLOY: production @ $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "💾 Disk free: $(df -h / | tail -1 | awk '{print $4}')"
+            for vol in fks_postgres_data fks_questdb_data fks_redis_data \
+                       fks_grafana_data fks_prometheus_data fks_loki_data \
+                       fks_alertmanager_data fks_optimizer_data \
+                       fks_promtail_positions fks_nginx_logs; do
+              docker volume create $vol 2>/dev/null || true
+            done
+            mkdir -p data config models dataset scripts
+            find . -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
+            echo "✅ Docker volumes + directories ready"
+            echo "🎮 GPU status:"
+            nvidia-smi --query-gpu=name,memory.total,driver_version \
+              --format=csv,noheader 2>/dev/null || echo "⚠️ nvidia-smi unavailable"
+            echo "🧹 Resetting local changes to ensure clean git pull..."
+            git checkout -- . 2>/dev/null || true
+            git clean -fd 2>/dev/null || true
+            echo "✅ Working tree clean"
+          env-setup-command: |
+            if [ -f ./run.sh ]; then
+              bash ./run.sh setup-env 2>&1 || true
+            fi
+            if [ ! -f .env ] || [ ! -s .env ]; then
+              echo "🔄 Fallback: creating minimal .env"
+              cat > .env << 'ENVEOF'
+            ENVIRONMENT=production
+            LOG_LEVEL=info
+            RUST_LOG=info
+            PYTHONUNBUFFERED=1
+            ENABLE_EXECUTION=true
+            ENVEOF
+              echo "✅ Fallback .env created"
+            fi
+            # Generate stable DB secrets once — never overwrite existing values
+            gen_secret() {
+              local key="$1"
+              local val
+              val=$(grep "^${key}=" .env 2>/dev/null | cut -d'=' -f2-)
+              if [ -n "$val" ]; then return; fi
+              if grep -q "^${key}=" .env 2>/dev/null; then
+                sed -i "s|^${key}=.*|${key}=$(openssl rand -base64 32 | tr -d '/+=' | head -c 40)|" .env
+              else
+                echo "${key}=$(openssl rand -base64 32 | tr -d '/+=' | head -c 40)" >> .env
+              fi
+              echo "🔑 Generated ${key}"
+            }
+            gen_secret "POSTGRES_PASSWORD"
+            gen_secret "REDIS_PASSWORD"
+            gen_secret "QUESTDB_PG_PASSWORD"
+
+            gen_secret "API_KEY"
+            gen_secret "TRAINER_API_KEY"
+            # Fernet key — URL-safe base64, accepted directly by cryptography.fernet.Fernet.
+            # Rotate with care: changing invalidates all DB-stored API keys.
+            gen_fernet_key() {
+              local key="$1"
+              local val
+              val=$(grep "^${key}=" .env 2>/dev/null | cut -d'=' -f2-)
+              if [ -n "$val" ]; then return; fi
+              local new_key
+              new_key=$(openssl rand -base64 32 | tr '+/' '-_')
+              if grep -q "^${key}=" .env 2>/dev/null; then
+                sed -i "s|^${key}=.*|${key}=${new_key}|" .env
+              else
+                echo "${key}=${new_key}" >> .env
+              fi
+              echo "🔑 Generated Fernet key for ${key}"
+            }
+            gen_fernet_key "API_KEY_ENCRYPTION_SECRET"
+            grep -q "^MASSIVE_S3_ENDPOINT=" .env 2>/dev/null \
+              || echo "MASSIVE_S3_ENDPOINT=https://files.massive.com" >> .env
+            grep -q "^MASSIVE_S3_BUCKET=" .env 2>/dev/null \
+              || echo "MASSIVE_S3_BUCKET=flatfiles" >> .env
+            chmod 600 .env
+          env-inject-secrets: |
+            DISCORD_WEBHOOK_GENERAL=${{ secrets.DISCORD_WEBHOOK_GENERAL }}
+DISCORD_WEBHOOK_GENERALDISCORD_WEBHOOK_GENERAL            DISCORD_BOT_TOKEN=${{ secrets.DISCORD_BOT_TOKEN }}
+            KRAKEN_API_KEY=${{ secrets.KRAKEN_API_KEY }}
+            KRAKEN_API_SECRET=${{ secrets.KRAKEN_API_SECRET }}
+            XAI_API_KEY=${{ secrets.XAI_API_KEY }}
+            MASSIVE_API_KEY=${{ secrets.MASSIVE_API_KEY }}
+            MASSIVE_S3_KEY_ID=${{ secrets.MASSIVE_S3_KEY_ID }}
+            MASSIVE_S3_SECRET=${{ secrets.MASSIVE_S3_SECRET }}
+            FINNHUB_API_KEY=${{ secrets.FINNHUB_API_KEY }}
+            ALPHA_VANTAGE_API_KEY=${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          deploy-command: |
+            chmod 600 .env  # Re-lock permissions after env-inject-secrets appended to .env
+            set -a && source .env && set +a
+            # Safety-net: ensure all external volumes exist even if pre-deploy-command
+            # failed silently (masked by || true) or ran on a different SSH session.
+            echo "🔒 Ensuring all external Docker volumes exist..."
+            for vol in fks_postgres_data fks_questdb_data fks_redis_data \
+                       fks_grafana_data fks_prometheus_data \
+                       fks_alertmanager_data; do
+              docker volume create "$vol" > /dev/null 2>&1 || true
+            done
+            echo "✅ External volumes ready"
+            TMPL="infrastructure/config/alertmanager/alertmanager.yml.tmpl"
+            DEST="infrastructure/config/alertmanager/alertmanager.yml"
+            [ -f "$TMPL" ] && cp "$TMPL" "$DEST" && echo "✅ alertmanager.yml generated"
+            # Trainer runs on a separate GPU rig via docker-compose.trainer.yml.
+            # Do NOT add --profile training here — it would try to start the
+            # GPU trainer on the production web server (no GPU available).
+            COMPOSE_CMD="docker compose -p fks --env-file .env \
+              -f docker-compose.yml \
+              -f docker-compose.prod.yml"
+            ALL_SERVICES="janus ruby nginx charting"
+            echo "🛑 Stopping app services..."
+            $COMPOSE_CMD stop $ALL_SERVICES 2>/dev/null || true
+            $COMPOSE_CMD rm -f $ALL_SERVICES 2>/dev/null || true
+            echo "🧹 Stopping split-profile services (port conflict prevention)..."
+            docker stop fks_ruby fks_web fks_engine 2>/dev/null || true
+            docker rm -f fks_ruby fks_web fks_engine 2>/dev/null || true
+            STRATEGY="${{ needs.setup.outputs.build_strategy }}"
+            if [ "$STRATEGY" = "dockerhub" ]; then
+              echo "📥 Pulling service images from DockerHub..."
+              $COMPOSE_CMD pull $ALL_SERVICES 2>&1 || STRATEGY="server-build"
+            fi
+            [ "$STRATEGY" = "server-build" ] && \
+              $COMPOSE_CMD build --parallel $ALL_SERVICES 2>&1
+            echo "🔄 Refreshing alertmanager-discord..."
+            $COMPOSE_CMD stop alertmanager-discord 2>/dev/null || true
+            $COMPOSE_CMD rm -f alertmanager-discord 2>/dev/null || true
+            if [ "$STRATEGY" = "dockerhub" ]; then
+              $COMPOSE_CMD pull alertmanager-discord 2>&1 \
+                || $COMPOSE_CMD build alertmanager-discord 2>&1 || true
+            else
+              $COMPOSE_CMD build alertmanager-discord 2>&1 || true
+            fi
+            echo "🚀 Starting infrastructure services..."
+            $COMPOSE_CMD up -d --no-recreate \
+              redis postgres questdb prometheus grafana \
+              alertmanager-discord alertmanager 2>&1
+            docker kill --signal=HUP fks_alertmanager 2>/dev/null || true
+            for i in $(seq 1 30); do
+              $COMPOSE_CMD exec -T redis redis-cli --no-auth-warning \
+                -a "${REDIS_PASSWORD:-}" ping </dev/null 2>/dev/null \
+                | grep -q PONG && break
+              sleep 2
+            done
+            echo "🚀 Starting all services..."
+            $COMPOSE_CMD up -d 2>&1
+            sleep 30
+            docker ps -a --filter "name=fks" \
+              --format "table {{.Names}}\t{{.Status}}" | head -25
+          post-deploy-command: |
+            [ -f .env ] && echo "✅ .env persisted ($(wc -l < .env) lines)" \
+                        || echo "❌ .env missing!"
+
+            echo ""
+            echo "📊 Service status:"
+            docker ps --filter "name=fks_" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            echo ""
+            echo "📋 Supervisord process status inside ruby:"
+            docker exec fks_ruby supervisorctl status 2>/dev/null || echo "  ⚠️ supervisorctl unavailable"
+
+            echo ""
+            echo "💾 Disk + Docker usage:"
+            df -h / | tail -1
+            docker system df 2>/dev/null || true
+            echo ""
+            echo "🎮 GPU status:"
+            nvidia-smi 2>/dev/null || echo "nvidia-smi unavailable on host"
+            echo ""
+            echo "🏥 Quick health probes..."
+            for svc_port in "ruby-data:8050" "ruby-web:8080" "trainer:8200"; do
+              svc="${svc_port%%:*}" port="${svc_port##*:}"
+              curl -sf --max-time 5 "http://localhost:${port}/health" > /dev/null 2>&1 \
+                && echo "  ✅ ${svc} (${port}) — healthy" \
+                || echo "  ⏳ ${svc} (${port}) — still starting"
+            done
+            echo ""
+            echo "🌐 Ensuring tailscale serve is active..."
+            tailscale serve status 2>/dev/null | grep -q "127.0.0.1:80" \
+              && echo "  ✅ tailscale serve already configured" \
+              || { tailscale serve --bg http://127.0.0.1:80 && echo "  ✅ tailscale serve configured"; }
+            echo ""
+            echo "🧹 Pruning dangling images..."
+            docker image prune -f 2>/dev/null || true
+            echo ""
+            echo "🌐 https://${{ steps.validate-domain.outputs.validated_domain }}"
+
+      - name: 🔎 Verify containers exist before health checks
+        id: container-gate
+        if: always() && steps.deploy.outcome == 'success'
+        env:
+          SSH_HOST: ${{ steps.resolve-host.outputs.target_host }}
+          SSH_PORT: ${{ secrets.PROD_SSH_PORT || '22' }}
+          SSH_USER: ${{ secrets.PROD_SSH_USER || 'actions' }}
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          # Re-create SSH key (ssh-deploy post-step removes it)
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          COUNT=$(ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" \
+            -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
+            "$SSH_USER@$SSH_HOST" \
+            "docker ps --filter 'name=fks_' --format '{{.Names}}' | wc -l" 2>/dev/null || echo "0")
+          echo "🐳 Running fks containers: $COUNT"
+          if [ "$COUNT" -ge 1 ]; then
+            echo "has_containers=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠️ No fks containers running — skipping health checks"
+            echo "has_containers=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 🏥 Health Checks
+        id: health-checks
+        if: always() && steps.deploy.outcome == 'success' && steps.container-gate.outputs.has_containers == 'true'
+        uses: nuniesmith/actions/.github/actions/health-check@main
+        with:
+          endpoints: "[]"
+          containers: fks_janus fks_nginx fks_ruby fks_charting fks_trainer
+          ssh-host: ${{ steps.resolve-host.outputs.target_host }}
+          ssh-port: ${{ secrets.PROD_SSH_PORT || '22' }}
+          ssh-user: ${{ secrets.PROD_SSH_USER || 'actions' }}
+          ssh-key: ${{ secrets.PROD_SSH_KEY }}
+          custom-command: |
+            docker exec fks_redis sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" ping' \
+              2>/dev/null | grep -q "PONG" && echo "✅ Redis OK" || echo "❌ Redis failed"
+            docker exec fks_postgres pg_isready -U fks_user 2>/dev/null \
+              | grep -q "accepting" && echo "✅ PostgreSQL OK" || echo "❌ PostgreSQL failed"
+            curl -s "http://localhost:9000/exec?query=SELECT%201" 2>/dev/null \
+              | grep -q "dataset" && echo "✅ QuestDB OK" || echo "❌ QuestDB failed"
+            echo "🌐 Checking HTTP endpoints via nginx (localhost)..."
+            for path in "/health" "/health/ruby" "/health/janus" "/health/grafana"; do
+              status=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "https://localhost${path}" 2>/dev/null)
+              if [ "$status" = "200" ]; then
+                echo "  ✅ https://localhost${path} → ${status}"
+              else
+                echo "  ❌ https://localhost${path} → ${status} (expected 200)"
+                ENDPOINT_FAIL=1
+              fi
+            done
+            [ "${ENDPOINT_FAIL:-0}" = "0" ] && echo "✅ All HTTPS endpoints healthy" || { echo "❌ One or more HTTPS endpoints failed"; exit 1; }
+          initial-delay: "15"
+          retry-count: "3"
+          retry-delay: "10"
+          fail-on-unhealthy: "true"
+
+      - name: 📣 Notify deployment
+        if: always()
+        uses: nuniesmith/actions/.github/actions/discord-notify@main
+        continue-on-error: true
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_ACTIONS }}
+          title: "${{ steps.deploy.outcome == 'success' && '🚀 Deployed to Production' || '❌ Deploy Failed' }}"
+          description: "FKS + Ruby deployed via ${{ needs.setup.outputs.build_strategy }}"
+          status: ${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
+          include-repo-info: "true"
+          fields: |
+            [
+              {"name": "Domain",   "value": "${{ steps.validate-domain.outputs.validated_domain }}", "inline": true},
+              {"name": "Strategy", "value": "${{ needs.setup.outputs.build_strategy }}", "inline": true},
+              {"name": "TLS",         "value": "tailscale serve", "inline": true},
+              {"name": "Services", "value": "`janus` · `nginx` · `ruby`\n`charting` · `trainer`\n`prometheus` · `grafana`", "inline": true},
+              {"name": "Health",   "value": "${{ steps.health-checks.outputs.healthy == 'true' && '✅ healthy' || '⚠️ degraded' }}", "inline": true}
+            ]
+
+  # =========================================================================
+  # UNIFIED PIPELINE SUMMARY
+  # =========================================================================
+  pipeline-summary:
+    name: 📊 Pipeline Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - setup
+      # ── FKS ─────────────────────────────────────────────────────
+      - fks-lint
+      - fks-test-core
+      - fks-test-neuro-core
+      - fks-test-neuro-vivit
+      - fks-test-services
+      - fks-test-trading
+      - fks-test-integration
+      # ── Ruby ────────────────────────────────────────────────────
+      - ruby-lint
+      - ruby-test
+      # ── Shared ──────────────────────────────────────────────────
+      - docker-build-services
+      - deploy
+    if: always()
+    steps:
+      - name: 📥 Download all JUnit artifacts
+        uses: actions/download-artifact@v4
+        if: always()
+        with:
+          pattern: junit-fks-*
+          path: test-reports/
+
+      - name: 📊 Generate unified summary
+        if: always()
+        run: |
+          si() {
+            case "$1" in
+              success)   echo "✅" ;;
+              failure)   echo "❌" ;;
+              skipped)   echo "⏭️" ;;
+              cancelled) echo "🚫" ;;
+              *)         echo "❓" ;;
+            esac
+          }
+
+          # ── Collect results ──────────────────────────────────────
+          FKS_LINT="${{ needs.fks-lint.result }}"
+          FKS_CORE="${{ needs.fks-test-core.result }}"
+          FKS_NEURO="${{ needs.fks-test-neuro-core.result }}"
+          FKS_VIVIT="${{ needs.fks-test-neuro-vivit.result }}"
+          FKS_SVC="${{ needs.fks-test-services.result }}"
+          FKS_TRADE="${{ needs.fks-test-trading.result }}"
+          FKS_INTEG="${{ needs.fks-test-integration.result }}"
+          FKS_DOCKER="${{ needs.docker-build-services.result }}"
+          FKS_DEPLOY="${{ needs.deploy.result }}"
+          RB_LINT="${{ needs.ruby-lint.result }}"
+          RB_TEST="${{ needs.ruby-test.result }}"
+
+          # ── Count failures for verdict ────────────────────────────
+          FAIL=0
+          for R in "$FKS_LINT" "$FKS_CORE" "$FKS_NEURO" "$FKS_VIVIT" "$FKS_SVC" \
+                    "$FKS_TRADE" "$FKS_INTEG" "$FKS_DOCKER" "$FKS_DEPLOY" \
+                    "$RB_LINT" "$RB_TEST"; do
+            [ "$R" = "failure" ] && FAIL=$((FAIL + 1))
+          done
+
+          if [ "$FAIL" -gt 0 ]; then
+            VERDICT="❌ $FAIL JOB(S) FAILED"
+          else
+            VERDICT="✅ ALL PASSED"
+          fi
+
+          # ── FIX #5: Parse JUnit XML — guard against empty/missing reports ──
+          # If test-reports/ doesn't exist or all tests were skipped, the
+          # Python block writes nothing. We detect this and substitute a
+          # placeholder row so the Markdown table is never malformed.
+          python3 << 'PYEOF' > /tmp/counts.txt 2>/tmp/counts_err.txt || true
+          import xml.etree.ElementTree as ET, os, glob, sys
+
+          LABELS = {
+            "junit-fks-core":        "🧱 Core & Libraries",
+            "junit-fks-neuro-core":  "🧠 Neuro (Core)",
+            "junit-fks-neuro-vivit": "🧠 Neuro (ViViT)",
+            "junit-fks-services":    "⚙️ Services",
+            "junit-fks-trading":     "📈 Trading & ML",
+            "junit-fks-integration": "🔗 Integration",
+          }
+          tot = {"t": 0, "p": 0, "f": 0, "s": 0}
+          rows_written = 0
+          for key, label in LABELS.items():
+            xmls = glob.glob(f"test-reports/{key}/**/*.xml", recursive=True)
+            t = f = s = 0
+            tm = 0.0
+            for xf in xmls:
+              try:
+                root = ET.parse(xf).getroot()
+                suites = root.findall(".//testsuite") or (
+                  [root] if root.tag == "testsuite" else []
+                )
+                for ts in suites:
+                  t  += int(ts.get("tests",   0))
+                  f  += int(ts.get("failures", 0)) + int(ts.get("errors", 0))
+                  s  += int(ts.get("skipped",  0))
+                  tm += float(ts.get("time",   0))
+              except Exception:
+                pass
+            p = t - f - s
+            tot["t"] += t
+            tot["p"] += p
+            tot["f"] += f
+            tot["s"] += s
+            mi  = int(tm) // 60
+            sec = tm - mi * 60
+            tf  = f"{mi}m {sec:.1f}s" if mi else f"{sec:.1f}s"
+            passed_str  = f"✅ {p}" if p  else "0"
+            failed_str  = f"❌ {f}" if f  else "0"
+            skipped_str = f"⏭️ {s}" if s  else "0"
+            print(f"{label}|{t}|{passed_str}|{failed_str}|{skipped_str}|{tf}")
+            rows_written += 1
+          print("---")
+          t = tot["t"]; p = tot["p"]; f = tot["f"]; s = tot["s"]
+          passed_str  = f"✅ {p}" if p  else "0"
+          failed_str  = f"❌ {f}" if f  else "0"
+          skipped_str = f"⏭️ {s}" if s  else "0"
+          print(f"**TOTAL**|**{t}**|**{passed_str}**|**{failed_str}**|**{skipped_str}**|—")
+          PYEOF
+
+          # ── FIX #4 + #5: Build table rows safely ───────────────────
+          # Read the Python output line-by-line; skip blank lines to
+          # prevent empty `|  |` rows that break Markdown rendering.
+          JUNIT_ROWS=""
+          TOTAL_ROW=""
+          section="rows"
+          HAS_DATA=false
+
+          while IFS= read -r line; do
+            # skip blank lines (guards against trailing newlines or empty output)
+            [ -z "$line" ] && continue
+
+            if [ "$line" = "---" ]; then
+              section="total"
+              continue
+            fi
+
+            if [ "$section" = "rows" ]; then
+              JUNIT_ROWS="${JUNIT_ROWS}| $(echo "$line" | sed 's/|/ | /g') |
+              "
+              HAS_DATA=true
+            else
+              TOTAL_ROW="| $(echo "$line" | sed 's/|/ | /g') |"
+            fi
+          done < /tmp/counts.txt
+
+          # Fallback: if no XML reports were found, render a clear notice
+          if [ "$HAS_DATA" = "false" ]; then
+            JUNIT_ROWS="| _No test reports found — tests were skipped or not yet run_ | — | — | — | — | — |
+            "
+            TOTAL_ROW=""
+          fi
+
+          # ── Write summary ──────────────────────────────────────────
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # ${VERDICT}  —  Pipeline \`#${{ github.run_number }}\`
+
+          > \`${{ github.ref_name }}\` | Actor: \`${{ github.actor }}\`
+          > FKS changed: \`${{ needs.setup.outputs.fks_changed }}\` | Ruby changed: \`${{ needs.setup.outputs.ruby_changed }}\`
+
+          ---
+
+          ## 🦀 FKS (Rust / Janus)
+
+          | | Job | Result | | Job | Result |
+          |--|-----|--------|-|-----|--------|
+          | 🦀 | Lint         | $(si "$FKS_LINT")  $FKS_LINT  | 📈 | Trading     | $(si "$FKS_TRADE")  $FKS_TRADE  |
+          | 🧱 | Core         | $(si "$FKS_CORE")  $FKS_CORE  | 🔗 | Integration | $(si "$FKS_INTEG")  $FKS_INTEG  |
+          | 🧠 | Neuro Core   | $(si "$FKS_NEURO") $FKS_NEURO | 🐳 | Docker Build | $(si "$FKS_DOCKER") $FKS_DOCKER |
+          | 🧠 | Neuro ViViT  | $(si "$FKS_VIVIT") $FKS_VIVIT | ⚙️ | Services     | $(si "$FKS_SVC")   $FKS_SVC    |
+
+          <details><summary><strong>🧪 FKS Test Breakdown</strong></summary>
+
+          | Group | Total | Passed | Failed | Skipped | Duration |
+          |-------|------:|-------:|-------:|--------:|---------:|
+          ${JUNIT_ROWS}${TOTAL_ROW}
+
+          </details>
+
+          ---
+
+          ## 🐍 Ruby (Python)
+
+          | | Job | Result |
+          |--|-----|--------|
+          | 🐍 | Lint        | $(si "$RB_LINT") $RB_LINT |
+          | 🧪 | Test        | $(si "$RB_TEST") $RB_TEST |
+
+          ---
+
+          ## 🚀 Unified Deploy
+
+          | | Result |
+          |--|--------|
+          | $(si "$FKS_DEPLOY") | $FKS_DEPLOY |
+
+          ---
+
+          <details><summary><strong>🐳 DockerHub Tag Reference</strong></summary>
+
+          | Project | Image | Tags |
+          |---------|-------|------|
+          | FKS | \`nuniesmith/fks\` | \`janus\` · \`auth\` · \`nginx\` · \`redis\` |
+          | FKS (pinned) | \`nuniesmith/fks\` | \`janus-${{ github.sha }}\` · \`auth-${{ github.sha }}\` … |
+          | Ruby (consolidated) | \`nuniesmith/fks\` | \`ruby\` · \`trainer\` · \`charting\` · \`prometheus\` · \`grafana\` |
+          | Ruby (pinned) | \`nuniesmith/fks\` | \`ruby-<sha7>\` · \`trainer-<sha7>\` … |
+
+          </details>
+
+          <details><summary><strong>⚙️ Deploy Target</strong></summary>
+
+          | Project | Target | Method |
+          |---------|--------|--------|
+          | FKS + Ruby | \`${{ needs.setup.outputs.target_domain }}\` | Tailscale → SSH → Compose |
+
+          </details>
+          EOF
+
+      - name: ❌ Fail on critical errors
+        if: |
+          needs.fks-lint.result == 'failure' ||
+          needs.fks-test-core.result == 'failure' ||
+          needs.fks-test-neuro-core.result == 'failure' ||
+          needs.fks-test-neuro-vivit.result == 'failure' ||
+          needs.fks-test-services.result == 'failure' ||
+          needs.fks-test-trading.result == 'failure' ||
+          needs.fks-test-integration.result == 'failure' ||
+          needs.docker-build-services.result == 'failure' ||
+          needs.deploy.result == 'failure' ||
+          needs.ruby-lint.result == 'failure' ||
+          needs.ruby-test.result == 'failure'
+        run: |
+          echo "❌ Pipeline failures detected:"
+          [ "${{ needs.fks-lint.result }}"             = "failure" ] && echo "  🦀 Rust Lint"
+          [ "${{ needs.fks-test-core.result }}"        = "failure" ] && echo "  🧱 Rust Core Tests"
+          [ "${{ needs.fks-test-neuro-core.result }}"  = "failure" ] && echo "  🧠 Rust Neuro Core Tests"
+          [ "${{ needs.fks-test-neuro-vivit.result }}" = "failure" ] && echo "  🧠 Rust Neuro ViViT Tests"
+          [ "${{ needs.fks-test-services.result }}"    = "failure" ] && echo "  ⚙️ Rust Services Tests"
+          [ "${{ needs.fks-test-trading.result }}"     = "failure" ] && echo "  📈 Rust Trading Tests"
+          [ "${{ needs.fks-test-integration.result }}" = "failure" ] && echo "  🔗 Rust Integration Tests"
+          [ "${{ needs.docker-build-services.result }}" = "failure" ] && echo "  🐳 Docker Services"
+          [ "${{ needs.deploy.result }}"               = "failure" ] && echo "  🚀 Deployment"
+          [ "${{ needs.ruby-lint.result }}"            = "failure" ] && echo "  🐍 Python Lint"
+          [ "${{ needs.ruby-test.result }}"            = "failure" ] && echo "  🧪 Python Tests"
+          exit 1

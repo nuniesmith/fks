@@ -1,0 +1,490 @@
+# Kubernetes Deployment Manifest for Data Service - Production
+# Week 8 - Production Deployment
+# This manifest deploys the Data Service with high availability and auto-scaling
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data-service-prod
+  labels:
+    environment: production
+    app: data-service
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: data-service-config
+  namespace: data-service-prod
+data:
+  config.toml: |
+    # Production configuration loaded from ConfigMap
+    # See deployment/production/config.toml for full configuration
+    [service]
+    name = "data-service"
+    environment = "production"
+    log_level = "info"
+
+    [server]
+    port = 8080
+    max_connections = 1000
+
+    # Additional config loaded from mounted volume
+
+---
+# Secret for sensitive configuration (create separately with kubectl)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: data-service-secrets
+  namespace: data-service-prod
+type: Opaque
+# Data should be base64 encoded and created via:
+# kubectl create secret generic data-service-secrets \
+#   --from-literal=binance-api-key=<key> \
+#   --from-literal=binance-api-secret=<secret> \
+#   --from-literal=kraken-api-key=<key> \
+#   --from-literal=kraken-api-secret=<secret> \
+#   --from-literal=coinbase-api-key=<key> \
+#   --from-literal=coinbase-api-secret=<secret> \
+#   --from-literal=redis-password=<password> \
+#   -n data-service-prod
+
+---
+# Deployment for Data Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-service
+  namespace: data-service-prod
+  labels:
+    app: data-service
+    version: v1.0.0
+    environment: production
+spec:
+  replicas: 3  # Start with 3 replicas for HA
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0  # Zero-downtime deployment
+  selector:
+    matchLabels:
+      app: data-service
+  template:
+    metadata:
+      labels:
+        app: data-service
+        version: v1.0.0
+        environment: production
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: data-service
+      # Anti-affinity to spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - data-service
+              topologyKey: kubernetes.io/hostname
+      # Init container to wait for dependencies
+      initContainers:
+      - name: wait-for-redis
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z redis-prod.data-service-prod.svc.cluster.local 6379; do echo waiting for redis; sleep 2; done;']
+      - name: wait-for-questdb
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z questdb-prod.data-service-prod.svc.cluster.local 9000; do echo waiting for questdb; sleep 2; done;']
+
+      containers:
+      - name: data-service
+        image: data-service:1.0.0  # Replace with actual image from registry
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: health
+          containerPort: 8081
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+
+        env:
+        # Service configuration
+        - name: RUST_LOG
+          value: "data_service=info,info"
+        - name: RUST_BACKTRACE
+          value: "1"
+        - name: CONFIG_PATH
+          value: "/app/config/config.toml"
+        - name: SERVICE_ENVIRONMENT
+          value: "production"
+
+        # Database configuration
+        - name: QUESTDB_HOST
+          value: "questdb-prod.data-service-prod.svc.cluster.local"
+        - name: REDIS_HOST
+          value: "redis-prod.data-service-prod.svc.cluster.local"
+
+        # Secrets from Kubernetes Secret
+        - name: BINANCE_PROD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: data-service-secrets
+              key: binance-api-key
+        - name: BINANCE_PROD_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: data-service-secrets
+              key: binance-api-secret
+        - name: KRAKEN_PROD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: data-service-secrets
+              key: kraken-api-key
+        - name: KRAKEN_PROD_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: data-service-secrets
+              key: kraken-api-secret
+        - name: COINBASE_PROD_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: data-service-secrets
+              key: coinbase-api-key
+        - name: COINBASE_PROD_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: data-service-secrets
+              key: coinbase-api-secret
+
+        # Kubernetes metadata
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # Resource requests and limits
+        resources:
+          requests:
+            cpu: "2000m"      # 2 cores
+            memory: "4Gi"     # 4GB RAM
+          limits:
+            cpu: "4000m"      # 4 cores max
+            memory: "8Gi"     # 8GB RAM max
+
+        # Liveness probe - restart if unhealthy
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness probe - remove from load balancer if not ready
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 2
+
+        # Startup probe - allow slow startup
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 12  # 60 seconds max startup time
+
+        # Volume mounts
+        volumeMounts:
+        - name: config
+          mountPath: /app/config
+          readOnly: true
+        - name: tls
+          mountPath: /etc/tls
+          readOnly: true
+        - name: logs
+          mountPath: /var/log/data-service
+
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes:
+      - name: config
+        configMap:
+          name: data-service-config
+      - name: tls
+        secret:
+          secretName: data-service-tls
+          optional: true
+      - name: logs
+        emptyDir: {}
+
+      # Node selector for production nodes
+      nodeSelector:
+        workload: production
+
+      # Tolerations for production taints
+      tolerations:
+      - key: "production"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: data-service-hpa
+  namespace: data-service-prod
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: data-service
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min
+
+---
+# Service for Data Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-service
+  namespace: data-service-prod
+  labels:
+    app: data-service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: data-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8080
+    protocol: TCP
+  sessionAffinity: None
+
+---
+# Internal Service for cluster-internal access
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-service-internal
+  namespace: data-service-prod
+  labels:
+    app: data-service
+spec:
+  type: ClusterIP
+  selector:
+    app: data-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  - name: health
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+---
+# Service for metrics scraping
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-service-metrics
+  namespace: data-service-prod
+  labels:
+    app: data-service
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for direct pod access
+  selector:
+    app: data-service
+  ports:
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+    protocol: TCP
+
+---
+# ServiceAccount for the application
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: data-service
+  namespace: data-service-prod
+  labels:
+    app: data-service
+
+---
+# PodDisruptionBudget to ensure availability during voluntary disruptions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: data-service-pdb
+  namespace: data-service-prod
+spec:
+  minAvailable: 2  # Always keep at least 2 pods running
+  selector:
+    matchLabels:
+      app: data-service
+
+---
+# NetworkPolicy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: data-service-network-policy
+  namespace: data-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: data-service
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  # Allow traffic from Prometheus
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9090
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow QuestDB
+  - to:
+    - podSelector:
+        matchLabels:
+          app: questdb
+    ports:
+    - protocol: TCP
+      port: 9000
+    - protocol: TCP
+      port: 9009
+  # Allow Redis
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow external APIs (exchanges)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443

@@ -1,0 +1,51 @@
+// ── Module: signal_logic ────────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. FILTER STACK + MAIN SIGNALS
+// Long  = strong TG bounce  + full filter stack
+// Short = strong TG reject  + full filter stack
+// [NEW] useHTFAO adds HTF AO direction as optional filter
+// [NEW] signal_bias var locks live bullBias at signal time for tracker accuracy
+// ══════════════════════════════════════════════════════════════════════════════
+bool rsiOK_L    = rsi14 < rsiOBLevel
+bool rsiOK_S    = rsi14 > rsiOSLevel
+bool regimeOK_L = not suppressRegime or not is_trending_d
+bool regimeOK_S = not suppressRegime or not is_trending_u
+bool volOK      = volume > volAvg * volMult
+bool vwapL      = not requireVWAP or close > vwap
+bool vwapS      = not requireVWAP or close < vwap
+bool qualOK     = quality >= minQualityPct
+// [NEW] HTF AO gate: bypassed when useHTFAO=false
+bool htfAO_L    = not useHTFAO or htf_ao > 0
+bool htfAO_S    = not useHTFAO or htf_ao < 0
+
+bool longSignal_raw  = strong_bot
+     and  bullBias   and ao > 0  and volOK    and vwapL
+     and qualOK      and rsiOK_L and waveOK_L and momOK_L
+     and regimeOK_L  and htfAO_L and barstate.isconfirmed
+
+bool shortSignal_raw = strong_top
+     and not bullBias and ao < 0  and volOK    and vwapS
+     and qualOK       and rsiOK_S and waveOK_S and momOK_S
+     and regimeOK_S   and htfAO_S and barstate.isconfirmed
+
+// Adaptive cooldown — longer in high-vol environments to avoid chasing
+var int lastLong  = 0
+var int lastShort = 0
+bool longSignal  = longSignal_raw  and (bar_index - lastLong  > cooldownBars)
+bool shortSignal = shortSignal_raw and (bar_index - lastShort > cooldownBars)
+
+if longSignal
+    lastLong  := bar_index
+if shortSignal
+    lastShort := bar_index
+
+// [NEW] signal_bias — locks bullBias value at signal entry time.
+//       bullBias can flip intrabar / between bars after entry; signal_bias
+//       preserves the direction the trade was taken in for dashboard display.
+var bool signal_bias = true
+if longSignal
+    signal_bias := true
+if shortSignal
+    signal_bias := false

@@ -1,0 +1,86 @@
+// ── Module: trade_tracker_table ─────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 17. TRADE TRACKER TABLE
+// ══════════════════════════════════════════════════════════════════════════════
+_tp = trackerPos_str == "Bottom Right" ? position.bottom_right :
+      trackerPos_str == "Top Left"     ? position.top_left     :
+      trackerPos_str == "Bottom Left"  ? position.bottom_left  : position.top_right
+
+var table trk = table.new(_tp, 6, 7,
+     bgcolor=color.new(#1e222d, 88), border_width=1, frame_color=#00ffff)
+
+if barstate.islast and showTracker
+    // ── Header row ────────────────────────────────────────────────────────────
+    table.cell(trk, 0, 0, "TRACKER", text_color=#00ffff,     text_size=size.normal)
+    table.cell(trk, 1, 0, "L-W",     text_color=color.lime,  text_size=size.normal)
+    table.cell(trk, 2, 0, "L-L",     text_color=color.red,   text_size=size.normal)
+    table.cell(trk, 3, 0, "S-W",     text_color=color.lime,  text_size=size.normal)
+    table.cell(trk, 4, 0, "S-L",     text_color=color.red,   text_size=size.normal)
+    table.cell(trk, 5, 0, "Win%",    text_color=color.white, text_size=size.normal)
+
+    // ── Row 1 — TG signals ────────────────────────────────────────────────────
+    table.cell(trk, 0, 1, "TG",      text_color=#00ffbb, text_size=size.normal)
+    table.cell(trk, 1, 1, str.tostring(lw),   text_color=lw   > 0 ? color.lime : color.gray, text_size=size.normal)
+    table.cell(trk, 2, 1, str.tostring(ll),   text_color=ll   > 0 ? color.red  : color.gray, text_size=size.normal)
+    table.cell(trk, 3, 1, str.tostring(sw),   text_color=sw   > 0 ? color.lime : color.gray, text_size=size.normal)
+    table.cell(trk, 4, 1, str.tostring(sl_c), text_color=sl_c > 0 ? color.red  : color.gray, text_size=size.normal)
+    _tgwr_c = tg_wr >= 55 ? color.lime : tg_wr >= 40 ? color.yellow : tg_total > 0 ? color.red : color.gray
+    table.cell(trk, 5, 1, tg_total > 0 ? str.tostring(math.round(tg_wr)) + "%" : "—", text_color=_tgwr_c, text_size=size.normal)
+
+    // ── Row 2 — RB / ORB breakout signals ────────────────────────────────────
+    table.cell(trk, 0, 2, "RB/ORB",  text_color=#2962FF, text_size=size.normal)
+    table.cell(trk, 1, 2, str.tostring(rb_lw),   text_color=rb_lw   > 0 ? color.lime : color.gray, text_size=size.normal)
+    table.cell(trk, 2, 2, str.tostring(rb_ll),   text_color=rb_ll   > 0 ? color.red  : color.gray, text_size=size.normal)
+    table.cell(trk, 3, 2, str.tostring(rb_sw),   text_color=rb_sw   > 0 ? color.lime : color.gray, text_size=size.normal)
+    table.cell(trk, 4, 2, str.tostring(rb_sl_c), text_color=rb_sl_c > 0 ? color.red  : color.gray, text_size=size.normal)
+    _rbwr_c = rb_wr >= 55 ? color.lime : rb_wr >= 40 ? color.yellow : rb_total > 0 ? color.red : color.gray
+    table.cell(trk, 5, 2, rb_total > 0 ? str.tostring(math.round(rb_wr)) + "%" : "—", text_color=_rbwr_c, text_size=size.normal)
+
+    // ── Row 3 — All combined ──────────────────────────────────────────────────
+    table.cell(trk, 0, 3, "ALL",     text_color=color.white, text_size=size.normal)
+    table.cell(trk, 1, 3, str.tostring(tot_long_w),  text_color=tot_long_w  > 0 ? color.lime : color.gray, text_size=size.normal)
+    table.cell(trk, 2, 3, str.tostring(tot_long_l),  text_color=tot_long_l  > 0 ? color.red  : color.gray, text_size=size.normal)
+    table.cell(trk, 3, 3, str.tostring(tot_short_w), text_color=tot_short_w > 0 ? color.lime : color.gray, text_size=size.normal)
+    table.cell(trk, 4, 3, str.tostring(tot_short_l), text_color=tot_short_l > 0 ? color.red  : color.gray, text_size=size.normal)
+    _totwr_c = tot_wr >= 55 ? color.lime : tot_wr >= 40 ? color.yellow : t_total > 0 ? color.red : color.gray
+    table.cell(trk, 5, 3, t_total > 0 ? str.tostring(math.round(tot_wr)) + "%" : "—", text_color=_totwr_c, text_size=size.normal)
+
+    // ── Row 4 — Long win % breakdown ─────────────────────────────────────────
+    table.cell(trk, 0, 4, "L Win%",  text_color=color.gray, text_size=size.normal)
+    _lwc_tg = l_wr    >= 55 ? color.lime : l_wr    >= 40 ? color.yellow : l_total    > 0 ? color.red : color.gray
+    _lwc_rb = rb_l_wr >= 55 ? color.lime : rb_l_wr >= 40 ? color.yellow : rb_l_total > 0 ? color.red : color.gray
+    _lwc_al = tot_l_wr >= 55 ? color.lime : tot_l_wr >= 40 ? color.yellow : tot_long_t > 0 ? color.red : color.gray
+    table.cell(trk, 1, 4, l_total    > 0 ? str.tostring(math.round(l_wr))    + "%" : "—", text_color=_lwc_tg, text_size=size.normal)
+    table.cell(trk, 2, 4, rb_l_total > 0 ? str.tostring(math.round(rb_l_wr)) + "%" : "—", text_color=_lwc_rb, text_size=size.normal)
+    table.cell(trk, 3, 4, str.tostring(t_total) + " tr", text_color=color.gray, text_size=size.normal)
+    table.cell(trk, 4, 4, tot_long_t > 0 ? str.tostring(math.round(tot_l_wr)) + "%" : "—", text_color=_lwc_al, text_size=size.normal)
+    table.cell(trk, 5, 4, cur_tg_str, text_color=cur_tg_col, text_size=size.normal)
+
+    // ── Row 5 — Short win % breakdown ────────────────────────────────────────
+    table.cell(trk, 0, 5, "S Win%",   text_color=color.gray, text_size=size.normal)
+    _swc_tg = s_wr    >= 55 ? color.lime : s_wr    >= 40 ? color.yellow : s_total    > 0 ? color.red : color.gray
+    _swc_rb = rb_s_wr >= 55 ? color.lime : rb_s_wr >= 40 ? color.yellow : rb_s_total > 0 ? color.red : color.gray
+    _swc_al = tot_s_wr >= 55 ? color.lime : tot_s_wr >= 40 ? color.yellow : tot_short_t > 0 ? color.red : color.gray
+    table.cell(trk, 1, 5, s_total    > 0 ? str.tostring(math.round(s_wr))    + "%" : "—", text_color=_swc_tg, text_size=size.normal)
+    table.cell(trk, 2, 5, rb_s_total > 0 ? str.tostring(math.round(rb_s_wr)) + "%" : "—", text_color=_swc_rb, text_size=size.normal)
+    table.cell(trk, 3, 5, "Win=" + winTarget, text_color=color.gray, text_size=size.normal)
+    table.cell(trk, 4, 5, tot_short_t > 0 ? str.tostring(math.round(tot_s_wr)) + "%" : "—", text_color=_swc_al, text_size=size.normal)
+    table.cell(trk, 5, 5, cur_rb_str, text_color=cur_rb_col, text_size=size.normal)
+
+    // ── Row 6 — Edge + bias recommendation ───────────────────────────────────
+    table.cell(trk, 0, 6, "Edge",     text_color=color.gray, text_size=size.normal)
+    string _l_edge = tot_long_t  >= 3 ? (tot_l_wr >= 55 ? "✓ LONG"  : tot_l_wr < 40 ? "✗ LONG"  : "~ LONG")  : "—"
+    string _s_edge = tot_short_t >= 3 ? (tot_s_wr >= 55 ? "✓ SHORT" : tot_s_wr < 40 ? "✗ SHORT" : "~ SHORT") : "—"
+    color  _l_ec   = tot_l_wr >= 55 ? color.lime : tot_l_wr < 40 and tot_long_t  >= 3 ? color.red : color.gray
+    color  _s_ec   = tot_s_wr >= 55 ? color.lime : tot_s_wr < 40 and tot_short_t >= 3 ? color.red : color.gray
+    table.cell(trk, 1, 6, _l_edge, text_color=_l_ec, text_size=size.normal)
+    table.cell(trk, 2, 6, _s_edge, text_color=_s_ec, text_size=size.normal)
+    string _bias_rec = t_total >= 5 ? (tot_l_wr > tot_s_wr + 15 ? "▲ LONGS" :
+         tot_s_wr > tot_l_wr + 15 ? "▼ SHORTS" : "= BALANCED") : "5+ needed"
+    color  _bias_col = t_total >= 5 ? (tot_l_wr > tot_s_wr + 15 ? color.lime :
+         tot_s_wr > tot_l_wr + 15 ? color.red : color.yellow) : color.gray
+    table.cell(trk, 3, 6, _bias_rec, text_color=_bias_col, text_size=size.normal)
+    table.cell(trk, 4, 6, "",         text_color=color.gray, text_size=size.normal)
+    table.cell(trk, 5, 6, resetOnDay ? "Daily" : "All-time", text_color=color.gray, text_size=size.normal)

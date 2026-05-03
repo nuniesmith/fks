@@ -1,0 +1,87 @@
+# ============================================================================
+# Prometheus Configuration - SLIM Baseline for HyroTrader Challenge
+# ============================================================================
+# Focused scrape targets for minimal latency monitoring
+# ============================================================================
+
+global:
+    scrape_interval: 5s # Aggressive scraping for real-time performance
+    evaluation_interval: 5s
+    scrape_timeout: 3s
+    external_labels:
+        cluster: "fks-slim"
+        environment: "hyrotrader-baseline"
+
+# ============================================================================
+# SCRAPE CONFIGS - Core Services Only
+# ============================================================================
+scrape_configs:
+    # --------------------------------------------------------------------------
+    # FORWARD SERVICE - Critical Path Metrics
+    # Monitor execution latency, order throughput, WebSocket lag
+    # --------------------------------------------------------------------------
+    - job_name: "forward"
+      static_configs:
+          - targets: ["forward:9100"]
+      metrics_path: "/metrics"
+      scrape_interval: 2s # High-frequency scraping for execution engine
+      scrape_timeout: 1s
+      metric_relabel_configs:
+          # Keep only critical metrics to reduce storage overhead
+          - source_labels: [__name__]
+            regex: "(forward_order_latency_.*|forward_websocket_lag_.*|forward_signal_processing_.*|forward_compliance_gate_.*)"
+            action: keep
+
+    # --------------------------------------------------------------------------
+    # GATEWAY SERVICE - API & Orchestration Metrics
+    # Monitor HTTP API latency, gRPC calls to Forward
+    # --------------------------------------------------------------------------
+    - job_name: "gateway"
+      static_configs:
+          - targets: ["gateway:8000"]
+      metrics_path: "/metrics"
+      scrape_interval: 5s
+      scrape_timeout: 3s
+
+    # --------------------------------------------------------------------------
+    # REDIS - Pub/Sub Performance
+    # Monitor signal distribution latency
+    # --------------------------------------------------------------------------
+    - job_name: "redis"
+      static_configs:
+          - targets: ["redis:6379"]
+      scrape_interval: 10s
+      scrape_timeout: 5s
+      # Note: Basic health check only. For full metrics, add redis_exporter
+
+    # --------------------------------------------------------------------------
+    # QUESTDB - Tick Storage Performance
+    # Monitor write throughput and query latency
+    # --------------------------------------------------------------------------
+    - job_name: "questdb"
+      static_configs:
+          - targets: ["questdb:9003"]
+      metrics_path: "/metrics"
+      scrape_interval: 10s
+      scrape_timeout: 5s
+
+    # --------------------------------------------------------------------------
+    # PROMETHEUS SELF-MONITORING
+    # --------------------------------------------------------------------------
+    - job_name: "prometheus"
+      static_configs:
+          - targets: ["localhost:9090"]
+      scrape_interval: 15s
+
+# ============================================================================
+# ALERTING RULES (Optional - for production)
+# ============================================================================
+# rule_files:
+#   - '/etc/prometheus/alerts/forward.yml'
+#   - '/etc/prometheus/alerts/compliance.yml'
+
+# ============================================================================
+# STORAGE OPTIMIZATION
+# ============================================================================
+# Keep retention short for baseline testing (7 days default in docker-compose)
+# For production, consider remote_write to long-term storage

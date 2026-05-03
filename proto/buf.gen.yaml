@@ -1,0 +1,67 @@
+# Buf code generation configuration for FKS Protocol Buffers
+# Run: buf generate
+version: v1
+
+# Managed mode for consistent code generation
+managed:
+    enabled: true
+    # Go package prefix for generated Go code
+    go_package_prefix:
+        default: github.com/nuniesmith/fks/gen/go
+        except:
+            - buf.build/googleapis/googleapis
+    # Java package prefix
+    java_multiple_files: true
+
+# Code generation plugins
+plugins:
+    # ==========================================================================
+    # Rust code generation (for main services)
+    # ==========================================================================
+    # Note: For Rust, we use tonic-build directly in build.rs files
+    # This is because buf doesn't have native Rust support
+    # See: src/proto/build.rs
+
+    # ==========================================================================
+    # Go code generation (for future Go services/clients)
+    # ==========================================================================
+    - plugin: buf.build/protocolbuffers/go
+      out: gen/go
+      opt:
+          - paths=source_relative
+
+    - plugin: buf.build/grpc/go
+      out: gen/go
+      opt:
+          - paths=source_relative
+
+    # ==========================================================================
+    # Python code generation (for ML/data science tools)
+    # ==========================================================================
+    - plugin: buf.build/protocolbuffers/python
+      out: gen/python
+
+    - plugin: buf.build/grpc/python
+      out: gen/python
+
+    # ==========================================================================
+    # TypeScript/JavaScript (for web clients)
+    # ==========================================================================
+    # Uncomment if you need web client generation
+    # - plugin: buf.build/bufbuild/es
+    #   out: gen/ts
+    #   opt:
+    #     - target=ts
+
+    # - plugin: buf.build/connectrpc/es
+    #   out: gen/ts
+    #   opt:
+    #     - target=ts
+
+    # ==========================================================================
+    # Documentation generation
+    # ==========================================================================
+    # - plugin: buf.build/pseudomuto/doc
+    #   out: docs/proto
+    #   opt:
+    #     - markdown,docs.md

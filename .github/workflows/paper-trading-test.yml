@@ -1,0 +1,658 @@
+# =============================================================================
+# FKS Operations Workflow — Paper Trading, Testing & Monitoring
+# =============================================================================
+# Manually triggered workflow to deploy and run various test types and
+# monitoring operations on the production server via Tailscale + SSH.
+#
+# Test Types:
+#   - paper-trading-soak: Full stack paper trading for configurable duration
+#   - health-check:       Quick health check of all running services
+#   - integration-test:   Run the integration test suite
+#   - signal-pipeline:    Validate signal generation and persistence pipeline
+#   - env-validation:     Verify environment configuration
+#   - rss-monitoring:     RSS memory monitoring only (attach to running services)
+#   - audit-72h-soak:     72-hour paper trading + RSS monitoring (audit item #1)
+#
+# Monitoring Layer:
+#   RSS memory monitoring can be enabled for ANY test type via the
+#   enable_rss_monitor input. When enabled, rss-memory-monitor.sh runs
+#   alongside the test and produces CSV data, summary reports, and
+#   optional Prometheus pushgateway metrics.
+#
+# Architecture:
+#   This workflow is intentionally slim — all heavy logic lives in external
+#   scripts at scripts/testing/paper-trading/{pre-deploy,deploy,post-deploy,monitoring}.sh.
+#   The workflow passes GitHub Actions context (inputs, secrets, outputs) as
+#   environment variables, then calls the scripts on the remote server.
+#
+# Shared Actions (from nuniesmith/actions):
+#   - tailscale-connect     Connect to Tailnet for SSH access
+#   - ssh-deploy            Git pull, Docker pull, run deploy commands via SSH
+#   - health-check          Post-deploy health verification
+#   - discord-notify        Discord webhook notifications
+#
+# Logging:
+#   All test artifacts are saved to ~/fks/test-results/{TEST_ID}/ on the server:
+#     - all-services.log        Combined Docker service logs
+#     - {service}.log           Individual service logs
+#     - health-monitor.log      Periodic health check results
+#     - test-metadata.json      Test configuration and metadata
+#     - check-status.sh         Helper: check current test status
+#     - stop-test.sh            Helper: gracefully stop the test
+#     - collect-report.sh       Helper: generate a summary report
+#   When RSS monitoring is enabled:
+#     - monitoring/rss_samples_*.csv      Raw per-process RSS samples
+#     - monitoring/rss_summary_*.txt      End-of-run summary with growth analysis
+#     - monitoring/rss_alerts_*.log       Growth alerts (if any fired)
+#
+# ⚠️ RUNNER REQUIREMENTS:
+#   GitHub-hosted runners have a 6-hour max job timeout. This workflow deploys
+#   the test and exits — the test continues running on the server. Use the
+#   generated helper scripts to monitor and stop tests.
+#
+# Required Secrets:
+#   - PROD_SSH_KEY, PROD_SSH_USER, PROD_SSH_PORT
+#   - PROD_TAILSCALE_IP
+#   - TAILSCALE_OAUTH_CLIENT_ID, TAILSCALE_OAUTH_SECRET
+#   - DOCKER_USERNAME, DOCKER_TOKEN
+#   - DISCORD_WEBHOOK_ACTIONS (optional)
+# =============================================================================
+
+name: 🧪 Paper Trading & Monitoring
+
+on:
+    workflow_dispatch:
+        inputs:
+            # =================================================================
+            # Core test configuration
+            # =================================================================
+            test_type:
+                description: "Test type to run"
+                required: true
+                type: choice
+                options:
+                    - paper-trading-soak
+                    - health-check
+                    - integration-test
+                    - signal-pipeline
+                    - env-validation
+                    - rss-monitoring
+                    - audit-72h-soak
+                default: paper-trading-soak
+            duration_hours:
+                description: "Test duration in hours (soak/monitoring tests)"
+                required: false
+                type: choice
+                options:
+                    - "1"
+                    - "4"
+                    - "12"
+                    - "24"
+                    - "48"
+                    - "72"
+                    - "96"
+                    - "168"
+                    - "720"
+                default: "24"
+            assets:
+                description: "Assets to trade (comma-separated, soak tests only)"
+                required: false
+                type: string
+                default: "BTC,ETH,SOL,AVAX,LINK,MATIC,ARB,OP,DOGE,XRP"
+
+            # =================================================================
+            # Optimizer configuration (soak tests)
+            # =================================================================
+            optimize_interval:
+                description: "Optimization interval"
+                required: false
+                type: choice
+                options:
+                    - "1h"
+                    - "2h"
+                    - "4h"
+                    - "6h"
+                    - "12h"
+                default: "6h"
+            optimize_trials:
+                description: "Optimization trials per asset"
+                required: false
+                type: choice
+                options:
+                    - "20"
+                    - "50"
+                    - "100"
+                default: "50"
+
+            # =================================================================
+            # Deployment options
+            # =================================================================
+            clean_volumes:
+                description: "Clean volumes before starting (fresh DB)"
+                required: false
+                type: boolean
+                default: false
+            run_initial_optimization:
+                description: "Run optimization immediately on start (soak only)"
+                required: false
+                type: boolean
+                default: true
+            skip_deploy:
+                description: "Skip deployment — attach to already-running services"
+                required: false
+                type: boolean
+                default: false
+
+            # =================================================================
+            # Live market data (paper trading with real exchange data)
+            # =================================================================
+            data_source:
+                description: "Data source: 'live' for real market data, 'standby' for synthetic signals"
+                required: false
+                type: choice
+                options:
+                    - "standby"
+                    - "live"
+                default: "standby"
+            data_exchange:
+                description: "Exchange for live data ingestion (only used when data_source=live)"
+                required: false
+                type: choice
+                options:
+                    - "binance"
+                    - "bybit"
+                    - "kraken"
+                default: "binance"
+            data_kline_intervals:
+                description: "Kline intervals for live data (comma-separated, e.g. 1m,5m)"
+                required: false
+                type: string
+                default: "1m,5m"
+
+            # =================================================================
+            # Health monitoring
+            # =================================================================
+            health_monitor_interval:
+                description: "Background health check interval in minutes"
+                required: false
+                type: choice
+                options:
+                    - "5"
+                    - "10"
+                    - "15"
+                    - "30"
+                    - "60"
+                default: "5"
+
+            # =================================================================
+            # RSS memory monitoring (composable — works with any test type)
+            # =================================================================
+            enable_rss_monitor:
+                description: "Enable RSS memory monitoring alongside the test"
+                required: false
+                type: boolean
+                default: false
+            rss_interval:
+                description: "RSS sampling interval in seconds"
+                required: false
+                type: choice
+                options:
+                    - "5"
+                    - "10"
+                    - "30"
+                    - "60"
+                default: "10"
+            rss_threshold:
+                description: "RSS growth threshold (MB) to flag as leak"
+                required: false
+                type: choice
+                options:
+                    - "50"
+                    - "100"
+                    - "200"
+                    - "500"
+                default: "100"
+            rss_containers:
+                description: "Container name regex for RSS monitoring"
+                required: false
+                type: string
+                default: "janus|fks"
+            rss_pushgateway:
+                description: "Prometheus Pushgateway URL (blank to disable)"
+                required: false
+                type: string
+                default: ""
+
+permissions:
+    contents: read
+    actions: write
+
+env:
+    REGISTRY: docker.io
+    IMAGE_NAME: nuniesmith/fks
+    TEST_ID: "${{ inputs.test_type }}-${{ inputs.duration_hours }}hr-${{ github.run_number }}-${{ github.run_attempt }}"
+
+concurrency:
+    group: paper-trading-test
+    cancel-in-progress: false # Don't cancel running tests
+
+defaults:
+    run:
+        shell: bash
+
+jobs:
+    # =========================================================================
+    # STAGE 1: SETUP AND VALIDATION
+    # =========================================================================
+    setup:
+        name: 📋 Setup ${{ inputs.test_type }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        outputs:
+            test_id: ${{ steps.config.outputs.test_id }}
+            start_time: ${{ steps.config.outputs.start_time }}
+            end_time: ${{ steps.config.outputs.end_time }}
+            duration_seconds: ${{ steps.config.outputs.duration_seconds }}
+            test_label: ${{ steps.config.outputs.test_label }}
+            needs_deploy: ${{ steps.config.outputs.needs_deploy }}
+            rss_enabled: ${{ steps.config.outputs.rss_enabled }}
+        steps:
+            - name: 🎯 Configure test parameters
+              id: config
+              run: |
+                  START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+                  DURATION_HOURS=${{ inputs.duration_hours }}
+                  DURATION_SECONDS=$((DURATION_HOURS * 3600))
+                  END_TIME=$(date -u -d "+${DURATION_HOURS} hours" +"%Y-%m-%dT%H:%M:%SZ")
+                  TEST_TYPE="${{ inputs.test_type }}"
+                  SKIP_DEPLOY="${{ inputs.skip_deploy }}"
+                  RSS_ENABLED="${{ inputs.enable_rss_monitor }}"
+
+                  # Human-readable label and per-type overrides
+                  NEEDS_DEPLOY="true"
+                  case "$TEST_TYPE" in
+                    paper-trading-soak)
+                      TEST_LABEL="${DURATION_HOURS}-Hour Paper Trading Soak"
+                      ;;
+                    health-check)
+                      TEST_LABEL="Health Check"
+                      DURATION_SECONDS=300
+                      NEEDS_DEPLOY="false"
+                      ;;
+                    integration-test)
+                      TEST_LABEL="Integration Test Suite"
+                      DURATION_SECONDS=1800
+                      ;;
+                    signal-pipeline)
+                      TEST_LABEL="Signal Pipeline Test"
+                      DURATION_SECONDS=3600
+                      ;;
+                    env-validation)
+                      TEST_LABEL="Environment Validation"
+                      DURATION_SECONDS=120
+                      NEEDS_DEPLOY="false"
+                      ;;
+                    rss-monitoring)
+                      TEST_LABEL="${DURATION_HOURS}-Hour RSS Memory Monitoring"
+                      NEEDS_DEPLOY="false"
+                      RSS_ENABLED="true"
+                      ;;
+                    audit-72h-soak)
+                      TEST_LABEL="72-Hour Audit Soak (Paper Trading + RSS)"
+                      DURATION_HOURS=72
+                      DURATION_SECONDS=$((72 * 3600))
+                      END_TIME=$(date -u -d "+72 hours" +"%Y-%m-%dT%H:%M:%SZ")
+                      RSS_ENABLED="true"
+                      ;;
+                    *)
+                      TEST_LABEL="$TEST_TYPE"
+                      ;;
+                  esac
+
+                  # skip_deploy overrides the per-type default
+                  if [ "$SKIP_DEPLOY" = "true" ]; then
+                    NEEDS_DEPLOY="false"
+                  fi
+
+                  echo "test_id=${{ env.TEST_ID }}" >> $GITHUB_OUTPUT
+                  echo "start_time=$START_TIME" >> $GITHUB_OUTPUT
+                  echo "end_time=$END_TIME" >> $GITHUB_OUTPUT
+                  echo "duration_seconds=$DURATION_SECONDS" >> $GITHUB_OUTPUT
+                  echo "test_label=$TEST_LABEL" >> $GITHUB_OUTPUT
+                  echo "needs_deploy=$NEEDS_DEPLOY" >> $GITHUB_OUTPUT
+                  echo "rss_enabled=$RSS_ENABLED" >> $GITHUB_OUTPUT
+
+                  # Build monitoring label suffix
+                  MONITOR_SUFFIX=""
+                  if [ "$RSS_ENABLED" = "true" ]; then
+                    MONITOR_SUFFIX=" + RSS monitoring"
+                  fi
+
+                  cat >> $GITHUB_STEP_SUMMARY << EOF
+                  ## 🧪 Test Configuration
+
+                  | Property | Value |
+                  |----------|-------|
+                  | Test Type | \`$TEST_TYPE\` |
+                  | Label | **${TEST_LABEL}${MONITOR_SUFFIX}** |
+                  | Test ID | \`${{ env.TEST_ID }}\` |
+                  | Duration | ${DURATION_HOURS} hours |
+                  | Assets | \`${{ inputs.assets }}\` |
+                  | Optimizer | \`${{ inputs.optimize_interval }}\` interval, \`${{ inputs.optimize_trials }}\` trials |
+                  | Clean Volumes | \`${{ inputs.clean_volumes }}\` |
+                  | Skip Deploy | \`${{ inputs.skip_deploy }}\` |
+                  | Health Monitor | Every \`${{ inputs.health_monitor_interval }}\` min |
+                  | RSS Monitoring | \`${RSS_ENABLED}\` |
+                  | RSS Interval | \`${{ inputs.rss_interval }}s\` |
+                  | RSS Threshold | \`${{ inputs.rss_threshold }} MB\` |
+                  | Start | \`$START_TIME\` |
+                  | Expected End | \`$END_TIME\` |
+                  | Triggered By | \`${{ github.actor }}\` |
+                  EOF
+
+            - name: 🔍 Validate secrets
+              env:
+                  HAS_SSH_KEY: ${{ secrets.PROD_SSH_KEY != '' }}
+                  HAS_TAILSCALE_IP: ${{ secrets.PROD_TAILSCALE_IP != '' }}
+                  HAS_TAILSCALE_ID: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID != '' }}
+                  HAS_TAILSCALE_SECRET: ${{ secrets.TAILSCALE_OAUTH_SECRET != '' }}
+              run: |
+                  ERRORS=""
+
+                  if [ "$HAS_SSH_KEY" != "true" ]; then
+                    ERRORS="${ERRORS}\n  - PROD_SSH_KEY"
+                  fi
+                  if [ "$HAS_TAILSCALE_IP" != "true" ]; then
+                    ERRORS="${ERRORS}\n  - PROD_TAILSCALE_IP"
+                  fi
+                  if [ "$HAS_TAILSCALE_ID" != "true" ]; then
+                    ERRORS="${ERRORS}\n  - TAILSCALE_OAUTH_CLIENT_ID"
+                  fi
+                  if [ "$HAS_TAILSCALE_SECRET" != "true" ]; then
+                    ERRORS="${ERRORS}\n  - TAILSCALE_OAUTH_SECRET"
+                  fi
+
+                  if [ -n "$ERRORS" ]; then
+                    echo -e "❌ Missing required secrets:$ERRORS"
+                    echo "" >> $GITHUB_STEP_SUMMARY
+                    echo "### ❌ Missing Secrets" >> $GITHUB_STEP_SUMMARY
+                    echo -e "The following secrets must be configured:$ERRORS" >> $GITHUB_STEP_SUMMARY
+                    exit 1
+                  fi
+                  echo "✅ All required secrets present"
+
+    # =========================================================================
+    # STAGE 2: DEPLOY AND RUN TEST
+    # =========================================================================
+    deploy:
+        name: 🚀 ${{ needs.setup.outputs.test_label }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: setup
+        outputs:
+            deployed: ${{ steps.deploy.outputs.deployed }}
+            health: ${{ steps.health-checks.outputs.healthy }}
+        steps:
+            - name: 📥 Checkout code
+              uses: actions/checkout@v4
+
+            # -----------------------------------------------------------------
+            # TAILSCALE
+            # -----------------------------------------------------------------
+            - name: 🔌 Connect to Tailscale
+              id: tailscale
+              uses: nuniesmith/actions/.github/actions/tailscale-connect@main
+              with:
+                  oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+                  oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+                  target-ip: ${{ secrets.PROD_TAILSCALE_IP }}
+                  target-ssh-port: ${{ secrets.PROD_SSH_PORT || '22' }}
+
+            - name: ❌ Fail if Tailscale not connected
+              if: steps.tailscale.outputs.connected != 'true'
+              run: |
+                  echo "❌ Tailscale connection failed"
+                  exit 1
+
+            # -----------------------------------------------------------------
+            # SSH DEPLOY — calls external scripts
+            # -----------------------------------------------------------------
+            - name: 🚀 Deploy & Run ${{ needs.setup.outputs.test_label }}
+              id: deploy
+              uses: nuniesmith/actions/.github/actions/ssh-deploy@main
+              with:
+                  host: ${{ secrets.PROD_TAILSCALE_IP }}
+                  port: ${{ secrets.PROD_SSH_PORT || '22' }}
+                  username: ${{ secrets.PROD_SSH_USER || 'actions' }}
+                  ssh-key: ${{ secrets.PROD_SSH_KEY }}
+                  project-path: ~/fks
+                  git-pull: "true"
+                  git-branch: ${{ github.ref_name }}
+                  docker-pull: ${{ needs.setup.outputs.needs_deploy }}
+                  docker-prune: "false"
+
+                  pre-deploy-command: |
+                      export FKS_TEST_LABEL="${{ needs.setup.outputs.test_label }}"
+                      export FKS_TEST_TYPE="${{ inputs.test_type }}"
+                      export FKS_TEST_ID="${{ needs.setup.outputs.test_id }}"
+                      export FKS_DURATION_HOURS="${{ inputs.duration_hours }}"
+                      export FKS_OPTIMIZE_INTERVAL="${{ inputs.optimize_interval }}"
+                      export FKS_ASSETS="${{ inputs.assets }}"
+                      export FKS_OPTIMIZE_TRIALS="${{ inputs.optimize_trials }}"
+                      export FKS_START_TIME="${{ needs.setup.outputs.start_time }}"
+                      export FKS_SKIP_DEPLOY="${{ inputs.skip_deploy }}"
+                      export FKS_DATA_SOURCE="${{ inputs.data_source }}"
+                      export FKS_DATA_EXCHANGE="${{ inputs.data_exchange }}"
+                      export FKS_DATA_KLINE_INTERVALS="${{ inputs.data_kline_intervals }}"
+                      bash ~/fks/scripts/testing/paper-trading/pre-deploy.sh
+
+                  deploy-command: |
+                      export FKS_TEST_LABEL="${{ needs.setup.outputs.test_label }}"
+                      export FKS_TEST_TYPE="${{ inputs.test_type }}"
+                      export FKS_TEST_ID="${{ needs.setup.outputs.test_id }}"
+                      export FKS_DURATION_HOURS="${{ inputs.duration_hours }}"
+                      export FKS_HEALTH_INTERVAL="${{ inputs.health_monitor_interval }}"
+                      export FKS_DOCKER_TOKEN="${{ secrets.DOCKER_TOKEN }}"
+                      export FKS_DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
+                      export FKS_CLEAN_VOLUMES="${{ inputs.clean_volumes }}"
+                      export FKS_RUN_INITIAL_OPT="${{ inputs.run_initial_optimization }}"
+                      export FKS_ASSETS="${{ inputs.assets }}"
+                      export FKS_START_TIME="${{ needs.setup.outputs.start_time }}"
+                      export FKS_END_TIME="${{ needs.setup.outputs.end_time }}"
+                      export FKS_OPTIMIZE_INTERVAL="${{ inputs.optimize_interval }}"
+                      export FKS_OPTIMIZE_TRIALS="${{ inputs.optimize_trials }}"
+                      export FKS_RUN_ID="${{ github.run_id }}"
+                      export FKS_SHA="${{ github.sha }}"
+                      export FKS_REF="${{ github.ref_name }}"
+                      export FKS_ACTOR="${{ github.actor }}"
+                      export FKS_SKIP_DEPLOY="${{ inputs.skip_deploy }}"
+                      export FKS_NEEDS_DEPLOY="${{ needs.setup.outputs.needs_deploy }}"
+                      export FKS_RSS_ENABLED="${{ needs.setup.outputs.rss_enabled }}"
+                      export FKS_RSS_INTERVAL="${{ inputs.rss_interval }}"
+                      export FKS_RSS_THRESHOLD="${{ inputs.rss_threshold }}"
+                      export FKS_RSS_CONTAINERS="${{ inputs.rss_containers }}"
+                      export FKS_RSS_PUSHGATEWAY="${{ inputs.rss_pushgateway }}"
+                      export FKS_DATA_SOURCE="${{ inputs.data_source }}"
+                      export FKS_DATA_EXCHANGE="${{ inputs.data_exchange }}"
+                      export FKS_DATA_KLINE_INTERVALS="${{ inputs.data_kline_intervals }}"
+                      bash ~/fks/scripts/testing/paper-trading/deploy.sh
+
+                  post-deploy-command: |
+                      export FKS_TEST_TYPE="${{ inputs.test_type }}"
+                      export FKS_TEST_ID="${{ needs.setup.outputs.test_id }}"
+                      export FKS_RSS_ENABLED="${{ needs.setup.outputs.rss_enabled }}"
+                      bash ~/fks/scripts/testing/paper-trading/post-deploy.sh
+
+            # -----------------------------------------------------------------
+            # HEALTH CHECKS (shared action — mirrors ci-cd)
+            # -----------------------------------------------------------------
+            - name: 🏥 Run Health Checks
+              id: health-checks
+              if: always() && steps.deploy.outcome == 'success'
+              uses: nuniesmith/actions/.github/actions/health-check@main
+              with:
+                  endpoints: |
+                      [
+                        {"url": "http://localhost:8080/health", "expected_status": 200},
+                        {"url": "http://localhost:8080/api/v1/health", "expected_status": 200},
+                        {"url": "http://localhost:9000", "expected_status": 200}
+                      ]
+                  containers: fks_janus fks_nginx fks_redis fks_postgres fks_questdb
+                  ssh-host: ${{ secrets.PROD_TAILSCALE_IP }}
+                  ssh-port: ${{ secrets.PROD_SSH_PORT || '22' }}
+                  ssh-user: ${{ secrets.PROD_SSH_USER || 'actions' }}
+                  ssh-key: ${{ secrets.PROD_SSH_KEY }}
+                  custom-command: |
+                      echo "🔍 Database connectivity check..."
+                      docker exec fks_redis sh -c 'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" ping' 2>/dev/null | grep -q "PONG" && echo "✅ Redis OK" || echo "❌ Redis failed"
+                      docker exec fks_postgres pg_isready -U fks_user 2>/dev/null | grep -q "accepting" && echo "✅ PostgreSQL OK" || echo "❌ PostgreSQL failed"
+                      curl -s "http://localhost:9000/exec?query=SELECT%201" 2>/dev/null | grep -q "dataset" && echo "✅ QuestDB OK" || echo "❌ QuestDB failed"
+                  initial-delay: "30"
+                  retry-count: "3"
+                  retry-delay: "10"
+                  fail-on-unhealthy: "false"
+
+            # -----------------------------------------------------------------
+            # DISCORD NOTIFICATION (shared action — mirrors ci-cd)
+            # -----------------------------------------------------------------
+            - name: 📣 Notify test started
+              if: always()
+              uses: nuniesmith/actions/.github/actions/discord-notify@main
+              continue-on-error: true
+              with:
+                  webhook-url: ${{ secrets.DISCORD_WEBHOOK_ACTIONS }}
+                  title: "${{ steps.deploy.outcome == 'success' && format('🧪 {0} Started', needs.setup.outputs.test_label) || format('❌ {0} Failed to Deploy', needs.setup.outputs.test_label) }}"
+                  description: "${{ steps.deploy.outcome == 'success' && format('Test deployed and running on production server.\nTest ID: `{0}`', needs.setup.outputs.test_id) || 'Test deployment failed. Check the workflow run for details.' }}"
+                  status: ${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
+                  include-repo-info: "true"
+                  fields: |
+                      [
+                        {"name": "Test Type", "value": "${{ inputs.test_type }}", "inline": true},
+                        {"name": "Duration", "value": "${{ inputs.duration_hours }} hours", "inline": true},
+                        {"name": "Assets", "value": "${{ inputs.assets }}", "inline": false},
+                        {"name": "Optimizer", "value": "${{ inputs.optimize_interval }} / ${{ inputs.optimize_trials }} trials", "inline": true},
+                        {"name": "Health", "value": "${{ steps.health-checks.outputs.healthy == 'true' && '✅ healthy' || '⚠️ degraded' }}", "inline": true},
+                        {"name": "RSS Monitor", "value": "${{ needs.setup.outputs.rss_enabled == 'true' && format('✅ {0}s / {1}MB threshold', inputs.rss_interval, inputs.rss_threshold) || '—' }}", "inline": true},
+                        {"name": "Clean Volumes", "value": "${{ inputs.clean_volumes }}", "inline": true},
+                        {"name": "Start Time", "value": "${{ needs.setup.outputs.start_time }}", "inline": true},
+                        {"name": "Expected End", "value": "${{ needs.setup.outputs.end_time }}", "inline": true},
+                        {"name": "Triggered By", "value": "${{ github.actor }}", "inline": true}
+                      ]
+
+    # =========================================================================
+    # PIPELINE SUMMARY
+    # =========================================================================
+    summary:
+        name: 📊 Test Summary
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        needs: [setup, deploy]
+        if: always()
+        steps:
+            - name: 📊 Generate summary
+              run: |
+                  # Build monitoring info block
+                  RSS_INFO=""
+                  if [ "${{ needs.setup.outputs.rss_enabled }}" = "true" ]; then
+                    RSS_INFO="
+                  ## 📈 RSS Memory Monitoring
+                  | Property | Value |
+                  |----------|-------|
+                  | Enabled | ✅ Yes |
+                  | Sample Interval | ${{ inputs.rss_interval }}s |
+                  | Leak Threshold | ${{ inputs.rss_threshold }} MB |
+                  | Containers | \`${{ inputs.rss_containers }}\` |
+                  | Pushgateway | \`${{ inputs.rss_pushgateway || 'disabled' }}\` |
+
+                  ### Monitoring Files (on server)
+                  \`\`\`
+                  ~/fks/test-results/${{ needs.setup.outputs.test_id }}/monitoring/
+                  ├── rss_samples_*.csv           # Raw per-process RSS samples
+                  ├── rss_summary_*.txt           # Growth analysis summary
+                  └── rss_alerts_*.log            # Leak alerts (if any)
+                  \`\`\`
+
+                  ### RSS Pass Criteria (Audit Item #1)
+                  - [ ] No service exceeds ${{ inputs.rss_threshold }} MB RSS growth
+                  - [ ] 6-hour derivative stays below 0.5 KB/s
+                  - [ ] No OOM kills or container restarts
+                  - [ ] Monitor script exits with code 0
+                  "
+                  fi
+
+                  cat >> $GITHUB_STEP_SUMMARY << EOF
+                  # 🧪 Paper Trading & Monitoring Summary
+
+                  ## Test Configuration
+                  | Property | Value |
+                  |----------|-------|
+                  | Test Type | \`${{ inputs.test_type }}\` |
+                  | Label | **${{ needs.setup.outputs.test_label }}** |
+                  | Test ID | \`${{ needs.setup.outputs.test_id }}\` |
+                  | Duration | ${{ inputs.duration_hours }} hours |
+                  | Assets | \`${{ inputs.assets }}\` |
+                  | Skip Deploy | \`${{ inputs.skip_deploy }}\` |
+
+                  ## Results
+                  | Job | Status |
+                  |-----|--------|
+                  | 📋 Setup | ${{ needs.setup.result }} |
+                  | 🚀 Deploy | ${{ needs.deploy.result }} |
+                  | 🏥 Health | ${{ needs.deploy.outputs.health == 'true' && '✅ healthy' || '⚠️ degraded' }} |
+                  | 📈 RSS Monitor | ${{ needs.setup.outputs.rss_enabled == 'true' && '✅ running' || '— disabled' }} |
+
+                  ${RSS_INFO}
+
+                  ## Server-Side Artifacts
+                  All test data is saved on the production server at:
+                  \`\`\`
+                  ~/fks/test-results/${{ needs.setup.outputs.test_id }}/
+                  ├── test-metadata.json          # Test configuration
+                  ├── check-status.sh             # Run: check current status
+                  ├── stop-test.sh                # Run: stop the test
+                  ├── collect-report.sh           # Run: generate summary report
+                  ├── health-monitor-daemon.sh    # Background health checker
+                  ├── logs/
+                  │   ├── all-services.log        # Combined Docker logs
+                  │   ├── health-monitor.log      # Periodic health results
+                  │   ├── janus.log               # Janus service log
+                  │   ├── execution.log           # Execution service log
+                  │   ├── redis.log               # Redis log
+                  │   ├── postgres.log            # PostgreSQL log
+                  │   └── questdb.log             # QuestDB log
+                  └── monitoring/                 # (if RSS monitoring enabled)
+                      ├── rss_samples_*.csv       # Raw RSS data
+                      ├── rss_summary_*.txt       # Growth analysis
+                      └── rss_alerts_*.log        # Leak alerts
+                  \`\`\`
+
+                  ## Quick Commands (SSH into server first)
+                  \`\`\`bash
+                  # Check test status
+                  cd ~/fks && test-results/${{ needs.setup.outputs.test_id }}/check-status.sh
+
+                  # Watch health monitor
+                  tail -f ~/fks/test-results/${{ needs.setup.outputs.test_id }}/logs/health-monitor.log
+
+                  # Watch all service logs
+                  tail -f ~/fks/test-results/${{ needs.setup.outputs.test_id }}/logs/all-services.log
+
+                  # Watch RSS monitoring (if enabled)
+                  tail -f ~/fks/test-results/${{ needs.setup.outputs.test_id }}/monitoring/rss_samples_*.csv
+
+                  # Generate summary report
+                  cd ~/fks && test-results/${{ needs.setup.outputs.test_id }}/collect-report.sh
+
+                  # Stop test monitoring
+                  cd ~/fks && test-results/${{ needs.setup.outputs.test_id }}/stop-test.sh
+                  \`\`\`
+
+                  ---
+                  **Triggered by:** \`${{ github.actor }}\` | **Run:** \`#${{ github.run_number }}\` | **SHA:** \`${{ github.sha }}\`
+                  EOF
+
+            - name: ❌ Fail if deployment failed
+              if: needs.deploy.result == 'failure'
+              run: |
+                  echo "❌ Test deployment failed. Check the deploy job logs for details."
+                  exit 1

@@ -1,0 +1,221 @@
+# Staging Environment Configuration for Data Service
+# This configuration is used for staging validation and pre-production testing
+
+[service]
+name = "data-service"
+environment = "staging"
+version = "1.0.0"
+log_level = "debug"  # More verbose logging in staging
+port = 8080
+health_check_port = 8081
+metrics_port = 9090
+
+[server]
+host = "0.0.0.0"
+port = 8080
+# Staging uses slightly lower timeouts for faster feedback
+request_timeout_ms = 25000
+shutdown_timeout_ms = 25000
+max_connections = 500
+# Allow more concurrent requests in staging for load testing
+max_concurrent_requests = 200
+
+[questdb]
+# Staging QuestDB instance
+host = "questdb-staging.internal"
+ilp_port = 9009
+http_port = 9000
+# Connection pool settings
+max_connections = 20
+connection_timeout_ms = 5000
+# Buffer settings optimized for staging throughput tests
+buffer_size = 10000
+flush_interval_ms = 1000
+# Verification settings
+verification_enabled = true
+verification_timeout_ms = 10000
+# Staging-specific table prefix for isolation
+table_prefix = "staging_"
+
+[redis]
+# Staging Redis cluster
+host = "redis-staging.internal"
+port = 6379
+# Staging uses DB 1 to avoid conflicts with other staging services
+database = 1
+max_connections = 50
+connection_timeout_ms = 3000
+# Lock settings
+lock_ttl_seconds = 300
+lock_retry_attempts = 5
+lock_retry_delay_ms = 200
+# Deduplication settings
+dedup_ttl_seconds = 86400  # 24 hours
+
+[rate_limiter]
+# Conservative limits for staging to avoid overwhelming exchanges
+enabled = true
+# Global rate limit
+requests_per_second = 100
+burst_size = 150
+
+# Per-exchange rate limits (staging uses 50% of production targets)
+[rate_limiter.exchanges.binance]
+requests_per_second = 50
+burst_size = 75
+
+[rate_limiter.exchanges.kraken]
+requests_per_second = 7
+burst_size = 10
+
+[rate_limiter.exchanges.coinbase]
+requests_per_second = 15
+burst_size = 20
+
+[circuit_breaker]
+enabled = true
+# Staging uses tighter thresholds for faster feedback
+failure_threshold = 5
+success_threshold = 2
+timeout_seconds = 60
+half_open_max_requests = 3
+
+[backfill]
+# Backfill executor settings
+default_batch_size = 500
+max_concurrent_backfills = 3  # Lower in staging
+max_retries = 3
+retry_delay_ms = 1000
+# Page size for exchange API pagination
+default_page_size = 500
+max_page_size = 1000
+# Validation settings
+enable_validation = true
+max_allowed_gap_hours = 24
+
+[metrics]
+# Prometheus metrics configuration
+enabled = true
+port = 9090
+path = "/metrics"
+# Staging collects more detailed metrics
+collect_runtime_metrics = true
+collect_system_metrics = true
+# Histogram buckets for latency (milliseconds)
+latency_buckets = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
+
+[logging]
+# Structured logging configuration
+format = "json"
+level = "debug"
+# Correlation ID settings
+include_correlation_id = true
+correlation_id_header = "X-Correlation-ID"
+# Log sampling (100% in staging for complete observability)
+sample_rate = 1.0
+# Staging logs to stdout and file
+outputs = ["stdout", "file"]
+file_path = "/var/log/data-service/staging.log"
+file_max_size_mb = 100
+file_max_age_days = 7
+file_max_backups = 5
+
+[observability]
+# Tracing configuration (optional - enable for deep debugging)
+tracing_enabled = false
+# jaeger_endpoint = "http://jaeger-staging.internal:14268/api/traces"
+# trace_sample_rate = 0.1
+
+# Alerting configuration
+alerting_enabled = true
+alertmanager_url = "http://alertmanager-staging.internal:9093"
+
+[health_checks]
+enabled = true
+interval_seconds = 30
+# Staging health checks are more comprehensive
+check_questdb = true
+check_redis = true
+check_exchange_connectivity = true
+
+[deployment]
+# Deployment metadata
+deployed_by = "automated-cd"
+deployment_strategy = "rolling"
+# Staging-specific feature flags
+[deployment.features]
+enable_experimental_batching = true
+enable_verification_alerts = true
+enable_chaos_testing_endpoints = true  # Staging only!
+
+[chaos]
+# Chaos testing endpoints (STAGING ONLY - never enable in production)
+enabled = true
+endpoints_enabled = true
+# Allow triggering failures for runbook validation
+allow_circuit_breaker_trip = true
+allow_redis_failure_simulation = true
+allow_questdb_failure_simulation = true
+allow_rate_limit_simulation = true
+
+[exchanges]
+# Exchange API configurations (staging uses sandbox/testnet where available)
+
+[exchanges.binance]
+enabled = true
+# Use Binance testnet for staging
+base_url = "https://testnet.binance.vision"
+# Staging API keys (replace with actual staging keys)
+api_key = "${BINANCE_STAGING_API_KEY}"
+api_secret = "${BINANCE_STAGING_API_SECRET}"
+timeout_ms = 10000
+max_retries = 3
+
+[exchanges.kraken]
+enabled = true
+# Kraken doesn't have testnet, use production with care
+base_url = "https://api.kraken.com"
+api_key = "${KRAKEN_STAGING_API_KEY}"
+api_secret = "${KRAKEN_STAGING_API_SECRET}"
+timeout_ms = 15000
+max_retries = 3
+
+[exchanges.coinbase]
+enabled = true
+# Use Coinbase sandbox for staging
+base_url = "https://api-public.sandbox.exchange.coinbase.com"
+api_key = "${COINBASE_STAGING_API_KEY}"
+api_secret = "${COINBASE_STAGING_API_SECRET}"
+timeout_ms = 10000
+max_retries = 3
+
+[testing]
+# Testing and validation settings for staging
+load_test_mode = false  # Set to true when running load tests
+# Synthetic data generation for testing
+enable_synthetic_data = true
+synthetic_data_rate = 0.0  # 0% synthetic in normal staging mode
+
+[storage]
+# Data retention in staging
+retention_days = 30  # Shorter retention in staging
+# Archival settings
+archive_enabled = false  # No archival in staging
+
+[security]
+# Security settings
+tls_enabled = false  # Staging uses internal network without TLS
+# API authentication
+require_api_key = true
+api_keys = "${DATA_SERVICE_API_KEYS}"  # Comma-separated list
+# CORS settings for staging dashboard access
+cors_enabled = true
+cors_allowed_origins = ["http://localhost:3000", "https://grafana-staging.internal"]
+
+[performance]
+# Performance tuning
+worker_threads = 4  # Match staging VM CPUs
+blocking_threads = 8
+stack_size_kb = 2048
+# Memory limits (staging has less memory than prod)
+max_memory_mb = 2048

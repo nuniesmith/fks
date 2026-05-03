@@ -1,0 +1,116 @@
+[package]
+name          = "indicators-ta"
+version       = "0.1.3"
+edition       = "2024"
+authors       = ["nuniesmith"]
+license       = "MIT"
+repository    = "https://github.com/nuniesmith/indicators-ta"
+rust-version  = "1.94.1"
+description   = "Technical analysis indicators and market regime detection for algorithmic trading"
+documentation = "https://docs.rs/indicators-ta"
+readme        = "README.md"
+keywords      = ["trading", "technical-analysis", "indicators", "finance", "regime"]
+categories    = ["algorithms", "mathematics", "science"]
+
+[dependencies]
+anyhow     = "1.0.102"
+indexmap   = "2"
+polars     = "0.53.0"
+serde      = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono     = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+rand      = "0.10.0"
+criterion = { version = "0.8.2", features = ["html_reports"] }
+
+[[bench]]
+name    = "indicators"
+harness = false
+
+[lib]
+name = "indicators"
+path = "src/lib.rs"
+
+[profile.dev]
+opt-level = 0
+debug     = true
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+# 16 units (vs the default 1) cuts link time noticeably on incremental
+# release builds. thin-LTO still inlines across unit boundaries for the
+# hot paths, so the runtime cost is negligible for a library crate.
+codegen-units = 16
+strip         = true
+debug         = false
+panic         = "abort"
+
+[profile.release-with-debug]
+inherits = "release"
+debug    = true
+strip    = false
+
+[profile.ci]
+inherits      = "release"
+lto           = false
+codegen-units = 256
+
+[lints.rust]
+unsafe_code  = "warn"
+missing_docs = "allow"
+
+[lints.clippy]
+all      = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery  = { level = "warn", priority = -1 }
+
+# ── Allowed: documented design decisions ───────────────────────────────────
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+module_name_repetitions = "allow"
+must_use_candidate      = "allow"
+
+# Numeric casts: usize->f64 for period values are always < 2^52 in practice.
+cast_precision_loss      = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss           = "allow"
+cast_lossless            = "allow"
+
+# mul_add changes semantics in edge-cases; arithmetic is correct as written.
+suboptimal_flops = "allow"
+
+# Exact float comparisons in tests compare values we computed ourselves.
+float_cmp = "allow"
+
+# f64::midpoint stabilised in Rust 1.85; our MSRV is 1.82.
+manual_midpoint = "allow"
+
+# Volume accumulation loop — float comparison is the natural idiom.
+while_float = "allow"
+
+# Indicator structs carry orthogonal boolean flags, not reducible to enums.
+struct_excessive_bools = "allow"
+
+# Multi-layer signal pipeline; splitting would harm readability.
+too_many_lines     = "allow"
+too_many_arguments = "allow"
+
+# Negated conditions are sometimes clearer in context.
+if_not_else = "allow"
+
+# if-let is often more readable than chained map_or for complex bodies.
+option_if_let_else = "allow"
+
+# Trivial getters; const annotation prevents future body additions.
+missing_const_for_fn = "allow"
+
+# Existing code uses TypeName:: consistently within files.
+use_self = "allow"
+
+# Domain terms (SuperTrend, KMeans, CHoCH) are not code identifiers.
+doc_markdown = "allow"
+
+# HMMConfig passed by value; changing to ref complicates builder call sites.
+needless_pass_by_value = "allow"

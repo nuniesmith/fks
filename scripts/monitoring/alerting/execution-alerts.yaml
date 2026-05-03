@@ -1,0 +1,398 @@
+# FKS Execution Alerting Rules
+# ============================
+#
+# Prometheus alerting rules for the FKS execution subsystem.
+# These rules monitor retry logic, circuit breakers, arbitrage,
+# best-execution analysis, and signal flow coordination.
+#
+# Installation:
+#   1. Copy to your Prometheus rules directory (e.g., /etc/prometheus/rules/)
+#   2. Update prometheus.yml to include: rule_files: ["rules/*.yaml"]
+#   3. Reload Prometheus: curl -X POST http://localhost:9090/-/reload
+#
+# Integration with Alertmanager:
+#   Configure routes based on severity labels (critical, warning, info)
+
+groups:
+  # ===========================================================================
+  # Circuit Breaker & Retry Alerts
+  # ===========================================================================
+  - name: fks-execution-retry
+    interval: 30s
+    rules:
+      # CRITICAL: Circuit breaker is open - operations are failing
+      - alert: ExecutionCircuitBreakerOpen
+        expr: execution_circuit_breaker_state > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: circuit_breaker
+        annotations:
+          summary: "Circuit breaker is open for {{ $labels.operation }}"
+          description: |
+            The circuit breaker for operation '{{ $labels.operation }}' has been
+            {{ if eq $value 1.0 }}OPEN{{ else }}HALF-OPEN{{ end }} for more than 2 minutes.
+            This indicates sustained failures and operations are being blocked.
+          runbook_url: "https://docs.fks.internal/runbooks/circuit-breaker"
+          dashboard_url: "https://grafana.fks.internal/d/fks-execution-metrics"
+
+      # WARNING: Low retry success rate
+      - alert: ExecutionLowRetrySuccessRate
+        expr: execution_retry_success_rate{operation!=""} < 0.80
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: retry
+        annotations:
+          summary: "Low retry success rate for {{ $labels.operation }}: {{ $value | humanizePercentage }}"
+          description: |
+            The retry success rate for '{{ $labels.operation }}' has dropped below 80%
+            (current: {{ $value | humanizePercentage }}).
+            This may indicate network issues, API problems, or rate limiting.
+          runbook_url: "https://docs.fks.internal/runbooks/retry-failures"
+
+      # CRITICAL: Very low success rate
+      - alert: ExecutionCriticalRetrySuccessRate
+        expr: execution_retry_success_rate{operation!=""} < 0.50
+        for: 3m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: retry
+        annotations:
+          summary: "Critical retry failure rate for {{ $labels.operation }}"
+          description: |
+            The retry success rate for '{{ $labels.operation }}' is critically low at
+            {{ $value | humanizePercentage }}. More than half of operations are failing.
+            Immediate investigation required.
+          runbook_url: "https://docs.fks.internal/runbooks/retry-failures"
+
+      # WARNING: High rate limit errors
+      - alert: ExecutionHighRateLimitErrors
+        expr: rate(execution_retry_errors_by_type{type="rate_limit"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: rate_limit
+        annotations:
+          summary: "High rate limit errors for {{ $labels.operation }}"
+          description: |
+            Operation '{{ $labels.operation }}' is experiencing frequent rate limit errors.
+            Consider reducing request frequency or implementing backoff.
+          runbook_url: "https://docs.fks.internal/runbooks/rate-limiting"
+
+      # WARNING: High network errors
+      - alert: ExecutionHighNetworkErrors
+        expr: rate(execution_retry_errors_by_type{type="network"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: network
+        annotations:
+          summary: "High network errors for {{ $labels.operation }}"
+          description: |
+            Operation '{{ $labels.operation }}' is experiencing network errors.
+            Check connectivity to exchange APIs.
+          runbook_url: "https://docs.fks.internal/runbooks/network-errors"
+
+      # WARNING: High timeout errors
+      - alert: ExecutionHighTimeoutErrors
+        expr: rate(execution_retry_errors_by_type{type="timeout"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: timeout
+        annotations:
+          summary: "High timeout errors for {{ $labels.operation }}"
+          description: |
+            Operation '{{ $labels.operation }}' is experiencing frequent timeouts.
+            Consider increasing timeout values or investigating API latency.
+
+      # INFO: High operation latency
+      - alert: ExecutionHighLatency
+        expr: execution_retry_duration_ms{operation!=""} > 5000
+        for: 5m
+        labels:
+          severity: info
+          service: fks-execution
+          component: latency
+        annotations:
+          summary: "High latency for {{ $labels.operation }}: {{ $value }}ms"
+          description: |
+            Operation '{{ $labels.operation }}' is taking longer than 5 seconds.
+            This may impact trading performance.
+
+  # ===========================================================================
+  # Arbitrage Monitoring Alerts
+  # ===========================================================================
+  - name: fks-execution-arbitrage
+    interval: 30s
+    rules:
+      # INFO: Large arbitrage spread detected
+      - alert: ArbitrageLargeSpread
+        expr: arbitrage_spread_bps > 50
+        for: 1m
+        labels:
+          severity: info
+          service: fks-execution
+          component: arbitrage
+        annotations:
+          summary: "Large arbitrage spread on {{ $labels.symbol }}: {{ $value }} bps"
+          description: |
+            A significant arbitrage opportunity has been detected on {{ $labels.symbol }}.
+            Spread: {{ $value }} basis points.
+            This may indicate market inefficiency or data feed issues.
+          dashboard_url: "https://grafana.fks.internal/d/fks-execution-metrics"
+
+      # WARNING: Very large arbitrage spread (possible data issue)
+      - alert: ArbitrageExtremeSpread
+        expr: arbitrage_spread_bps > 100
+        for: 2m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: arbitrage
+        annotations:
+          summary: "Extreme arbitrage spread on {{ $labels.symbol }}: {{ $value }} bps"
+          description: |
+            An unusually large arbitrage spread ({{ $value }} bps) has been detected
+            on {{ $labels.symbol }}. This may indicate a data feed issue or exchange problem.
+            Verify price feeds are accurate before acting.
+
+      # WARNING: No price updates received
+      - alert: ArbitragePriceFeedStale
+        expr: increase(arbitrage_price_updates[5m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: arbitrage
+        annotations:
+          summary: "No arbitrage price updates in 5 minutes"
+          description: |
+            The arbitrage monitor has not received any price updates in the last 5 minutes.
+            WebSocket connections may be down or market data feeds stale.
+          runbook_url: "https://docs.fks.internal/runbooks/market-data"
+
+      # WARNING: High Kraken deviation
+      - alert: ArbitrageKrakenHighDeviation
+        expr: abs(arbitrage_kraken_deviation_pct) > 1.0
+        for: 3m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: arbitrage
+        annotations:
+          summary: "High Kraken price deviation on {{ $labels.symbol }}: {{ $value }}%"
+          description: |
+            Kraken price for {{ $labels.symbol }} is deviating more than 1% from
+            the market average. Current deviation: {{ $value }}%.
+            This may indicate a Kraken-specific issue or opportunity.
+
+  # ===========================================================================
+  # Best Execution Alerts
+  # ===========================================================================
+  - name: fks-execution-best-execution
+    interval: 30s
+    rules:
+      # WARNING: Persistent avoid recommendations
+      - alert: BestExecutionAvoidRecommendation
+        expr: best_execution_recommendation == 4
+        for: 10m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: best_execution
+        annotations:
+          summary: "Best execution recommends AVOID for {{ $labels.symbol }}"
+          description: |
+            The best execution analyzer has been recommending to avoid trading
+            {{ $labels.symbol }} for the last 10 minutes. Market conditions may be
+            unfavorable (high slippage, poor liquidity, or extreme volatility).
+
+      # INFO: High estimated slippage
+      - alert: BestExecutionHighSlippage
+        expr: best_execution_slippage_bps > 25
+        for: 5m
+        labels:
+          severity: info
+          service: fks-execution
+          component: best_execution
+        annotations:
+          summary: "High estimated slippage for {{ $labels.symbol }}: {{ $value }} bps"
+          description: |
+            Estimated slippage for {{ $labels.symbol }} is {{ $value }} basis points.
+            Consider using limit orders or reducing order size.
+
+      # WARNING: Low execution quality
+      - alert: BestExecutionLowQuality
+        expr: best_execution_quality_score < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: best_execution
+        annotations:
+          summary: "Low execution quality score for {{ $labels.symbol }}: {{ $value }}"
+          description: |
+            The execution quality score for {{ $labels.symbol }} has dropped below 50%.
+            Actual execution prices may be significantly worse than expected.
+            Review recent fills and consider adjusting execution strategy.
+
+      # INFO: No best execution analyses
+      - alert: BestExecutionInactive
+        expr: increase(best_execution_analyses_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: info
+          service: fks-execution
+          component: best_execution
+        annotations:
+          summary: "Best execution analyzer inactive"
+          description: |
+            The best execution analyzer has not performed any analyses in the
+            last 10 minutes. This may indicate no trading signals or a configuration issue.
+
+  # ===========================================================================
+  # Signal Flow Alerts
+  # ===========================================================================
+  - name: fks-execution-signal-flow
+    interval: 30s
+    rules:
+      # WARNING: High signal rejection rate
+      - alert: SignalFlowHighRejectionRate
+        expr: |
+          (
+            rate(signal_flow_signals_rejected[5m]) /
+            (rate(signal_flow_signals_received[5m]) + 0.001)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: signal_flow
+        annotations:
+          summary: "High signal rejection rate: {{ $value | humanizePercentage }}"
+          description: |
+            More than 50% of signals are being rejected. This may indicate
+            aggressive risk controls, poor signal quality, or configuration issues.
+          runbook_url: "https://docs.fks.internal/runbooks/signal-rejection"
+
+      # WARNING: Low order fill rate
+      - alert: SignalFlowLowFillRate
+        expr: |
+          (
+            rate(signal_flow_orders_filled[10m]) /
+            (rate(signal_flow_orders_submitted[10m]) + 0.001)
+          ) < 0.7
+        for: 10m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: signal_flow
+        annotations:
+          summary: "Low order fill rate: {{ $value | humanizePercentage }}"
+          description: |
+            Less than 70% of submitted orders are being filled. This may indicate
+            aggressive pricing, low liquidity, or stale quotes.
+
+      # CRITICAL: No signals received
+      - alert: SignalFlowNoSignals
+        expr: increase(signal_flow_signals_received[15m]) == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: signal_flow
+        annotations:
+          summary: "No trading signals received in 15 minutes"
+          description: |
+            The signal flow coordinator has not received any trading signals
+            in the last 15 minutes. Signal generation may be down or disconnected.
+          runbook_url: "https://docs.fks.internal/runbooks/signal-flow"
+
+      # WARNING: High order cancellation rate
+      - alert: SignalFlowHighCancellationRate
+        expr: |
+          (
+            rate(signal_flow_orders_cancelled[5m]) /
+            (rate(signal_flow_orders_submitted[5m]) + 0.001)
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: signal_flow
+        annotations:
+          summary: "High order cancellation rate: {{ $value | humanizePercentage }}"
+          description: |
+            More than 30% of orders are being cancelled. This may indicate
+            aggressive timeout settings or rapidly changing market conditions.
+
+      # INFO: No fills received
+      - alert: SignalFlowNoFills
+        expr: increase(signal_flow_fills_received[30m]) == 0 AND increase(signal_flow_orders_submitted[30m]) > 0
+        for: 30m
+        labels:
+          severity: info
+          service: fks-execution
+          component: signal_flow
+        annotations:
+          summary: "No order fills received despite active order submission"
+          description: |
+            Orders are being submitted but no fills have been received in 30 minutes.
+            This may indicate connectivity issues with fill reporting or all orders
+            are being cancelled/rejected.
+
+  # ===========================================================================
+  # Service Health Alerts
+  # ===========================================================================
+  - name: fks-execution-health
+    interval: 60s
+    rules:
+      # CRITICAL: Execution service down
+      - alert: ExecutionServiceDown
+        expr: up{job="fks-execution"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: fks-execution
+          component: health
+        annotations:
+          summary: "FKS Execution Service is down"
+          description: |
+            The FKS Execution Service has been unreachable for more than 2 minutes.
+            Prometheus cannot scrape the metrics endpoint.
+          runbook_url: "https://docs.fks.internal/runbooks/service-down"
+
+      # WARNING: High active orders
+      - alert: ExecutionHighActiveOrders
+        expr: execution_orders_active > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: fks-execution
+          component: orders
+        annotations:
+          summary: "High number of active orders: {{ $value }}"
+          description: |
+            There are {{ $value }} active orders in the system. This is higher
+            than normal and may indicate order management issues or fill delays.
+
+      # INFO: Service just started
+      - alert: ExecutionServiceRestart
+        expr: changes(execution_service_timestamp_ms[5m]) > 1
+        labels:
+          severity: info
+          service: fks-execution
+          component: health
+        annotations:
+          summary: "FKS Execution Service restarted"
+          description: |
+            The execution service appears to have restarted recently.
+            Verify all connections and state are properly restored.

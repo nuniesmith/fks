@@ -1,0 +1,372 @@
+# Database Alert Rules for FKS Trading Platform
+# Monitors PostgreSQL, Redis, and QuestDB health and performance
+
+groups:
+  # ============================================================================
+  # PostgreSQL Alerts
+  # ============================================================================
+  - name: postgresql_alerts
+    rules:
+      # NOTE: 3m threshold avoids false alarms during planned deployments.
+      # `docker compose up -d` may briefly disrupt the Docker network when
+      # recreating services, causing the postgres-exporter to lose its
+      # connection for 1-2 minutes. Two consecutive failed 30s scrapes
+      # would trigger at 1m; 3m requires ~6 failures (a real outage).
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL instance {{ $labels.instance }} has been down for more than 3 minutes."
+
+      - alert: PostgresHighConnections
+        expr: |
+          sum by (instance) (pg_stat_activity_count{state="active"})
+          / on (instance)
+          pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL high connection usage"
+          description: 'PostgreSQL connection usage is above 80% (current: {{ $value | printf "%.1f" }}%)'
+
+      - alert: PostgresTooManyConnections
+        expr: |
+          sum by (instance) (pg_stat_activity_count)
+          / on (instance)
+          pg_settings_max_connections > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL connection limit nearly reached"
+          description: 'PostgreSQL is using {{ $value | printf "%.1f" }}% of available connections'
+
+      - alert: PostgresDeadLocks
+        expr: increase(pg_stat_database_deadlocks{datname="janus_db"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL deadlocks detected"
+          description: "{{ $value }} deadlocks detected in the last 5 minutes on database {{ $labels.datname }}"
+
+      - alert: PostgresSlowQueries
+        expr: pg_stat_activity_max_tx_duration{datname="janus_db"} > 300
+        for: 2m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL slow query detected"
+          description: 'A query has been running for more than 5 minutes ({{ $value | printf "%.0f" }}s)'
+
+      - alert: PostgresReplicationLag
+        expr: pg_replication_lag > 30
+        for: 2m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL replication lag"
+          description: 'Replication lag is {{ $value | printf "%.0f" }} seconds'
+
+      - alert: PostgresDatabaseSizeGrowing
+        expr: |
+          predict_linear(pg_database_size_bytes{datname="janus_db"}[1h], 24 * 3600)
+          > 10 * 1024 * 1024 * 1024
+        for: 30m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL database size growing rapidly"
+          description: "Database {{ $labels.datname }} is predicted to exceed 10GB within 24 hours"
+
+      - alert: PostgresHighDeadTuples
+        expr: |
+          pg_stat_user_tables_n_dead_tup
+          / (pg_stat_user_tables_n_live_tup + pg_stat_user_tables_n_dead_tup + 1)
+          > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL table has high dead tuple ratio"
+          description: 'Table {{ $labels.relname }} has {{ $value | printf "%.1f" }}% dead tuples - consider running VACUUM'
+
+      - alert: PostgresTableBloat
+        expr: |
+          (pg_stat_user_tables_n_dead_tup{relname=~"signals|orders"} > 10000)
+          and
+          (pg_stat_user_tables_n_dead_tup / (pg_stat_user_tables_n_live_tup + 1) > 0.05)
+        for: 30m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL table bloat detected"
+          description: 'Table {{ $labels.relname }} has {{ $value | printf "%.0f" }} dead tuples'
+
+      - alert: PostgresIdleInTransaction
+        expr: pg_stat_activity_count{state="idle in transaction"} > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "PostgreSQL idle in transaction connections"
+          description: "{{ $value }} connections are idle in transaction for more than 5 minutes"
+
+      - alert: PostgresNoSignalsPersisted
+        expr: |
+          increase(fks_signals_total[1h]) == 0
+          and
+          up{job="postgres"} == 1
+        for: 1h
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "No signals persisted to PostgreSQL"
+          description: "No new signals have been persisted to PostgreSQL in the last hour"
+
+  # ============================================================================
+  # Redis Alerts
+  # ============================================================================
+  - name: redis_alerts
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance {{ $labels.instance }} has been down for more than 3 minutes."
+
+      - alert: RedisHighMemoryUsage
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: 'Redis is using {{ $value | printf "%.1f" }}% of maximum configured memory'
+
+      - alert: RedisCriticalMemoryUsage
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis critical memory usage"
+          description: 'Redis is using {{ $value | printf "%.1f" }}% of maximum memory - evictions likely'
+
+      - alert: RedisHighConnections
+        expr: redis_connected_clients > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high connection count"
+          description: "Redis has {{ $value }} connected clients"
+
+      - alert: RedisRejectedConnections
+        expr: increase(redis_rejected_connections_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis rejecting connections"
+          description: "Redis has rejected {{ $value }} connections in the last 5 minutes"
+
+      - alert: RedisEvictingKeys
+        expr: increase(redis_evicted_keys_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis evicting keys"
+          description: "Redis has evicted {{ $value }} keys in the last 5 minutes due to memory pressure"
+
+      - alert: RedisLowHitRatio
+        expr: |
+          (redis_keyspace_hits_total + redis_keyspace_misses_total) > 1000
+          and
+          redis_keyspace_hits_total
+          / (redis_keyspace_hits_total + redis_keyspace_misses_total + 1)
+          < 0.8
+        for: 15m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis low cache hit ratio"
+          description: 'Redis cache hit ratio is {{ $value | printf "%.1f" }}% - consider cache tuning'
+
+      - alert: RedisBlockedClients
+        expr: redis_blocked_clients > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis has blocked clients"
+          description: "{{ $value }} Redis clients are blocked (BLPOP, BRPOP, etc.)"
+
+      - alert: RedisNotPersisting
+        expr: |
+          (time() - redis_rdb_last_save_timestamp_seconds) > 3600
+          and
+          redis_rdb_last_save_timestamp_seconds > 1000000000
+        for: 10m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis RDB snapshot is stale"
+          description: 'Redis has not saved an RDB snapshot in {{ $value | printf "%.0f" }} seconds (AOF may still be persisting writes)'
+
+      # NOTE: Disabled for single-node Redis deployments.
+      # Re-enable when Redis replication (master/slave) is configured.
+      # - alert: RedisReplicationBroken
+      #   expr: |
+      #       redis_connected_slaves < 1
+      #       and
+      #       redis_connected_slaves >= 0
+      #   for: 5m
+      #   labels:
+      #       severity: warning
+      #       service: redis
+      #   annotations:
+      #       summary: "Redis replication broken"
+      #       description: "Redis master has no connected slaves"
+
+  # ============================================================================
+  # QuestDB Alerts
+  # ============================================================================
+  - name: questdb_alerts
+    rules:
+      - alert: QuestDBDown
+        # Use questdb-direct (native :9003/metrics) — the questdb-exporter
+        # sidecar (port 9191) is not deployed in this stack.
+        expr: up{job="questdb-direct"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: questdb
+        annotations:
+          summary: "QuestDB is down"
+          description: "QuestDB instance {{ $labels.instance }} has been down for more than 3 minutes."
+
+      - alert: QuestDBHighQueryLatency
+        expr: |
+          rate(questdb_query_duration_seconds_sum[5m])
+          / rate(questdb_query_duration_seconds_count[5m])
+          > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: questdb
+        annotations:
+          summary: "QuestDB high query latency"
+          description: 'QuestDB average query latency is {{ $value | printf "%.2f" }}s'
+
+      - alert: QuestDBHighMemoryUsage
+        expr: questdb_memory_jvm_used_bytes / questdb_memory_jvm_max_bytes * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          service: questdb
+        annotations:
+          summary: "QuestDB high JVM memory usage"
+          description: 'QuestDB JVM memory usage is {{ $value | printf "%.1f" }}%'
+
+      - alert: QuestDBIngestionStalled
+        expr: |
+          rate(questdb_line_tcp_messages_total[5m]) == 0
+          and
+          questdb_line_tcp_messages_total > 0
+        for: 10m
+        labels:
+          severity: warning
+          service: questdb
+        annotations:
+          summary: "QuestDB ingestion stalled"
+          description: "No data has been ingested via line protocol in the last 10 minutes"
+
+      - alert: QuestDBHttpErrors
+        expr: increase(questdb_http_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: questdb
+        annotations:
+          summary: "QuestDB HTTP errors"
+          description: "{{ $value }} HTTP errors in the last 5 minutes"
+
+  # ============================================================================
+  # Cross-Database Alerts
+  # ============================================================================
+  - name: database_general_alerts
+    rules:
+      - alert: AllDatabasesDown
+        expr: |
+          (pg_up == 0 or absent(pg_up))
+          and
+          (redis_up == 0 or absent(redis_up))
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "All databases are down"
+          description: "Both PostgreSQL and Redis are unreachable - critical infrastructure failure"
+
+      - alert: DatabaseExporterDown
+        # Only alert on exporters that are expected to be running:
+        #   postgres-exporter (:9187) and redis-exporter (:9121).
+        # Excludes questdb-exporter (not deployed — use questdb-direct instead)
+        # and trainer (optional GPU service, not always running).
+        expr: |
+          up{job=~"postgres|redis"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: monitoring
+        annotations:
+          summary: "Database exporter is down"
+          description: "The {{ $labels.job }} exporter is not responding"
+
+      - alert: HighDatabaseWriteLatency
+        expr: |
+          (
+            rate(pg_stat_database_tup_inserted{datname="janus_db"}[5m])
+            + rate(pg_stat_database_tup_updated{datname="janus_db"}[5m])
+          ) > 1000
+          and
+          pg_stat_activity_max_tx_duration{datname="janus_db"} > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High database write activity with slow transactions"
+          description: "High write rate detected with transactions taking > 10s"

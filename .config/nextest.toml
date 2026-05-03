@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# cargo-nextest configuration
+# https://nexte.st/docs/configuration/
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profile.default]
+# Local development defaults
+fail-fast = true
+status-level = "pass"
+final-status-level = "fail"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI profile — used in GitHub Actions for structured test reporting
+#
+# Usage:  cargo nextest run --profile ci -p <packages...>
+#
+# This profile:
+#   • Disables fail-fast so ALL tests run even if some fail early
+#   • Emits JUnit XML to target/nextest/ci/junit.xml for dorny/test-reporter
+#   • Sets retries to 1 for flaky-test resilience in CI
+#   • Increases per-test timeout to handle slower CI runners
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profile.ci]
+fail-fast = false
+retries = 1
+status-level = "pass"
+final-status-level = "fail"
+slow-timeout = { period = "120s", terminate-after = 2 }
+
+[profile.ci.junit]
+path = "junit.xml"
+report-name = "rust-tests"
+store-success-output = true
+store-failure-output = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI-heavy profile — used for computationally expensive tests (e.g. ViViT)
+#
+# Usage:  cargo nextest run --profile ci-heavy -p janus-neuromorphic -E 'test(~visual_cortex::vivit)'
+#
+# This profile extends ci defaults but with much longer timeouts to
+# accommodate heavy model tests (forward passes, training loops) that
+# legitimately need several minutes on CI runners.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[profile.ci-heavy]
+fail-fast = false
+retries = 1
+status-level = "pass"
+final-status-level = "fail"
+slow-timeout = { period = "300s", terminate-after = 3 }
+
+[profile.ci-heavy.junit]
+path = "junit-heavy.xml"
+report-name = "rust-tests-heavy"
+store-success-output = true
+store-failure-output = true

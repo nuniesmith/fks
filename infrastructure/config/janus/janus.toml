@@ -1,0 +1,823 @@
+# ============================================================================
+# JANUS UNIFIED SERVICE CONFIGURATION
+# ============================================================================
+# Comprehensive configuration for the FKS JANUS trading system
+# This file configures all JANUS modules: Forward, Backward, CNS, API, and Data
+#
+# Environment variables can override any value using the pattern:
+#   JANUS_<SECTION>_<KEY> (e.g., JANUS_SERVICE_HTTP_PORT=8080)
+# ============================================================================
+
+[service]
+name = "janus"
+version = "2.0.0"
+environment = "development"  # development | staging | production
+
+# ============================================================================
+# NETWORK CONFIGURATION
+# ============================================================================
+
+[ports]
+# HTTP/REST API port
+http = 8080
+# gRPC API port
+grpc = 50051
+# WebSocket port for live signal streaming
+websocket = 8081
+# Prometheus metrics endpoint port
+metrics = 9090
+
+[host]
+# Bind address for all services
+bind = "0.0.0.0"
+# Public hostname (for CORS and external access)
+public = "localhost"
+
+# ============================================================================
+# MODULE TOGGLES
+# ============================================================================
+# Enable/disable individual JANUS modules
+
+[modules]
+# Forward module - Real-time signal generation and streaming
+forward = true
+# Backward module - Historical analytics and persistence
+backward = true
+# CNS module - Central Nervous System health monitoring
+cns = true
+# API module - REST/gRPC endpoints
+api = true
+# Data module - Market data ingestion
+data = true
+# WebSocket streaming
+websocket = true
+# gRPC API endpoints
+grpc = true
+# Prometheus metrics collection
+metrics = true
+
+# ============================================================================
+# EXTERNAL SERVICES
+# ============================================================================
+
+[redis]
+url = "redis://redis:6379/0"
+# Connection pool settings
+max_connections = 10
+min_connections = 2
+connect_timeout_secs = 10
+# Pub/Sub channels
+param_channel = "fks:params"
+signal_channel = "fks:signals"
+
+[database]
+# PostgreSQL connection URL
+# NOTE: Override with DATABASE_URL environment variable in production
+# The compose file sets DATABASE_URL with the correct password from .env
+url = "postgresql://fks_user:CHANGEME@postgres:5432/fks"
+# Connection pool settings
+max_connections = 10
+min_connections = 2
+connect_timeout_secs = 30
+idle_timeout_secs = 600
+max_lifetime_secs = 1800
+# Enable SQL query logging (WARNING: verbose in production)
+enable_logging = false
+
+[questdb]
+# QuestDB host for time-series data
+host = "questdb"
+# ILP (InfluxDB Line Protocol) port for high-speed ingestion
+ilp_port = 9009
+# HTTP API port
+http_port = 9000
+# PostgreSQL wire protocol port
+pg_port = 8812
+
+# ============================================================================
+# FORWARD MODULE - Signal Generation
+# ============================================================================
+
+[forward]
+# Signal generation interval in seconds
+signal_interval_secs = 5
+# Path to ML models directory
+ml_model_path = "/models"
+# Enable ML inference
+enable_ml_inference = false
+
+[forward.signals]
+# Minimum confidence threshold for signals (0.0 - 1.0)
+min_confidence = 0.6
+# Minimum strength threshold for signals (0.0 - 1.0)
+min_strength = 0.5
+# Maximum signal age before expiration (seconds)
+max_age_secs = 300
+# Enable quality filtering
+enable_quality_filter = true
+# Batch size for signal processing
+batch_size = 100
+
+[forward.execution]
+# Enable order execution (built into janus)
+enabled = false
+# Execution endpoint (localhost — execution is built into the janus binary)
+endpoint = "http://localhost:50052"
+# Connection timeout
+connect_timeout_secs = 10
+# Request timeout
+request_timeout_secs = 30
+# Enable TLS for execution service
+enable_tls = false
+# Maximum retry attempts
+max_retries = 3
+# Retry backoff in milliseconds
+retry_backoff_ms = 100
+
+# ============================================================================
+# INDICATORS CONFIGURATION
+# ============================================================================
+
+[forward.indicators]
+# EMA (Exponential Moving Average)
+ema_periods = [9, 21, 50, 200]
+
+# RSI (Relative Strength Index)
+rsi_period = 14
+rsi_overbought = 70.0
+rsi_oversold = 30.0
+
+# MACD (Moving Average Convergence Divergence)
+macd_fast_period = 12
+macd_slow_period = 26
+macd_signal_period = 9
+
+# Bollinger Bands
+bollinger_period = 20
+bollinger_std_dev = 2.0
+
+# ATR (Average True Range)
+atr_period = 14
+
+# Volume analysis
+volume_ma_period = 20
+
+# ============================================================================
+# STRATEGIES CONFIGURATION
+# ============================================================================
+
+[forward.strategies]
+# Strategy weights for consensus (0.0 - 1.0)
+[forward.strategies.weights]
+ema_crossover = 1.0
+rsi_reversal = 1.0
+macd_momentum = 1.0
+bollinger_breakout = 1.0
+
+[forward.strategies.consensus]
+# Minimum agreement ratio for consensus signals
+min_agreement = 0.6
+# Require minimum number of agreeing strategies
+min_strategies = 2
+
+[forward.strategies.ema_crossover]
+enabled = true
+fast_period = 9
+slow_period = 21
+# Minimum spread between EMAs to trigger signal (percentage)
+min_spread_pct = 0.1
+
+[forward.strategies.rsi_reversal]
+enabled = true
+period = 14
+overbought_threshold = 70.0
+oversold_threshold = 30.0
+# Confirmation candles required
+confirmation_candles = 1
+
+[forward.strategies.macd_momentum]
+enabled = true
+fast_period = 12
+slow_period = 26
+signal_period = 9
+# Histogram threshold for signal strength
+histogram_threshold = 0.0
+
+[forward.strategies.bollinger_breakout]
+enabled = true
+period = 20
+std_dev = 2.0
+# Require close outside bands
+require_close_outside = true
+
+# ============================================================================
+# RISK MANAGEMENT
+# ============================================================================
+
+[risk]
+# Account balance for position sizing
+account_balance = 100000.0
+# Maximum position size as percentage of account
+max_position_size_pct = 0.02
+# Maximum portfolio risk as percentage of account
+max_portfolio_risk_pct = 0.10
+# Maximum number of open positions
+max_open_positions = 10
+# Maximum daily loss allowed
+max_daily_loss = 1000.0
+# Maximum position hold time in hours
+max_position_hold_hours = 24
+
+[risk.stop_loss]
+# Default stop loss percentage
+default_pct = 0.02
+# Use ATR-based stops
+use_atr = true
+# ATR multiplier for stop distance
+atr_multiplier = 2.0
+# Minimum stop distance percentage
+min_distance_pct = 0.005
+# Maximum stop distance percentage
+max_distance_pct = 0.10
+
+[risk.take_profit]
+# Risk/reward ratio for take profit
+risk_reward_ratio = 2.0
+# Enable trailing take profit
+enable_trailing = false
+# Trailing distance percentage
+trailing_distance_pct = 0.01
+
+[risk.position_sizing]
+# Sizing method: fixed | risk_based | kelly | volatility
+method = "risk_based"
+# Fixed size in USD (for fixed method)
+fixed_size_usd = 1000.0
+# Risk per trade percentage (for risk_based method)
+risk_per_trade_pct = 0.01
+# Kelly fraction (for kelly method)
+kelly_fraction = 0.25
+
+# ============================================================================
+# BACKWARD MODULE - Analytics & Persistence
+# ============================================================================
+
+[backward]
+# Number of worker threads for background tasks
+worker_threads = 4
+# Enable scheduled jobs
+enable_scheduler = true
+
+[backward.persistence]
+# Batch size for database writes
+batch_size = 100
+# Flush interval in seconds
+flush_interval_secs = 5
+# Enable write-ahead logging
+enable_wal = true
+
+[backward.analytics]
+# Analytics update interval in seconds
+update_interval_secs = 60
+# Performance metrics calculation window (hours)
+performance_window_hours = 24
+# Enable detailed trade analysis
+enable_trade_analysis = true
+
+[backward.retention]
+# Signal retention period in days
+signals_days = 90
+# Trade history retention in days
+trades_days = 365
+# Metrics retention in days
+metrics_days = 30
+
+# ============================================================================
+# CNS MODULE - Health Monitoring
+# ============================================================================
+
+[cns]
+# Health check interval in seconds
+health_check_interval_secs = 10
+# Enable automatic recovery reflexes
+enable_reflexes = true
+# Verbose logging for debugging
+verbose_logging = false
+# Grace period on startup before health checks (seconds)
+startup_grace_period_secs = 30
+# Maximum concurrent health probes
+max_concurrent_probes = 10
+# Probe retry attempts
+probe_retry_attempts = 2
+
+[cns.endpoints]
+# Forward service endpoint
+forward_service = "http://localhost:8080/api/v1"
+# Backward service endpoint
+backward_service = "http://localhost:8082"
+# Gateway service endpoint
+gateway_service = "http://localhost:8000"
+# Redis connection
+redis = "redis://redis:6379"
+# Qdrant vector database (optional)
+qdrant = ""
+# Shared memory path for IPC
+shared_memory_path = "/dev/shm/janus_forward_backward"
+
+[cns.endpoints.neuromorphic]
+# Enable neuromorphic brain region monitoring
+enabled = false
+# Base URL for neuromorphic services
+base_url = "http://localhost:8090"
+
+# Circuit breaker configurations
+[cns.circuit_breakers.redis]
+failure_threshold = 5
+failure_window_secs = 60
+recovery_timeout_secs = 30
+success_threshold = 3
+
+[cns.circuit_breakers.forward]
+failure_threshold = 3
+failure_window_secs = 30
+recovery_timeout_secs = 20
+success_threshold = 2
+
+[cns.circuit_breakers.backward]
+failure_threshold = 3
+failure_window_secs = 30
+recovery_timeout_secs = 20
+success_threshold = 2
+
+[cns.circuit_breakers.database]
+failure_threshold = 5
+failure_window_secs = 60
+recovery_timeout_secs = 30
+success_threshold = 3
+
+# ============================================================================
+# MARKET DATA CONFIGURATION
+# ============================================================================
+
+[market]
+# Primary exchange
+exchange = "binance"
+# Data update interval in milliseconds
+update_interval_ms = 1000
+# Enable order book depth
+enable_orderbook = true
+# Order book depth levels
+orderbook_depth = 10
+
+[market.timeframes]
+# Enabled timeframes for analysis
+enabled = ["1m", "5m", "15m", "1h", "4h", "1d"]
+# Primary timeframe for signals
+primary = "5m"
+
+# ============================================================================
+# ASSETS CONFIGURATION
+# ============================================================================
+# Define trading assets with per-asset settings
+
+[assets]
+# List of enabled trading assets (base currency)
+enabled = ["BTC", "ETH", "SOL", "AVAX", "LINK", "MATIC", "ARB", "OP", "DOGE", "XRP"]
+
+# Default quote currency
+default_quote = "USDT"
+
+# Assets to use for optimization runs
+optimize_assets = ["BTC", "ETH", "SOL"]
+
+# High priority assets (receive more frequent updates)
+priority_assets = ["BTC", "ETH"]
+
+# ============================================================================
+# Per-Asset Configuration
+# ============================================================================
+# Override default settings for specific assets
+
+[assets.BTC]
+symbol = "BTC/USDT"
+enabled = true
+# Risk overrides
+max_position_size_pct = 0.03      # Allow larger BTC positions
+max_leverage = 3.0
+min_order_size = 0.0001           # Minimum order in BTC
+max_order_size = 1.0              # Maximum order in BTC
+# Indicator tuning
+atr_multiplier = 2.5              # Wider stops for BTC volatility
+rsi_overbought = 75.0             # Higher threshold for BTC
+rsi_oversold = 25.0
+# Exchange-specific
+[assets.BTC.exchanges]
+kraken = { pair = "XXBTZUSD", min_order = 0.0001, fee_tier = "maker" }
+bybit = { pair = "BTCUSDT", min_order = 0.001, category = "linear" }
+binance = { pair = "BTCUSDT", min_order = 0.00001 }
+
+[assets.ETH]
+symbol = "ETH/USDT"
+enabled = true
+max_position_size_pct = 0.03
+max_leverage = 3.0
+min_order_size = 0.001
+max_order_size = 10.0
+atr_multiplier = 2.5
+rsi_overbought = 75.0
+rsi_oversold = 25.0
+[assets.ETH.exchanges]
+kraken = { pair = "XETHZUSD", min_order = 0.001, fee_tier = "maker" }
+bybit = { pair = "ETHUSDT", min_order = 0.01, category = "linear" }
+binance = { pair = "ETHUSDT", min_order = 0.0001 }
+
+[assets.SOL]
+symbol = "SOL/USDT"
+enabled = true
+max_position_size_pct = 0.02
+max_leverage = 2.0
+min_order_size = 0.01
+max_order_size = 100.0
+atr_multiplier = 3.0              # Higher volatility asset
+rsi_overbought = 70.0
+rsi_oversold = 30.0
+[assets.SOL.exchanges]
+kraken = { pair = "SOLUSD", min_order = 0.01 }
+bybit = { pair = "SOLUSDT", min_order = 0.1, category = "linear" }
+binance = { pair = "SOLUSDT", min_order = 0.01 }
+
+[assets.AVAX]
+symbol = "AVAX/USDT"
+enabled = true
+max_position_size_pct = 0.015
+max_leverage = 2.0
+min_order_size = 0.1
+max_order_size = 500.0
+atr_multiplier = 3.0
+[assets.AVAX.exchanges]
+kraken = { pair = "AVAXUSD", min_order = 0.1 }
+bybit = { pair = "AVAXUSDT", min_order = 0.1, category = "linear" }
+binance = { pair = "AVAXUSDT", min_order = 0.1 }
+
+[assets.LINK]
+symbol = "LINK/USDT"
+enabled = true
+max_position_size_pct = 0.015
+max_leverage = 2.0
+min_order_size = 0.1
+max_order_size = 1000.0
+atr_multiplier = 2.5
+[assets.LINK.exchanges]
+kraken = { pair = "LINKUSD", min_order = 0.1 }
+bybit = { pair = "LINKUSDT", min_order = 0.1, category = "linear" }
+binance = { pair = "LINKUSDT", min_order = 0.1 }
+
+[assets.MATIC]
+symbol = "MATIC/USDT"
+enabled = true
+max_position_size_pct = 0.01
+max_leverage = 2.0
+min_order_size = 1.0
+max_order_size = 10000.0
+atr_multiplier = 3.0
+[assets.MATIC.exchanges]
+kraken = { pair = "MATICUSD", min_order = 1.0 }
+bybit = { pair = "MATICUSDT", min_order = 1.0, category = "linear" }
+binance = { pair = "MATICUSDT", min_order = 1.0 }
+
+[assets.ARB]
+symbol = "ARB/USDT"
+enabled = true
+max_position_size_pct = 0.01
+max_leverage = 2.0
+min_order_size = 1.0
+max_order_size = 5000.0
+atr_multiplier = 3.5
+[assets.ARB.exchanges]
+kraken = { pair = "ARBUSD", min_order = 1.0 }
+bybit = { pair = "ARBUSDT", min_order = 1.0, category = "linear" }
+binance = { pair = "ARBUSDT", min_order = 1.0 }
+
+[assets.OP]
+symbol = "OP/USDT"
+enabled = true
+max_position_size_pct = 0.01
+max_leverage = 2.0
+min_order_size = 1.0
+max_order_size = 5000.0
+atr_multiplier = 3.5
+[assets.OP.exchanges]
+kraken = { pair = "OPUSD", min_order = 1.0 }
+bybit = { pair = "OPUSDT", min_order = 1.0, category = "linear" }
+binance = { pair = "OPUSDT", min_order = 1.0 }
+
+[assets.DOGE]
+symbol = "DOGE/USDT"
+enabled = true
+max_position_size_pct = 0.01
+max_leverage = 2.0
+min_order_size = 10.0
+max_order_size = 100000.0
+atr_multiplier = 4.0              # Very volatile
+rsi_overbought = 65.0             # More conservative thresholds
+rsi_oversold = 35.0
+[assets.DOGE.exchanges]
+kraken = { pair = "XDGUSD", min_order = 10.0 }
+bybit = { pair = "DOGEUSDT", min_order = 10.0, category = "linear" }
+binance = { pair = "DOGEUSDT", min_order = 10.0 }
+
+[assets.XRP]
+symbol = "XRP/USDT"
+enabled = true
+max_position_size_pct = 0.015
+max_leverage = 2.0
+min_order_size = 1.0
+max_order_size = 50000.0
+atr_multiplier = 3.0
+[assets.XRP.exchanges]
+kraken = { pair = "XXRPZUSD", min_order = 1.0 }
+bybit = { pair = "XRPUSDT", min_order = 1.0, category = "linear" }
+binance = { pair = "XRPUSDT", min_order = 1.0 }
+
+# ============================================================================
+# Additional Assets (disabled by default)
+# ============================================================================
+
+[assets.ADA]
+symbol = "ADA/USDT"
+enabled = false
+max_position_size_pct = 0.01
+min_order_size = 10.0
+[assets.ADA.exchanges]
+kraken = { pair = "ADAUSD", min_order = 10.0 }
+
+[assets.DOT]
+symbol = "DOT/USDT"
+enabled = false
+max_position_size_pct = 0.01
+min_order_size = 1.0
+[assets.DOT.exchanges]
+kraken = { pair = "DOTUSD", min_order = 1.0 }
+
+[assets.ATOM]
+symbol = "ATOM/USDT"
+enabled = false
+max_position_size_pct = 0.01
+min_order_size = 0.1
+[assets.ATOM.exchanges]
+kraken = { pair = "ATOMUSD", min_order = 0.1 }
+
+[assets.UNI]
+symbol = "UNI/USDT"
+enabled = false
+max_position_size_pct = 0.01
+min_order_size = 0.1
+[assets.UNI.exchanges]
+kraken = { pair = "UNIUSD", min_order = 0.1 }
+
+[assets.LTC]
+symbol = "LTC/USDT"
+enabled = false
+max_position_size_pct = 0.015
+min_order_size = 0.01
+[assets.LTC.exchanges]
+kraken = { pair = "XLTCZUSD", min_order = 0.01 }
+
+[assets.BCH]
+symbol = "BCH/USDT"
+enabled = false
+max_position_size_pct = 0.015
+min_order_size = 0.01
+[assets.BCH.exchanges]
+kraken = { pair = "BCHUSD", min_order = 0.01 }
+
+# ============================================================================
+# TRADING CONFIGURATION
+# ============================================================================
+
+[trading]
+# Trading mode: simulation | paper | live
+mode = "paper"
+# Enable real order execution (DANGER: requires mode=live)
+real_orders_enabled = false
+# Dry run mode (log orders but don't execute)
+dry_run = true
+
+[trading.simulation]
+# Initial balance for simulation
+initial_balance = 100000.0
+# Simulated slippage in basis points
+slippage_bps = 5
+# Simulated trading fee in basis points
+fee_bps = 10
+# Simulated fill delay in milliseconds
+fill_delay_ms = 200
+# Enable realistic slippage simulation
+enable_slippage = true
+
+[trading.orders]
+# Default order type: market | limit
+default_type = "limit"
+# Time in force: gtc | ioc | fok
+default_tif = "gtc"
+# Minimum order size in USD
+min_size_usd = 10.0
+# Maximum order size in USD
+max_size_usd = 100000.0
+# Maximum slippage tolerance in basis points
+max_slippage_bps = 50
+
+# ============================================================================
+# LOGGING & OBSERVABILITY
+# ============================================================================
+
+[logging]
+# Log level: trace | debug | info | warn | error
+level = "info"
+# Log format: json | pretty
+format = "json"
+# Enable console output
+console = true
+# Enable file logging
+file_enabled = false
+# Log file path
+file_path = "/var/log/janus/janus.log"
+# Enable SQL query logging
+sql_logging = false
+
+[tracing]
+# Enable distributed tracing
+enabled = false
+# Jaeger endpoint
+jaeger_endpoint = "http://jaeger:14268/api/traces"
+# Sampling rate (0.0 - 1.0)
+sampling_rate = 0.1
+
+[metrics]
+# Metrics endpoint path
+endpoint = "/metrics"
+# Include detailed histogram buckets
+detailed_histograms = true
+# Custom metric labels
+[metrics.labels]
+service = "janus"
+environment = "development"
+
+# ============================================================================
+# ALERTING (Optional)
+# ============================================================================
+
+[alerting]
+# Enable alerting
+enabled = false
+
+[alerting.discord]
+# Discord webhook URL
+webhook_url = ""
+# Enable notifications
+enabled = false
+# Notify on signals
+notify_on_signal = true
+# Notify on order fills
+notify_on_fill = true
+# Notify on errors
+notify_on_error = true
+
+[alerting.slack]
+# Slack webhook URL
+webhook_url = ""
+# Enable notifications
+enabled = false
+
+[alerting.email]
+# Enable email alerts
+enabled = false
+# SMTP host
+smtp_host = "localhost"
+# SMTP port
+smtp_port = 587
+# Recipients
+recipients = []
+
+# ============================================================================
+# PARAMETER HOT-RELOAD
+# ============================================================================
+
+[param_reload]
+# Enable parameter hot-reload from Redis
+enabled = true
+# Redis instance ID for namespacing
+instance_id = "default"
+# Reconnection delay in milliseconds
+reconnect_delay_ms = 5000
+# Maximum reconnection attempts (0 = unlimited)
+max_retries = 0
+
+# ============================================================================
+# ENGINEERED HETEROGENEITY (Crowding Resistance)
+# ============================================================================
+# Each JANUS instance receives a unique parameter profile derived from its
+# instance_id, producing idiosyncratic order flow that reduces cross-instance
+# correlation and mitigates co-impact costs (Bucci et al. 2020).
+#
+# The same instance_id always generates the same profile (deterministic).
+# Different instance_ids generate different profiles (diverse).
+
+[heterogeneity]
+# Enable engineered heterogeneity across brain regions
+enabled = true
+# Instance identifier — must be unique per deployment.
+# Reuses the param_reload instance_id by convention; override per-instance
+# via the JANUS_HETEROGENEITY_INSTANCE_ID environment variable.
+instance_id = "default"
+
+# --- Thalamus (Modality Attention Weights) ---
+# Range of perturbation as fraction of default (e.g., 0.25 = ±25%)
+thalamus_weight_range = 0.25
+thalamus_temperature_range = 0.20
+
+# --- Hypothalamus (Risk Setpoints) ---
+hypothalamus_risk_setpoint_range = 0.20
+hypothalamus_position_sizing_range = 0.25
+hypothalamus_drawdown_range = 0.15
+
+# --- Basal Ganglia (Action Selection) ---
+basal_ganglia_dopamine_range = 0.30
+basal_ganglia_threshold_range = 0.20
+basal_ganglia_discount_range = 0.15
+basal_ganglia_temperature_range = 0.25
+
+# --- Prefrontal (LTN Constraint Priorities) ---
+prefrontal_axiom_weight_range = 0.20
+prefrontal_violation_threshold_range = 0.15
+
+# --- Hippocampus (Replay & Consolidation) ---
+hippocampus_alpha_range = 0.25
+hippocampus_beta_range = 0.15
+hippocampus_consolidation_range = 0.20
+
+# --- Cerebellum (Execution Timing) ---
+cerebellum_lambda_range = 0.25
+cerebellum_eta_range = 0.20
+cerebellum_pid_range = 0.15
+
+# --- Cross-Instance Monitoring ---
+[heterogeneity.monitoring]
+# Minimum profile distance before crowding alert
+min_distance_threshold = 0.05
+# Maximum acceptable order flow correlation between instances
+max_flow_correlation = 0.60
+# Window size for flow correlation estimation
+correlation_window = 100
+
+# ============================================================================
+# FEATURE ENGINEERING
+# ============================================================================
+
+[features]
+# Enable Gramian Angular Field image generation
+enable_gaf = false
+# GAF image size
+gaf_image_size = 32
+# GAF method: summation | difference
+gaf_method = "summation"
+
+# Lookback windows for feature calculation
+lookback_windows = [5, 10, 20, 50, 100]
+
+# Normalize features
+normalize = true
+# Normalization method: minmax | zscore | robust
+normalization_method = "zscore"
+
+# ============================================================================
+# SECURITY
+# ============================================================================
+
+[security]
+# CORS allowed origins (comma-separated)
+cors_origins = "*"
+# Enable rate limiting
+enable_rate_limit = true
+# Requests per second per IP
+rate_limit_rps = 100
+# API key header name
+api_key_header = "X-API-Key"
+
+# ============================================================================
+# ADVANCED SETTINGS
+# ============================================================================
+
+[advanced]
+# Tokio worker thread count (0 = auto)
+tokio_worker_threads = 0
+# HTTP request timeout in seconds
+http_timeout_secs = 30
+# Database query timeout in seconds
+db_query_timeout_secs = 30
+# Signal buffer size
+signal_buffer_size = 1000
+# Order buffer size
+order_buffer_size = 500
+# Enable experimental features
+experimental_features = false

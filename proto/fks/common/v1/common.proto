@@ -1,0 +1,400 @@
+// ============================================================================
+// FKS Common Protocol Buffer Definitions
+// ============================================================================
+// Shared types used across all FKS services
+//
+// This file contains common message types, enums, and definitions that are
+// referenced by multiple services to ensure consistency and avoid duplication.
+// ============================================================================
+
+syntax = "proto3";
+
+package fks.common.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/common/v1;commonv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.common.v1";
+
+// ============================================================================
+// TRADING SIGNAL - Core signal type used across services
+// ============================================================================
+
+// TradingSignal represents a trading decision from JANUS strategies
+message TradingSignal {
+  // Unique signal identifier (UUID)
+  string signal_id = 1;
+
+  // Trading symbol (e.g., "BTCUSD", "ETHUSDT")
+  string symbol = 2;
+
+  // Signal action to take
+  SignalAction action = 3;
+
+  // Quantity to trade (in base asset)
+  double quantity = 4;
+
+  // Optional limit price (0.0 = market order)
+  double price_limit = 5;
+
+  // Optional stop loss price
+  double stop_loss = 6;
+
+  // Optional take profit price
+  double take_profit = 7;
+
+  // Signal generation timestamp (Unix milliseconds)
+  int64 timestamp = 8;
+
+  // Strategy that generated the signal
+  string strategy_id = 9;
+
+  // Confidence score (0.0 to 1.0)
+  double confidence = 10;
+
+  // Maximum acceptable slippage (0.0 = no limit)
+  double max_slippage = 11;
+
+  // Signal expiry timestamp (0 = no expiry)
+  int64 expiry_timestamp = 12;
+
+  // Execution mode for this signal
+  ExecutionMode mode = 13;
+
+  // Exchange to execute on (empty = default)
+  string exchange = 14;
+
+  // Additional metadata
+  map<string, string> metadata = 15;
+}
+
+// ============================================================================
+// EXECUTION RESULT - Result of signal execution
+// ============================================================================
+
+// ExecutionResult represents the outcome of executing a trading signal
+message ExecutionResult {
+  // Reference to the original signal
+  string signal_id = 1;
+
+  // Execution status
+  ExecutionStatus status = 2;
+
+  // Human-readable status message
+  string message = 3;
+
+  // Exchange order ID (if accepted)
+  string order_id = 4;
+
+  // Internal tracking order ID
+  string internal_order_id = 5;
+
+  // Actual execution price
+  double executed_price = 6;
+
+  // Actual executed quantity
+  double executed_quantity = 7;
+
+  // Execution timestamp (Unix milliseconds)
+  int64 execution_timestamp = 8;
+
+  // Error code (if rejected/failed)
+  string error_code = 9;
+
+  // Detailed error information
+  string error_details = 10;
+
+  // Fees paid
+  double fee = 11;
+
+  // Fee currency
+  string fee_currency = 12;
+
+  // Slippage from expected price (percentage)
+  double slippage = 13;
+}
+
+// ============================================================================
+// CANDLE - OHLCV data
+// ============================================================================
+
+// Candle represents a single OHLCV bar
+message Candle {
+  // Candle open timestamp (Unix milliseconds)
+  int64 timestamp = 1;
+
+  // Open price
+  double open = 2;
+
+  // High price
+  double high = 3;
+
+  // Low price
+  double low = 4;
+
+  // Close price
+  double close = 5;
+
+  // Volume (in base asset)
+  double volume = 6;
+
+  // Quote volume (in quote asset)
+  double quote_volume = 7;
+
+  // Number of trades
+  int64 trade_count = 8;
+}
+
+// ============================================================================
+// POSITION - Trading position
+// ============================================================================
+
+// Position represents an open trading position
+message Position {
+  // Trading symbol
+  string symbol = 1;
+
+  // Exchange
+  string exchange = 2;
+
+  // Position side
+  PositionSide side = 3;
+
+  // Position quantity
+  double quantity = 4;
+
+  // Average entry price
+  double entry_price = 5;
+
+  // Current market price
+  double current_price = 6;
+
+  // Unrealized profit/loss
+  double unrealized_pnl = 7;
+
+  // Realized profit/loss
+  double realized_pnl = 8;
+
+  // Margin used
+  double margin_used = 9;
+
+  // Liquidation price (for leveraged positions)
+  double liquidation_price = 10;
+
+  // Position open timestamp
+  int64 opened_at = 11;
+
+  // Last update timestamp
+  int64 updated_at = 12;
+
+  // Leverage (1.0 = no leverage)
+  double leverage = 13;
+}
+
+// ============================================================================
+// HEALTH CHECK - Standard health response
+// ============================================================================
+
+// HealthCheckRequest is an empty request for health checks
+message HealthCheckRequest {}
+
+// HealthCheckResponse represents service health status
+message HealthCheckResponse {
+  // Overall health status
+  bool healthy = 1;
+
+  // Status string ("healthy", "degraded", "unhealthy")
+  string status = 2;
+
+  // Individual component health
+  map<string, string> components = 3;
+
+  // Service uptime in seconds
+  int64 uptime_seconds = 4;
+
+  // Service version
+  string version = 5;
+
+  // Response timestamp (Unix milliseconds)
+  int64 timestamp = 6;
+}
+
+// ============================================================================
+// ERROR RESPONSE - Standard error format
+// ============================================================================
+
+// ErrorResponse provides a standard error format across all services
+message ErrorResponse {
+  // Error code (service-specific)
+  string code = 1;
+
+  // Human-readable error message
+  string message = 2;
+
+  // Additional error details
+  map<string, string> details = 3;
+
+  // Error timestamp
+  int64 timestamp = 4;
+
+  // Request ID for tracing
+  string request_id = 5;
+}
+
+// ============================================================================
+// PAGINATION - Standard pagination
+// ============================================================================
+
+// PageRequest for paginated queries
+message PageRequest {
+  // Page number (1-indexed)
+  int32 page = 1;
+
+  // Items per page
+  int32 page_size = 2;
+
+  // Optional cursor for cursor-based pagination
+  string cursor = 3;
+}
+
+// PageResponse metadata for paginated responses
+message PageResponse {
+  // Current page number
+  int32 page = 1;
+
+  // Items per page
+  int32 page_size = 2;
+
+  // Total number of items
+  int64 total_items = 3;
+
+  // Total number of pages
+  int32 total_pages = 4;
+
+  // Next page cursor (empty if no more pages)
+  string next_cursor = 5;
+
+  // Has more pages
+  bool has_more = 6;
+}
+
+// ============================================================================
+// TIME RANGE - Standard time range filter
+// ============================================================================
+
+// TimeRange for filtering by time
+message TimeRange {
+  // Start timestamp (Unix milliseconds)
+  int64 start = 1;
+
+  // End timestamp (Unix milliseconds)
+  int64 end = 2;
+}
+
+// ============================================================================
+// ENUMS - Shared enumerations
+// ============================================================================
+
+// SignalAction represents the type of trading action
+enum SignalAction {
+  SIGNAL_ACTION_UNSPECIFIED = 0;
+  SIGNAL_ACTION_BUY = 1; // Open or add to long position
+  SIGNAL_ACTION_SELL = 2; // Open or add to short position
+  SIGNAL_ACTION_CLOSE = 3; // Close entire position
+  SIGNAL_ACTION_CLOSE_LONG = 4; // Close long position only
+  SIGNAL_ACTION_CLOSE_SHORT = 5; // Close short position only
+}
+
+// ExecutionMode determines how a signal is executed
+enum ExecutionMode {
+  EXECUTION_MODE_UNSPECIFIED = 0;
+  EXECUTION_MODE_SIMULATED = 1; // Internal simulation (backtesting)
+  EXECUTION_MODE_PAPER = 2; // Paper trading (real API, demo account)
+  EXECUTION_MODE_LIVE = 3; // Live trading (real money)
+}
+
+// ExecutionStatus represents the status of an execution
+enum ExecutionStatus {
+  EXECUTION_STATUS_UNSPECIFIED = 0;
+  EXECUTION_STATUS_PENDING = 1; // Waiting to be processed
+  EXECUTION_STATUS_ACCEPTED = 2; // Accepted by exchange
+  EXECUTION_STATUS_REJECTED = 3; // Rejected by exchange or risk
+  EXECUTION_STATUS_PARTIALLY_FILLED = 4; // Partially executed
+  EXECUTION_STATUS_FILLED = 5; // Fully executed
+  EXECUTION_STATUS_CANCELLED = 6; // Cancelled
+  EXECUTION_STATUS_FAILED = 7; // Execution failed
+  EXECUTION_STATUS_EXPIRED = 8; // Signal expired before execution
+}
+
+// PositionSide represents the direction of a position
+enum PositionSide {
+  POSITION_SIDE_UNSPECIFIED = 0;
+  POSITION_SIDE_FLAT = 1; // No position
+  POSITION_SIDE_LONG = 2; // Long position
+  POSITION_SIDE_SHORT = 3; // Short position
+}
+
+// OrderType represents the type of order
+enum OrderType {
+  ORDER_TYPE_UNSPECIFIED = 0;
+  ORDER_TYPE_MARKET = 1; // Market order
+  ORDER_TYPE_LIMIT = 2; // Limit order
+  ORDER_TYPE_STOP_MARKET = 3; // Stop market order
+  ORDER_TYPE_STOP_LIMIT = 4; // Stop limit order
+  ORDER_TYPE_TRAILING_STOP = 5; // Trailing stop order
+}
+
+// TimeInForce determines how long an order remains active
+enum TimeInForce {
+  TIME_IN_FORCE_UNSPECIFIED = 0;
+  TIME_IN_FORCE_GTC = 1; // Good Till Cancel
+  TIME_IN_FORCE_IOC = 2; // Immediate or Cancel
+  TIME_IN_FORCE_FOK = 3; // Fill or Kill
+  TIME_IN_FORCE_GTD = 4; // Good Till Date
+}
+
+// Side represents buy or sell
+enum Side {
+  SIDE_UNSPECIFIED = 0;
+  SIDE_BUY = 1;
+  SIDE_SELL = 2;
+}
+
+// Timeframe for candlestick data
+enum Timeframe {
+  TIMEFRAME_UNSPECIFIED = 0;
+  TIMEFRAME_1M = 1; // 1 minute
+  TIMEFRAME_5M = 2; // 5 minutes
+  TIMEFRAME_15M = 3; // 15 minutes
+  TIMEFRAME_30M = 4; // 30 minutes
+  TIMEFRAME_1H = 5; // 1 hour
+  TIMEFRAME_4H = 6; // 4 hours
+  TIMEFRAME_1D = 7; // 1 day
+  TIMEFRAME_1W = 8; // 1 week
+}
+
+// Severity levels for logging and alerts
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_DEBUG = 1;
+  SEVERITY_INFO = 2;
+  SEVERITY_WARNING = 3;
+  SEVERITY_ERROR = 4;
+  SEVERITY_CRITICAL = 5;
+}
+
+// ServiceStatus for service health
+enum ServiceStatus {
+  SERVICE_STATUS_UNSPECIFIED = 0;
+  SERVICE_STATUS_STARTING = 1; // Service is starting up
+  SERVICE_STATUS_HEALTHY = 2; // Service is fully operational
+  SERVICE_STATUS_DEGRADED = 3; // Service is operational but degraded
+  SERVICE_STATUS_UNHEALTHY = 4; // Service is not operational
+  SERVICE_STATUS_STOPPING = 5; // Service is shutting down
+}
+
+// ============================================================================
+// EMPTY MESSAGE - For RPCs that don't need parameters
+// ============================================================================
+
+// Empty message for RPCs without parameters or responses
+message Empty {}

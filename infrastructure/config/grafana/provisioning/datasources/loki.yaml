@@ -1,0 +1,27 @@
+# ============================================================================
+# Grafana Datasource: Loki (Centralized Logging)
+# ============================================================================
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: true
+    jsonData:
+      maxLines: 1000
+      timeout: 60
+      derivedFields:
+        # Link to Jaeger traces from trace IDs in logs
+        - datasourceUid: jaeger
+          matcherRegex: 'trace_id=(\w+)'
+          name: TraceID
+          url: '1227826{__value.raw}'
+        # Link request IDs
+        - datasourceUid: loki
+          matcherRegex: 'request_id=([a-zA-Z0-9-]+)'
+          name: RequestID
+          url: '1227826{__value.raw}'
+    version: 1

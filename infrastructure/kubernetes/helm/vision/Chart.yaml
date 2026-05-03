@@ -1,0 +1,78 @@
+# JANUS Vision Helm Chart
+# Kubernetes deployment configuration for Vision execution and monitoring services
+
+apiVersion: v2
+name: vision
+description: JANUS Vision - Portfolio Optimization and Execution Analytics Platform
+type: application
+
+# Chart version (this is the version of the Helm chart itself)
+version: 1.0.0
+
+# Application version (this is the version of the Vision application)
+appVersion: "1.0.0"
+
+# Keywords for chart discovery
+keywords:
+  - trading
+  - execution
+  - portfolio
+  - analytics
+  - prometheus
+  - monitoring
+  - tca
+
+# Maintainers
+maintainers:
+  - name: JANUS Vision Team
+    email: vision@janus.ai
+    url: https://vision.janus.ai
+
+# Icon for the chart (optional)
+icon: https://vision.janus.ai/assets/icon.png
+
+# Sources (repository URLs)
+sources:
+  - https://github.com/janus/vision
+
+# Home page
+home: https://vision.janus.ai
+
+# Dependencies (sub-charts)
+dependencies:
+  # Prometheus for metrics collection
+  - name: prometheus
+    version: "25.8.0"
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+    tags:
+      - monitoring
+
+  # Grafana for visualization
+  - name: grafana
+    version: "7.0.8"
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+    tags:
+      - monitoring
+
+  # PostgreSQL for execution history (optional)
+  - name: postgresql
+    version: "13.2.24"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+    tags:
+      - database
+
+  # Redis for caching (optional)
+  - name: redis
+    version: "18.4.0"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+    tags:
+      - cache
+
+# Annotations
+annotations:
+  category: Analytics
+  licenses: Apache-2.0

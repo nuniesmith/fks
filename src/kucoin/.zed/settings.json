@@ -1,0 +1,46 @@
+{
+  // ─────────────────────────────────────────────────────────────────────
+  // Rust — Zed Project Settings
+  // ─────────────────────────────────────────────────────────────────────
+  // Rust: rust-analyzer (LSP) + rustfmt (formatting) + Clippy (linting)
+  // ─────────────────────────────────────────────────────────────────────
+  "languages": {
+    "Rust": {
+      // Exclusively use rust-analyzer
+      "language_servers": ["rust-analyzer"],
+      "formatter": {
+        "language_server": {
+          "name": "rust-analyzer",
+        },
+      },
+      // Automatically run rustfmt on save
+      "format_on_save": "on",
+      // Rust standard is 4 spaces
+      "tab_size": 4,
+      // Rust standard line length is 100 (unlike Python's common 120)
+      "preferred_line_length": 100,
+    },
+  },
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        // Run `cargo clippy` instead of standard `cargo check` on save
+        // for much stricter linting, catching idioms, and performance issues.
+        "check": {
+          "command": "clippy",
+        },
+        // Optional but recommended: index and check all Cargo features
+        "cargo": {
+          "allFeatures": true,
+        },
+      },
+    },
+  },
+  "file_scan_exclusions": [
+    "**/.git",
+    // ── Rust Specific Exclusions ───────────────────────────────────────
+    // Prevents Zed from attempting to index massive compiled binaries,
+    // build scripts, and dependencies inside the Cargo build directory.
+    "**/target",
+  ],
+}

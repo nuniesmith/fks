@@ -1,0 +1,1613 @@
+# =============================================================================
+# FKS — Development Environment
+# Janus (Rust) + Ruby (Python) + RustCode (AI agent) + OpenClaw (Discord)
+#
+# Architecture:
+#   ruby      — consolidated Python container running data + engine + factory
+#               via supervisord (base/python/Dockerfile target: supervisor)
+#   webui     — SvelteKit frontend, replaces HTMX dashboard (src/webui/Dockerfile)
+#   janus     — Rust trading brain (base/rust/Dockerfile target: workspace)
+#   trainer   — GPU CNN retraining (base/python-gpu/Dockerfile target: trainer)
+#   rustcode    — RustCode API server (AI agent, semantic search, LLM proxy)
+#   openclaw    — Discord bot + GitHub readonly (routes LLM calls through rustcode)
+#
+# Postgres: three logical databases on two instances
+#   - janus_db       — Janus schema (signals, regime, backtest tables)
+#   - ruby_db        — Ruby schema (bars, journal, orb events, tasks…)
+#   - rustcode       — RustCode schema (repos, documents, tasks)
+#   - Single FKS redis (custom image with kernel tuning), three DBs:
+#       db 0 — janus_db + ruby (shared trading state)
+#       db 1 — rustcode_db (AI agent cache)
+#   - Single RUSTCODE redis  (Alpine, for caching)
+#   - Single prometheus + grafana
+#   - Trainer          GPU service
+#
+# Usage:
+#   docker compose up -d                          # all core services
+#   docker compose --profile training up -d       # + GPU trainer
+#   docker compose --profile ollama up -d         # + Ollama local LLM
+#   docker compose logs -f [service]
+#
+# Port map (host):
+# ⚠️  All ports bound to 127.0.0.1 — only reachable via localhost / tailscale serve
+#
+#   ── Trading Platform ──────────────────────────────────────────────────────
+#   80         nginx reverse proxy
+#   5432       postgres (janus_db + ruby_db)
+#   6379       redis (FKS, shared — db 0 janus/ruby, db 1 rustcode)
+#   7000       janus HTTP API
+#   8000       Ruby API (FastAPI REST + SSE)
+#   8200       trainer
+#   8812       questdb postgres wire
+#   9000       questdb HTTP console
+#   9009       questdb ILP ingestion
+#   9051       janus gRPC
+#   9090       prometheus
+#   9092       janus optimizer metrics
+#   9093       alertmanager
+#   3001       webui (SvelteKit frontend)
+#   3000       grafana (served at /grafana/ subpath via nginx)
+#   3100       loki
+#   6333       qdrant REST
+#   6334       qdrant gRPC
+#   9187       postgres-exporter
+#   9121       redis-exporter
+#   9191       questdb-exporter
+#   16686      jaeger UI
+#
+#   ── AI Assistant (RustCode + OpenClaw) ───────────────────────────────────
+#   3500       rustcode (RustCode API + OpenAI-compatible proxy)
+#   11434      ollama (local LLM, optional — profile: ollama)
+#   18789      openclaw (WebSocket + Control UI)
+#   18790      openclaw (secondary)
+#
+#   ── Evaluation Tools ─────────────────────────────────────────────────────
+#   4000       promptfoo (LLM eval UI, optional — profile: tools)
+# =============================================================================
+services:
+    # ===========================================================================
+    # INFRASTRUCTURE — shared data stores
+    # ===========================================================================
+
+    postgres:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/postgres/Dockerfile
+        image: nuniesmith/fks:postgres
+        container_name: fks_postgres
+        user: "postgres"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - CHOWN
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
+        environment:
+            - JANUS_DB=${JANUS_DB:-janus_db}
+            - POSTGRES_USER=${POSTGRES_USER:-fks_user}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+            - RUBY_DB=${RUBY_DB:-ruby_db}
+            - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+        ports:
+            - "127.0.0.1:5432:5432"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        tmpfs:
+            - /tmp
+            - /run/postgresql
+        networks:
+            - fks-network
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "pg_isready -U ${POSTGRES_USER:-fks_user} -d ${JANUS_DB:-janus_db}",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 2g
+                reservations:
+                    cpus: "0.5"
+                    memory: 512m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=postgres,environment=dev"
+
+    redis:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/redis/Dockerfile
+            target: production
+        image: nuniesmith/fks:redis
+        container_name: fks_redis
+        user: "999:1000"
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        environment:
+            - REDIS_REPLICATION_MODE=master
+            - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD required}
+        ports:
+            - "127.0.0.1:6379:6379"
+        volumes:
+            - redis_data:/data
+        tmpfs:
+            - /tmp
+            - /var/run
+        networks:
+            - fks-network
+        command:
+            - redis-server
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+            - --save
+            - "900 1"
+            - --save
+            - "300 10"
+            - --save
+            - "60 10000"
+            - --maxmemory
+            - "512mb"
+            - --maxmemory-policy
+            - allkeys-lru
+            - --requirepass
+            - "${REDIS_PASSWORD:?REDIS_PASSWORD required}"
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+            interval: 10s
+            timeout: 3s
+            retries: 3
+            start_period: 5s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512m
+                reservations:
+                    cpus: "0.25"
+                    memory: 128m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=redis,environment=dev"
+
+    questdb:
+        # ⚠️  HTTP console (9000) and ILP (9009) are unauthenticated by default.
+        #    Restrict via nginx in production — do not expose to public internet.
+        # Config is baked into the image via infrastructure/docker/services/questdb/Dockerfile.
+        # Rebuild with: docker compose build questdb
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/questdb/Dockerfile
+        image: nuniesmith/fks:questdb
+        container_name: fks_questdb
+        security_opt:
+            - no-new-privileges:true
+        environment:
+            - QDB_TELEMETRY_ENABLED=false
+            - QDB_LOG_W_STDOUT_LEVEL=INFO
+            - QDB_PG_ENABLED=true
+            - QDB_HTTP_ENABLED=true
+            - QDB_HTTP_SECURITY_ENABLED=${QDB_HTTP_SECURITY_ENABLED:-false}
+            - QDB_LINE_TCP_ENABLED=true
+            - QDB_SHARED_WORKER_COUNT=2
+            - QDB_CAIRO_COMMIT_LAG=10000
+            - QDB_METRICS_ENABLED=true
+            - QDB_PG_USER=${QUESTDB_PG_USER:-admin}
+            - QDB_PG_PASSWORD=${QUESTDB_PG_PASSWORD:?QUESTDB_PG_PASSWORD is required (no default — set in .env)}
+        ports:
+            - "127.0.0.1:9000:9000" # HTTP console
+            - "127.0.0.1:9009:9009" # ILP ingestion
+            - "127.0.0.1:8812:8812" # PostgreSQL wire
+            - "127.0.0.1:9003:9003" # Prometheus metrics
+        volumes:
+            - questdb_data:/var/lib/questdb
+        tmpfs:
+            - /tmp
+            - /var/tmp
+        networks:
+            - fks-network
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -sf --max-time 5 http://localhost:9003 || exit 1",
+                ]
+            interval: 10s
+            timeout: 8s
+            retries: 5
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 2g
+                reservations:
+                    cpus: "0.5"
+                    memory: 512m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "20m"
+                max-file: "3"
+                labels: "service=questdb,environment=dev"
+
+    qdrant:
+        # Planned use: embedding storage for semantic regime analysis and journal search.
+        # Config is baked into the image via infrastructure/docker/services/qdrant/Dockerfile.
+        # Rebuild with: docker compose build qdrant
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/qdrant/Dockerfile
+        image: nuniesmith/fks:qdrant
+        container_name: fks_qdrant
+        #profiles: ["qdrant"]
+        security_opt:
+            - no-new-privileges:true
+        ports:
+            - "127.0.0.1:6333:6333" # REST
+            - "127.0.0.1:6334:6334" # gRPC
+        volumes:
+            - fks_qdrant_data:/qdrant/storage
+        tmpfs:
+            - /tmp
+        networks:
+            - fks-network
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "bash -c 'echo > /dev/tcp/localhost/6333' || exit 1",
+                ]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 1g
+                reservations:
+                    cpus: "0.25"
+                    memory: 256m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=qdrant,environment=dev"
+
+    # ===========================================================================
+    # JANUS — Rust trading brain
+    # ===========================================================================
+
+    janus:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/base/rust/Dockerfile
+            target: workspace
+            args:
+                SERVICE_NAME: janus
+                RUST_VERSION: "1.92.0"
+                REPO_URL: ${JANUS_REPO:-}
+                REPO_REF: ${JANUS_REF:-main}
+        image: nuniesmith/fks:janus
+        container_name: fks_janus
+        user: "1000:1000"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+        environment:
+            - EXECUTION_MODE=${EXECUTION_MODE:-paper_trading}
+            - QUESTDB_ILP_PORT=9009
+            - DATA_SOURCE=${DATA_SOURCE:-live}
+            - DATA_EXCHANGE=${DATA_EXCHANGE:-binance}
+            - DATA_WS_URL=${DATA_WS_URL:-wss://stream.binance.com:9443/ws}
+            - DATA_KLINE_INTERVALS=${DATA_KLINE_INTERVALS:-1m,5m}
+            - DATA_RECONNECT_DELAY_SECS=${DATA_RECONNECT_DELAY_SECS:-5}
+            - DATA_MAX_RECONNECT_ATTEMPTS=${DATA_MAX_RECONNECT_ATTEMPTS:-50}
+            - DATA_HEALTH_POLL_SECS=${DATA_HEALTH_POLL_SECS:-10}
+            - ENABLE_BRAIN_RUNTIME=${ENABLE_BRAIN_RUNTIME:-true}
+            - BRAIN_WIRE_KILL_SWITCH=${BRAIN_WIRE_KILL_SWITCH:-false}
+            - BRAIN_AUTO_START_WATCHDOG=${BRAIN_AUTO_START_WATCHDOG:-true}
+            - BRAIN_HEARTBEAT_MS=${BRAIN_HEARTBEAT_MS:-5000}
+            - BRAIN_WATCHDOG_CHECK_INTERVAL_MS=${BRAIN_WATCHDOG_CHECK_INTERVAL_MS:-5000}
+            - BRAIN_WATCHDOG_DEAD_THRESHOLD=${BRAIN_WATCHDOG_DEAD_THRESHOLD:-10}
+            - RUST_LOG=info,janus=debug,sqlx=debug,janus_backward=debug
+            - RUST_BACKTRACE=1
+            - JANUS_CONFIG_PATH=/app/config/janus.toml
+            - JANUS_ENABLE_BACKWARD=${JANUS_ENABLE_BACKWARD:-true}
+            - ENABLE_EXECUTION=${ENABLE_EXECUTION:-false}
+            - EXECUTION_ENDPOINT=${EXECUTION_ENDPOINT:-http://janus-execution:50052}
+            - EXECUTION_CONNECT_TIMEOUT=${EXECUTION_CONNECT_TIMEOUT:-10}
+            - EXECUTION_REQUEST_TIMEOUT=${EXECUTION_REQUEST_TIMEOUT:-30}
+            - EXECUTION_MAX_RETRIES=${EXECUTION_MAX_RETRIES:-3}
+            - EXECUTION_RETRY_BACKOFF_MS=${EXECUTION_RETRY_BACKOFF_MS:-100}
+            - EXECUTION_DEFAULT_QUANTITY=${EXECUTION_DEFAULT_QUANTITY:-0.001}
+            - EXECUTION_EXCHANGE=${EXECUTION_EXCHANGE:-kraken}
+            - ALERTMANAGER_URL=${ALERTMANAGER_URL:-http://fks_alertmanager:9093}
+            - EXEC_ACCOUNT_TYPE=${EXEC_ACCOUNT_TYPE:-paper}
+            - POSTGRES_HOST=postgres
+            - POSTGRES_PORT=5432
+            - POSTGRES_USER=${POSTGRES_USER:-fks_user}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+            - JANUS_DB=${JANUS_DB:-janus_db}
+            - DATABASE_URL=postgresql://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${JANUS_DB:-janus_db}?sslmode=disable
+            - REDIS_HOST=redis
+            - REDIS_PORT=6379
+            - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD required}
+            - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            - OPTIMIZER_ENABLED=${OPTIMIZER_ENABLED:-true}
+            - DATA_DIR=/app/data
+            - OPTIMIZER_DATA_DIR=/app/data
+            - OPTIMIZER_METRICS_PORT=9092
+            - OPTIMIZE_INTERVAL=${OPTIMIZE_INTERVAL:-6h}
+            - OPTIMIZE_ASSETS=${OPTIMIZE_ASSETS:-BTC,ETH,SOL}
+            - OPTIMIZE_TRIALS=${OPTIMIZE_TRIALS:-100}
+            - OPTIMIZE_HISTORICAL_DAYS=${OPTIMIZE_HISTORICAL_DAYS:-30}
+            - OPTIMIZER_INSTANCE_ID=${OPTIMIZER_INSTANCE_ID:-janus-prod}
+            - PYTHON_DATA_SERVICE_URL=http://fks_ruby:8000
+            - DATA_SERVICE_API_KEY=${API_KEY:-}
+            - DATA_CLIENT_TIMEOUT_SECS=${DATA_CLIENT_TIMEOUT_SECS:-30}
+            - DATA_CLIENT_MAX_RETRIES=${DATA_CLIENT_MAX_RETRIES:-3}
+            - DATA_CLIENT_RETRY_DELAY_MS=${DATA_CLIENT_RETRY_DELAY_MS:-500}
+        ports:
+            - "127.0.0.1:9051:50051" # gRPC inference
+            - "127.0.0.1:7000:8080" # HTTP API (main janus_api)
+            - "127.0.0.1:7001:8180" # Forward REST API (brain health, affinity endpoints)
+            - "127.0.0.1:7002:50052" # PositionFeedback gRPC
+            - "127.0.0.1:9092:9092" # Optimizer metrics
+        tmpfs:
+            - /tmp
+            - /var/tmp
+        volumes:
+            - optimizer_data:/app/data
+            - ./infrastructure/config/janus:/app/config:ro
+        networks:
+            - fks-network
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            questdb:
+                condition: service_healthy
+            ruby:
+                condition: service_healthy
+        restart: unless-stopped
+        healthcheck:
+            test:
+                ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: "4.0"
+                    memory: 4g
+                reservations:
+                    cpus: "1.0"
+                    memory: 1g
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "20m"
+                max-file: "5"
+                labels: "service=janus,environment=dev"
+
+    # ===========================================================================
+    # RUBY — Python trading services (consolidated into fks_ruby)
+    # ===========================================================================
+
+    ruby:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/base/python/Dockerfile
+            # Default target rebuilds the venv on every build (safe for local dev).
+            # For CI/CD fast builds once `venv` image is in the registry, switch to:
+            #   target: supervisor-from-venv
+            target: supervisor
+            args:
+                APP_SRC: src/ruby
+                REPO_URL: ${RUBY_REPO:-}
+                REPO_REF: ${RUBY_REF:-main}
+        image: nuniesmith/fks:ruby
+        container_name: fks_ruby
+        restart: unless-stopped
+        shm_size: 2gb
+        ports:
+            - "127.0.0.1:8000:8000" # Ruby API (FastAPI REST + SSE)
+        environment:
+            - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${RUBY_DB:-ruby_db}
+            - DATA_SERVICE_HOST=0.0.0.0
+            - DATA_SERVICE_PORT=8000
+            - ENGINE_MODE=remote
+            - DATA_SERVICE_URL=http://localhost:8000
+            - ENGINE_DATA_URL=http://localhost:8000
+            - JANUS_GRPC_HOST=fks_janus
+            - JANUS_GRPC_PORT=50051
+            - JANUS_HTTP_URL=http://fks_janus:8080
+            - JANUS_FORWARD_URL=${JANUS_FORWARD_URL:-http://fks_janus:8180}
+            - ALERTMANAGER_URL=http://fks_alertmanager:9093
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-1}
+            - TRAINER_SERVICE_URL=http://fks_trainer:8200
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+            - ORB_FILTER_GATE=${ORB_FILTER_GATE:-majority}
+            - ORB_CNN_GATE=${ORB_CNN_GATE:-0}
+            - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
+            - MASSIVE_S3_KEY_ID=${MASSIVE_S3_KEY_ID:-}
+            - MASSIVE_S3_SECRET=${MASSIVE_S3_SECRET:-}
+            - MASSIVE_S3_ENDPOINT=${MASSIVE_S3_ENDPOINT:-https://files.massive.com}
+            - MASSIVE_S3_BUCKET=${MASSIVE_S3_BUCKET:-flatfiles}
+            - BACKFILL_DAYS_BACK=${BACKFILL_DAYS_BACK:-365}
+            - BACKFILL_CHUNK_DAYS=${BACKFILL_CHUNK_DAYS:-30}
+            - FACTORY_ENABLED_CLASSES=${FACTORY_ENABLED_CLASSES:-futures_cme,crypto}
+            - GAP_SCAN_INTERVAL_SECS=${GAP_SCAN_INTERVAL_SECS:-300}
+            - DATA_KLINE_INTERVALS=${DATA_KLINE_INTERVALS:-1m,5m,15m,1h,1d}
+            - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+            - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
+            - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
+            - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-fks-news-pipeline/1.0}
+            - WHALE_ALERT_API_KEY=${WHALE_ALERT_API_KEY:-}
+            - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-}
+            - SOLSCAN_API_KEY=${SOLSCAN_API_KEY:-}
+            - CRYPTOCOMPARE_API_KEY=${CRYPTOCOMPARE_API_KEY:-}
+            - MEMPOOL_SPACE_URL=${MEMPOOL_SPACE_URL:-https://mempool.space/api}
+            - CHAIN_MIN_USD=${CHAIN_MIN_USD:-1000000}
+            - CHAIN_POLL_WHALE=${CHAIN_POLL_WHALE:-30}
+            - CHAIN_POLL_MEMPOOL=${CHAIN_POLL_MEMPOOL:-60}
+            - CHAIN_POLL_FLOW=${CHAIN_POLL_FLOW:-3600}
+            - CMC_API_KEY=${CMC_API_KEY:-}
+            - CMC_POLL_QUOTES=${CMC_POLL_QUOTES:-900}
+            - CMC_POLL_GLOBAL=${CMC_POLL_GLOBAL:-1800}
+            - CMC_POLL_FEAR_GREED=${CMC_POLL_FEAR_GREED:-1800}
+            - CMC_POLL_LISTINGS=${CMC_POLL_LISTINGS:-21600}
+            - QUESTDB_HOST=fks_questdb
+            - QUESTDB_PG_PORT=8812
+            - QUESTDB_PG_USER=${QUESTDB_PG_USER:-admin}
+            - QUESTDB_PG_PASSWORD=${QUESTDB_PG_PASSWORD:-}
+            - LOG_LEVEL=${LOG_LEVEL:-info}
+            - PYTHONPATH=/app/src
+            - PYTHONUNBUFFERED=1
+            - API_KEY=${API_KEY:-}
+            - MODELS_DIR=/app/models
+            - PAPER_TRADING_ENABLED=${PAPER_TRADING_ENABLED:-0}
+            - SIM_ENABLED=${SIM_ENABLED:-0}
+            - SIM_DATA_SOURCE=${SIM_DATA_SOURCE:-kraken}
+            - SIM_INITIAL_BALANCE=${SIM_INITIAL_BALANCE:-100000}
+            - WEB_PASSWORD_HASH=${WEB_PASSWORD_HASH:-}
+            - WEB_SESSION_SECRET=${WEB_SESSION_SECRET:-}
+            - WEB_SESSION_TTL_DAYS=${WEB_SESSION_TTL_DAYS:-30}
+            - API_KEY_ENCRYPTION_SECRET=${API_KEY_ENCRYPTION_SECRET:-}
+            - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
+            - XAI_API_KEY=${XAI_API_KEY:-}
+            - TV_SESSION_ID=${TV_SESSION_ID:-}
+            - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+            - COPIER_URL=${COPIER_URL:-}
+            - DISCORD_WEBHOOK_GENERAL=${DISCORD_WEBHOOK_GENERAL:-}
+            - DISCORD_WEBHOOK_SIGNALS=${DISCORD_WEBHOOK_SIGNALS:-}
+            - DISCORD_WEBHOOK_ANALYSIS=${DISCORD_WEBHOOK_ANALYSIS:-}
+            - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+            - AUDIT_RUNTIME_ENABLED=${AUDIT_RUNTIME_ENABLED:-false}
+            - AUDIT_LLM_ENABLED=${AUDIT_LLM_ENABLED:-false}
+            - AUDIT_LLM_PROVIDER=${AUDIT_LLM_PROVIDER:-xai}
+            - AUDIT_LLM_API_KEY=${AUDIT_LLM_API_KEY:-}
+            - AUDIT_LLM_MODEL=${AUDIT_LLM_MODEL:-grok-4-1}
+        volumes:
+            - ruby_app_data:/app/data
+            - ./models:/app/models
+            - ./scripts:/app/scripts
+            - ./docs:/app/docs:ro
+            - ./infrastructure/docker/services/ruby/supervisord.conf:/etc/supervisor/conf.d/app.conf:ro
+            - ./src/web:/app/static:ro
+        networks:
+            - fks-network
+        depends_on:
+            redis:
+                condition: service_healthy
+            postgres:
+                condition: service_healthy
+        healthcheck:
+            test:
+                ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+            interval: 15s
+            timeout: 10s
+            start_period: 90s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    cpus: "4.0"
+                    memory: 4g
+                reservations:
+                    cpus: "1.0"
+                    memory: 1g
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "20m"
+                max-file: "5"
+                labels: "service=fks-ruby,environment=dev"
+
+    webui:
+        image: nuniesmith/fks:webui
+        build:
+            context: .
+            dockerfile: infrastructure/docker/base/nodejs/Dockerfile
+            args:
+                APP_SRC: src/web
+        container_name: fks_webui
+        restart: unless-stopped
+        ports:
+            - "127.0.0.1:3001:3000"
+        environment:
+            - NODE_ENV=production
+            - PUBLIC_API_URL=http://fks_ruby:8000
+            - PUBLIC_JANUS_URL=http://fks_janus:7000
+            - ORIGIN=http://localhost:3001
+        networks:
+            - fks-network
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "node",
+                    "-e",
+                    "const h=require('http');h.get('http://localhost:3000/',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+                    cpus: "0.5"
+
+    base:
+        image: nuniesmith/fks:python-base
+        build:
+            context: .
+            dockerfile: infrastructure/docker/base/python/Dockerfile
+            target: builder
+            args:
+                APP_SRC: src/ruby
+        profiles: ["base"]
+
+    # Build-utility image: installs all Python deps once so downstream CPU services
+    # can inherit from it (FROM venv). Rebuild when pyproject.toml changes.
+    # Usage: docker compose --profile base build venv
+    venv:
+        image: nuniesmith/fks:python-venv
+        build:
+            context: .
+            dockerfile: infrastructure/docker/base/python-venv/Dockerfile
+        profiles: ["base"]
+
+    # Build-utility image: generic GPU-enabled Rust base (CUDA runtime).
+    # Used as a builder template for any Rust service that requires GPU at runtime.
+    # Usage: docker compose --profile base build rust-gpu-base
+    rust-gpu-base:
+        image: nuniesmith/fks:rust-gpu-base
+        build:
+            context: .
+            dockerfile: infrastructure/docker/base/rust-gpu/Dockerfile
+            args:
+                SERVICE_NAME: app
+                SERVICE_PORT: "8080"
+        profiles: ["base"]
+
+    trainer:
+        image: nuniesmith/fks:trainer
+        #profiles: [training]
+        build:
+            context: .
+            dockerfile: infrastructure/docker/base/python-gpu/Dockerfile
+            target: trainer
+        container_name: fks_trainer
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
+        restart: unless-stopped
+        shm_size: 4gb
+        ports:
+            - "127.0.0.1:8200:8200"
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: 1
+                          capabilities: [gpu]
+                limits:
+                    cpus: "8.0"
+                    memory: 16g
+        environment:
+            - TRAINER_HOST=0.0.0.0
+            - TRAINER_PORT=8200
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+            - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            - CNN_RETRAIN_MIN_ACC=${CNN_RETRAIN_MIN_ACC:-65.0}
+            - CNN_RETRAIN_MIN_PRECISION=${CNN_RETRAIN_MIN_PRECISION:-55.0}
+            - CNN_RETRAIN_MIN_RECALL=${CNN_RETRAIN_MIN_RECALL:-50.0}
+            - CNN_RETRAIN_IMPROVEMENT=${CNN_RETRAIN_IMPROVEMENT:-0.0}
+            - CNN_RETRAIN_EPOCHS=${CNN_RETRAIN_EPOCHS:-60}
+            - CNN_RETRAIN_BATCH_SIZE=${CNN_RETRAIN_BATCH_SIZE:-64}
+            - CNN_RETRAIN_LR=${CNN_RETRAIN_LR:-0.0001}
+            - CNN_RETRAIN_PATIENCE=${CNN_RETRAIN_PATIENCE:-12}
+            - ENGINE_DATA_URL=http://fks_ruby:8000
+            - DATA_SERVICE_URL=http://fks_ruby:8000
+            - ENGINE_BARS_TIMEOUT=${ENGINE_BARS_TIMEOUT:-60}
+            - ENGINE_FILL_POLL_MAX_WAIT=${ENGINE_FILL_POLL_MAX_WAIT:-300}
+            - ENGINE_FILL_POLL_INTERVAL=${ENGINE_FILL_POLL_INTERVAL:-10}
+            - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
+            - MASSIVE_S3_KEY_ID=${MASSIVE_S3_KEY_ID:-}
+            - MASSIVE_S3_SECRET=${MASSIVE_S3_SECRET:-}
+            - MASSIVE_S3_ENDPOINT=${MASSIVE_S3_ENDPOINT:-https://files.massive.com}
+            - MASSIVE_S3_BUCKET=${MASSIVE_S3_BUCKET:-flatfiles}
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            - API_KEY=${API_KEY:-}
+            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM}
+            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-365}
+            - CNN_RETRAIN_BARS_SOURCE=${CNN_RETRAIN_BARS_SOURCE:-engine}
+            - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
+            - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}
+            - NVIDIA_VISIBLE_DEVICES=all
+            - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+            - PYTHONPATH=/app/src/ruby:/app/src
+            - PYTHONUNBUFFERED=1
+            - MODELS_DIR=/app/models
+        volumes:
+            - trainer_dataset:/app/dataset
+            - ./models:/app/models
+            - ./data:/app/data
+            - ./scripts:/app/scripts
+        networks:
+            - fks-network
+        depends_on:
+            ruby:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        command: ["python", "-m", "lib.services.training.trainer_server"]
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')",
+                ]
+            interval: 30s
+            timeout: 10s
+            start_period: 60s
+            retries: 3
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "20m"
+                max-file: "5"
+                labels: "service=trainer,environment=dev"
+
+    # ===========================================================================
+    # PROXY
+    # ===========================================================================
+
+    nginx:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/nginx/Dockerfile
+            target: production
+        image: nuniesmith/fks:nginx
+        container_name: fks_nginx
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+            - CHOWN
+            - SETGID
+            - SETUID
+            - DAC_OVERRIDE
+        ports:
+            - "127.0.0.1:80:80"
+        environment:
+            - API_KEY=${API_KEY:-}
+            - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
+        volumes:
+            - /dev/null:/etc/nginx/conf.d/default.conf:ro
+        networks:
+            - fks-network
+        depends_on:
+            janus:
+                condition: service_started
+            ruby:
+                condition: service_healthy
+            grafana:
+                condition: service_started
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 512m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "20m"
+                max-file: "5"
+                labels: "service=nginx,environment=dev"
+
+    # ===========================================================================
+    # MONITORING
+    # ===========================================================================
+
+    prometheus:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/prometheus/Dockerfile
+        image: nuniesmith/fks:prometheus
+        container_name: fks_prometheus
+        user: "nobody"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        ports:
+            - "127.0.0.1:9090:9090"
+        volumes:
+            - prometheus_data:/prometheus
+            - prometheus_sd:/etc/prometheus/sd
+        tmpfs:
+            - /tmp
+        networks:
+            - fks-network
+        command:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=30d"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--web.enable-lifecycle"
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 1g
+                reservations:
+                    cpus: "0.25"
+                    memory: 256m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=prometheus,environment=dev"
+
+    grafana:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/grafana/Dockerfile
+        image: nuniesmith/fks:grafana
+        container_name: fks_grafana
+        user: "472"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD required}
+            - GF_USERS_ALLOW_SIGN_UP=false
+            - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+            - GF_SERVER_SERVE_FROM_SUB_PATH=true
+            - GF_AUTH_ANONYMOUS_ENABLED=true
+            - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+            - GF_SECURITY_ALLOW_EMBEDDING=true
+        ports:
+            - "127.0.0.1:3000:3000"
+        volumes:
+            - grafana_data:/var/lib/grafana
+            - ./infrastructure/config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+        tmpfs:
+            - /tmp
+        networks:
+            - fks-network
+        depends_on:
+            prometheus:
+                condition: service_healthy
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 512m
+                reservations:
+                    cpus: "0.1"
+                    memory: 128m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=grafana,environment=dev"
+
+    loki:
+        # Config baked into image via infrastructure/docker/services/loki/Dockerfile.
+        # Source: infrastructure/config/loki/loki.yaml
+        # Rebuild with: docker compose build loki
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/loki/Dockerfile
+        image: nuniesmith/fks:loki
+        container_name: fks_loki
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        volumes:
+            - loki_data:/loki
+        ports:
+            - "127.0.0.1:3100:3100"
+        networks:
+            - fks-network
+        restart: unless-stopped
+        # Path matches what the Dockerfile bakes the config to
+        command: -config.file=/etc/loki/loki.yaml
+        healthcheck:
+            disable: true
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 512m
+                reservations:
+                    cpus: "0.1"
+                    memory: 256m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=loki,environment=dev"
+
+    promtail:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/promtail/Dockerfile
+        image: nuniesmith/fks:promtail
+        container_name: fks_promtail
+        user: "root"
+        security_opt:
+            - no-new-privileges:true
+        volumes:
+            - ./infrastructure/config/promtail/promtail.yml:/etc/promtail/config.yml:ro
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - /var/lib/docker/containers:/var/lib/docker/containers:ro
+            - /var/log:/var/log:ro
+            - promtail_positions:/positions
+        networks:
+            - fks-network
+        restart: unless-stopped
+        command: -config.file=/etc/promtail/config.yml -positions.file=/positions/positions.yaml
+        healthcheck:
+            disable: true
+        depends_on:
+            - loki
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.25"
+                    memory: 256m
+                reservations:
+                    cpus: "0.1"
+                    memory: 64m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=promtail,environment=dev"
+
+    alertmanager:
+        # Config baked into image via infrastructure/docker/services/alertmanager/Dockerfile.
+        # Source: infrastructure/config/alertmanager/alertmanager.yml
+        # Rebuild with: docker compose build alertmanager
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/alertmanager/Dockerfile
+        image: nuniesmith/fks:alertmanager
+        container_name: fks_alertmanager
+        user: "nobody"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - TZ=UTC
+        ports:
+            - "127.0.0.1:9093:9093"
+        volumes:
+            - alertmanager_data:/alertmanager
+        tmpfs:
+            - /tmp
+        networks:
+            - fks-network
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost:9093/-/healthy || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.25"
+                    memory: 256m
+                reservations:
+                    cpus: "0.1"
+                    memory: 64m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=alertmanager,environment=dev"
+
+    alertmanager-discord:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/alertmanager-discord/Dockerfile
+        image: nuniesmith/fks:alertmanager-discord
+        container_name: fks_alertmanager_discord
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - DISCORD_WEBHOOK_GENERAL=${DISCORD_WEBHOOK_GENERAL:-}
+            - DISCORD_WEBHOOK_SIGNALS=${DISCORD_WEBHOOK_SIGNALS:-}
+            - DISCORD_WEBHOOK_ANALYSIS=${DISCORD_WEBHOOK_ANALYSIS:-}
+            - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+            - BRIDGE_PORT=9094
+            - BRIDGE_HOST=0.0.0.0
+            - LOG_LEVEL=INFO
+        networks:
+            - fks-network
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:9094/health')",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.25"
+                    memory: 128m
+                reservations:
+                    cpus: "0.05"
+                    memory: 32m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=alertmanager-discord,environment=dev"
+
+    jaeger:
+        # Config (sampling.json) baked into image via infrastructure/docker/services/jaeger/Dockerfile.
+        # Source: infrastructure/config/jaeger/sampling.json
+        # Rebuild with: docker compose build jaeger
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/jaeger/Dockerfile
+        image: nuniesmith/fks:jaeger
+        container_name: fks_jaeger
+        security_opt:
+            - no-new-privileges:true
+        environment:
+            - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+            - COLLECTOR_OTLP_ENABLED=true
+            - SPAN_STORAGE_TYPE=memory
+        ports:
+            - "127.0.0.1:16686:16686" # Web UI
+            - "127.0.0.1:14268:14268" # HTTP collector
+            - "127.0.0.1:14250:14250" # gRPC collector
+            - "127.0.0.1:6831:6831/udp" # Jaeger compact
+            - "127.0.0.1:9411:9411" # Zipkin
+        tmpfs:
+            - /tmp
+        networks:
+            - fks-network
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost:14269/ || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512m
+                reservations:
+                    cpus: "0.1"
+                    memory: 128m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=jaeger,environment=dev"
+
+    # ===========================================================================
+    # EXPORTERS
+    # ===========================================================================
+
+    postgres-exporter:
+        # Custom queries baked into image via infrastructure/docker/services/postgres-exporter/Dockerfile.
+        # Source: infrastructure/config/postgres-exporter/queries.yaml
+        # Rebuild with: docker compose build postgres-exporter
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/postgres-exporter/Dockerfile
+        image: nuniesmith/fks:postgres-exporter
+        container_name: fks_postgres_exporter
+        user: "65534:65534"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${JANUS_DB:-janus_db}?sslmode=disable
+            - PG_EXPORTER_DISABLE_DEFAULT_METRICS=false
+            - PG_EXPORTER_DISABLE_SETTINGS_METRICS=false
+            - PG_EXPORTER_AUTO_DISCOVER_DATABASES=false
+        ports:
+            - "127.0.0.1:9187:9187"
+        networks:
+            - fks-network
+        depends_on:
+            postgres:
+                condition: service_healthy
+        restart: unless-stopped
+        healthcheck:
+            disable: true
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.25"
+                    memory: 128m
+                reservations:
+                    cpus: "0.1"
+                    memory: 32m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=postgres-exporter,environment=dev"
+
+    redis-exporter:
+        # Binary baked into image via infrastructure/docker/services/redis-exporter/Dockerfile.
+        # Rebuild with: docker compose build redis-exporter
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/redis-exporter/Dockerfile
+        image: nuniesmith/fks:redis-exporter
+        container_name: fks_redis_exporter
+        user: "65534:65534"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - REDIS_ADDR=redis://redis:6379
+            - REDIS_PASSWORD=${REDIS_PASSWORD}
+            - REDIS_EXPORTER_LOG_FORMAT=json
+            - REDIS_EXPORTER_INCL_SYSTEM_METRICS=true
+        ports:
+            - "127.0.0.1:9121:9121"
+        networks:
+            - fks-network
+        depends_on:
+            redis:
+                condition: service_healthy
+        restart: unless-stopped
+        healthcheck:
+            disable: true
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.25"
+                    memory: 128m
+                reservations:
+                    cpus: "0.1"
+                    memory: 32m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=redis-exporter,environment=dev"
+
+    questdb-exporter:
+        # nginx reverse proxy — rewrites GET /metrics → http://questdb:9003
+        # Config baked into image via infrastructure/docker/services/questdb-exporter/Dockerfile.
+        # Source: infrastructure/config/questdb-exporter/nginx.conf
+        # Rebuild with: docker compose build questdb-exporter
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/questdb-exporter/Dockerfile
+        image: nuniesmith/fks:questdb-exporter
+        container_name: fks_questdb_exporter
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - CHOWN
+            - SETGID
+            - SETUID
+        environment:
+            - EXPORTER_PORT=9191
+            - QUESTDB_HOST=fks_questdb
+            - QUESTDB_PORT=9000
+        ports:
+            - "127.0.0.1:9191:9191"
+        networks:
+            - fks-network
+        depends_on:
+            questdb:
+                condition: service_healthy
+        restart: unless-stopped
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget -qO- http://127.0.0.1:9191/health || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.1"
+                    memory: 64m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=questdb-exporter,environment=dev"
+
+    # =============================================================================
+    # AI ASSISTANT — RustCode + OpenClaw
+    # =============================================================================
+
+    rustcode:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/rustcode/Dockerfile
+            args:
+                SERVICE_PORT: "3500"
+        image: ${RUSTCODE_IMAGE:-nuniesmith/fks:rustcode}
+        container_name: fks_rustcode
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        environment:
+            DATABASE_URL: postgres://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/rustcode
+            REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+            OLLAMA_BASE_URL: http://fks_ollama:11434
+            LOCAL_MODEL: qwen2.5-coder:7b
+            XAI_API_KEY: ${XAI_API_KEY}
+            XAI_MODEL: ${XAI_MODEL:-grok-4-fast}
+            GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+            GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+            RUSTCODE_PROXY_API_KEYS: ${RUSTCODE_PROXY_API_KEYS}
+            HOST: 0.0.0.0
+            PORT: "3500"
+            RUST_LOG: info
+            CACHE_ENABLED: "true"
+            CACHE_PREFIX: "rustcode:"
+            MULTI_TENANT_MODE: "false"
+            TELEMETRY_ENABLED: "false"
+            ANALYTICS_ENABLED: "true"
+            TZ: ${TZ:-America/Toronto}
+        ports:
+            - "${TAILSCALE_IP:-127.0.0.1}:3500:3500"
+        volumes:
+            - rustcode-data:/app/data
+            - rustcode-docs:/app/docs
+            - rustcode-workspace:/app/workspace
+        networks:
+            - fks-network
+        restart: unless-stopped
+        healthcheck:
+            test: ["CMD", "curl", "-sf", "http://127.0.0.1:3500/health"]
+            interval: 30s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 2g
+                reservations:
+                    cpus: "0.5"
+                    memory: 512m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "5"
+                labels: "service=fks_rustcode,environment=dev"
+
+    fks_ollama:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/ollama/Dockerfile
+        image: nuniesmith/fks:ollama
+        container_name: fks_ollama
+        profiles: [ollama]
+        environment:
+            OLLAMA_NUM_GPU: 0
+        volumes:
+            - rustcode-ollama-data:/root/.ollama
+        ports:
+            - "${TAILSCALE_IP:-127.0.0.1}:11434:11434"
+        networks:
+            - fks-network
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: "4.0"
+                    memory: 8g
+                reservations:
+                    cpus: "1.0"
+                    memory: 2g
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "20m"
+                max-file: "3"
+                labels: "service=fks_ollama,environment=dev"
+
+    fks_ollama_init:
+        image: nuniesmith/fks:ollama
+        container_name: fks_ollama_init
+        profiles: [ollama]
+        depends_on:
+            - fks_ollama
+        entrypoint: >
+            sh -c "sleep 5 && ollama pull qwen2.5-coder:7b"
+        environment:
+            OLLAMA_HOST: http://fks_ollama:11434
+        networks:
+            - fks-network
+        restart: "no"
+
+    openclaw:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/openclaw/Dockerfile
+            args:
+                OPENCLAW_BASE_IMAGE: ${OPENCLAW_BASE_IMAGE:-openclaw-base:local}
+        image: ${OPENCLAW_IMAGE:-openclaw:local}
+        container_name: fks_openclaw
+        depends_on:
+            rustcode:
+                condition: service_healthy
+        environment:
+            HOME: /home/node
+            TERM: xterm-256color
+            TZ: ${TZ:-America/Toronto}
+            NODE_OPTIONS: "--max-old-space-size=768"
+            OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+            OPENAI_API_BASE: http://fks_rustcode:3500/v1
+            OPENAI_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
+            DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+            GITHUB_TOKEN: ${GITHUB_TOKEN}
+            GITHUB_USERNAME: ${GITHUB_USERNAME:-}
+            GITHUB_ORG: ${GITHUB_ORG:-}
+            RUSTCODE_BASE_URL: http://fks_rustcode:3500
+            RUSTCODE_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
+        volumes:
+            - openclaw-config:/home/node/.openclaw
+            - openclaw-workspace:/home/node/.openclaw/workspace
+            - ./infrastructure/config/openclaw/openclaw.json:/home/node/.openclaw/openclaw.json:ro
+        ports:
+            - "${TAILSCALE_IP:-127.0.0.1}:18789:18789"
+            - "${TAILSCALE_IP:-127.0.0.1}:18790:18790"
+        networks:
+            - fks-network
+        init: true
+        restart: unless-stopped
+        command:
+            - node
+            - openclaw.mjs
+            - gateway
+            - --bind
+            - lan
+            - --port
+            - "18789"
+            - --allow-unconfigured
+        healthcheck:
+            test:
+                - CMD
+                - node
+                - -e
+                - "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+            interval: 30s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 1.5g
+                reservations:
+                    cpus: "0.25"
+                    memory: 512m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "20m"
+                max-file: "5"
+                labels: "service=fks_openclaw,environment=dev"
+
+    openclaw_cli:
+        image: ${OPENCLAW_IMAGE:-openclaw:local}
+        container_name: fks_openclaw_cli
+        network_mode: "service:openclaw"
+        cap_drop:
+            - NET_RAW
+            - NET_ADMIN
+        security_opt:
+            - no-new-privileges:true
+        depends_on:
+            - openclaw
+        environment:
+            HOME: /home/node
+            TERM: xterm-256color
+            TZ: ${TZ:-America/Toronto}
+            OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+            OPENAI_API_BASE: http://fks_rustcode:3500/v1
+            OPENAI_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
+            BROWSER: echo
+        volumes:
+            - openclaw-config:/home/node/.openclaw
+            - openclaw-workspace:/home/node/.openclaw/workspace
+        stdin_open: true
+        tty: true
+        init: true
+        entrypoint: ["node", "openclaw.mjs"]
+
+    promptfoo:
+        # Node.js eval runner baked into image via infrastructure/docker/services/promptfoo/Dockerfile.
+        # Source: infrastructure/config/promptfoo/
+        # Rebuild with: docker compose --profile tools build promptfoo
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/promptfoo/Dockerfile
+        image: nuniesmith/fks:promptfoo
+        container_name: fks_promptfoo
+        profiles:
+            - tools
+        ports:
+            - "${TAILSCALE_IP:-127.0.0.1}:4000:3000"
+        volumes:
+            - promptfoo-data:/home/promptfoo/.promptfoo
+            - ./infrastructure/promptfoo:/home/promptfoo/evals:ro
+        environment:
+            OPENAI_API_BASE_URL: http://fks_rustcode:3500/v1
+            OPENAI_API_KEY: ${RUSTCODE_PROXY_API_KEYS:-dev-key}
+            PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:4000
+            PROMPTFOO_REMOTE_APP_BASE_URL: http://localhost:4000
+            XAI_API_KEY: ${XAI_API_KEY:-}
+            TZ: ${TZ:-America/Toronto}
+        networks:
+            - fks-network
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: "1"
+                    memory: 1G
+
+    # ===========================================================================
+    # BOT SPAWNER
+    # ===========================================================================
+
+    fks_bot_spawner:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/spawner/Dockerfile
+            args:
+                SERVICE_PORT: "8090"
+                REPO_URL: ${SPAWNER_REPO:-}
+                REPO_REF: ${SPAWNER_REF:-main}
+        image: nuniesmith/fks:spawner
+        container_name: fks_bot_spawner
+        restart: unless-stopped
+        ports:
+            - "127.0.0.1:8090:8090"
+        environment:
+            - SPAWNER_HOST=0.0.0.0
+            - SPAWNER_PORT=8090
+            - ALLOWED_IMAGE_PREFIX=${ALLOWED_BOT_IMAGE_PREFIX:-fks-bot-}
+            - MAX_CONCURRENT_BOTS=${MAX_CONCURRENT_BOTS:-20}
+            - ALLOWED_NETWORK=${COMPOSE_PROJECT_NAME:-fks}_network
+            - DEFAULT_CPU_LIMIT=${BOT_CPU_LIMIT:-1.0}
+            - DEFAULT_MEMORY_LIMIT_MB=${BOT_MEMORY_MB:-512}
+            - PROMETHEUS_SD_PATH=/prometheus-sd/bots.json
+            - BOT_METRICS_PORT=9091
+            - PRUNE_AFTER_SECS=${BOT_PRUNE_AFTER_SECS:-300}
+            - PRUNE_INTERVAL_SECS=60
+            - RUST_LOG=${SPAWNER_LOG_LEVEL:-info,spawner=debug}
+        volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - prometheus_sd:/prometheus-sd
+        networks:
+            - fks-network
+        healthcheck:
+            test:
+                ["CMD-SHELL", "curl -sf http://localhost:8090/health || exit 1"]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.5"
+                    memory: 256m
+                reservations:
+                    cpus: "0.1"
+                    memory: 64m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=fks_bot_spawner,environment=dev"
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+    postgres_data:
+        driver: local
+    redis_data:
+        driver: local
+    questdb_data:
+        driver: local
+    fks_qdrant_data:
+        driver: local
+    optimizer_data:
+        driver: local
+    ruby_app_data:
+        driver: local
+    trainer_dataset:
+        driver: local
+    prometheus_sd:
+        driver: local
+    loki_data:
+        driver: local
+    promtail_positions:
+        driver: local
+    rustcode-ollama-data:
+        driver: local
+    rustcode-data:
+        driver: local
+    rustcode-docs:
+        driver: local
+    rustcode-workspace:
+        driver: local
+    openclaw-config:
+        driver: local
+    openclaw-workspace:
+        driver: local
+    promptfoo-data:
+        driver: local
+    alertmanager_data:
+        external: true
+    prometheus_data:
+        external: true
+    grafana_data:
+        external: true
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+    fks-network:
+        driver: bridge

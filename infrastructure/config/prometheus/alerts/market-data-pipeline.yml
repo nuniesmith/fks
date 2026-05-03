@@ -1,0 +1,389 @@
+# ============================================================================
+# Market Data Pipeline Alert Rules - Week 1 Signal Pipeline
+# ============================================================================
+# Enhanced alerting for real-time market data ingestion monitoring
+# ============================================================================
+
+groups:
+    # ========================================================================
+    # CRITICAL - Immediate action required
+    # ========================================================================
+    - name: market_data_pipeline_critical
+      interval: 15s
+      rules:
+          # ------------------------------------------------------------------
+          # Data Gap Duration - Critical if gap persists > 5 minutes
+          # ------------------------------------------------------------------
+          - alert: DataGapDurationCritical
+            expr: |
+                (time() - max by (exchange, symbol) (timestamp(trades_ingested_total))) > 300
+            for: 1m
+            labels:
+                severity: critical
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "No trades received for {{ $labels.exchange }}/{{ $labels.symbol }} for >5 minutes"
+                description: |
+                    No new trades have been ingested for {{ $labels.exchange }}/{{ $labels.symbol }}
+                    in over 5 minutes. Last trade was {{ $value | humanizeDuration }} ago.
+                    This indicates a critical data gap that needs immediate attention.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-gap-critical.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Complete Ingestion Halt
+          # ------------------------------------------------------------------
+          - alert: IngestionHalted
+            expr: sum(rate(trades_ingested_total[2m])) == 0
+            for: 2m
+            labels:
+                severity: critical
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "Trade ingestion has completely stopped"
+                description: |
+                    No trades have been ingested across all exchanges and symbols for >2 minutes.
+                    The entire data pipeline may be down. Immediate investigation required.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-halted.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # ILP Buffer Overflow Imminent
+          # ------------------------------------------------------------------
+          - alert: ILPBufferOverflowImminent
+            expr: data_factory_ilp_buffer_size > 900
+            for: 30s
+            labels:
+                severity: critical
+                component: questdb
+                pipeline: market-data
+            annotations:
+                summary: "ILP buffer near capacity - data loss imminent"
+                description: |
+                    ILP buffer is at {{ $value }} lines (max ~1000). Buffer overflow will cause data loss.
+                    QuestDB writes may be blocked or slow. Check QuestDB health immediately.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ilp-buffer-overflow.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # High Error Rate
+          # ------------------------------------------------------------------
+          - alert: HighIngestionErrorRate
+            expr: |
+                100 * rate(data_factory_errors_total[5m]) /
+                (rate(trades_ingested_total[5m]) + rate(data_factory_errors_total[5m]) + 0.001) > 5
+            for: 3m
+            labels:
+                severity: critical
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "High ingestion error rate detected"
+                description: |
+                    {{ $value | printf "%.1f" }}% of ingestion operations are failing.
+                    This may indicate connection issues, malformed data, or infrastructure problems.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-error-rate.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # QuestDB Write Failures Sustained
+          # ------------------------------------------------------------------
+          - alert: QuestDBWriteFailuresSustained
+            expr: rate(questdb_write_errors_total[5m]) > 1
+            for: 2m
+            labels:
+                severity: critical
+                component: questdb
+                pipeline: market-data
+            annotations:
+                summary: "Sustained QuestDB write failures"
+                description: |
+                    QuestDB is experiencing {{ $value | printf "%.2f" }} write errors per second.
+                    Data is being lost. Check disk space, database health, and ILP connections.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/questdb-write-failures.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+    # ========================================================================
+    # WARNING - Investigate soon
+    # ========================================================================
+    - name: market_data_pipeline_warning
+      interval: 30s
+      rules:
+          # ------------------------------------------------------------------
+          # Data Gap Duration Warning (> 2 minutes)
+          # ------------------------------------------------------------------
+          - alert: DataGapDurationWarning
+            expr: |
+                (time() - max by (exchange, symbol) (timestamp(trades_ingested_total))) > 120
+                and
+                (time() - max by (exchange, symbol) (timestamp(trades_ingested_total))) <= 300
+            for: 1m
+            labels:
+                severity: warning
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "No trades received for {{ $labels.exchange }}/{{ $labels.symbol }} for >2 minutes"
+                description: |
+                    No new trades have been ingested for {{ $labels.exchange }}/{{ $labels.symbol }}
+                    in {{ $value | humanizeDuration }}. Monitor closely - may escalate to critical.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-gap-warning.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # ILP Buffer High
+          # ------------------------------------------------------------------
+          - alert: ILPBufferHigh
+            expr: data_factory_ilp_buffer_size > 500 and data_factory_ilp_buffer_size <= 900
+            for: 2m
+            labels:
+                severity: warning
+                component: questdb
+                pipeline: market-data
+            annotations:
+                summary: "ILP buffer usage elevated"
+                description: |
+                    ILP buffer is at {{ $value }} lines (warning threshold: 500).
+                    QuestDB may be slow to flush. Monitor for continued growth.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ilp-buffer-high.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Ingestion Rate Drop
+          # ------------------------------------------------------------------
+          - alert: IngestionRateDropped
+            expr: |
+                sum(rate(trades_ingested_total[5m])) <
+                0.5 * sum(rate(trades_ingested_total[5m] offset 1h))
+                and sum(rate(trades_ingested_total[5m])) > 0
+            for: 5m
+            labels:
+                severity: warning
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "Trade ingestion rate dropped significantly"
+                description: |
+                    Current ingestion rate is less than 50% of the rate 1 hour ago.
+                    Current: {{ $value | printf "%.1f" }} trades/sec vs historical baseline.
+                    May indicate partial connectivity issues or market conditions.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-rate-dropped.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Backfill Stalled
+          # ------------------------------------------------------------------
+          - alert: BackfillStalled
+            expr: |
+                backfills_running > 0
+                and rate(backfills_completed_total[10m]) == 0
+            for: 10m
+            labels:
+                severity: warning
+                component: backfill
+                pipeline: market-data
+            annotations:
+                summary: "Backfill operations appear stalled"
+                description: |
+                    {{ $value }} backfills are marked as running but none have completed in 10 minutes.
+                    Backfills may be stuck due to rate limiting, API issues, or lock contention.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/backfill-stalled.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Latency Spike
+          # ------------------------------------------------------------------
+          - alert: IngestionLatencySpike
+            expr: |
+                histogram_quantile(0.99, sum(rate(ingestion_latency_ms_bucket[5m])) by (le)) > 500
+                and
+                histogram_quantile(0.99, sum(rate(ingestion_latency_ms_bucket[5m])) by (le)) <= 1000
+            for: 5m
+            labels:
+                severity: warning
+                component: data-factory
+                pipeline: market-data
+                slo: latency
+            annotations:
+                summary: "Ingestion latency elevated"
+                description: |
+                    P99 ingestion latency is {{ $value | printf "%.0f" }}ms (warning: >500ms, SLO: <1000ms).
+                    Network latency or processing delays may be affecting data freshness.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/latency-spike.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Single Exchange Throughput Anomaly
+          # ------------------------------------------------------------------
+          - alert: ExchangeThroughputAnomaly
+            expr: |
+                abs(
+                    rate(trades_ingested_total[5m]) -
+                    avg_over_time(rate(trades_ingested_total[5m])[1h:5m])
+                ) > 2 * stddev_over_time(rate(trades_ingested_total[5m])[1h:5m])
+            for: 10m
+            labels:
+                severity: warning
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "Unusual trade volume for {{ $labels.exchange }}/{{ $labels.symbol }}"
+                description: |
+                    Trade ingestion rate for {{ $labels.exchange }}/{{ $labels.symbol }}
+                    is significantly outside normal range (>2 standard deviations).
+                    Could indicate exchange issues, unusual market activity, or data problems.
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # High Deduplication Miss Rate
+          # ------------------------------------------------------------------
+          - alert: HighDeduplicationMissRate
+            expr: |
+                rate(backfill_dedup_misses_total[10m]) /
+                (rate(backfill_dedup_hits_total[10m]) + rate(backfill_dedup_misses_total[10m]) + 0.001) > 0.8
+            for: 15m
+            labels:
+                severity: warning
+                component: backfill
+                pipeline: market-data
+            annotations:
+                summary: "High rate of new gaps being detected"
+                description: |
+                    {{ $value | humanizePercentage }} of gap detections are new (not deduplicated).
+                    This may indicate a systemic issue creating many gaps, or deduplication not working properly.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-dedup-miss-rate.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+    # ========================================================================
+    # INFO - Awareness and tracking
+    # ========================================================================
+    - name: market_data_pipeline_info
+      interval: 1m
+      rules:
+          # ------------------------------------------------------------------
+          # Backfill Activity High
+          # ------------------------------------------------------------------
+          - alert: BackfillActivityHigh
+            expr: backfills_running > 5
+            for: 5m
+            labels:
+                severity: info
+                component: backfill
+                pipeline: market-data
+            annotations:
+                summary: "Multiple concurrent backfills running"
+                description: |
+                    {{ $value }} backfills are currently running. This is higher than typical.
+                    May indicate recent connectivity issues being resolved.
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Rate Limiter Tokens Low
+          # ------------------------------------------------------------------
+          - alert: RateLimiterTokensLow
+            expr: rate_limiter_tokens_available < 10
+            for: 5m
+            labels:
+                severity: info
+                component: rate-limiter
+                pipeline: market-data
+            annotations:
+                summary: "Rate limiter tokens running low for {{ $labels.exchange }}"
+                description: |
+                    Only {{ $value | printf "%.0f" }} tokens available for {{ $labels.exchange }}.
+                    API requests may start being throttled soon.
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # WebSocket Reconnection Event
+          # ------------------------------------------------------------------
+          - alert: WebSocketReconnected
+            expr: increase(websocket_reconnections_total[5m]) > 0
+            for: 0s
+            labels:
+                severity: info
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "WebSocket reconnected to {{ $labels.exchange }}"
+                description: |
+                    WebSocket connection to {{ $labels.exchange }} reconnected.
+                    {{ $value | printf "%.0f" }} reconnection(s) in the last 5 minutes.
+                    Check for potential data gaps during the disconnection period.
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # New Symbol Detected
+          # ------------------------------------------------------------------
+          - alert: NewSymbolIngesting
+            expr: |
+                count(trades_ingested_total) by (exchange, symbol)
+                unless
+                count(trades_ingested_total offset 1h) by (exchange, symbol)
+            for: 1m
+            labels:
+                severity: info
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "New symbol detected: {{ $labels.exchange }}/{{ $labels.symbol }}"
+                description: |
+                    A new symbol {{ $labels.symbol }} on {{ $labels.exchange }} is now being ingested.
+                    This is the first data seen for this symbol in the last hour.
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+    # ========================================================================
+    # SLO Burn Rate Alerts (Multi-Window)
+    # ========================================================================
+    - name: market_data_slo_burn_rate
+      interval: 30s
+      rules:
+          # ------------------------------------------------------------------
+          # Fast Burn - 2% budget consumed in 1 hour (will exhaust in 2 days)
+          # ------------------------------------------------------------------
+          - alert: DataCompletenessFastBurn
+            expr: |
+                (
+                    1 - (sum(rate(trades_ingested_total[1h])) / (sum(rate(trades_ingested_total[1h])) + sum(rate(gaps_detected_total[1h])) + 0.001))
+                ) > 0.02
+            for: 5m
+            labels:
+                severity: critical
+                component: data-factory
+                pipeline: market-data
+                slo: completeness
+                burn_rate: fast
+            annotations:
+                summary: "Data completeness SLO burning fast - will exhaust budget in ~2 days"
+                description: |
+                    Error budget is being consumed at a rate that will exhaust the monthly budget in ~2 days.
+                    Current 1h error rate: {{ $value | humanizePercentage }}.
+                    Immediate action required to prevent SLO breach.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/slo-burn-rate.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Slow Burn - 0.5% budget consumed in 6 hours
+          # ------------------------------------------------------------------
+          - alert: DataCompletenessSlowBurn
+            expr: |
+                (
+                    1 - (sum(rate(trades_ingested_total[6h])) / (sum(rate(trades_ingested_total[6h])) + sum(rate(gaps_detected_total[6h])) + 0.001))
+                ) > 0.005
+            for: 30m
+            labels:
+                severity: warning
+                component: data-factory
+                pipeline: market-data
+                slo: completeness
+                burn_rate: slow
+            annotations:
+                summary: "Data completeness SLO burning slowly - investigate"
+                description: |
+                    Error budget is being consumed at an elevated rate over 6 hours.
+                    Current 6h error rate: {{ $value | humanizePercentage }}.
+                    Investigate to prevent gradual SLO degradation.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/slo-burn-rate.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"

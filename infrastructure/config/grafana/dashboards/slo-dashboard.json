@@ -1,0 +1,768 @@
+{
+  "schemaVersion": 38,
+  "title": "Data Service - Production SLO/SLI Dashboard",
+  "description": "Service Level Objectives and Indicators for Production Data Service - Week 8",
+  "tags": [
+    "production",
+    "slo",
+    "sli",
+    "data-service"
+  ],
+  "timezone": "utc",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "annotations": {
+    "list": [
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "ALERTS{alertname=~\".*\", severity=\"critical\"}",
+        "iconColor": "red",
+        "name": "Critical Alerts",
+        "step": "60s",
+        "tagKeys": "alertname,severity",
+        "textFormat": "{{alertname}}",
+        "titleFormat": "Alert"
+      },
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "changes(kube_deployment_status_observed_generation{deployment=\"data-service\"}[5m]) > 0",
+        "iconColor": "blue",
+        "name": "Deployments",
+        "step": "60s",
+        "titleFormat": "Deployment Event"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "type": "row",
+      "title": "SLO Summary - Week 8 Production Targets"
+    },
+    {
+      "id": 2,
+      "title": "Availability SLO (Target: 99.9%)",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 3
+      },
+      "targets": [
+        {
+          "expr": "(1 - (sum(rate(http_requests_total{status=~\"5..\"}[24h])) / sum(rate(http_requests_total[24h])))) * 100",
+          "legendFormat": "Availability %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 99.5
+              },
+              {
+                "color": "yellow",
+                "value": 99.8
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 99,
+          "max": 100,
+          "decimals": 3
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 3,
+      "title": "P99 Latency SLO (Target: <1000ms)",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 3
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P99 Latency",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 800
+              },
+              {
+                "color": "orange",
+                "value": 1000
+              },
+              {
+                "color": "red",
+                "value": 2000
+              }
+            ]
+          },
+          "unit": "ms",
+          "decimals": 0
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 4,
+      "title": "Error Rate SLO (Target: <0.1%)",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 3
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(http_requests_total{status=~\"4..|5..\"}[5m])) / sum(rate(http_requests_total[5m]))) * 100",
+          "legendFormat": "Error Rate %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 0.05
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "unit": "percent",
+          "decimals": 3,
+          "max": 1
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Data Completeness SLO (Target: >99.5%)",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 3
+      },
+      "targets": [
+        {
+          "expr": "(1 - (sum(data_gaps_detected_total) / sum(data_expected_points_total))) * 100",
+          "legendFormat": "Completeness %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 99
+              },
+              {
+                "color": "yellow",
+                "value": 99.5
+              },
+              {
+                "color": "green",
+                "value": 99.8
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 99,
+          "max": 100,
+          "decimals": 2
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "background",
+        "graphMode": "area"
+      }
+    },
+    {
+      "id": 6,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "type": "row",
+      "title": "SLI Trends - 24 Hour Rolling Window"
+    },
+    {
+      "id": 7,
+      "title": "Availability Trend (99.9% SLO)",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "(1 - (sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])))) * 100",
+          "legendFormat": "Current Availability",
+          "refId": "A"
+        },
+        {
+          "expr": "99.9",
+          "legendFormat": "SLO Target (99.9%)",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "min": 99,
+          "max": 100
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Latency Trend (P95, P99, P999)",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P95 Latency",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P99 Latency",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.999, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) * 1000",
+          "legendFormat": "P999 Latency",
+          "refId": "C"
+        },
+        {
+          "expr": "1000",
+          "legendFormat": "SLO Target (1000ms)",
+          "refId": "D"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ms",
+          "min": 0
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "type": "row",
+      "title": "Error Budget & Burn Rate"
+    },
+    {
+      "id": 10,
+      "title": "Error Budget Remaining (30-day)",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 23
+      },
+      "targets": [
+        {
+          "expr": "100 - ((sum(increase(http_requests_total{status=~\"5..\"}[30d])) / sum(increase(http_requests_total[30d]))) / (1 - 0.999) * 100)",
+          "legendFormat": "Error Budget %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 25
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "green",
+                "value": 75
+              }
+            ]
+          },
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 11,
+      "title": "Error Budget Burn Rate (1h, 6h, 24h)",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 23
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[1h])) / sum(rate(http_requests_total[1h]))) / (1 - 0.999)",
+          "legendFormat": "1h Burn Rate",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[6h])) / sum(rate(http_requests_total[6h]))) / (1 - 0.999)",
+          "legendFormat": "6h Burn Rate",
+          "refId": "B"
+        },
+        {
+          "expr": "(sum(rate(http_requests_total{status=~\"5..\"}[24h])) / sum(rate(http_requests_total[24h]))) / (1 - 0.999)",
+          "legendFormat": "24h Burn Rate",
+          "refId": "C"
+        },
+        {
+          "expr": "1",
+          "legendFormat": "Sustainable Burn Rate",
+          "refId": "D"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "label": "Burn Rate Multiplier"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "type": "row",
+      "title": "Canary vs Production Comparison"
+    },
+    {
+      "id": 13,
+      "title": "Request Rate: Canary vs Production",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 34
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{version=\"canary\"}[5m]))",
+          "legendFormat": "Canary",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{version!=\"canary\"}[5m]))",
+          "legendFormat": "Production",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "reqps",
+          "label": "Requests/sec"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Error Rate: Canary vs Production",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 34
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(http_requests_total{version=\"canary\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{version=\"canary\"}[5m]))) * 100",
+          "legendFormat": "Canary Error Rate",
+          "refId": "A"
+        },
+        {
+          "expr": "(sum(rate(http_requests_total{version!=\"canary\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{version!=\"canary\"}[5m]))) * 100",
+          "legendFormat": "Production Error Rate",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "label": "Error Rate %"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Latency Distribution: Canary vs Production",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{version=\"canary\"}[5m])) by (le)) * 1000",
+          "legendFormat": "Canary P50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{version=\"canary\"}[5m])) by (le)) * 1000",
+          "legendFormat": "Canary P95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{version=\"canary\"}[5m])) by (le)) * 1000",
+          "legendFormat": "Canary P99",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{version!=\"canary\"}[5m])) by (le)) * 1000",
+          "legendFormat": "Production P50",
+          "refId": "D"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{version!=\"canary\"}[5m])) by (le)) * 1000",
+          "legendFormat": "Production P95",
+          "refId": "E"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{version!=\"canary\"}[5m])) by (le)) * 1000",
+          "legendFormat": "Production P99",
+          "refId": "F"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ms",
+          "label": "Latency"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 50
+      },
+      "type": "row",
+      "title": "Business Metrics & KPIs"
+    },
+    {
+      "id": 17,
+      "title": "Backfill Success Rate (Target: >95%)",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 53
+      },
+      "targets": [
+        {
+          "expr": "(sum(rate(backfill_executions_total{status=\"success\"}[24h])) / sum(rate(backfill_executions_total[24h]))) * 100",
+          "legendFormat": "Success Rate",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "yellow",
+                "value": 95
+              },
+              {
+                "color": "green",
+                "value": 98
+              }
+            ]
+          },
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Trades Ingested (24h)",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 53
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(questdb_writes_total[24h]))",
+          "legendFormat": "Trades",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short",
+          "decimals": 0
+        }
+      }
+    },
+    {
+      "id": 19,
+      "title": "Circuit Breaker Health",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 53
+      },
+      "targets": [
+        {
+          "expr": "sum(circuit_breaker_state == 0)",
+          "legendFormat": "Closed (Healthy)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "value": "3",
+              "text": "All Healthy"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Active Pods",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 53
+      },
+      "targets": [
+        {
+          "expr": "count(kube_pod_status_phase{namespace=\"data-service-prod\",phase=\"Running\"})",
+          "legendFormat": "Running Pods",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,410 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vault
+  labels:
+    name: vault
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault
+  namespace: vault
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-server-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+- kind: ServiceAccount
+  name: vault
+  namespace: vault
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  namespace: vault
+data:
+  vault.hcl: |
+    ui = true
+
+    listener "tcp" {
+      address = "[::]:8200"
+      cluster_address = "[::]:8201"
+      tls_disable = 1
+    }
+
+    storage "raft" {
+      path = "/vault/data"
+
+      retry_join {
+        leader_api_addr = "http://vault-0.vault-internal:8200"
+      }
+      retry_join {
+        leader_api_addr = "http://vault-1.vault-internal:8200"
+      }
+      retry_join {
+        leader_api_addr = "http://vault-2.vault-internal:8200"
+      }
+    }
+
+    service_registration "kubernetes" {}
+
+    api_addr = "http://POD_IP:8200"
+    cluster_addr = "http://POD_IP:8201"
+
+    telemetry {
+      prometheus_retention_time = "30s"
+      disable_hostname = true
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  namespace: vault
+  labels:
+    app: vault
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8200
+    targetPort: 8200
+    protocol: TCP
+  - name: https-internal
+    port: 8201
+    targetPort: 8201
+    protocol: TCP
+  selector:
+    app: vault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-internal
+  namespace: vault
+  labels:
+    app: vault
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: http
+    port: 8200
+    targetPort: 8200
+    protocol: TCP
+  - name: https-internal
+    port: 8201
+    targetPort: 8201
+    protocol: TCP
+  selector:
+    app: vault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault-ui
+  namespace: vault
+  labels:
+    app: vault
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 8200
+    targetPort: 8200
+    protocol: TCP
+  selector:
+    app: vault
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vault
+  namespace: vault
+  labels:
+    app: vault
+spec:
+  serviceName: vault-internal
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vault
+  template:
+    metadata:
+      labels:
+        app: vault
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8200"
+        prometheus.io/path: "/v1/sys/metrics"
+    spec:
+      serviceAccountName: vault
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: vault
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: vault
+        image: hashicorp/vault:1.15.4
+        command:
+        - /bin/sh
+        - -c
+        args:
+        - |
+          sed -e "s/POD_IP/${POD_IP}/g" /vault/config/vault.hcl > /tmp/vault.hcl
+          exec vault server -config=/tmp/vault.hcl
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: VAULT_ADDR
+          value: "http://127.0.0.1:8200"
+        - name: VAULT_API_ADDR
+          value: "http://$(POD_IP):8200"
+        - name: SKIP_CHOWN
+          value: "true"
+        - name: SKIP_SETCAP
+          value: "true"
+        - name: VAULT_CLUSTER_ADDR
+          value: "http://$(POD_IP):8201"
+        - name: VAULT_RAFT_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+        - name: http
+          containerPort: 8200
+          protocol: TCP
+        - name: https-internal
+          containerPort: 8201
+          protocol: TCP
+        - name: replication
+          containerPort: 8202
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+            port: 8200
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /v1/sys/health?standbyok=true
+            port: 8200
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        volumeMounts:
+        - name: data
+          mountPath: /vault/data
+        - name: config
+          mountPath: /vault/config
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - IPC_LOCK
+      volumes:
+      - name: config
+        configMap:
+          name: vault-config
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: gp3
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vault
+  namespace: vault
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: vault
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-auth
+  namespace: production
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-auth
+rules:
+- apiGroups: [""]
+  resources:
+  - serviceaccounts
+  - serviceaccounts/token
+  verbs:
+  - get
+  - list
+- apiGroups: [""]
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-auth
+subjects:
+- kind: ServiceAccount
+  name: vault
+  namespace: vault
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-init
+  namespace: vault
+data:
+  init.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "Waiting for Vault to be ready..."
+    until vault status 2>/dev/null; do
+      echo "Waiting..."
+      sleep 2
+    done
+
+    # Check if already initialized
+    if vault status | grep -q "Initialized.*true"; then
+      echo "Vault is already initialized"
+      exit 0
+    fi
+
+    echo "Initializing Vault..."
+    vault operator init -key-shares=5 -key-threshold=3 -format=json > /vault/init-keys.json
+
+    echo "Vault initialized. Keys stored in /vault/init-keys.json"
+    echo "IMPORTANT: Store these keys securely and remove from the pod!"
+
+  setup.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "Setting up Vault configuration..."
+
+    # Enable KV secrets engine
+    vault secrets enable -path=secret kv-v2 || echo "KV engine already enabled"
+
+    # Enable database secrets engine
+    vault secrets enable database || echo "Database engine already enabled"
+
+    # Enable Kubernetes auth
+    vault auth enable kubernetes || echo "Kubernetes auth already enabled"
+
+    # Configure Kubernetes auth
+    vault write auth/kubernetes/config \
+      kubernetes_host="https://$KUBERNETES_PORT_443_TCP_ADDR:443" \
+      kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+      token_reviewer_jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token
+
+    # Create policy for data-service
+    vault policy write data-service - <<EOF
+    # Read QuestDB credentials
+    path "secret/data/questdb/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Read Redis credentials
+    path "secret/data/redis/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Read exchange API keys
+    path "secret/data/exchanges/*" {
+      capabilities = ["read", "list"]
+    }
+
+    # Read database credentials (dynamic)
+    path "database/creds/data-service" {
+      capabilities = ["read"]
+    }
+    EOF
+
+    # Create Kubernetes auth role
+    vault write auth/kubernetes/role/data-service \
+      bound_service_account_names=data-service \
+      bound_service_account_namespaces=production \
+      policies=data-service \
+      ttl=1h
+
+    echo "Vault setup complete!"
+
+  populate-secrets.sh: |
+    #!/bin/sh
+    set -e
+
+    echo "Populating initial secrets..."
+
+    # Note: Replace these with actual values from environment or secure source
+
+    # QuestDB credentials
+    vault kv put secret/questdb/production \
+      host="${QUESTDB_HOST:-questdb.production.svc.cluster.local}" \
+      http_port="${QUESTDB_HTTP_PORT:-9000}" \
+      ilp_port="${QUESTDB_ILP_PORT:-9009}" \
+      username="${QUESTDB_USER:-admin}" \
+      password="${QUESTDB_PASSWORD:-changeme}"
+
+    # Redis credentials
+    vault kv put secret/redis/production \
+      host="${REDIS_HOST:-redis.production.svc.cluster.local}" \
+      port="${REDIS_PORT:-6379}" \
+      password="${REDIS_PASSWORD:-changeme}" \
+      db="${REDIS_DB:-0}"
+
+    # Exchange API keys (these should come from secure source)
+    vault kv put secret/exchanges/binance \
+      api_key="${BINANCE_API_KEY:-}" \
+      api_secret="${BINANCE_API_SECRET:-}"
+
+    vault kv put secret/exchanges/kraken \
+      api_key="${KRAKEN_API_KEY:-}" \
+      api_secret="${KRAKEN_API_SECRET:-}"
+
+    vault kv put secret/exchanges/coinbase \
+      api_key="${COINBASE_API_KEY:-}" \
+      api_secret="${COINBASE_API_SECRET:-}"
+
+    echo "Secrets populated!"

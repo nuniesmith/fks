@@ -1,0 +1,593 @@
+{
+  "dashboard": {
+    "title": "QuestDB Production Monitoring",
+    "uid": "questdb-production",
+    "tags": ["questdb", "database", "production", "timeseries"],
+    "timezone": "America/New_York",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "annotations": {
+      "list": [
+        {
+          "datasource": "Prometheus",
+          "enable": true,
+          "iconColor": "red",
+          "name": "Deployments",
+          "expr": "changes(kube_pod_container_status_restarts_total{namespace=\"data-service-prod\", pod=~\"questdb-.*\"}[5m]) > 0"
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "QuestDB Cluster Status",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "count(up{job=\"questdb\", namespace=\"data-service-prod\"} == 1)",
+            "legendFormat": "Pods Running",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 2, "color": "yellow"},
+                {"value": 3, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Write Throughput",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(rate(questdb_writes_total[5m]))",
+            "legendFormat": "Writes/sec",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "unit": "writes/sec"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 5000, "color": "yellow"},
+                {"value": 9000, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Write Latency P95",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(questdb_write_latency_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P95 Latency (ms)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "unit": "ms"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 100, "color": "yellow"},
+                {"value": 200, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Disk Usage",
+        "type": "gauge",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "avg(questdb_disk_usage_percent)",
+            "legendFormat": "Disk Usage %",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 70, "color": "yellow"},
+                {"value": 85, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Write Throughput Over Time",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(questdb_writes_total[1m]))",
+            "legendFormat": "Total Writes/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(questdb_writes_total{table=\"trades_crypto\"}[1m]))",
+            "legendFormat": "trades_crypto",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(rate(questdb_writes_total{table=\"candles_crypto\"}[1m]))",
+            "legendFormat": "candles_crypto",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "spanNulls": false
+            },
+            "unit": "writes/sec"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Write Latency Distribution",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(questdb_write_latency_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(questdb_write_latency_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(questdb_write_latency_seconds_bucket[5m])) by (le)) * 1000",
+            "legendFormat": "P99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Table Row Counts",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "questdb_table_rows{table=\"trades_crypto\"}",
+            "legendFormat": "trades_crypto",
+            "refId": "A"
+          },
+          {
+            "expr": "questdb_table_rows{table=\"candles_crypto\"}",
+            "legendFormat": "candles_crypto",
+            "refId": "B"
+          },
+          {
+            "expr": "questdb_table_rows{table=\"market_metrics\"}",
+            "legendFormat": "market_metrics",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Table Disk Size",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "questdb_table_size_bytes{table=\"trades_crypto\"} / 1024 / 1024 / 1024",
+            "legendFormat": "trades_crypto",
+            "refId": "A"
+          },
+          {
+            "expr": "questdb_table_size_bytes{table=\"candles_crypto\"} / 1024 / 1024 / 1024",
+            "legendFormat": "candles_crypto",
+            "refId": "B"
+          },
+          {
+            "expr": "questdb_table_size_bytes{table=\"market_metrics\"} / 1024 / 1024 / 1024",
+            "legendFormat": "market_metrics",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "gbytes",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "stacking": {"mode": "normal"}
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Pod CPU Usage",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 20, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"data-service-prod\", pod=~\"questdb-.*\"}[5m])) by (pod) * 100",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Pod Memory Usage",
+        "type": "timeseries",
+        "gridPos": {"x": 8, "y": 20, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"data-service-prod\", pod=~\"questdb-.*\"}) by (pod) / 1024 / 1024 / 1024",
+            "legendFormat": "{{pod}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "gbytes",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Disk I/O",
+        "type": "timeseries",
+        "gridPos": {"x": 16, "y": 20, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(container_fs_reads_bytes_total{namespace=\"data-service-prod\", pod=~\"questdb-.*\"}[5m])) by (pod) / 1024 / 1024",
+            "legendFormat": "{{pod}} - Read",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(container_fs_writes_bytes_total{namespace=\"data-service-prod\", pod=~\"questdb-.*\"}[5m])) by (pod) / 1024 / 1024",
+            "legendFormat": "{{pod}} - Write",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "MBs",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 0
+            }
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "Write Error Rate",
+        "type": "timeseries",
+        "gridPos": {"x": 0, "y": 28, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(rate(questdb_write_errors_total[5m]))",
+            "legendFormat": "Write Errors/sec",
+            "refId": "A"
+          },
+          {
+            "expr": "100 * sum(rate(questdb_write_errors_total[5m])) / sum(rate(questdb_writes_total[5m]))",
+            "legendFormat": "Error Rate %",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Error Rate %"},
+              "properties": [
+                {"id": "unit", "value": "percent"},
+                {"id": "custom.axisPlacement", "value": "right"}
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": 13,
+        "title": "WAL Transaction Lag",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 28, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "questdb_wal_lag_transactions",
+            "legendFormat": "{{table}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 14,
+        "title": "Recent Partitions - trades_crypto",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 34, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "questdb_partition_rows{table=\"trades_crypto\"}",
+            "legendFormat": "{{partition}}",
+            "refId": "A",
+            "format": "table",
+            "instant": true
+          },
+          {
+            "expr": "questdb_partition_size_bytes{table=\"trades_crypto\"} / 1024 / 1024 / 1024",
+            "legendFormat": "{{partition}}",
+            "refId": "B",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "merge"
+          },
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true},
+              "renameByName": {
+                "partition": "Partition",
+                "Value #A": "Rows",
+                "Value #B": "Size (GB)"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 15,
+        "title": "Connection Pool",
+        "type": "timeseries",
+        "gridPos": {"x": 12, "y": 34, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "questdb_connections_active",
+            "legendFormat": "Active",
+            "refId": "A"
+          },
+          {
+            "expr": "questdb_connections_idle",
+            "legendFormat": "Idle",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10,
+              "stacking": {"mode": "normal"}
+            }
+          }
+        }
+      },
+      {
+        "id": 16,
+        "title": "Total Database Size",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 42, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "questdb_total_size_bytes / 1024 / 1024 / 1024 / 1024",
+            "legendFormat": "Total Size (TB)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value",
+          "unit": "tbytes"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 3, "color": "yellow"},
+                {"value": 4, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 17,
+        "title": "Backup Status",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 42, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "time() - kube_job_status_completion_time{job_name=~\"questdb-backup.*\", namespace=\"data-service-prod\"}",
+            "legendFormat": "Time Since Last Backup",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "value",
+          "unit": "s"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 86400, "color": "yellow"},
+                {"value": 172800, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 18,
+        "title": "Pod Restart Count",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 42, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(kube_pod_container_status_restarts_total{namespace=\"data-service-prod\", pod=~\"questdb-.*\"})",
+            "legendFormat": "Total Restarts",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "area",
+          "colorMode": "value"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "namespace",
+          "type": "constant",
+          "current": {
+            "value": "data-service-prod",
+            "text": "data-service-prod"
+          }
+        },
+        {
+          "name": "pod",
+          "type": "query",
+          "datasource": "Prometheus",
+          "query": "label_values(up{namespace=\"data-service-prod\", job=\"questdb\"}, pod)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    }
+  }
+}

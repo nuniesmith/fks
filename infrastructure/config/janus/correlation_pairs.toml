@@ -1,0 +1,106 @@
+# ============================================================================
+# Correlation Pairs Configuration
+# ============================================================================
+#
+# Defines known asset pair correlations to monitor and their alert thresholds.
+# Loaded by the CorrelationTracker at startup to pre-populate the monitored
+# pairs list and configure per-pair alerting.
+#
+# Fields per pair:
+#   primary              — first asset symbol
+#   secondary            — second asset symbol
+#   expected_correlation  — historical baseline correlation (informational)
+#   alert_threshold       — absolute correlation above which an alert fires
+#   notes                — optional human-readable context
+#
+# The global correlation_threshold in CorrelationConfig controls position
+# blocking. The per-pair alert_threshold here is for monitoring/alerting only.
+#
+# ============================================================================
+
+# ── Global Defaults ─────────────────────────────────────────────────────────
+
+[defaults]
+window                  = 100     # rolling window size (number of returns)
+correlation_threshold   = 0.75    # block trades above this
+max_correlated_positions = 3      # max simultaneous correlated positions
+min_observations        = 20      # min data points before correlation is valid
+
+# ── Major Crypto Pairs ──────────────────────────────────────────────────────
+
+[[pairs]]
+primary              = "BTCUSD"
+secondary            = "ETHUSD"
+expected_correlation = 0.85
+alert_threshold      = 0.95
+notes                = "BTC-ETH historically very correlated; alert on decorrelation or extreme lock-step"
+
+[[pairs]]
+primary              = "ETHUSD"
+secondary            = "SOLUSD"
+expected_correlation = 0.70
+alert_threshold      = 0.90
+notes                = "ETH-SOL moderate correlation via L1 narrative overlap"
+
+[[pairs]]
+primary              = "BTCUSD"
+secondary            = "SOLUSD"
+expected_correlation = 0.65
+alert_threshold      = 0.90
+notes                = "BTC-SOL moderate; SOL has higher idiosyncratic vol"
+
+# ── Alt Pairs ───────────────────────────────────────────────────────────────
+
+[[pairs]]
+primary              = "BTCUSD"
+secondary            = "XRPUSD"
+expected_correlation = 0.55
+alert_threshold      = 0.85
+notes                = "XRP often decorrelates on regulatory news"
+
+[[pairs]]
+primary              = "ETHUSD"
+secondary            = "XRPUSD"
+expected_correlation = 0.50
+alert_threshold      = 0.85
+notes                = "ETH-XRP weakly correlated in trending markets"
+
+[[pairs]]
+primary              = "BTCUSD"
+secondary            = "DOGEUSD"
+expected_correlation = 0.45
+alert_threshold      = 0.80
+notes                = "DOGE driven by meme/social sentiment, low fundamental correlation"
+
+[[pairs]]
+primary              = "ETHUSD"
+secondary            = "DOGEUSD"
+expected_correlation = 0.40
+alert_threshold      = 0.80
+notes                = "ETH-DOGE weakly coupled"
+
+[[pairs]]
+primary              = "SOLUSD"
+secondary            = "DOGEUSD"
+expected_correlation = 0.35
+alert_threshold      = 0.75
+notes                = "SOL-DOGE: low expected correlation"
+
+# ── Cross-Regime Monitoring ─────────────────────────────────────────────────
+#
+# These pairs are NOT expected to be correlated. An alert here indicates
+# a market-wide risk-on/risk-off regime shift where everything moves together.
+
+[[pairs]]
+primary              = "XRPUSD"
+secondary            = "SOLUSD"
+expected_correlation = 0.40
+alert_threshold      = 0.85
+notes                = "If XRP-SOL spike above 0.85, market is in risk-on/off regime — reduce total exposure"
+
+[[pairs]]
+primary              = "XRPUSD"
+secondary            = "DOGEUSD"
+expected_correlation = 0.30
+alert_threshold      = 0.80
+notes                = "Low-cap alts moving together signals broad alt squeeze"

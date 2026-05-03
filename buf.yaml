@@ -1,0 +1,25 @@
+# Buf workspace configuration for FKS (v2)
+# Migrated from buf.work.yaml (v1) + proto/buf.yaml
+# See: https://buf.build/docs/configuration/v2/buf-yaml
+version: v2
+
+modules:
+  - path: proto
+    name: buf.build/fks/proto
+
+    # Lint configuration
+    lint:
+      use:
+        - STANDARD
+      except:
+        # Allow non-standard enum prefixes for backward compatibility
+        - ENUM_VALUE_PREFIX
+        - ENUM_ZERO_VALUE_SUFFIX
+        # Allow non-standard RPC request/response naming for backward compatibility
+        - RPC_REQUEST_STANDARD_NAME
+        - RPC_RESPONSE_STANDARD_NAME
+
+    # Breaking change detection configuration
+    breaking:
+      use:
+        - FILE

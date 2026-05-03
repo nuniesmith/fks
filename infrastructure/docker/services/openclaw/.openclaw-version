@@ -1,0 +1,5 @@
+# OpenClaw upstream version pin.
+# Set to a git tag (e.g. v1.2.3), branch, or full commit SHA.
+# build.sh clones this ref with --depth 1 for fast CI builds.
+# To update: change this value and run ./docker/openclaw/build.sh
+main

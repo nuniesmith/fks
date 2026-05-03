@@ -1,0 +1,607 @@
+# =============================================================================
+# GitHub Actions Labeler Configuration for FKS / Project JANUS
+# =============================================================================
+# Automatically applies labels to PRs based on changed files and branch names.
+# Used by .github/workflows/labeler.yml with actions/labeler@v5
+#
+# Syntax reference: https://github.com/actions/labeler#common-examples
+#
+# NOTE: Top-level matchers (- changed-files, - head-branch) are OR conditions.
+#       Within changed-files, multiple entries under any-glob-to-any-file are OR.
+#       Negation patterns (!) exclude files matched by earlier patterns.
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOCUMENTATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "README.md"
+          - "docs/**/*"
+          - "**/*.md"
+          - "!BUILD_FIX_SUMMARY.md"
+          - "!CI_STATUS.md"
+          - "!QUICK_STATUS.md"
+          - "!docs/audit/AUDIT_REPORT.md"
+          - "!docs/audit/LLM_AUDIT_REPORT.md"
+
+build-status:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "BUILD_FIX_SUMMARY.md"
+          - "CI_STATUS.md"
+          - "QUICK_STATUS.md"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NEUROMORPHIC ARCHITECTURE — Brain Regions
+# ─────────────────────────────────────────────────────────────────────────────
+
+neuromorphic:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/**/*"
+
+amygdala:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/amygdala/**/*"
+
+basal-ganglia:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/basal_ganglia/**/*"
+
+cerebellum:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/cerebellum/**/*"
+
+cortex:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/cortex/**/*"
+
+hippocampus:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/hippocampus/**/*"
+
+hypothalamus:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/hypothalamus/**/*"
+
+prefrontal:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/prefrontal/**/*"
+
+thalamus:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/thalamus/**/*"
+
+visual-cortex:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/visual_cortex/**/*"
+
+integration:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/integration/**/*"
+
+distributed:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/distributed/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CROSS-CUTTING CONCERNS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Risk Management & Safety
+risk-management:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/amygdala/**/*"
+          - "src/janus/neuromorphic/hypothalamus/**/*"
+          - "src/janus/neuromorphic/prefrontal/conscience/**/*"
+          - "src/janus/crates/risk/**/*"
+          - "src/janus/crates/compliance/**/*"
+
+# Execution & Trading
+execution:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/cerebellum/**/*"
+          - "src/janus/neuromorphic/basal_ganglia/**/*"
+          - "src/janus/services/execution/**/*"
+          - "src/janus/crates/exchanges/**/*"
+
+# Memory & Learning
+memory:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/hippocampus/**/*"
+          - "src/janus/neuromorphic/cortex/memory/**/*"
+          - "src/janus/crates/memory/**/*"
+
+# Performance & Optimization
+performance:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/cerebellum/**/*"
+          - "src/janus/neuromorphic/hippocampus/replay/**/*"
+          - "src/janus/neuromorphic/hippocampus/swr/**/*"
+          - "src/janus/services/execution/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RUST SERVICES & CRATES
+# ─────────────────────────────────────────────────────────────────────────────
+
+# All Rust code
+rust:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/**/*.rs"
+          - "src/janus/**/Cargo.toml"
+          - "src/janus/**/Cargo.lock"
+          - "src/janus/crates/**/*"
+          - "src/janus/services/**/*"
+          - "src/audit/**/*.rs"
+          - "src/proto/**/*"
+
+# JANUS Services
+forward:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/forward/**/*"
+
+backward:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/backward/**/*"
+
+data:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/data/**/*"
+
+cns:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/cns/**/*"
+          - "src/janus/crates/cns/**/*"
+
+optimizer:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/optimizer/**/*"
+          - "src/janus/crates/optimizer/**/*"
+
+api-service:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/api/**/*"
+
+registry:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/registry/**/*"
+          - "src/janus/crates/registry/**/*"
+
+execution-service:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/services/execution/**/*"
+
+# Audit Service
+audit:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/audit/**/*"
+          - "docs/audit/**/*"
+
+# JANUS Crate Groups
+janus-core:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/common/**/*"
+
+janus-neuromorphic:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/**/*"
+
+janus-crates:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/**/*"
+
+# Individual Crates
+backtest:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/backtest/**/*"
+
+strategies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/strategies/**/*"
+
+indicators:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/indicators/**/*"
+
+vision:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/vision/**/*"
+
+models:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/models/**/*"
+
+exchanges:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/exchanges/**/*"
+          - "src/janus/crates/bybit-client/**/*"
+
+bybit:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/bybit-client/**/*"
+
+regime:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/regime/**/*"
+
+ml:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/ml/**/*"
+          - "src/janus/crates/training/**/*"
+
+dsp:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/dsp/**/*"
+
+questdb:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/questdb-writer/**/*"
+
+health:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/health/**/*"
+
+rate-limiting:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/rate-limiter/**/*"
+
+data-quality:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/gap-detection/**/*"
+          - "src/janus/crates/data-quality/**/*"
+
+logic:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/logic/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROTOBUF / gRPC
+# ─────────────────────────────────────────────────────────────────────────────
+
+grpc:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "proto/**/*.proto"
+          - "proto/**/*"
+          - "src/proto/**/*"
+          - "src/janus/crates/proto/**/*"
+          - "src/janus/services/forward/proto/**/*"
+
+proto:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "proto/**/*.proto"
+          - "proto/**/*"
+          - "src/proto/**/*"
+          - "src/janus/crates/proto/**/*"
+          - "src/janus/services/forward/proto/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KOTLIN / KMP CLIENTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+kotlin:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/kotlin/**/*"
+          - "**/*.kt"
+          - "**/*.kts"
+
+kmp:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/kotlin/**/*"
+          - "**/*.kt"
+          - "**/*.kts"
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/web/**/*"
+          - "src/kotlin/composeApp/**/*"
+          - "src/kotlin/shared/**/*"
+
+mobile:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/kotlin/android/**/*"
+          - "src/kotlin/ios/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/config/**/*"
+          - "src/audit/config/**/*"
+          - "infrastructure/config/**/*"
+          - "*.yaml"
+          - "*.yml"
+          - "*.toml"
+          - "!Cargo.toml"
+          - "!pyproject.toml"
+          - "!**/Cargo.toml"
+          - "*.env"
+          - ".env*"
+          - "!.github/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INFRASTRUCTURE
+# ─────────────────────────────────────────────────────────────────────────────
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "infrastructure/docker/**/*"
+          - "infrastructure/compose/**/*"
+          - "Dockerfile*"
+          - "docker-compose*"
+          - ".dockerignore"
+
+infra:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "infrastructure/**/*"
+          - "Dockerfile*"
+          - "docker-compose*"
+          - "scripts/deployment/**/*"
+
+kubernetes:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "infrastructure/kubernetes/**/*"
+
+monitoring:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "infrastructure/config/**/*"
+          - "scripts/monitoring/**/*"
+
+nginx:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "infrastructure/config/nginx/**/*"
+          - "infrastructure/docker/services/nginx/**/*"
+
+# DNS & Cloudflare
+dns:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/deployment/manage_dns.sh"
+          - "docs/operations/infrastructure/CLOUDFLARE_DNS_SETUP.md"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CI/CD
+# ─────────────────────────────────────────────────────────────────────────────
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**/*"
+          - "!.github/labeler.yml"
+
+ci-config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**/*"
+
+labeler:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/labeler.yml"
+
+audit-report:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/audit/AUDIT_REPORT.md"
+          - "docs/audit/LLM_AUDIT_REPORT.md"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCRIPTS & AUTOMATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "*.sh"
+          - "scripts/**/*"
+          - "Makefile"
+          - "**/Makefile"
+
+testing:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "scripts/testing/**/*"
+          - "scripts/start-*-test.sh"
+          - "scripts/monitor-test.sh"
+          - "scripts/pre-test-checklist.sh"
+          - "scripts/test-control.sh"
+          - ".github/workflows/paper-trading-test.yml"
+          - "docs/testing/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TESTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/tests/**/*"
+          - "**/*_test.rs"
+          - "**/*_tests.rs"
+          - "**/test_*.py"
+          - "**/test_*.rs"
+          - "pytest.ini"
+          - "src/clients/tests/**/*"
+
+unit-tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*_test.rs"
+          - "**/*_tests.rs"
+          - "**/test_*.py"
+          - "**/test_*.rs"
+          - "!**/integration/**/*"
+
+integration-tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/integration/**/*"
+          - "src/janus/services/execution/tests/**/*"
+          - "src/janus/crates/*/tests/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECURITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".env*"
+          - "docker-compose*.yml"
+          - ".github/workflows/**"
+          - "Cargo.lock"
+          - "src/janus/neuromorphic/prefrontal/conscience/**/*"
+          - "src/janus/crates/compliance/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEPENDENCIES
+# ─────────────────────────────────────────────────────────────────────────────
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/Cargo.toml"
+          - "**/Cargo.lock"
+          - "pyproject.toml"
+          - "poetry.lock"
+          - "build.gradle.kts"
+          - "settings.gradle.kts"
+          - "gradle.properties"
+          - "package.json"
+          - "package-lock.json"
+
+rust-deps:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/Cargo.toml"
+          - "**/Cargo.lock"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BREAKING CHANGES & API
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Changes to shared interfaces or service entry points
+breaking:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/crates/common/**/*"
+          - "src/janus/crates/proto/**/*"
+          - "proto/**/*.proto"
+          - "src/proto/**/*"
+          - "src/janus/services/forward/src/main.rs"
+          - "src/janus/services/backward/src/main.rs"
+          - "src/janus/services/data/src/main.rs"
+          - "src/janus/services/execution/src/main.rs"
+          - "src/audit/src/main.rs"
+          - "src/janus/Cargo.toml"
+
+api:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "proto/**/*.proto"
+          - "src/proto/**/*"
+          - "src/janus/crates/proto/**/*"
+          - "src/janus/services/api/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# URGENT / SAFETY-CRITICAL
+# ─────────────────────────────────────────────────────────────────────────────
+
+urgent:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/janus/neuromorphic/amygdala/kill_switch.rs"
+          - "src/janus/neuromorphic/amygdala/circuit_breakers/**/*"
+          - "src/janus/crates/compliance/**/*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BRANCH-BASED LABELS
+# ─────────────────────────────────────────────────────────────────────────────
+
+hotfix:
+  - head-branch: ["^hotfix/", "hotfix"]
+
+feature:
+  - head-branch: ["^feature/", "^feat/"]
+
+bugfix:
+  - head-branch: ["^bugfix/", "^fix/", "^bug/"]
+
+refactor:
+  - head-branch: ["^refactor/"]
+
+chore:
+  - head-branch: ["^chore/"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WIP (Work in Progress)
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTE: actions/labeler v5 does not support draft PR matching.
+# Use a separate workflow or branch convention for WIP detection.
+
+wip:
+  - head-branch: ["^wip/", "^WIP/", "^draft/"]
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*WIP*"
+          - "**/*wip*"
+          - "**/*.draft.*"

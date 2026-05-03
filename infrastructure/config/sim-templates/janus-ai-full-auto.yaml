@@ -1,0 +1,33 @@
+# Template metadata
+id: janus-ai-full-auto
+name: "Janus AI Full Auto"
+description: >
+  Full Janus brain pipeline → alertmanager → auto-execution in sim. Runs all
+  strategies on BTC/ETH/SOL with high-confidence auto-execute. Use this to
+  validate the end-to-end signal pipeline before live deployment.
+category: ai
+icon: "🧠"
+accent: "#a78bfa"
+
+# Session defaults (maps 1:1 to CreateSessionRequest fields)
+session:
+  name: "Janus AI Full Auto"
+  initial_balance: 25000.0
+  symbols:
+    - BTCUSD
+    - ETHUSD
+    - SOLUSD
+  data_source: kraken
+  tags:
+    - janus
+    - ai
+    - auto
+  risk:
+    max_position_size: 2500.0
+    max_daily_loss: -1250.0
+    max_open_positions: 3
+  janus_ai:
+    enabled: true
+    min_confidence: 0.75
+    auto_execute: true
+    auto_execute_threshold: 0.85

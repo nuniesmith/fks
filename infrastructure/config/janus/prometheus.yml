@@ -1,0 +1,236 @@
+# Prometheus Configuration for JANUS Trading System
+# This configuration scrapes metrics from all JANUS services and dependencies
+
+global:
+  # How frequently to scrape targets
+  scrape_interval: 10s
+  # How frequently to evaluate rules
+  evaluation_interval: 10s
+  # Timeout for scraping
+  scrape_timeout: 5s
+  # Attach these labels to any time series or alerts
+  external_labels:
+    cluster: 'janus-prod'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - '/etc/prometheus/alerts.yml'
+
+# Scrape configurations
+scrape_configs:
+  # ============================================================================
+  # JANUS Core Services
+  # ============================================================================
+
+  # CNS - Central Nervous System
+  - job_name: 'janus-cns'
+    static_configs:
+      - targets: ['janus-cns:9090']
+        labels:
+          service: 'cns'
+          component: 'monitoring'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Forward Service - Wake State
+  - job_name: 'janus-forward'
+    static_configs:
+      - targets: ['janus-forward:8081']
+        labels:
+          service: 'forward'
+          component: 'trading'
+          tier: 'core'
+          state: 'wake'
+    metrics_path: '/metrics'
+    scrape_interval: 5s  # More frequent for real-time trading
+    scrape_timeout: 3s
+
+  # Backward Service - Sleep State
+  - job_name: 'janus-backward'
+    static_configs:
+      - targets: ['janus-backward:8082']
+        labels:
+          service: 'backward'
+          component: 'training'
+          tier: 'core'
+          state: 'sleep'
+    metrics_path: '/metrics'
+    scrape_interval: 15s  # Less frequent for batch processing
+    scrape_timeout: 5s
+
+  # Gateway Service - Orchestration
+  - job_name: 'janus-gateway'
+    static_configs:
+      - targets: ['janus-gateway:8080']
+        labels:
+          service: 'gateway'
+          component: 'api'
+          tier: 'edge'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # ============================================================================
+  # Dependencies
+  # ============================================================================
+
+  # Redis - Job Queue and Cache
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          component: 'cache'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  # Qdrant - Vector Database (if exporter available)
+  - job_name: 'qdrant'
+    static_configs:
+      - targets: ['qdrant:6333']
+        labels:
+          service: 'qdrant'
+          component: 'database'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  # ============================================================================
+  # Monitoring Infrastructure
+  # ============================================================================
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Grafana
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+          component: 'visualization'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ============================================================================
+  # Docker & Host Metrics (Optional)
+  # ============================================================================
+
+  # Node Exporter - Host metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node-exporter'
+          component: 'monitoring'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  # cAdvisor - Container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+          component: 'monitoring'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  # ============================================================================
+  # Service Discovery (Kubernetes example - commented out)
+  # ============================================================================
+
+  # # Kubernetes pods
+  # - job_name: 'kubernetes-pods'
+  #   kubernetes_sd_configs:
+  #     - role: pod
+  #   relabel_configs:
+  #     # Only scrape pods with prometheus.io/scrape: "true" annotation
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+  #       action: keep
+  #       regex: true
+  #     # Use custom scrape path if specified
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+  #       action: replace
+  #       target_label: __metrics_path__
+  #       regex: (.+)
+  #     # Use custom port if specified
+  #     - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+  #       action: replace
+  #       regex: ([^:]+)(?::\d+)?;(\d+)
+  #       replacement: $1:$2
+  #       target_label: __address__
+  #     # Add pod labels
+  #     - action: labelmap
+  #       regex: __meta_kubernetes_pod_label_(.+)
+  #     - source_labels: [__meta_kubernetes_namespace]
+  #       action: replace
+  #       target_label: kubernetes_namespace
+  #     - source_labels: [__meta_kubernetes_pod_name]
+  #       action: replace
+  #       target_label: kubernetes_pod_name
+
+  # ============================================================================
+  # Docker Swarm Service Discovery (commented out)
+  # ============================================================================
+
+  # - job_name: 'dockerswarm'
+  #   dockerswarm_sd_configs:
+  #     - host: unix:///var/run/docker.sock
+  #       role: tasks
+  #   relabel_configs:
+  #     - source_labels: [__meta_dockerswarm_service_label_prometheus_enable]
+  #       regex: "true"
+  #       action: keep
+  #     - source_labels: [__meta_dockerswarm_service_name]
+  #       target_label: job
+
+# ============================================================================
+# Remote Write (for long-term storage - optional)
+# ============================================================================
+
+# remote_write:
+#   - url: 'http://cortex:9009/api/prom/push'
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 200
+#       min_shards: 1
+#       max_samples_per_send: 5000
+#       batch_send_deadline: 5s
+#       min_backoff: 30ms
+#       max_backoff: 100ms
+#   - url: 'http://thanos-receive:19291/api/v1/receive'
+
+# ============================================================================
+# Remote Read (for long-term storage - optional)
+# ============================================================================
+
+# remote_read:
+#   - url: 'http://thanos-query:19192/api/v1/query'
+#     read_recent: true

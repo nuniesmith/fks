@@ -1,0 +1,11 @@
+{
+  "global_safety": {
+    "max_leverage": 10.0,
+    "max_open_positions": 3,
+    "kill_switch_enabled": false
+  },
+  "per_trade_risk": {
+    "max_risk_per_trade_percent": 1.0
+  }
+}
+

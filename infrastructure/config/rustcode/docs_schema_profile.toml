@@ -1,0 +1,466 @@
+# Documentation Schema Validation Profile
+# Purpose: Enforce documentation organization and quality standards
+# Reference: DOCS_REORGANIZATION_GUIDE.md
+
+[profile]
+name = "docs-schema"
+description = "Validates documentation structure, organization, and quality"
+version = "1.0"
+author = "nuniesmith"
+
+# Documentation schema enforcement
+[focus_areas]
+documentation_structure = true
+file_placement = true
+link_integrity = true
+metadata_validation = true
+content_quality = true
+
+# Severity thresholds
+[thresholds]
+max_critical = 0  # Zero tolerance for schema violations
+max_high = 5
+max_medium = 20
+fail_on_critical = true
+
+# ============================================================================
+# 1. DOCUMENTATION STRUCTURE VALIDATION
+# Reference: DOCS_REORGANIZATION_GUIDE.md
+# ============================================================================
+
+[[checks]]
+name = "docs_root_no_flat_files"
+category = "documentation"
+severity = "critical"
+description = "Prevent flat files in docs/ root (must be categorized)"
+pattern = '''(?x)
+^docs/[^/]+\.md$
+'''
+paths = ["docs/"]
+exclude_paths = ["docs/index.md", "docs/README.md"]
+message = "Documentation file in docs/ root - must be in architecture/operations/research/archive/audit"
+reference = "DOCS_REORGANIZATION_GUIDE.md"
+
+[[checks]]
+name = "docs_required_index_files"
+category = "documentation"
+severity = "high"
+description = "Each documentation section must have README.md index"
+required_files = [
+    "docs/index.md",
+    "docs/architecture/README.md",
+    "docs/operations/README.md",
+    "docs/archive/README.md",
+    "docs/api/README.md"
+]
+message = "Missing required index file in documentation section"
+
+[[checks]]
+name = "docs_archive_temporal_markers"
+category = "documentation"
+severity = "medium"
+description = "Archive files should have temporal markers (dates, versions, phases)"
+pattern = '''(?x)
+# Files in archive without temporal markers in filename
+^docs/archive/.*?
+(?!.*?(
+    \d{4}-\d{2}-\d{2}|  # Date format YYYY-MM-DD
+    20\d{2}|             # Year
+    v\d+\.\d+|           # Version
+    [Pp]hase[0-9]|       # Phase N
+    [Pp][0-9]|           # P0, P1, etc.
+    [Qq][1-4]|           # Q1, Q2, etc.
+    [Ww]eek|             # Week
+    [Rr]un|              # Run number
+    [Ff]ix               # Fix
+))
+.*?\.md$
+'''
+paths = ["docs/archive/"]
+message = "Archive file lacks temporal marker (date, version, phase, or identifier)"
+
+[[checks]]
+name = "docs_status_files_should_archive"
+category = "documentation"
+severity = "high"
+description = "Status/progress/complete files belong in archive"
+pattern = '''(?x)
+.*?(
+    [Ss][Tt][Aa][Tt][Uu][Ss]|
+    [Pp][Rr][Oo][Gg][Rr][Ee][Ss][Ss]|
+    [Cc][Oo][Mm][Pp][Ll][Ee][Tt][Ee]|
+    [Ss][Uu][Mm][Mm][Aa][Rr][Yy]|
+    [Ff][Ii][Xx][Ee][Ss]|
+    DASHBOARD
+).*?\.md$
+'''
+paths = ["docs/architecture/", "docs/operations/", "docs/research/"]
+message = "Status/progress file should be in docs/archive/ (historical logs)"
+
+[[checks]]
+name = "docs_architecture_permanent_only"
+category = "documentation"
+severity = "high"
+description = "Architecture folder should only contain permanent design docs"
+pattern = '''(?x)
+.*?(
+    [Qq]uick|
+    [Ss]tart|
+    [Tt]utorial|
+    [Hh]ow[_-]?[Tt]o|
+    [Ss]etup|
+    [Dd]eployment
+).*?\.md$
+'''
+paths = ["docs/architecture/"]
+message = "Quick-start/tutorial content belongs in docs/operations/, not architecture/"
+
+[[checks]]
+name = "docs_operations_actionable_only"
+category = "documentation"
+severity = "medium"
+description = "Operations folder should contain actionable procedures"
+pattern = '''(?x)
+.*?(
+    [Tt]heory|
+    [Rr]esearch|
+    [Pp]aper|
+    [Aa]lgorithm|
+    [Mm]athematical
+).*?\.md$
+'''
+paths = ["docs/operations/"]
+message = "Theoretical content belongs in docs/architecture/ or docs/research/, not operations/"
+
+# ============================================================================
+# 2. METADATA & FRONTMATTER VALIDATION
+# ============================================================================
+
+[[checks]]
+name = "docs_missing_frontmatter"
+category = "documentation"
+severity = "medium"
+description = "Important docs should have metadata (title, date, author, status)"
+pattern = '''(?x)
+^# .*?$                    # Has a title
+(?!.*?                      # But NOT followed by metadata
+    (
+        \*\*[Dd]ate\*\*:|
+        \*\*[Ss]tatus\*\*:|
+        \*\*[Aa]uthor\*\*:|
+        \*\*[Ll]ast [Uu]pdated\*\*:|
+        [Cc]reated:
+    )
+)
+'''
+paths = ["docs/architecture/", "docs/operations/deployment/", "docs/research/"]
+exclude_paths = ["docs/*/README.md"]
+message = "Missing metadata (Date, Status, Author, or Last Updated)"
+
+[[checks]]
+name = "docs_outdated_status"
+category = "documentation"
+severity = "low"
+description = "Documentation with old Last Updated dates"
+pattern = '''(?x)
+\*\*[Ll]ast [Uu]pdated\*\*:?\s*
+(
+    202[0-3]|              # Years 2020-2023
+    2024-(0[1-9]|1[0-1])   # January-November 2024
+)
+'''
+paths = ["docs/architecture/", "docs/operations/", "docs/research/"]
+message = "Documentation may be outdated (Last Updated > 1 month ago)"
+
+# ============================================================================
+# 3. LINK INTEGRITY & CROSS-REFERENCES
+# ============================================================================
+
+[[checks]]
+name = "docs_broken_relative_links"
+category = "documentation"
+severity = "high"
+description = "Detect potentially broken relative links"
+pattern = '''(?x)
+\[.*?\]\(                   # Markdown link
+    (?!https?://)           # Not external link
+    (?!#)                   # Not anchor link
+    (
+        \.\./\.\./\.\./|    # Too many parent dirs
+        /[Hh]ome/|          # Absolute path
+        /[Uu]sers/|         # Absolute path
+        [Cc]:/              # Windows absolute path
+    )
+'''
+paths = ["docs/"]
+message = "Potentially broken relative link (too many ../ or absolute path)"
+
+[[checks]]
+name = "docs_missing_anchor_targets"
+category = "documentation"
+severity = "medium"
+description = "Link to anchor that may not exist"
+pattern = '''(?x)
+\[.*?\]\(.*?\.md#[a-z0-9-]+\)  # Link with anchor
+'''
+paths = ["docs/"]
+message = "Link with anchor - verify target heading exists in referenced file"
+
+[[checks]]
+name = "docs_external_links_without_https"
+category = "documentation"
+severity = "low"
+description = "External links should use HTTPS"
+pattern = '''(?x)
+\[.*?\]\(http://           # HTTP (not HTTPS)
+    (?!localhost|127\.0\.0\.1)  # Except local
+'''
+paths = ["docs/"]
+message = "External link uses HTTP instead of HTTPS (security risk)"
+
+[[checks]]
+name = "docs_github_links_hardcoded_branch"
+category = "documentation"
+severity = "low"
+description = "GitHub links should use /main/ or be relative"
+pattern = '''(?x)
+github\.com/[^/]+/[^/]+/blob/
+(master|develop|feature/[^/]+)  # Not 'main'
+'''
+paths = ["docs/"]
+message = "GitHub link uses hardcoded branch (use 'main' or relative links)"
+
+# ============================================================================
+# 4. CODE DOCUMENTATION REQUIREMENTS
+# ============================================================================
+
+[[checks]]
+name = "docs_service_missing_readme"
+category = "documentation"
+severity = "high"
+description = "Each service must have a README.md"
+required_files = [
+    "src/audit/README.md",
+    "src/janus/README.md",
+    "src/monitor/README.md"
+]
+message = "Service missing README.md (see docs/operations/README.md for template)"
+
+[[checks]]
+name = "docs_service_readme_minimal"
+category = "documentation"
+severity = "medium"
+description = "Service README should link to architecture and API docs"
+pattern = '''(?x)
+# Service README without proper links
+^#\s+.*?Service.*?$        # Has service title
+(?!.*?                      # But doesn't have links to:
+    (
+        \[.*?[Aa]rchitecture.*?\]|
+        \[.*?API.*?\]|
+        docs/architecture/|
+        docs/api/
+    )
+)
+'''
+paths = ["src/*/README.md"]
+message = "Service README should link to architecture docs and API reference"
+
+[[checks]]
+name = "docs_experiment_missing_readme"
+category = "documentation"
+severity = "medium"
+description = "Experiment directories should have README explaining purpose"
+pattern = '''(?x)
+experiments/[^/]+/          # Subdirectory in experiments/
+(?!.*?README\.md)           # Without README
+'''
+paths = ["experiments/"]
+message = "Experiment directory missing README.md (explain purpose, setup, results)"
+
+# ============================================================================
+# 5. CONTENT QUALITY CHECKS
+# ============================================================================
+
+[[checks]]
+name = "docs_todo_in_permanent_docs"
+category = "documentation"
+severity = "medium"
+description = "Permanent docs should not have TODO markers"
+pattern = '''(?i)TODO|FIXME|XXX|HACK|WIP'''
+paths = ["docs/architecture/", "docs/operations/deployment/"]
+exclude_paths = ["docs/archive/"]
+message = "TODO marker in permanent documentation (resolve or move to archive)"
+
+[[checks]]
+name = "docs_placeholder_content"
+category = "documentation"
+severity = "high"
+description = "Detect placeholder/stub content"
+pattern = '''(?x)
+(
+    [Cc]oming [Ss]oon|
+    [Tt][Bb][Dd]|
+    [Pp]laceholder|
+    Lorem ipsum|
+    \.\.\.|
+    ^$\n^$\n^$              # Multiple blank lines
+)
+'''
+paths = ["docs/architecture/", "docs/operations/", "docs/research/"]
+exclude_paths = ["docs/archive/"]
+message = "Placeholder content detected - complete or move to archive"
+
+[[checks]]
+name = "docs_duplicate_headings"
+category = "documentation"
+severity = "low"
+description = "Duplicate top-level headings in same file suggest content merge"
+pattern = '''(?x)
+^#\s+(.+?)$                 # First H1
+.*?
+^#\s+\1$                    # Same H1 again
+'''
+paths = ["docs/"]
+message = "Duplicate top-level heading - consider merging or splitting content"
+
+[[checks]]
+name = "docs_excessive_nesting"
+category = "documentation"
+severity = "low"
+description = "Avoid deeply nested heading structures (>5 levels)"
+pattern = '''(?x)
+^#{6,}\s+                   # H6 or deeper
+'''
+paths = ["docs/"]
+message = "Excessive heading nesting (#{6,}) - simplify structure"
+
+[[checks]]
+name = "docs_long_lines_in_code_blocks"
+category = "documentation"
+severity = "low"
+description = "Code blocks with very long lines (readability)"
+pattern = '''(?x)
+```.*?\n
+.{200,}                     # Line with 200+ characters
+\n```
+'''
+paths = ["docs/"]
+message = "Code block has very long lines (>200 chars) - consider wrapping"
+
+# ============================================================================
+# 6. SCHEMA COMPLIANCE (AUTO-GENERATED CONTENT)
+# ============================================================================
+
+[[checks]]
+name = "docs_api_in_git"
+category = "documentation"
+severity = "critical"
+description = "Auto-generated API docs should not be committed"
+pattern = '''(?x)
+^docs/api/(rust|python)/.*?\.(html|json)$
+'''
+paths = ["docs/api/"]
+message = "CRITICAL: Auto-generated API docs committed to Git (should be in .gitignore)"
+
+[[checks]]
+name = "docs_site_directory_in_git"
+category = "documentation"
+severity = "critical"
+description = "MkDocs site/ directory should not be committed"
+pattern = '''(?x)
+^site/.*?
+'''
+paths = ["site/"]
+message = "CRITICAL: MkDocs site/ directory committed to Git (should be in .gitignore)"
+
+# ============================================================================
+# 7. NAVIGATION & DISCOVERABILITY
+# ============================================================================
+
+[[checks]]
+name = "docs_orphaned_files"
+category = "documentation"
+severity = "medium"
+description = "Files not referenced in any README or index"
+# This check requires special logic in the audit engine
+# Mark for manual review
+pattern = '''(?x)
+.*?\.md$                    # Any markdown file
+'''
+paths = ["docs/architecture/", "docs/operations/", "docs/research/"]
+exclude_paths = ["docs/*/README.md", "docs/index.md"]
+message = "File may be orphaned - not found in section README (verify manually)"
+# Note: This is a heuristic - actual orphan detection needs link graph analysis
+
+[[checks]]
+name = "docs_index_missing_new_files"
+category = "documentation"
+severity = "low"
+description = "Recently added files may not be in indices"
+# Requires Git history analysis - mark for tooling
+message = "Check if recently added docs are referenced in README indices"
+
+# ============================================================================
+# 8. MKDOCS INTEGRATION
+# ============================================================================
+
+[[checks]]
+name = "docs_mkdocs_nav_sync"
+category = "documentation"
+severity = "high"
+description = "Files in mkdocs.yml nav should exist"
+# This check should parse mkdocs.yml and verify all nav entries exist
+message = "mkdocs.yml references file that doesn't exist (broken navigation)"
+
+[[checks]]
+name = "docs_new_files_missing_from_nav"
+category = "documentation"
+severity = "medium"
+description = "New documentation files should be added to mkdocs.yml nav"
+# Requires comparing file list with mkdocs.yml nav
+message = "Documentation file not in mkdocs.yml navigation (won't appear in site)"
+
+# ============================================================================
+# 9. REPORT GENERATION SETTINGS
+# ============================================================================
+
+[report]
+format = "markdown"
+output_file = "DOCS_SCHEMA_AUDIT_REPORT.md"
+include_code_snippets = true
+max_snippet_lines = 5
+group_by = "category"
+sort_by = "severity"
+
+[report.sections]
+schema_violations = true
+link_integrity = true
+content_quality = true
+navigation_issues = true
+
+[metrics]
+track_orphaned_files = true
+track_missing_indices = true
+track_archive_candidates = true
+
+[alerts]
+schema_violation_any = true
+broken_links_any = true
+missing_index_any = true
+
+# ============================================================================
+# 10. CI/CD INTEGRATION
+# ============================================================================
+
+[ci]
+fail_build_on_critical = true
+fail_build_on_schema_violation = true
+generate_github_annotations = true
+post_comment_to_pr = true
+
+[ci.github_actions]
+enabled = true
+workflow_name = "Documentation Schema Audit"
+run_on = ["pull_request", "push"]
+paths_filter = ["docs/**", "mkdocs.yml"]

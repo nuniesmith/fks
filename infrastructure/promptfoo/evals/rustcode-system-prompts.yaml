@@ -1,0 +1,412 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: "RUSTCODE System Prompt Quality — scaffold, code review, architectural reasoning"
+
+# Each provider label maps to a distinct system-prompt persona.
+# Tests select their persona via options.provider: <label>.
+providers:
+  - id: openai:grok-4-1-fast-reasoning
+    label: scaffold
+    config:
+      apiBaseUrl: http://rc-app:3500/v1
+      apiKey: "{{env.OPENAI_API_KEY}}"
+      system: |
+        You are a Rust expert embedded in a high-performance trading system (FKS/Janus).
+        Generate minimal but complete stub implementations that compile.
+        Use idiomatic Rust: thiserror/anyhow for errors, async/await with Tokio,
+        axum for HTTP handlers, sqlx for database access.
+        Always include necessary `use` statements. Output code only — no prose preamble.
+
+  - id: openai:grok-4-1-fast-reasoning
+    label: code_review
+    config:
+      apiBaseUrl: http://rc-app:3500/v1
+      apiKey: "{{env.OPENAI_API_KEY}}"
+      system: |
+        You are a senior Rust engineer performing code review on a trading system codebase.
+        Review for: correctness, memory safety, idiomatic style, error handling quality,
+        potential panics (.unwrap()/.expect()), race conditions, and performance issues.
+        Be specific — cite the exact pattern or line that is problematic.
+        Format your response as:
+          ## Issues  (numbered list)
+          ## Suggestions  (numbered list)
+          ## Verdict  (Approve | Request Changes)
+
+  - id: openai:grok-4-1-fast-reasoning
+    label: architectural
+    config:
+      apiBaseUrl: http://rc-app:3500/v1
+      apiKey: "{{env.OPENAI_API_KEY}}"
+      system: |
+        You are a systems architect specialising in high-performance trading infrastructure.
+        Stack context: Rust (Janus core), Python (Ruby analytics), PostgreSQL + QuestDB + Redis,
+        gRPC for inter-service comms, axum for HTTP APIs, deployed via Docker Compose on a single host.
+        Give concrete, opinionated recommendations — state trade-offs clearly and make a final call.
+        Avoid hedging. If a choice is context-dependent, specify exactly which condition tips the decision.
+
+prompts:
+  - "{{user_message}}"
+
+tests:
+  # ---------------------------------------------------------------------------
+  # SCAFFOLD — stub generation
+  # ---------------------------------------------------------------------------
+  - description: "Scaffold — axum GET handler with sqlx query"
+    options:
+      provider: scaffold
+    vars:
+      user_message: >
+        Generate an axum GET handler `get_ohlcv` that reads a `symbol` query param (String)
+        and an optional `limit` query param (u32, default 100), queries a sqlx PgPool stored
+        in AppState, and returns a JSON array of OHLCV rows. Include the handler function,
+        the AppState struct, and the OhlcvRow struct that derives sqlx::FromRow.
+    assert:
+      - type: contains
+        value: "async fn get_ohlcv"
+      - type: contains
+        value: "Query("
+      - type: contains
+        value: "Json("
+      - type: contains
+        value: "sqlx"
+      - type: llm-rubric
+        value: >
+          The response contains a valid async axum handler with a correct Query extractor,
+          an AppState struct holding a sqlx PgPool, an OhlcvRow struct that derives
+          sqlx::FromRow, and returns a Result with an appropriate error type.
+          The code should compile given standard axum + sqlx imports.
+
+  - description: "Scaffold — tokio broadcast channel for signal fanout"
+    options:
+      provider: scaffold
+    vars:
+      user_message: >
+        Generate a Rust module `signal_bus` that wraps a tokio::sync::broadcast channel
+        for distributing TradingSignal events to multiple async subscribers. Include:
+        a SignalBus struct with `send` and `subscribe` methods, a TradingSignal enum
+        with at least Entry/Exit/Hold variants carrying a symbol String and price f64,
+        and a doc-comment example showing how a producer and two consumers would use it.
+    assert:
+      - type: contains
+        value: "broadcast"
+      - type: contains
+        value: "TradingSignal"
+      - type: contains
+        value: "subscribe"
+      - type: llm-rubric
+        value: >
+          The SignalBus wraps a broadcast::Sender, the subscribe() method returns a
+          broadcast::Receiver, and send() returns a Result. The TradingSignal enum
+          has at least Entry/Exit/Hold variants with symbol and price fields.
+          Error handling avoids bare unwrap(). The doc-comment example is runnable.
+
+  - description: "Scaffold — SELECT FOR UPDATE SKIP LOCKED task queue"
+    options:
+      provider: scaffold
+    vars:
+      user_message: >
+        Scaffold a Rust task queue backed by a `tasks` PostgreSQL table using sqlx.
+        Include: a Task struct (id UUID, payload serde_json::Value, status TaskStatus enum,
+        created_at OffsetDateTime), an `enqueue` async method that inserts a new pending task,
+        and a `poll_next` async method that atomically claims the next pending task using
+        SELECT ... FOR UPDATE SKIP LOCKED inside a transaction, marking it as running.
+        Return Option<Task> from poll_next.
+    assert:
+      - type: contains
+        value: "FOR UPDATE SKIP LOCKED"
+      - type: contains
+        value: "Uuid"
+      - type: contains
+        value: "transaction"
+      - type: llm-rubric
+        value: >
+          poll_next opens a sqlx transaction, runs SELECT FOR UPDATE SKIP LOCKED,
+          updates the status to Running within the same transaction, and commits.
+          The Task struct derives sqlx::FromRow. TaskStatus is an enum with at least
+          Pending/Running/Done. Returns Ok(None) cleanly when the queue is empty.
+
+  - description: "Scaffold — Redis rate limiter with atomic Lua script"
+    options:
+      provider: scaffold
+    vars:
+      user_message: >
+        Scaffold a Rust struct `RateLimiter` using a deadpool_redis connection pool
+        that implements a sliding-window rate limit via a Lua script for atomicity.
+        Method: `pub async fn check_and_increment(&self, key: &str, limit: u32, window_secs: u64) -> Result<bool, AppError>`.
+        The bool should be true if the request is allowed, false if rate-limited.
+        Include the Lua script as a const string.
+    assert:
+      - type: contains
+        value: "RateLimiter"
+      - type: contains
+        value: "EVAL"
+      - type: llm-rubric
+        value: >
+          The Lua script is stored as a const and executed via redis EVAL or evalsha.
+          It implements sliding-window semantics (ZADD + ZREMRANGEBYSCORE + ZCARD or similar).
+          The method gets a pooled connection from deadpool_redis and returns true when
+          the count is under the limit, false otherwise. AppError wraps the redis error.
+
+  - description: "Scaffold — tonic gRPC service stub"
+    options:
+      provider: scaffold
+    vars:
+      user_message: >
+        Generate a tonic gRPC service implementation for a RegimeService with a single
+        RPC `get_current_regime(RegimeRequest) returns (RegimeResponse)`. Include the
+        service struct holding a sqlx PgPool, the async impl block, and a minimal main()
+        that serves on port 9051 using Server::builder(). Assume proto-generated types
+        are in a `proto::regime` module.
+    assert:
+      - type: contains
+        value: "tonic"
+      - type: contains
+        value: "async fn get_current_regime"
+      - type: contains
+        value: "9051"
+      - type: llm-rubric
+        value: >
+          The impl block correctly wraps the method in `async fn` returning
+          `Result<Response<RegimeResponse>, Status>`. main() uses Server::builder()
+          with .add_service() and .serve(). The struct holds a PgPool and is used
+          inside the handler. The code is structurally correct for tonic 0.10+.
+
+  # ---------------------------------------------------------------------------
+  # CODE REVIEW — correctness and safety
+  # ---------------------------------------------------------------------------
+  - description: "Code review — .unwrap() in production axum handler"
+    options:
+      provider: code_review
+    vars:
+      user_message: |
+        Review this axum handler:
+
+        ```rust
+        pub async fn get_position(
+            State(state): State<AppState>,
+            Path(symbol): Path<String>,
+        ) -> impl IntoResponse {
+            let row = state.db
+                .query_one(
+                    "SELECT qty, avg_price FROM positions WHERE symbol = $1",
+                    &[&symbol],
+                )
+                .await
+                .unwrap();
+
+            let qty: f64 = row.get(0);
+            let price: f64 = row.get(1);
+            Json(json!({ "symbol": symbol, "qty": qty, "avg_price": price }))
+        }
+        ```
+    assert:
+      - type: llm-rubric
+        value: >
+          The review identifies `.unwrap()` as a critical bug that causes a panic
+          (and 500 response) when no position row exists for the symbol.
+          It recommends using the `?` operator with a proper error type or explicitly
+          returning a 404 response when query_one returns no rows.
+      - type: llm-rubric
+        value: >
+          The verdict is "Request Changes". The response is structured with Issues,
+          Suggestions, and Verdict sections and gives actionable, specific feedback
+          rather than restating the code.
+
+  - description: "Code review — integer overflow in position sizing"
+    options:
+      provider: code_review
+    vars:
+      user_message: |
+        Review this position sizing function used in our live trading path:
+
+        ```rust
+        pub fn calculate_shares(capital: u32, price: f32) -> u32 {
+            let raw = (capital as f32 / price) as u32;
+            let risk_adjusted = raw * 95 / 100;  // use 95% of max position
+            risk_adjusted
+        }
+        ```
+    assert:
+      - type: llm-rubric
+        value: >
+          The review identifies that `raw * 95` overflows for large values of raw
+          (e.g. when capital is large and price is small), recommending u64 intermediate
+          arithmetic or checked_mul with a meaningful error. It also flags f32 precision
+          loss as problematic for financial calculations.
+      - type: llm-rubric
+        value: >
+          The review recommends rust_decimal or integer fixed-point arithmetic
+          as the correct approach for financial quantities, and notes that using
+          floating-point for share counts or currency values is an antipattern
+          in production trading systems.
+
+  - description: "Code review — cache-aside with thundering herd"
+    options:
+      provider: code_review
+    vars:
+      user_message: |
+        Review this Redis cache-aside implementation:
+
+        ```rust
+        pub async fn get_regime(
+            redis: &mut Connection,
+            db: &PgPool,
+            symbol: &str,
+        ) -> Regime {
+            let key = format!("regime:{}", symbol);
+            if let Ok(cached) = redis::cmd("GET").arg(&key).query_async(redis).await {
+                return cached;
+            }
+            let regime: Regime = sqlx::query_as(
+                "SELECT * FROM regimes WHERE symbol = $1 ORDER BY ts DESC LIMIT 1"
+            )
+            .bind(symbol)
+            .fetch_one(db)
+            .await
+            .unwrap();
+
+            let _: () = redis::cmd("SET")
+                .arg(&key).arg(&regime).arg("EX").arg(60)
+                .query_async(redis).await.unwrap();
+            regime
+        }
+        ```
+    assert:
+      - type: llm-rubric
+        value: >
+          The review identifies the cache stampede / thundering-herd race condition:
+          multiple concurrent callers all miss the cache simultaneously and all query
+          the database. It suggests SET NX with a short lock TTL, a tokio::sync::OnceCell,
+          or a per-key mutex (DashMap<String, Arc<Mutex<...>>>) to deduplicate in-flight loads.
+      - type: llm-rubric
+        value: >
+          The review flags both .unwrap() calls (DB fetch and Redis SET) and the fact
+          that the function signature returns Regime instead of Result<Regime, AppError>,
+          making error propagation impossible. The verdict is Request Changes.
+
+  - description: "Code review — background task without cancellation"
+    options:
+      provider: code_review
+    vars:
+      user_message: |
+        Review this background backtest runner spawned at startup:
+
+        ```rust
+        pub async fn run_backtest(params: BacktestParams) {
+            let mut results = Vec::new();
+            for date in params.date_range() {
+                let bars = fetch_bars(&date).await;
+                let signals = compute_signals(&bars);
+                results.push(signals);
+            }
+            save_results(results).await;
+        }
+        ```
+    assert:
+      - type: llm-rubric
+        value: >
+          The review identifies the lack of cancellation support: this task cannot be
+          stopped on shutdown. It recommends tokio_util::sync::CancellationToken or
+          a tokio::sync::oneshot shutdown signal checked inside the loop with select!.
+      - type: llm-rubric
+        value: >
+          The review flags that fetch_bars and save_results presumably return Results
+          that are silently discarded, and that collecting all results in memory before
+          saving is risky for long date ranges. It suggests streaming / incremental saves.
+
+  # ---------------------------------------------------------------------------
+  # ARCHITECTURAL REASONING
+  # ---------------------------------------------------------------------------
+  - description: "Architecture — QuestDB vs TimescaleDB for 50k rows/sec tick ingest"
+    options:
+      provider: architectural
+    vars:
+      user_message: >
+        We ingest intraday tick data (symbol, ts, price, size) at ~50k rows/sec peak
+        during market open. We use QuestDB today via ILP. A team member wants to
+        migrate to TimescaleDB (PostgreSQL extension) so we can JOIN tick data with
+        our existing janus_db tables using foreign data wrappers, eliminating a
+        separate query hop. Evaluate the trade-offs and give a concrete recommendation.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response gives a concrete recommendation (keep QuestDB or migrate),
+          not just a list of pros and cons. It references QuestDB's ILP ingest
+          throughput advantage and TimescaleDB's FDW join benefit and makes a
+          clear call based on the 50k rows/sec requirement.
+      - type: llm-rubric
+        value: >
+          The response mentions at least one concrete alternative to FDW joins
+          (e.g. materialised aggregates in Postgres synced from QuestDB, a REST
+          microservice aggregating across both, or a scheduled ETL) so the JOIN
+          benefit can be approximated without migrating the hot ingest path.
+
+  - description: "Architecture — event sourcing for order state machine"
+    options:
+      provider: architectural
+    vars:
+      user_message: >
+        Our order management has a mutable `orders` table with a status column
+        (pending/filled/cancelled). We're losing audit trail and hitting concurrency
+        bugs with optimistic locking collisions. A colleague suggests migrating to
+        event sourcing. Should we? If yes, describe what the Rust + Postgres
+        implementation looks like in our stack.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response makes a clear yes/no recommendation on event sourcing for this
+          use case, citing regulatory audit trail requirements and natural fit for
+          order lifecycle as factors. It does not give a both-sides-have-merit non-answer.
+      - type: llm-rubric
+        value: >
+          If recommending event sourcing, the response describes a concrete schema:
+          an order_events table (event_id UUID, order_id UUID, event_type, payload JSONB,
+          occurred_at), a Rust domain event enum, and how to project current state by
+          replaying events. It also addresses how downstream consumers receive events
+          (LISTEN/NOTIFY, outbox pattern, or a Rust broadcast channel).
+
+  - description: "Architecture — signal-to-order latency reduction to sub-10ms"
+    options:
+      provider: architectural
+    vars:
+      user_message: >
+        Our measured signal-to-order latency is 45ms broken down as:
+        bar aggregation in QuestDB (2ms), regime check via Redis (8ms),
+        signal computation in Python/numpy (22ms), REST call to Janus Rust API (13ms).
+        Target is under 10ms total. What is the highest-ROI path?
+    assert:
+      - type: llm-rubric
+        value: >
+          The response correctly identifies Python signal computation (22ms, nearly
+          half the total) as the dominant bottleneck and prioritises it over the
+          smaller wins. It does not spread effort uniformly across all four components.
+      - type: llm-rubric
+        value: >
+          The response gives a realistic floor for broker REST latency (typically
+          10-50ms to the broker endpoint itself) and notes that achieving sub-10ms
+          end-to-end latency requires either co-location with the broker or a
+          different order submission mechanism, making the stated goal potentially
+          impossible regardless of internal optimisation.
+
+  - description: "Architecture — multi-broker failover within 30 seconds"
+    options:
+      provider: architectural
+    vars:
+      user_message: >
+        All orders route through Alpaca's REST API. Design automatic failover to
+        Interactive Brokers within 30 seconds if Alpaca is degraded, with no manual
+        intervention. Our Janus core already abstracts brokers behind a BrokerClient trait.
+        Address: health checking, state machine, position reconciliation on cutover,
+        and how to prevent double-fills during the transition.
+    assert:
+      - type: llm-rubric
+        value: >
+          The response builds on the existing BrokerClient trait abstraction and
+          proposes a circuit-breaker state machine (Closed → Open → Half-Open)
+          with specific failure thresholds and health-check intervals that achieve
+          the 30-second SLA. It does not suggest replacing the trait abstraction.
+      - type: llm-rubric
+        value: >
+          The response explicitly addresses double-fill prevention during transition
+          (e.g. cancel all open orders on the failing broker before activating the
+          standby, or use idempotency keys) and position reconciliation (fetch
+          live positions from both brokers, diff, and cancel/flatten the discrepancy).

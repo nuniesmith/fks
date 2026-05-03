@@ -1,0 +1,261 @@
+syntax = "proto3";
+
+package fks.execution.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/execution/v1;executionv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.execution.v1";
+
+import "fks/common/v1/common.proto";
+
+// ExecutionService handles order placement, position management, and trade execution
+service ExecutionService {
+  // Submit a trading signal for execution
+  rpc SubmitSignal(SubmitSignalRequest) returns (SubmitSignalResponse);
+
+  // Get order status
+  rpc GetOrderStatus(GetOrderStatusRequest) returns (GetOrderStatusResponse);
+
+  // Get all active orders
+  rpc GetActiveOrders(GetActiveOrdersRequest) returns (GetActiveOrdersResponse);
+
+  // Cancel an order
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+
+  // Cancel all orders for a symbol
+  rpc CancelAllOrders(CancelAllOrdersRequest) returns (CancelAllOrdersResponse);
+
+  // Get current positions
+  rpc GetPositions(GetPositionsRequest) returns (GetPositionsResponse);
+
+  // Get account information
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+
+  // Stream execution updates (fills, cancellations, etc.)
+  rpc StreamUpdates(StreamUpdatesRequest) returns (stream StreamUpdatesResponse);
+
+  // Health check — uses shared type from fks.common.v1 (richer than the old local version:
+  // adds uptime_seconds, version, and moves timestamp to field 6).
+  rpc HealthCheck(fks.common.v1.HealthCheckRequest) returns (fks.common.v1.HealthCheckResponse);
+}
+
+// ============================================================================
+// Request/Response Messages
+// ============================================================================
+
+message SubmitSignalRequest {
+  string signal_id = 1; // Unique signal identifier from JANUS
+  string symbol = 2; // Trading symbol (e.g., "BTCUSD")
+  string exchange = 3; // Exchange name (e.g., "bybit", "binance")
+  fks.common.v1.Side side = 4; // Buy or Sell
+  double quantity = 5; // Order quantity
+  fks.common.v1.OrderType order_type = 6; // Market, Limit, etc.
+  optional double price = 7; // Limit price (for limit orders)
+  optional double stop_price = 8; // Stop price (for stop orders)
+  fks.common.v1.TimeInForce time_in_force = 9; // Order duration
+  ExecutionStrategy strategy = 10; // Execution strategy
+  map<string, string> metadata = 11; // Additional metadata
+}
+
+message SubmitSignalResponse {
+  bool success = 1;
+  string order_id = 2; // Exchange order ID
+  string internal_order_id = 3; // Internal tracking ID
+  string message = 4;
+  int64 timestamp = 5; // Unix timestamp in milliseconds
+  OrderStatus status = 6;
+}
+
+message GetOrderStatusRequest {
+  string order_id = 1; // Internal or exchange order ID
+}
+
+message GetOrderStatusResponse {
+  string order_id = 1;
+  string internal_order_id = 2;
+  string symbol = 3;
+  string exchange = 4;
+  fks.common.v1.Side side = 5;
+  fks.common.v1.OrderType order_type = 6;
+  OrderStatus status = 7;
+  double quantity = 8;
+  double filled_quantity = 9;
+  double remaining_quantity = 10;
+  optional double price = 11;
+  optional double average_fill_price = 12;
+  int64 created_at = 13;
+  optional int64 updated_at = 14;
+  repeated Fill fills = 15;
+}
+
+message GetActiveOrdersRequest {
+  optional string symbol = 1; // Filter by symbol (optional)
+  optional string exchange = 2; // Filter by exchange (optional)
+}
+
+message GetActiveOrdersResponse {
+  repeated GetOrderStatusResponse orders = 1;
+}
+
+message CancelOrderRequest {
+  string order_id = 1; // Internal or exchange order ID
+}
+
+message CancelOrderResponse {
+  bool success = 1;
+  string order_id = 2;
+  string message = 3;
+  int64 timestamp = 4;
+}
+
+message CancelAllOrdersRequest {
+  optional string symbol = 1; // Cancel all for symbol (or all if empty)
+  optional string exchange = 2; // Cancel all for exchange (or all if empty)
+}
+
+message CancelAllOrdersResponse {
+  bool success = 1;
+  int32 cancelled_count = 2;
+  string message = 3;
+  repeated string cancelled_order_ids = 4;
+}
+
+message GetPositionsRequest {
+  optional string symbol = 1; // Filter by symbol (optional)
+  optional string exchange = 2; // Filter by exchange (optional)
+}
+
+message GetPositionsResponse {
+  repeated Position positions = 1;
+  double total_pnl = 2; // Total unrealized P&L across all positions
+}
+
+message GetAccountRequest {
+  optional string exchange = 1; // Specific exchange or all
+}
+
+message GetAccountResponse {
+  double balance = 1; // Total account balance
+  double available_balance = 2; // Available for trading
+  double margin_used = 3; // Used margin
+  double unrealized_pnl = 4; // Total unrealized P&L
+  double realized_pnl = 5; // Total realized P&L (session)
+  map<string, double> balances_by_exchange = 6; // Per-exchange balances
+}
+
+message StreamUpdatesRequest {
+  repeated string symbols = 1; // Subscribe to specific symbols (empty = all)
+  repeated UpdateType types = 2; // Subscribe to specific update types (empty = all)
+}
+
+message StreamUpdatesResponse {
+  UpdateType type = 1;
+  int64 timestamp = 2;
+  oneof update {
+    OrderUpdate order_update = 3;
+    FillUpdate fill_update = 4;
+    PositionUpdate position_update = 5;
+    AccountUpdate account_update = 6;
+  }
+}
+
+// HealthCheckRequest and HealthCheckResponse have been removed from this package.
+// Use fks.common.v1.HealthCheckRequest and fks.common.v1.HealthCheckResponse instead.
+// The common versions add: uptime_seconds (field 4), version (field 5), timestamp (field 6).
+//
+// Rust consumers: replace fks_proto::execution::HealthCheckRequest/Response
+//                 with     fks_proto::common::HealthCheckRequest/Response
+
+// ============================================================================
+// Core Data Types
+// ============================================================================
+
+message Fill {
+  string fill_id = 1;
+  string order_id = 2;
+  double quantity = 3;
+  double price = 4;
+  double fee = 5;
+  string fee_currency = 6;
+  fks.common.v1.Side side = 7;
+  int64 timestamp = 8;
+  bool is_maker = 9; // Maker or taker
+}
+
+message Position {
+  string symbol = 1;
+  string exchange = 2;
+  fks.common.v1.Side side = 3; // Long or Short
+  double quantity = 4;
+  double average_entry_price = 5;
+  double current_price = 6;
+  double unrealized_pnl = 7;
+  double realized_pnl = 8;
+  double margin_used = 9;
+  double liquidation_price = 10;
+  int64 opened_at = 11;
+  optional int64 updated_at = 12;
+}
+
+message OrderUpdate {
+  string order_id = 1;
+  string internal_order_id = 2;
+  string symbol = 3;
+  OrderStatus old_status = 4;
+  OrderStatus new_status = 5;
+  string message = 6;
+}
+
+message FillUpdate {
+  string order_id = 1;
+  Fill fill = 2;
+  string symbol = 3;
+  double total_filled = 4; // Total filled quantity for this order
+  double remaining = 5; // Remaining quantity
+}
+
+message PositionUpdate {
+  Position position = 1;
+  string reason = 2; // Why the position updated (fill, price change, etc.)
+}
+
+message AccountUpdate {
+  double balance = 1;
+  double available_balance = 2;
+  double unrealized_pnl = 3;
+  double realized_pnl = 4;
+  string reason = 5; // Why the account updated
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+  ORDER_STATUS_NEW = 1; // Order created but not submitted
+  ORDER_STATUS_SUBMITTED = 2; // Submitted to exchange
+  ORDER_STATUS_PARTIALLY_FILLED = 3; // Partially executed
+  ORDER_STATUS_FILLED = 4; // Fully executed
+  ORDER_STATUS_CANCELLED = 5; // Cancelled
+  ORDER_STATUS_REJECTED = 6; // Rejected by exchange
+  ORDER_STATUS_EXPIRED = 7; // Expired (for GTD orders)
+  ORDER_STATUS_PENDING_CANCEL = 8; // Cancel request submitted
+}
+
+enum ExecutionStrategy {
+  EXECUTION_STRATEGY_UNSPECIFIED = 0;
+  EXECUTION_STRATEGY_IMMEDIATE = 1; // Execute immediately (default)
+  EXECUTION_STRATEGY_TWAP = 2; // Time-Weighted Average Price
+  EXECUTION_STRATEGY_VWAP = 3; // Volume-Weighted Average Price
+  EXECUTION_STRATEGY_ALMGREN_CHRISS = 4; // Optimal execution
+  EXECUTION_STRATEGY_ICEBERG = 5; // Iceberg order
+}
+
+enum UpdateType {
+  UPDATE_TYPE_UNSPECIFIED = 0;
+  UPDATE_TYPE_ORDER = 1;
+  UPDATE_TYPE_FILL = 2;
+  UPDATE_TYPE_POSITION = 3;
+  UPDATE_TYPE_ACCOUNT = 4;
+}

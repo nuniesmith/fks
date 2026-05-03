@@ -1,0 +1,18 @@
+# ruby-alerts.yml
+# =============================================================================
+# NOTE: Ruby alert rules are defined in ruby-trading.yml in this directory.
+# This file is a placeholder kept for reference from todo.md (PROM-B).
+#
+# The alert rules from src/ruby/config/prometheus/alert_rules.yml were
+# reviewed and merged into ruby-trading.yml which contains:
+#   - ruby-redis group (RubyRedisDown, RubyRedisFlapping)
+#   - ruby-postgres group (RubyPostgresDown)
+#   - ruby-engine group (EngineDown, EngineCrashLoop, EngineStaleRefresh, HighEngineCycleLatency)
+#   - cnn_model group (CNNModelStale, CNNModelLowAccuracy)
+#   - risk group (ConsecutiveLossesHigh, DailyPnLDrawdown, DailyPnLCriticalDrawdown)
+#   - kraken_ws group (KrakenWsDisconnected, KrakenWsFrequentReconnects, KrakenWsBarsFrozen)
+#   - api_health group (HighAPIErrorRate, HighAPILatencyP95, SSEConnectionsSpike)
+#   - orb_pipeline group (ORBFilterRejectionRateHigh, ORBNoScansActivePeriod)
+#
+# See ruby-trading.yml for the actual alert rules.
+# =============================================================================

@@ -1,0 +1,253 @@
+# FKS Trading Alerts - Signal Flow & Paper Trading Monitoring
+# Alert rules for trading anomalies, performance degradation, and system health
+
+groups:
+    # ==========================================================================
+    # Signal Flow Alerts
+    # ==========================================================================
+    - name: signal_flow_alerts
+      interval: 30s
+      rules:
+          # No signals generated for extended period
+          - alert: NoSignalsGenerated
+            expr: |
+                increase(signal_flow_signals_received[15m]) == 0
+            for: 15m
+            labels:
+                severity: warning
+                component: janus
+                category: trading
+            annotations:
+                summary: "No trading signals generated"
+                description: "No new signals have been generated in the last 15 minutes. Check if Janus forward module is running."
+                runbook_url: "https://docs.fks.ai/runbooks/no-signals"
+
+          # Signal generation rate dropped significantly
+          - alert: SignalRateDropped
+            expr: |
+                rate(signal_flow_signals_received[5m]) < 0.1 * rate(signal_flow_signals_received[1h] offset 1h)
+            for: 10m
+            labels:
+                severity: warning
+                component: janus
+                category: trading
+            annotations:
+                summary: "Signal generation rate dropped significantly"
+                description: "Signal rate is less than 10% of the rate from 1 hour ago. Current: {{ $value | humanize }}/s"
+                runbook_url: "https://docs.fks.ai/runbooks/signal-rate-drop"
+
+          # High signal rejection rate
+          - alert: HighSignalRejectionRate
+            expr: |
+                (rate(signal_flow_signals_rejected[5m]) / rate(signal_flow_signals_received[5m])) > 0.3
+            for: 10m
+            labels:
+                severity: warning
+                component: execution
+                category: trading
+            annotations:
+                summary: "High signal rejection rate"
+                description: "Over 30% of signals are being rejected. Current rejection rate: {{ $value | humanize }}%"
+                runbook_url: "https://docs.fks.ai/runbooks/high-rejection"
+
+          # Low fill rate on orders
+          - alert: LowOrderFillRate
+            expr: |
+                signal_flow_fill_rate < 0.5
+            for: 15m
+            labels:
+                severity: warning
+                component: execution
+                category: trading
+            annotations:
+                summary: "Low order fill rate"
+                description: "Order fill rate is below 50%. Current: {{ $value | humanize }}%"
+                runbook_url: "https://docs.fks.ai/runbooks/low-fill-rate"
+
+    # ==========================================================================
+    # Order Flow Alerts
+    # ==========================================================================
+    - name: order_flow_alerts
+      interval: 30s
+      rules:
+          # Too many active orders (potential order queue buildup)
+          - alert: HighActiveOrderCount
+            expr: |
+                execution_orders_active > 100
+            for: 5m
+            labels:
+                severity: warning
+                component: execution
+                category: trading
+            annotations:
+                summary: "High number of active orders"
+                description: "{{ $value }} active orders. This may indicate order queue buildup or slow execution."
+                runbook_url: "https://docs.fks.ai/runbooks/order-queue"
+
+          # Order cancellation spike
+          - alert: OrderCancellationSpike
+            expr: |
+                increase(signal_flow_orders_cancelled[5m]) > 50
+            for: 5m
+            labels:
+                severity: warning
+                component: execution
+                category: trading
+            annotations:
+                summary: "High order cancellation rate"
+                description: "{{ $value }} orders cancelled in the last 5 minutes."
+                runbook_url: "https://docs.fks.ai/runbooks/order-cancellation"
+
+          # No order activity
+          - alert: NoOrderActivity
+            expr: |
+                increase(signal_flow_orders_submitted[30m]) == 0
+                and
+                increase(signal_flow_signals_received[30m]) > 10
+            for: 30m
+            labels:
+                severity: critical
+                component: execution
+                category: trading
+            annotations:
+                summary: "Signals received but no orders submitted"
+                description: "Signals are being generated but no orders are being submitted. Check execution service."
+                runbook_url: "https://docs.fks.ai/runbooks/no-orders"
+
+    # ==========================================================================
+    # System Health Alerts
+    # ==========================================================================
+    - name: trading_system_health
+      interval: 30s
+      rules:
+          # Janus service unhealthy
+          - alert: JanusUnhealthy
+            expr: |
+                up{job="fks-janus"} == 0
+            for: 2m
+            labels:
+                severity: critical
+                component: janus
+                category: system
+            annotations:
+                summary: "Janus service is down"
+                description: "Janus service has been unreachable for 2 minutes."
+                runbook_url: "https://docs.fks.ai/runbooks/janus-down"
+
+          # Execution service unhealthy
+          # Only fires when execution is enabled (target has reported up=1 at least once in the last hour)
+          - alert: ExecutionUnhealthy
+            expr: |
+                up{job="fks-execution"} == 0
+                and
+                max_over_time(up{job="fks-execution"}[1h]) == 1
+            for: 2m
+            labels:
+                severity: critical
+                component: execution
+                category: system
+            annotations:
+                summary: "Execution service is down"
+                description: "Execution service has been unreachable for 2 minutes."
+                runbook_url: "https://docs.fks.ai/runbooks/execution-down"
+
+          # Redis disconnected
+          # Only fires when Janus is up (metric actively reported) to avoid
+          # false positives from the gauge's default value of 0.
+          - alert: RedisDisconnected
+            expr: |
+                janus_redis_connected == 0
+                and
+                up{job="fks-janus"} == 1
+            for: 3m
+            labels:
+                severity: critical
+                component: redis
+                category: system
+            annotations:
+                summary: "Redis connection lost"
+                description: "Janus has lost connection to Redis. Signal pub/sub will not work."
+                runbook_url: "https://docs.fks.ai/runbooks/redis-down"
+
+          # Database pool exhausted
+          # Guard: only fire when Janus is up AND the gauge has been set above 0
+          # at some point in the last hour (avoids false positives from the
+          # uninitialized default of 0 when no centralised pool is configured).
+          - alert: DatabasePoolExhausted
+            expr: |
+                janus_db_pool_size < 2
+                and
+                up{job="fks-janus"} == 1
+                and
+                max_over_time(janus_db_pool_size[1h]) >= 2
+            for: 5m
+            labels:
+                severity: warning
+                component: postgres
+                category: system
+            annotations:
+                summary: "Database connection pool low"
+                description: "Only {{ $value }} database connections available."
+                runbook_url: "https://docs.fks.ai/runbooks/db-pool"
+
+          # Janus module unhealthy
+          - alert: JanusModuleUnhealthy
+            expr: |
+                janus_module_health == 0
+            for: 2m
+            labels:
+                severity: critical
+                component: janus
+                category: system
+            annotations:
+                summary: "Janus module {{ $labels.module }} is unhealthy"
+                description: "The {{ $labels.module }} module has been unhealthy for 2 minutes."
+                runbook_url: "https://docs.fks.ai/runbooks/module-health"
+
+    # ==========================================================================
+    # Performance Alerts
+    # ==========================================================================
+    - name: trading_performance
+      interval: 60s
+      rules:
+          # High slippage detection
+          - alert: HighSlippageDetected
+            expr: |
+                increase(best_execution_slippage_exceeded_total[10m]) > 5
+            for: 5m
+            labels:
+                severity: warning
+                component: execution
+                category: performance
+            annotations:
+                summary: "High slippage detected"
+                description: "{{ $value }} orders exceeded slippage threshold in the last 10 minutes."
+                runbook_url: "https://docs.fks.ai/runbooks/slippage"
+
+          # Volume anomaly - unusually high
+          - alert: UnusuallyHighVolume
+            expr: |
+                rate(signal_flow_total_volume[5m]) > 3 * rate(signal_flow_total_volume[1h])
+            for: 5m
+            labels:
+                severity: info
+                component: trading
+                category: performance
+            annotations:
+                summary: "Unusually high trading volume"
+                description: "Trading volume is 3x higher than the hourly average."
+                runbook_url: "https://docs.fks.ai/runbooks/volume-anomaly"
+
+          # Low acceptance rate
+          - alert: LowAcceptanceRate
+            expr: |
+                signal_flow_acceptance_rate < 0.5
+            for: 10m
+            labels:
+                severity: warning
+                component: execution
+                category: performance
+            annotations:
+                summary: "Low signal acceptance rate"
+                description: "Signal acceptance rate is {{ $value | humanize }}%. Check risk limits and filters."
+                runbook_url: "https://docs.fks.ai/runbooks/acceptance-rate"

@@ -1,0 +1,150 @@
+# ============================================================================
+# Grafana Loki Configuration
+# ============================================================================
+# Optimized for FKS Trading Platform - handles logs from 15+ services
+# Storage: Local filesystem with retention policies
+# Performance: Tuned for high-throughput trading logs
+# ============================================================================
+
+auth_enabled: false
+
+server:
+    http_listen_port: 3100
+    grpc_listen_port: 9096
+    log_level: info
+
+# Common configuration shared across modules
+common:
+    path_prefix: /loki
+    storage:
+        filesystem:
+            chunks_directory: /loki/chunks
+            rules_directory: /loki/rules
+    replication_factor: 1
+    ring:
+        instance_addr: 127.0.0.1
+        kvstore:
+            store: inmemory
+
+# Ingester configuration - receives and processes logs
+ingester:
+    # Lifecycle settings
+    lifecycler:
+        address: 127.0.0.1
+        ring:
+            kvstore:
+                store: inmemory
+            replication_factor: 1
+        final_sleep: 0s
+
+    # Chunk settings - optimize for trading log volume
+    chunk_idle_period: 5m # Flush idle chunks after 5 minutes
+    chunk_block_size: 262144 # 256KB chunks
+    chunk_retain_period: 30s # Keep chunks in memory briefly
+    max_chunk_age: 1h # Force flush after 1 hour
+
+    # WAL (Write-Ahead Log) for durability
+    wal:
+        enabled: true
+        dir: /loki/wal
+        flush_on_shutdown: true
+
+# Schema configuration - defines how logs are stored
+schema_config:
+    configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+              prefix: index_
+              period: 24h
+
+# Storage configuration
+storage_config:
+    tsdb_shipper:
+        active_index_directory: /loki/tsdb-index
+        cache_location: /loki/tsdb-cache
+        cache_ttl: 24h
+
+    filesystem:
+        directory: /loki/chunks
+
+# Compactor - manages retention and compaction
+compactor:
+    working_directory: /loki/compactor
+    compaction_interval: 10m
+    retention_enabled: true
+    retention_delete_delay: 2h
+    retention_delete_worker_count: 150
+    delete_request_store: filesystem
+
+# Retention limits - keep logs based on service importance
+limits_config:
+    # Ingestion rate limits (per tenant)
+    ingestion_rate_mb: 16 # 16 MB/s
+    ingestion_burst_size_mb: 32 # 32 MB burst
+
+    # Per-stream limits
+    per_stream_rate_limit: 5MB # 5 MB/s per stream
+    per_stream_rate_limit_burst: 10MB # 10 MB burst
+
+    # Query limits
+    max_entries_limit_per_query: 10000 # Max log lines per query
+    max_query_length: 721h # 30 days
+    max_query_parallelism: 32 # Parallel queries
+    max_query_series: 500 # Max series per query
+    max_streams_per_user: 0 # Unlimited streams
+    max_global_streams_per_user: 5000 # Global stream limit
+
+    # Retention periods by stream
+    retention_period: 168h # Default: 7 days
+
+    # Chunk settings
+    max_chunks_per_query: 2000000
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h # 7 days
+    creation_grace_period: 10m
+
+    # Cardinality limits
+    max_label_name_length: 1024
+    max_label_value_length: 2048
+    max_label_names_per_series: 30
+
+# Query scheduler configuration
+query_scheduler:
+    max_outstanding_requests_per_tenant: 256
+
+# Querier configuration
+querier:
+    max_concurrent: 10
+    query_ingesters_within: 3h
+
+# Query frontend configuration
+frontend:
+    max_outstanding_per_tenant: 256
+    compress_responses: true
+    log_queries_longer_than: 10s
+
+# Table manager (for retention)
+table_manager:
+    retention_deletes_enabled: true
+    retention_period: 168h # 7 days default
+
+# Ruler configuration (for alerting on logs)
+ruler:
+    storage:
+        type: local
+        local:
+            directory: /loki/rules
+    rule_path: /loki/rules-temp
+    alertmanager_url: http://alertmanager:9093
+    ring:
+        kvstore:
+            store: inmemory
+    enable_api: true
+    enable_alertmanager_v2: true
+
+# Analytics
+analytics:
+    reporting_enabled: false

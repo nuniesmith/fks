@@ -1,0 +1,1113 @@
+# =============================================================================
+# FKS — Production Environment Overrides
+# =============================================================================
+# Production-ready configuration with enhanced security and resource limits.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Features:
+# - Read-only filesystems where possible
+# - Strict resource limits
+# - Enhanced security options
+# - Production-grade restart policies
+# - External secrets management
+# - Rate limiting and throttling
+#
+# Redis DB map (shared fks_redis):
+#   db 0 — janus + ruby (trading state, bars, signals)
+#   db 1 — rustcode (AI agent cache)
+# =============================================================================
+
+services:
+    # ============================================================================
+    # JANUS — Production Configuration
+    # ============================================================================
+    janus:
+        image: ${REGISTRY:-docker.io}/${IMAGE_NAME:-nuniesmith/fks}:janus-${TAG:-latest}
+        container_name: fks_janus
+
+        read_only: true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+
+        environment:
+            - RUST_LOG=info,janus=info
+            - RUST_BACKTRACE=0
+            - TZ=UTC
+
+            - POSTGRES_HOST=postgres
+            - POSTGRES_PORT=5432
+            - POSTGRES_USER=${POSTGRES_USER:-fks_user}
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+            - JANUS_DB=${JANUS_DB:-janus_db}
+            - DATABASE_URL=postgresql://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/${JANUS_DB:-janus_db}?sslmode=disable
+
+            - REDIS_HOST=redis
+            - REDIS_PORT=6379
+            - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD required}
+            - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379/0
+
+            - ENABLE_EXECUTION=${ENABLE_EXECUTION:-false}
+            - EXECUTION_ENDPOINT=http://fks_ruby:8000/api/execute
+
+        tmpfs:
+            - /tmp
+            - /var/tmp
+            - /app/logs
+
+        volumes: []
+
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+
+        deploy:
+            mode: replicated
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+                delay: 5s
+                max_attempts: 3
+                window: 120s
+            resources:
+                limits:
+                    cpus: "6.0"
+                    memory: 8g
+                reservations:
+                    cpus: "2.0"
+                    memory: 2g
+            update_config:
+                parallelism: 1
+                delay: 10s
+                failure_action: rollback
+                monitor: 30s
+                order: start-first
+            rollback_config:
+                parallelism: 1
+                delay: 5s
+
+        healthcheck:
+            test:
+                ["CMD-SHELL", "curl -sf http://localhost:8080/health || exit 1"]
+            interval: 15s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
+
+        networks:
+            - fks-network
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=janus,environment=production"
+
+    # ============================================================================
+    # POSTGRES — Production Configuration
+    # ============================================================================
+    postgres:
+        image: ${REGISTRY:-docker.io}/${IMAGE_NAME:-nuniesmith/fks}:postgres-${TAG:-latest}
+
+        environment:
+            - JANUS_DB=janus_db
+            - POSTGRES_USER=fks_user
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+            - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+
+        ports: []
+
+        command:
+            - postgres
+            - -c
+            - shared_buffers=512MB
+            - -c
+            - effective_cache_size=2GB
+            - -c
+            - maintenance_work_mem=128MB
+            - -c
+            - checkpoint_completion_target=0.9
+            - -c
+            - wal_buffers=16MB
+            - -c
+            - default_statistics_target=100
+            - -c
+            - random_page_cost=1.1
+            - -c
+            - effective_io_concurrency=200
+            - -c
+            - work_mem=8MB
+            - -c
+            - min_wal_size=1GB
+            - -c
+            - max_wal_size=4GB
+            - -c
+            - max_connections=200
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "4.0"
+                    memory: 4g
+                reservations:
+                    cpus: "1.0"
+                    memory: 1g
+
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U fks_user -d janus_db"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+
+        networks:
+            - fks-network
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=postgres,environment=production"
+
+    # ============================================================================
+    # REDIS — Production Configuration
+    # ============================================================================
+    # Custom image with kernel tuning entrypoint (vm.overcommit_memory, THP, somaxconn).
+    # Requires `privileged: true` so the entrypoint can write to /proc/sys.
+    # Shared across janus (db 0), rustcode (db 1).
+    # ============================================================================
+    redis:
+        image: ${REGISTRY:-docker.io}/${IMAGE_NAME:-nuniesmith/fks}:redis-${TAG:-latest}
+
+        privileged: true
+
+        ports: []
+
+        command:
+            - redis-server
+            - --requirepass
+            - ${REDIS_PASSWORD:?REDIS_PASSWORD required}
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+            - --auto-aof-rewrite-percentage
+            - "100"
+            - --auto-aof-rewrite-min-size
+            - 64mb
+            - --save
+            - "3600 1"
+            - --save
+            - "900 1"
+            - --save
+            - "300 10"
+            - --save
+            - "60 10000"
+            - --maxmemory
+            - 1gb
+            - --maxmemory-policy
+            - allkeys-lru
+            - --tcp-backlog
+            - "511"
+            - --timeout
+            - "3600"
+            - --tcp-keepalive
+            - "30"
+            - --protected-mode
+            - "yes"
+            - --bind
+            - 0.0.0.0
+            - --loglevel
+            - notice
+            - --slowlog-log-slower-than
+            - "10000"
+            - --slowlog-max-len
+            - "128"
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 1g
+                reservations:
+                    cpus: "0.5"
+                    memory: 256m
+
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "redis-cli",
+                    "--no-auth-warning",
+                    "-a",
+                    "${REDIS_PASSWORD}",
+                    "ping",
+                ]
+            interval: 10s
+            timeout: 3s
+            retries: 5
+
+        networks:
+            - fks-network
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=redis,environment=production"
+
+    # ============================================================================
+    # QUESTDB — Production Configuration
+    # ============================================================================
+    questdb:
+        image: questdb/questdb:9.3.2
+
+        environment:
+            - QDB_TELEMETRY_ENABLED=false
+            - QDB_LOG_W_STDOUT_LEVEL=INFO
+            - QDB_PG_ENABLED=true
+            - QDB_HTTP_ENABLED=true
+            - QDB_LINE_TCP_ENABLED=true
+            - QDB_SHARED_WORKER_COUNT=4
+            - QDB_LINE_TCP_WORKER_COUNT=4
+            - QDB_CAIRO_COMMIT_LAG=500
+            - QDB_METRICS_ENABLED=true
+            - QDB_PG_USER=admin
+            - QDB_PG_PASSWORD=${QUESTDB_PG_PASSWORD:?QUESTDB_PG_PASSWORD required}
+
+        # ⚠️ Ports intentionally NOT exposed in production.
+        # Access QuestDB only through the Docker network via nginx.
+        ports: []
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "6.0"
+                    memory: 12g
+                reservations:
+                    cpus: "2.0"
+                    memory: 4g
+
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -sf --max-time 3 'http://localhost:9000/exec?query=select+1' || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+
+        networks:
+            - fks-network
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=questdb,environment=production"
+
+    # ============================================================================
+    # RUBY — Production Configuration
+    # ============================================================================
+    ruby:
+        image: ${REGISTRY:-docker.io}/${IMAGE_NAME:-nuniesmith/fks}:ruby-${TAG:-latest}
+        container_name: fks_ruby
+
+        shm_size: 2gb
+        read_only: true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+            - CHOWN
+            - SETGID
+            - SETUID
+
+        ports: []
+
+        environment:
+            - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379/0
+            - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/${RUBY_DB:-ruby_db}
+            - DATA_SERVICE_HOST=0.0.0.0
+            - DATA_SERVICE_PORT=8000
+            - ENGINE_MODE=remote
+            - DATA_SERVICE_URL=http://localhost:8000
+            - WEB_HOST=0.0.0.0
+            - WEB_PORT=8080
+            - ENGINE_DATA_URL=http://localhost:8000
+            - JANUS_GRPC_HOST=fks_janus
+            - JANUS_GRPC_PORT=50051
+            - JANUS_HTTP_URL=http://fks_janus:8080
+            - ALERTMANAGER_URL=http://fks_alertmanager:9093
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-1}
+            - TRAINER_SERVICE_URL=http://fks_trainer:8200
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+            - ORB_FILTER_GATE=${ORB_FILTER_GATE:-majority}
+            - ORB_CNN_GATE=${ORB_CNN_GATE:-0}
+            - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
+            - MASSIVE_S3_KEY_ID=${MASSIVE_S3_KEY_ID:-}
+            - MASSIVE_S3_SECRET=${MASSIVE_S3_SECRET:-}
+            - MASSIVE_S3_ENDPOINT=${MASSIVE_S3_ENDPOINT:-https://files.massive.com}
+            - MASSIVE_S3_BUCKET=${MASSIVE_S3_BUCKET:-flatfiles}
+            - BACKFILL_DAYS_BACK=${BACKFILL_DAYS_BACK:-365}
+            - BACKFILL_CHUNK_DAYS=${BACKFILL_CHUNK_DAYS:-30}
+            - FACTORY_ENABLED_CLASSES=${FACTORY_ENABLED_CLASSES:-futures_cme,crypto}
+            - GAP_SCAN_INTERVAL_SECS=${GAP_SCAN_INTERVAL_SECS:-300}
+            - DATA_KLINE_INTERVALS=${DATA_KLINE_INTERVALS:-1m,5m,15m,1h,1d}
+            - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+            - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
+            - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
+            - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-fks-news-pipeline/1.0}
+            - QUESTDB_HOST=fks_questdb
+            - QUESTDB_PG_PORT=8812
+            - QUESTDB_PG_USER=${QUESTDB_PG_USER:-admin}
+            - QUESTDB_PG_PASSWORD=${QUESTDB_PG_PASSWORD:-}
+            - PAPER_TRADING_ENABLED=${PAPER_TRADING_ENABLED:-0}
+            - SIM_ENABLED=${SIM_ENABLED:-0}
+            - SIM_DATA_SOURCE=${SIM_DATA_SOURCE:-kraken}
+            - SIM_INITIAL_BALANCE=${SIM_INITIAL_BALANCE:-100000}
+            - WHALE_ALERT_API_KEY=${WHALE_ALERT_API_KEY:-}
+            - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-}
+            - SOLSCAN_API_KEY=${SOLSCAN_API_KEY:-}
+            - CRYPTOCOMPARE_API_KEY=${CRYPTOCOMPARE_API_KEY:-}
+            - MEMPOOL_SPACE_URL=${MEMPOOL_SPACE_URL:-https://mempool.space/api}
+            - CHAIN_MIN_USD=${CHAIN_MIN_USD:-1000000}
+            - CHAIN_POLL_WHALE=${CHAIN_POLL_WHALE:-30}
+            - CHAIN_POLL_MEMPOOL=${CHAIN_POLL_MEMPOOL:-60}
+            - CHAIN_POLL_FLOW=${CHAIN_POLL_FLOW:-3600}
+            - CMC_API_KEY=${CMC_API_KEY:-}
+            - CMC_POLL_QUOTES=${CMC_POLL_QUOTES:-900}
+            - CMC_POLL_GLOBAL=${CMC_POLL_GLOBAL:-1800}
+            - CMC_POLL_FEAR_GREED=${CMC_POLL_FEAR_GREED:-1800}
+            - CMC_POLL_LISTINGS=${CMC_POLL_LISTINGS:-21600}
+            - WEB_PASSWORD_HASH=${WEB_PASSWORD_HASH:-}
+            - WEB_SESSION_SECRET=${WEB_SESSION_SECRET:-}
+            - WEB_SESSION_TTL_DAYS=${WEB_SESSION_TTL_DAYS:-30}
+            - API_KEY_ENCRYPTION_SECRET=${API_KEY_ENCRYPTION_SECRET:-}
+            - XAI_API_KEY=${XAI_API_KEY:-}
+            - TV_SESSION_ID=${TV_SESSION_ID:-}
+            - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+            - COPIER_URL=${COPIER_URL:-}
+            - AUDIT_RUNTIME_ENABLED=${AUDIT_RUNTIME_ENABLED:-false}
+            - AUDIT_LLM_ENABLED=${AUDIT_LLM_ENABLED:-false}
+            - AUDIT_LLM_PROVIDER=${AUDIT_LLM_PROVIDER:-xai}
+            - AUDIT_LLM_API_KEY=${AUDIT_LLM_API_KEY:-}
+            - AUDIT_LLM_MODEL=${AUDIT_LLM_MODEL:-grok-4-1}
+            - LOG_LEVEL=${LOG_LEVEL:-info}
+            - PYTHONPATH=/app/src
+            - PYTHONUNBUFFERED=1
+            - API_KEY=${API_KEY:-}
+            - MODELS_DIR=/app/models
+
+        tmpfs:
+            - /tmp
+            - /var/tmp
+            - /var/log/fks
+            - /var/log/supervisor
+
+        volumes:
+            - ruby_app_data:/app/data
+
+        depends_on:
+            redis:
+                condition: service_healthy
+            postgres:
+                condition: service_healthy
+
+        deploy:
+            mode: replicated
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+                delay: 5s
+                max_attempts: 3
+                window: 120s
+            resources:
+                limits:
+                    cpus: "6.0"
+                    memory: 6g
+                reservations:
+                    cpus: "1.0"
+                    memory: 1g
+            update_config:
+                parallelism: 1
+                delay: 10s
+                failure_action: rollback
+                monitor: 60s
+                order: start-first
+            rollback_config:
+                parallelism: 1
+                delay: 5s
+
+        healthcheck:
+            test:
+                ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+            interval: 15s
+            timeout: 10s
+            retries: 5
+            start_period: 90s
+
+        networks:
+            - fks-network
+
+        logging:
+            driver: json-file
+            options:
+                max-size: "50m"
+                max-file: "5"
+                compress: "true"
+                labels: "service=fks-ruby,environment=production"
+
+    # ============================================================================
+    # TRAINER — Production Configuration
+    # ============================================================================
+    # GPU CNN retraining server shared by ruby and futures.
+    # Both services POST to /retrain with their own symbol lists.
+    # futures-specific symbols: MGC,SIL,MES,MNQ,M2K,MYM (passed in request body,
+    # not via env — the trainer env defines fallback defaults only).
+    # ============================================================================
+    trainer:
+        image: ${REGISTRY:-docker.io}/${IMAGE_NAME:-nuniesmith/fks}:trainer-${TAG:-latest}
+        container_name: fks_trainer
+
+        shm_size: 4gb
+
+        ports: []
+
+        environment:
+            - TRAINER_HOST=0.0.0.0
+            - TRAINER_PORT=8200
+            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
+            - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD required}@redis:6379/0
+            - CNN_RETRAIN_MIN_ACC=${CNN_RETRAIN_MIN_ACC:-65.0}
+            - CNN_RETRAIN_MIN_PRECISION=${CNN_RETRAIN_MIN_PRECISION:-55.0}
+            - CNN_RETRAIN_MIN_RECALL=${CNN_RETRAIN_MIN_RECALL:-50.0}
+            - CNN_RETRAIN_IMPROVEMENT=${CNN_RETRAIN_IMPROVEMENT:-0.0}
+            - CNN_RETRAIN_EPOCHS=${CNN_RETRAIN_EPOCHS:-60}
+            - CNN_RETRAIN_BATCH_SIZE=${CNN_RETRAIN_BATCH_SIZE:-64}
+            - CNN_RETRAIN_LR=${CNN_RETRAIN_LR:-0.0001}
+            - CNN_RETRAIN_PATIENCE=${CNN_RETRAIN_PATIENCE:-12}
+            - ENGINE_DATA_URL=http://fks_ruby:8000
+            - DATA_SERVICE_URL=http://fks_ruby:8000
+            - ENGINE_BARS_TIMEOUT=${ENGINE_BARS_TIMEOUT:-60}
+            - ENGINE_FILL_POLL_MAX_WAIT=${ENGINE_FILL_POLL_MAX_WAIT:-300}
+            - ENGINE_FILL_POLL_INTERVAL=${ENGINE_FILL_POLL_INTERVAL:-10}
+            - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
+            - MASSIVE_S3_KEY_ID=${MASSIVE_S3_KEY_ID:-}
+            - MASSIVE_S3_SECRET=${MASSIVE_S3_SECRET:-}
+            - MASSIVE_S3_ENDPOINT=${MASSIVE_S3_ENDPOINT:-https://files.massive.com}
+            - MASSIVE_S3_BUCKET=${MASSIVE_S3_BUCKET:-flatfiles}
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            - API_KEY=${API_KEY:-}
+            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM}
+            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-365}
+            - CNN_RETRAIN_BARS_SOURCE=${CNN_RETRAIN_BARS_SOURCE:-engine}
+            - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
+            - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}
+            - NVIDIA_VISIBLE_DEVICES=all
+            - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+            - PYTHONPATH=/app/src/ruby:/app/src
+            - PYTHONUNBUFFERED=1
+            - MODELS_DIR=/app/models
+
+        volumes:
+            - trainer_dataset:/app/dataset
+            - trainer_models:/app/models
+
+        depends_on:
+            ruby:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+
+        networks:
+            - fks-network
+
+        restart: unless-stopped
+
+        command: ["python", "-m", "lib.services.training.trainer_server"]
+
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')",
+                ]
+            interval: 30s
+            timeout: 10s
+            start_period: 60s
+            retries: 3
+
+        deploy:
+            resources:
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "5"
+                compress: "true"
+                labels: "service=trainer,environment=production"
+
+    # ============================================================================
+    # NGINX — Production Configuration
+    # ============================================================================
+    # Uses custom image with baked-in config.
+    # Proxies:
+    #   /         → fks_ruby web dashboard (:8080)
+    #   /api/     → fks_ruby data API (:8000)
+    #   /janus/   → fks_janus HTTP API (:8080)
+    #   /grafana/ → fks_grafana (:3000)
+    # ============================================================================
+    nginx:
+        image: ${REGISTRY:-docker.io}/${IMAGE_NAME:-nuniesmith/fks}:nginx-${TAG:-latest}
+        container_name: fks_nginx
+
+        ports:
+            - "127.0.0.1:80:80"
+
+        volumes:
+            - nginx_logs:/var/log/nginx:rw
+
+        networks:
+            - fks-network
+
+        depends_on:
+            janus:
+                condition: service_healthy
+            ruby:
+                condition: service_healthy
+
+        ulimits:
+            nofile:
+                soft: 65536
+                hard: 65536
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 1g
+                reservations:
+                    cpus: "0.5"
+                    memory: 256m
+
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -sf http://localhost/health > /dev/null || exit 1",
+                ]
+            interval: 10s
+            timeout: 3s
+            retries: 5
+            start_period: 10s
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=nginx,environment=production"
+
+    # ============================================================================
+    # PROMETHEUS — Production Configuration
+    # ============================================================================
+    prometheus:
+        image: prom/prometheus:v3.4.1
+
+        command:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=30d"
+            - "--storage.tsdb.retention.size=50GB"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--web.enable-lifecycle"
+            - "--web.enable-admin-api"
+
+        ports: []
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 4g
+                reservations:
+                    cpus: "0.5"
+                    memory: 1g
+
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 5
+
+        networks:
+            - fks-network
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=prometheus,environment=production"
+
+    # ============================================================================
+    # GRAFANA — Production Configuration
+    # ============================================================================
+    grafana:
+        image: grafana/grafana:11.6.0
+
+        environment:
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD required}
+            - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+            - GF_AUTH_ANONYMOUS_ENABLED=false
+            - GF_AUTH_PROXY_ENABLED=false
+            - GF_SECURITY_COOKIE_SECURE=false
+            - GF_SECURITY_COOKIE_SAMESITE=lax
+            - GF_SECURITY_X_CONTENT_TYPE_OPTIONS=true
+            - GF_SECURITY_X_XSS_PROTECTION=true
+            - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-%(protocol)s://%(domain)s/grafana/}
+            - GF_SERVER_SERVE_FROM_SUB_PATH=true
+            - GF_INSTALL_PLUGINS=
+
+        ports: []
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 2g
+                reservations:
+                    cpus: "0.5"
+                    memory: 512m
+
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 5
+
+        networks:
+            - fks-network
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=grafana,environment=production"
+
+    # ============================================================================
+    # ALERTMANAGER — Production Configuration
+    # ============================================================================
+    alertmanager:
+        image: prom/alertmanager:v0.27.0
+
+        ports: []
+
+        depends_on:
+            alertmanager-discord:
+                condition: service_started
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512m
+                reservations:
+                    cpus: "0.25"
+                    memory: 128m
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "5"
+                compress: "true"
+                labels: "service=alertmanager,environment=production"
+
+    # ============================================================================
+    # ALERTMANAGER DISCORD BRIDGE — Production Configuration
+    # ============================================================================
+    alertmanager-discord:
+        image: nuniesmith/fks:alertmanager-discord
+
+        read_only: true
+        cap_drop:
+            - ALL
+
+        environment:
+            - DISCORD_WEBHOOK_GENERAL=${DISCORD_WEBHOOK_GENERAL:-}
+            - BRIDGE_PORT=9094
+            - BRIDGE_HOST=0.0.0.0
+            - LOG_LEVEL=INFO
+
+        tmpfs:
+            - /tmp
+
+        networks:
+            - fks-network
+
+        restart: unless-stopped
+
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://localhost:9094/health')",
+                ]
+            interval: 30s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.25"
+                    memory: 128m
+                reservations:
+                    cpus: "0.05"
+                    memory: 32m
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "5"
+                compress: "true"
+                labels: "service=alertmanager-discord,environment=production"
+
+    # ============================================================================
+    # JAEGER — Production Configuration
+    # ============================================================================
+    jaeger:
+        image: jaegertracing/all-in-one:1.76.0
+
+        # TODO: Stop running as root. Proper fix: chown jaeger_data volume to
+        # Jaeger's UID (10001) at init time, then set user: "10001:10001".
+        user: "0:0"
+
+        ports:
+            - "16686:16686" # Web UI
+            - "14268:14268" # HTTP collector
+            - "14250:14250" # gRPC
+
+        environment:
+            - SPAN_STORAGE_TYPE=badger
+            - BADGER_EPHEMERAL=false
+            - BADGER_DIRECTORY_VALUE=/badger/data
+            - BADGER_DIRECTORY_KEY=/badger/key
+
+        volumes:
+            - jaeger_data:/badger
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 2g
+                reservations:
+                    cpus: "0.5"
+                    memory: 512m
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=jaeger,environment=production"
+
+    # ============================================================================
+    # LOKI — Production Configuration
+    # ============================================================================
+    loki:
+        image: grafana/loki:3.5.0
+
+        ports: []
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 2g
+                reservations:
+                    cpus: "0.5"
+                    memory: 512m
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=loki,environment=production"
+
+    # ============================================================================
+    # PROMTAIL — Production Configuration
+    # ============================================================================
+    promtail:
+        image: grafana/promtail:3.5.0
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512m
+                reservations:
+                    cpus: "0.25"
+                    memory: 128m
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "10"
+                compress: "true"
+                labels: "service=promtail,environment=production"
+
+    # ============================================================================
+    # RUSTCODE (fks_rustcode) — Production Configuration
+    # ============================================================================
+    fks_rustcode:
+        image: ${RUSTCODE_IMAGE:-nuniesmith/fks:rustcode}
+        container_name: fks_rustcode
+
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+
+        environment:
+            DATABASE_URL: postgres://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/rustcode
+            REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+            OLLAMA_BASE_URL: http://fks_ollama:11434
+            LOCAL_MODEL: ${RUSTCODE_LOCAL_MODEL:-qwen2.5-coder:7b}
+            XAI_API_KEY: ${XAI_API_KEY}
+            XAI_MODEL: ${XAI_MODEL:-grok-4-fast}
+            GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+            GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+            RUSTCODE_PROXY_API_KEYS: ${RUSTCODE_PROXY_API_KEYS}
+            HOST: 0.0.0.0
+            PORT: "3500"
+            RUST_LOG: ${RUSTCODE_RUST_LOG:-info}
+            CACHE_ENABLED: "true"
+            CACHE_PREFIX: "rustcode:"
+            MULTI_TENANT_MODE: ${RUSTCODE_MULTI_TENANT:-false}
+            TELEMETRY_ENABLED: ${RUSTCODE_TELEMETRY:-false}
+            ANALYTICS_ENABLED: "true"
+            TZ: ${TZ:-UTC}
+
+        ports:
+            - "${TAILSCALE_IP:-127.0.0.1}:3500:3500"
+
+        volumes:
+            - rc-data:/app/data
+            - rc-docs:/app/docs
+            - rc-workspace:/app/workspace
+
+        networks:
+            - fks-network
+
+        restart: unless-stopped
+
+        healthcheck:
+            test: ["CMD", "curl", "-sf", "http://127.0.0.1:3500/health"]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 60s
+
+        deploy:
+            mode: replicated
+            replicas: 1
+            restart_policy:
+                condition: on-failure
+                delay: 10s
+                max_attempts: 3
+                window: 120s
+            resources:
+                limits:
+                    cpus: "2.0"
+                    memory: 4g
+                reservations:
+                    cpus: "0.5"
+                    memory: 512m
+            update_config:
+                parallelism: 1
+                delay: 10s
+                failure_action: rollback
+                monitor: 30s
+                order: start-first
+            rollback_config:
+                parallelism: 1
+                delay: 5s
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "100m"
+                max-file: "5"
+                compress: "true"
+                labels: "service=fks_rustcode,environment=production"
+
+    # ── OpenClaw Gateway — Production Configuration ───────────────────────────
+    fks_openclaw:
+        image: ${OPENCLAW_IMAGE:-openclaw:local}
+        container_name: fks_openclaw
+
+        depends_on:
+            fks_rustcode:
+                condition: service_healthy
+
+        environment:
+            HOME: /home/node
+            TERM: xterm-256color
+            TZ: ${TZ:-UTC}
+            OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+            OPENAI_API_BASE: http://fks_rustcode:3500/v1
+            OPENAI_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
+            DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+            GITHUB_TOKEN: ${GITHUB_TOKEN}
+            GITHUB_USERNAME: ${GITHUB_USERNAME:-}
+            GITHUB_ORG: ${GITHUB_ORG:-}
+            RUSTCODE_BASE_URL: http://fks_rustcode:3500
+            RUSTCODE_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
+
+        volumes:
+            - openclaw-config:/home/node/.openclaw
+            - openclaw-workspace:/workspace
+
+        networks:
+            - fks-network
+
+        init: true
+        restart: unless-stopped
+
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "node",
+                    "-e",
+                    "require('http').get('http://localhost:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+                ]
+            interval: 30s
+            timeout: 10s
+            retries: 5
+            start_period: 30s
+
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 1g
+                reservations:
+                    cpus: "0.25"
+                    memory: 256m
+
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "50m"
+                max-file: "5"
+                compress: "true"
+                labels: "service=fks_openclaw,environment=production"
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+    ruby_app_data:
+        driver: local
+    trainer_dataset:
+        driver: local
+    trainer_models:
+        driver: local
+    jaeger_data:
+        driver: local
+    nginx_logs:
+        driver: local
+    rc-data:
+        driver: local
+    rc-docs:
+        driver: local
+    rc-workspace:
+        driver: local
+    openclaw-config:
+        driver: local
+    openclaw-workspace:
+        driver: local
+
+networks:
+    fks-network:
+        driver: bridge
+
+# =============================================================================
+# PRODUCTION SECRETS — Required environment variables
+# =============================================================================
+# Trading:
+#   POSTGRES_PASSWORD         Database password
+#   REDIS_PASSWORD            Redis password (shared across all services)
+#   QUESTDB_PG_PASSWORD       QuestDB PostgreSQL wire password
+#   GRAFANA_PASSWORD          Grafana admin password
+#   GRAFANA_USER              Grafana admin username
+#   GRAFANA_ROOT_URL          Grafana public root URL
+#
+#
+# AI / LLM:
+#   XAI_API_KEY               xAI / Grok API key
+#   RUSTCODE_PROXY_API_KEYS         RustCode proxy auth key
+#   GITHUB_TOKEN              GitHub readonly token
+#   DISCORD_BOT_TOKEN         Discord bot token
+#   OPENCLAW_GATEWAY_TOKEN    OpenClaw gateway auth token
+#
+# Images:
+#   REGISTRY                  Docker registry (default: docker.io)
+#   IMAGE_NAME                Image namespace (default: nuniesmith/fks)
+#   TAG                       Image tag (e.g. v1.0.0, latest)
+#   RUSTCODE_IMAGE                  RustCode image override
+#   OPENCLAW_IMAGE            OpenClaw image override
+#
+# Network:
+#   TAILSCALE_IP              Tailscale IP for AI service bindings (default: 127.0.0.1)
+#
+# Optional secrets management:
+#   HashiCorp Vault / AWS Secrets Manager / Azure Key Vault / GCP Secret Manager

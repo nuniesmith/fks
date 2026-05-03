@@ -1,0 +1,284 @@
+{
+  "_comment": "Jaeger per-service sampling strategies for the FKS trading platform.",
+  "_doc": "https://www.jaegertracing.io/docs/latest/sampling/#collector-sampling-strategies",
+
+  "default_strategy": {
+    "type": "probabilistic",
+    "param": 0.1,
+    "_comment": "10 % sample rate for any service not listed below."
+  },
+
+  "service_strategies": [
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "JANUS — Rust trading brain",
+      "_comment3": "High-frequency market-data ingestion is sampled at 2 % to",
+      "_comment4": "keep trace volume manageable. All trade-execution and",
+      "_comment5": "optimizer operations are always captured.",
+      "_comment6": "==========================================================",
+      "service": "janus",
+      "type": "probabilistic",
+      "param": 0.05,
+      "operation_strategies": [
+        {
+          "operation": "execute_trade",
+          "type": "const",
+          "param": 1,
+          "_comment": "Always trace live order placement."
+        },
+        {
+          "operation": "place_order",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "cancel_order",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "signal_generated",
+          "type": "probabilistic",
+          "param": 0.25,
+          "_comment": "25 % of signal events — enough to spot regime shifts."
+        },
+        {
+          "operation": "optimizer_run",
+          "type": "const",
+          "param": 1,
+          "_comment": "Always trace overnight optimiser runs (infrequent + expensive)."
+        },
+        {
+          "operation": "backward_module",
+          "type": "probabilistic",
+          "param": 0.2
+        },
+        {
+          "operation": "healthcheck",
+          "type": "const",
+          "param": 0,
+          "_comment": "Drop health-check spans — too noisy, no diagnostic value."
+        },
+        {
+          "operation": "GET /health",
+          "type": "const",
+          "param": 0
+        }
+      ]
+    },
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "RUBY — consolidated Python service (data + engine + factory)",
+      "_comment3": "API requests sampled at 10 %. Health checks suppressed.",
+      "_comment4": "==========================================================",
+      "service": "ruby",
+      "type": "probabilistic",
+      "param": 0.1,
+      "operation_strategies": [
+        {
+          "operation": "GET /health",
+          "type": "const",
+          "param": 0
+        },
+        {
+          "operation": "backfill",
+          "type": "probabilistic",
+          "param": 0.5,
+          "_comment": "Backfill jobs are slow and infrequent — worth capturing."
+        },
+        {
+          "operation": "orb_scan",
+          "type": "probabilistic",
+          "param": 0.25
+        },
+        {
+          "operation": "factory_scan",
+          "type": "probabilistic",
+          "param": 0.1
+        },
+        {
+          "operation": "paper_trade",
+          "type": "const",
+          "param": 1,
+          "_comment": "Always trace paper-trade execution for audit trail."
+        },
+        {
+          "operation": "chain_ingest",
+          "type": "probabilistic",
+          "param": 0.05,
+          "_comment": "On-chain data polling is high-frequency; keep sample rate low."
+        }
+      ]
+    },
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "RUSTCODE — AI agent / LLM proxy",
+      "_comment3": "Calls are infrequent but expensive — sample at 50 %.",
+      "_comment4": "LLM completions always captured for cost + latency tracking.",
+      "_comment5": "==========================================================",
+      "service": "rustcode",
+      "type": "probabilistic",
+      "param": 0.5,
+      "operation_strategies": [
+        {
+          "operation": "llm_completion",
+          "type": "const",
+          "param": 1,
+          "_comment": "Always trace LLM calls — latency and token usage are critical."
+        },
+        {
+          "operation": "llm_proxy",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "semantic_search",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "repo_index",
+          "type": "probabilistic",
+          "param": 0.5
+        },
+        {
+          "operation": "GET /health",
+          "type": "const",
+          "param": 0
+        }
+      ]
+    },
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "OPENCLAW — Discord bot",
+      "_comment3": "Very low volume. Sample all command handling.",
+      "_comment4": "==========================================================",
+      "service": "openclaw",
+      "type": "probabilistic",
+      "param": 0.5,
+      "operation_strategies": [
+        {
+          "operation": "discord_command",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "discord_message",
+          "type": "probabilistic",
+          "param": 0.5
+        },
+        {
+          "operation": "github_webhook",
+          "type": "const",
+          "param": 1
+        }
+      ]
+    },
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "NGINX — reverse proxy",
+      "_comment3": "Potentially high request volume. Use rate-limiting to cap",
+      "_comment4": "trace throughput to 10 traces / sec regardless of load.",
+      "_comment5": "==========================================================",
+      "service": "nginx",
+      "type": "ratelimiting",
+      "param": 10,
+      "operation_strategies": [
+        {
+          "operation": "GET /health",
+          "type": "const",
+          "param": 0
+        },
+        {
+          "operation": "GET /metrics",
+          "type": "const",
+          "param": 0
+        }
+      ]
+    },
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "SPAWNER — bot container lifecycle manager",
+      "_comment3": "Low volume, moderate importance.",
+      "_comment4": "==========================================================",
+      "service": "spawner",
+      "type": "probabilistic",
+      "param": 0.5,
+      "operation_strategies": [
+        {
+          "operation": "spawn_bot",
+          "type": "const",
+          "param": 1,
+          "_comment": "Always trace bot spawns and kills for audit."
+        },
+        {
+          "operation": "kill_bot",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "GET /health",
+          "type": "const",
+          "param": 0
+        }
+      ]
+    },
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "WEBUI — SvelteKit frontend (server-side rendering / API)",
+      "_comment3": "Moderate volume. 10 % sample is enough for UX profiling.",
+      "_comment4": "==========================================================",
+      "service": "webui",
+      "type": "probabilistic",
+      "param": 0.1,
+      "operation_strategies": [
+        {
+          "operation": "GET /health",
+          "type": "const",
+          "param": 0
+        }
+      ]
+    },
+
+    {
+      "_comment": "==========================================================",
+      "_comment2": "TRAINER — GPU CNN retraining service",
+      "_comment3": "Long-running batch jobs — always trace starts/completions.",
+      "_comment4": "==========================================================",
+      "service": "trainer",
+      "type": "probabilistic",
+      "param": 1.0,
+      "operation_strategies": [
+        {
+          "operation": "retrain_epoch",
+          "type": "probabilistic",
+          "param": 0.1,
+          "_comment": "Individual epochs are very frequent; sample lightly."
+        },
+        {
+          "operation": "retrain_complete",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "model_evaluate",
+          "type": "const",
+          "param": 1
+        },
+        {
+          "operation": "GET /health",
+          "type": "const",
+          "param": 0
+        }
+      ]
+    }
+
+  ]
+}

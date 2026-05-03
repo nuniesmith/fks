@@ -1,0 +1,129 @@
+// ============================================================================
+// FKS RustCode (RUSTCODE) Protocol Buffer Definitions
+// ============================================================================
+// Defines the gRPC API for the RustCode service, enabling cross-service
+// communication between Janus, CNS, and other Rust services without going
+// through the REST API.
+//
+// Service topology:
+//   Janus / CNS / other Rust services
+//       └── RAServiceClient
+//               ├── HealthCheck       — service health and model status
+//               ├── SemanticSearch    — vector search across indexed repos
+//               ├── ChatCompletion   — LLM proxy for structured completions
+//               └── IngestDocument   — add documents to the vector index
+//
+//   RUSTCODE (Rust)
+//       └── implements RAService
+//               ├── manages vector index (embeddings + chunks)
+//               ├── proxies LLM requests to configured provider
+//               └── reports health / model readiness
+//
+// Key design decisions:
+//   - All enum zero values are UNSPECIFIED to honour proto3 defaults.
+//   - SemanticSearchResponse returns ranked results with scores so callers
+//     can apply their own thresholds.
+//   - ChatRequest supports a messages array for multi-turn conversation
+//     context, plus a system_prompt field for per-request system prompts.
+//   - IngestRequest supports pluggable chunk_strategy so the caller can
+//     control how documents are split.
+// ============================================================================
+
+syntax = "proto3";
+
+package fks.rustcode.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/rustcode/v1;rav1";
+
+// RAService — RustCode gRPC API for cross-service communication.
+// This allows Janus and other Rust services to call RUSTCODE functions without
+// going through the REST API.
+service RAService {
+  // Health check
+  rpc HealthCheck(RAHealthRequest) returns (RAHealthResponse);
+
+  // Semantic search across indexed repositories
+  rpc SemanticSearch(SemanticSearchRequest) returns (SemanticSearchResponse);
+
+  // Chat completion (proxy to configured LLM)
+  rpc ChatCompletion(ChatRequest) returns (ChatResponse);
+
+  // Ingest a document into the vector index
+  rpc IngestDocument(IngestRequest) returns (IngestResponse);
+}
+
+// ── Health Check ───────────────────────────────────────────────
+
+message RAHealthRequest {}
+
+message RAHealthResponse {
+  string service_name = 1;
+  string version = 2;
+  uint64 uptime_seconds = 3;
+  ModelStatus model_status = 4;
+}
+
+enum ModelStatus {
+  MODEL_STATUS_UNSPECIFIED = 0;
+  MODEL_STATUS_READY = 1;
+  MODEL_STATUS_LOADING = 2;
+  MODEL_STATUS_ERROR = 3;
+  MODEL_STATUS_UNAVAILABLE = 4;
+}
+
+// ── Semantic Search ────────────────────────────────────────────
+
+message SemanticSearchRequest {
+  string query = 1;
+  string repo_id = 2;
+  uint32 top_k = 3;
+  float threshold = 4;
+}
+
+message SemanticSearchResponse {
+  repeated SearchResult results = 1;
+}
+
+message SearchResult {
+  float score = 1;
+  string content = 2;
+  string path = 3;
+  string chunk_id = 4;
+}
+
+// ── Chat Completion ────────────────────────────────────────────
+
+message ChatRequest {
+  repeated ChatMessage messages = 1;
+  string model = 2;
+  float temperature = 3;
+  uint32 max_tokens = 4;
+  string system_prompt = 5;
+}
+
+message ChatMessage {
+  string role = 1;
+  string content = 2;
+}
+
+message ChatResponse {
+  string content = 1;
+  string model_used = 2;
+  uint32 tokens_used = 3;
+  bool cached = 4;
+}
+
+// ── Document Ingestion ─────────────────────────────────────────
+
+message IngestRequest {
+  string path = 1;
+  string content = 2;
+  string repo_id = 3;
+  string chunk_strategy = 4;
+}
+
+message IngestResponse {
+  string document_id = 1;
+  uint32 chunks_created = 2;
+  bool indexed = 3;
+}

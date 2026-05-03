@@ -1,0 +1,20 @@
+# =============================================================================
+# models/.gitignore
+# =============================================================================
+# Trained model files are intentionally excluded from automatic git tracking.
+# This prevents noisy diffs and accidental commits of under-trained models.
+#
+# To promote a model to git, use the promote script:
+#   ./scripts/promote_model.sh
+#
+# Or force-add a specific model manually:
+#   git add -f models/cnn_btc.pt models/cnn_btc.json
+# =============================================================================
+
+# Ignore all model weights and their JSON sidecars by default
+*.pt
+*.json
+
+# Always track this file and the README
+!.gitignore
+!README.md

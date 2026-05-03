@@ -1,0 +1,468 @@
+# Prometheus Alerting Rules for JANUS Trading System
+# These rules define when alerts should fire based on metric conditions
+
+groups:
+  # ============================================================================
+  # System Health Alerts
+  # ============================================================================
+  - name: janus_system_health
+    interval: 30s
+    rules:
+      # Critical system status
+      - alert: SystemCritical
+        expr: janus_cns_system_status >= 3
+        for: 1m
+        labels:
+          severity: critical
+          component: system
+          team: platform
+        annotations:
+          summary: "JANUS system is in CRITICAL state"
+          description: "System status has been CRITICAL for more than 1 minute. Immediate investigation required."
+          runbook_url: "https://docs.janus.io/runbooks/system-critical"
+          dashboard_url: "http://grafana:3000/d/janus-cns/janus-cns"
+
+      # Low health score
+      - alert: LowSystemHealthScore
+        expr: janus_cns_system_health_score < 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+          team: platform
+        annotations:
+          summary: "System health score below 50%"
+          description: "System health score is {{ $value | humanizePercentage }}, indicating multiple degraded components."
+          runbook_url: "https://docs.janus.io/runbooks/low-health-score"
+
+      # System degraded
+      - alert: SystemDegraded
+        expr: janus_cns_system_status == 2
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+          team: platform
+        annotations:
+          summary: "JANUS system is in DEGRADED state"
+          description: "System has been in degraded state for 10 minutes. Performance may be impacted."
+
+  # ============================================================================
+  # Component Health Alerts
+  # ============================================================================
+  - name: janus_component_health
+    interval: 30s
+    rules:
+      # Forward service down - CRITICAL for trading
+      - alert: ForwardServiceDown
+        expr: janus_cns_component_health{component="forward_service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: forward
+          team: trading
+          pagerduty: "true"
+        annotations:
+          summary: "Forward service is DOWN - trading halted"
+          description: "The Forward (Wake State) service has been down for 2 minutes. All trading activity is halted."
+          runbook_url: "https://docs.janus.io/runbooks/forward-service-down"
+          impact: "Trading operations completely stopped"
+
+      # Backward service down - ERROR
+      - alert: BackwardServiceDown
+        expr: janus_cns_component_health{component="backward_service"} == 0
+        for: 5m
+        labels:
+          severity: error
+          component: backward
+          team: ml
+        annotations:
+          summary: "Backward service is DOWN"
+          description: "The Backward (Sleep State) service has been down for 5 minutes. Training and memory consolidation disabled."
+          runbook_url: "https://docs.janus.io/runbooks/backward-service-down"
+          impact: "No model training or memory updates"
+
+      # Gateway service down
+      - alert: GatewayServiceDown
+        expr: janus_cns_component_health{component="gateway_service"} == 0
+        for: 2m
+        labels:
+          severity: error
+          component: gateway
+          team: platform
+        annotations:
+          summary: "Gateway service is DOWN"
+          description: "API gateway has been unreachable for 2 minutes. External API access unavailable."
+          runbook_url: "https://docs.janus.io/runbooks/gateway-down"
+
+      # Redis down
+      - alert: RedisDown
+        expr: janus_cns_component_health{component="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: redis
+          team: infrastructure
+          pagerduty: "true"
+        annotations:
+          summary: "Redis is DOWN"
+          description: "Redis has been unreachable for 2 minutes. Job queue and caching unavailable."
+          runbook_url: "https://docs.janus.io/runbooks/redis-down"
+          impact: "Job processing halted, cache unavailable"
+
+      # Qdrant down
+      - alert: QdrantDown
+        expr: janus_cns_component_health{component="qdrant"} == 0
+        for: 5m
+        labels:
+          severity: error
+          component: qdrant
+          team: ml
+        annotations:
+          summary: "Qdrant vector database is DOWN"
+          description: "Qdrant has been unreachable for 5 minutes. Vector similarity search unavailable."
+          runbook_url: "https://docs.janus.io/runbooks/qdrant-down"
+
+      # Component degraded
+      - alert: ComponentDegraded
+        expr: janus_cns_component_health == 0.5
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Component {{ $labels.component }} is DEGRADED"
+          description: "Component {{ $labels.component }} has been in degraded state for 10 minutes."
+
+  # ============================================================================
+  # Performance Alerts
+  # ============================================================================
+  - name: janus_performance
+    interval: 30s
+    rules:
+      # High response time
+      - alert: HighComponentResponseTime
+        expr: janus_cns_component_response_time_ms > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High response time for {{ $labels.component }}"
+          description: "{{ $labels.component }} response time is {{ $value }}ms (threshold: 1000ms)"
+
+      # Very high response time
+      - alert: VeryHighComponentResponseTime
+        expr: janus_cns_component_response_time_ms > 5000
+        for: 2m
+        labels:
+          severity: error
+          team: platform
+        annotations:
+          summary: "Very high response time for {{ $labels.component }}"
+          description: "{{ $labels.component }} response time is {{ $value }}ms (threshold: 5000ms). Service may be overloaded."
+
+      # High probe failure rate
+      - alert: HighProbeFailureRate
+        expr: rate(janus_cns_component_probe_failures[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High health probe failure rate"
+          description: "Health probe failures for {{ $labels.component }} at {{ $value | humanize }} failures/sec"
+
+  # ============================================================================
+  # Circuit Breaker Alerts
+  # ============================================================================
+  - name: janus_circuit_breakers
+    interval: 30s
+    rules:
+      # Circuit breaker open
+      - alert: CircuitBreakerOpen
+        expr: janus_circuit_breaker_state == 1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Circuit breaker OPEN for {{ $labels.component }}"
+          description: "Circuit breaker for {{ $labels.component }} has been open for 5 minutes. Requests are being blocked."
+          runbook_url: "https://docs.janus.io/runbooks/circuit-breaker-open"
+
+      # High circuit breaker trip rate
+      - alert: FrequentCircuitBreakerTrips
+        expr: rate(janus_circuit_breaker_trips_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Frequent circuit breaker trips for {{ $labels.component }}"
+          description: "Circuit breaker for {{ $labels.component }} is tripping frequently ({{ $value | humanize }} trips/sec)"
+
+  # ============================================================================
+  # Trading Alerts (Forward Service)
+  # ============================================================================
+  - name: janus_trading
+    interval: 15s
+    rules:
+      # High order rejection rate
+      - alert: HighOrderRejectionRate
+        expr: |
+          rate(janus_forward_orders_rejected_total[5m])
+          /
+          rate(janus_forward_orders_submitted_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: forward
+          team: trading
+        annotations:
+          summary: "High order rejection rate"
+          description: "Order rejection rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+          runbook_url: "https://docs.janus.io/runbooks/high-rejection-rate"
+
+      # No orders being submitted
+      - alert: NoOrderActivity
+        expr: rate(janus_forward_orders_submitted_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: forward
+          team: trading
+        annotations:
+          summary: "No trading activity detected"
+          description: "No orders have been submitted in the last 10 minutes. Check if trading is intentionally paused."
+
+      # No active engines
+      - alert: NoActiveEngines
+        expr: janus_forward_active_engines == 0
+        for: 5m
+        labels:
+          severity: error
+          component: forward
+          team: trading
+        annotations:
+          summary: "No active trading engines"
+          description: "There are no active trading engines. Trading is halted."
+          runbook_url: "https://docs.janus.io/runbooks/no-active-engines"
+
+  # ============================================================================
+  # Training Alerts (Backward Service)
+  # ============================================================================
+  - name: janus_training
+    interval: 60s
+    rules:
+      # No training activity
+      - alert: NoTrainingActivity
+        expr: rate(janus_backward_training_iterations_total[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          component: backward
+          team: ml
+        annotations:
+          summary: "No training activity detected"
+          description: "No training iterations in the last 30 minutes. Model may not be updating."
+
+      # Low memory consolidation rate
+      - alert: LowMemoryConsolidation
+        expr: rate(janus_backward_memory_consolidations_total[1h]) < 0.001
+        for: 1h
+        labels:
+          severity: info
+          component: backward
+          team: ml
+        annotations:
+          summary: "Low memory consolidation rate"
+          description: "Memory consolidation rate is unusually low ({{ $value | humanize }}/sec)"
+
+  # ============================================================================
+  # Dependency Alerts
+  # ============================================================================
+  - name: janus_dependencies
+    interval: 30s
+    rules:
+      # High Redis latency
+      - alert: HighRedisLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(janus_redis_command_duration_seconds_bucket[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: redis
+          team: infrastructure
+        annotations:
+          summary: "High Redis command latency"
+          description: "Redis p95 latency is {{ $value | humanizeDuration }}. May impact job processing."
+
+      # Redis connection issues
+      - alert: RedisConnectionDrops
+        expr: rate(janus_redis_commands_total{status="error"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: error
+          component: redis
+          team: infrastructure
+        annotations:
+          summary: "Redis connection errors detected"
+          description: "Redis command errors at {{ $value | humanize }} errors/sec"
+
+      # Qdrant slow searches
+      - alert: SlowQdrantSearches
+        expr: |
+          histogram_quantile(0.95,
+            rate(janus_qdrant_search_duration_seconds_bucket[5m])
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+          component: qdrant
+          team: ml
+        annotations:
+          summary: "Slow Qdrant vector searches"
+          description: "Qdrant p95 search latency is {{ $value | humanizeDuration }}"
+
+  # ============================================================================
+  # Resource Alerts
+  # ============================================================================
+  - name: janus_resources
+    interval: 30s
+    rules:
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: janus_resources_memory_usage_bytes > 4294967296  # 4GB
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanize1024 }}. May need to scale."
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: janus_resources_cpu_usage_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}%. Service may be overloaded."
+
+      # Very high CPU
+      - alert: VeryHighCPUUsage
+        expr: janus_resources_cpu_usage_percent > 95
+        for: 5m
+        labels:
+          severity: error
+          team: platform
+        annotations:
+          summary: "Very high CPU usage"
+          description: "CPU usage is {{ $value }}%. Service is critically overloaded."
+
+  # ============================================================================
+  # Communication Channel Alerts
+  # ============================================================================
+  - name: janus_communication
+    interval: 30s
+    rules:
+      # Shared memory communication issues
+      - alert: SharedMemoryStalled
+        expr: |
+          rate(janus_shm_messages_sent_total[5m]) == 0
+          and
+          janus_cns_component_health{component="forward_service"} == 1
+        for: 5m
+        labels:
+          severity: error
+          component: ipc
+          team: platform
+        annotations:
+          summary: "Shared memory IPC stalled"
+          description: "No shared memory messages in 5 minutes despite Forward service being up."
+          runbook_url: "https://docs.janus.io/runbooks/shm-stalled"
+
+      # gRPC errors
+      - alert: HighGRPCErrorRate
+        expr: |
+          rate(janus_grpc_requests_total{status!="OK"}[5m])
+          /
+          rate(janus_grpc_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: grpc
+          team: platform
+        annotations:
+          summary: "High gRPC error rate"
+          description: "gRPC error rate is {{ $value | humanizePercentage }} for {{ $labels.service }}.{{ $labels.method }}"
+
+  # ============================================================================
+  # CNS Service Alerts
+  # ============================================================================
+  - name: janus_cns_service
+    interval: 30s
+    rules:
+      # CNS itself is down
+      - alert: CNSServiceDown
+        expr: up{job="janus-cns"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: cns
+          team: platform
+          pagerduty: "true"
+        annotations:
+          summary: "CNS monitoring service is DOWN"
+          description: "The Central Nervous System service is unreachable. Monitoring is blind!"
+          runbook_url: "https://docs.janus.io/runbooks/cns-down"
+          impact: "No health monitoring or metrics collection"
+
+      # CNS probe failures
+      - alert: CNSProbeFailures
+        expr: rate(janus_cns_component_probe_failures[5m]) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: cns
+          team: platform
+        annotations:
+          summary: "High CNS probe failure rate"
+          description: "CNS health probes are failing at {{ $value | humanize }} failures/sec"
+
+  # ============================================================================
+  # Prometheus & Monitoring Infrastructure
+  # ============================================================================
+  - name: monitoring_infrastructure
+    interval: 60s
+    rules:
+      # Prometheus scrape failures
+      - alert: PrometheusScrapeFailures
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: prometheus
+          team: platform
+        annotations:
+          summary: "Prometheus cannot scrape {{ $labels.job }}"
+          description: "Target {{ $labels.instance }} for job {{ $labels.job }} has been down for 5 minutes."
+
+      # Prometheus storage issues
+      - alert: PrometheusStorageAlmostFull
+        expr: |
+          (prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_storage_blocks_bytes{quantile="1.0"}) > 0.85
+        for: 1h
+        labels:
+          severity: warning
+          component: prometheus
+          team: platform
+        annotations:
+          summary: "Prometheus storage almost full"
+          description: "Prometheus storage is {{ $value | humanizePercentage }} full. Consider cleanup or expansion."

@@ -1,0 +1,405 @@
+# ============================================================================
+# JANUS FORWARD SERVICE CONFIGURATION
+# ============================================================================
+# Real-time signal generation and streaming service
+# Handles: Signal Generation • WebSocket Streaming • Risk Management • ML Inference
+# ============================================================================
+
+[service]
+name = "janus-forward"
+version = "0.1.0"
+
+[server]
+# Bind address
+host = "0.0.0.0"
+# gRPC port for signal streaming
+grpc_port = 50051
+# REST API port
+rest_port = 8080
+# WebSocket port for live signal broadcast
+websocket_port = 8081
+# Prometheus metrics port
+metrics_port = 9090
+# Enable metrics endpoint
+enable_metrics = true
+
+# ============================================================================
+# SIGNAL GENERATION
+# ============================================================================
+
+[signals]
+# Minimum confidence threshold (0.0 - 1.0)
+min_confidence = 0.6
+# Minimum signal strength (0.0 - 1.0)
+min_strength = 0.5
+# Maximum signal age before expiration (seconds)
+max_age_secs = 300
+# Enable quality filtering
+enable_quality_filter = true
+# Batch size for signal processing
+batch_size = 100
+# Signal generation interval (seconds)
+generation_interval_secs = 5
+
+# ============================================================================
+# INDICATORS CONFIGURATION
+# ============================================================================
+
+[indicators]
+# Enable indicator calculations
+enabled = true
+
+[indicators.ema]
+# EMA periods to calculate
+periods = [9, 21, 50, 200]
+
+[indicators.rsi]
+# RSI period
+period = 14
+# Overbought threshold
+overbought = 70.0
+# Oversold threshold
+oversold = 30.0
+
+[indicators.macd]
+# Fast EMA period
+fast_period = 12
+# Slow EMA period
+slow_period = 26
+# Signal line period
+signal_period = 9
+
+[indicators.bollinger]
+# Bollinger Bands period
+period = 20
+# Standard deviation multiplier
+std_dev = 2.0
+
+[indicators.atr]
+# ATR period
+period = 14
+
+[indicators.volume]
+# Volume moving average period
+ma_period = 20
+
+# ============================================================================
+# STRATEGIES CONFIGURATION
+# ============================================================================
+
+[strategies]
+# Enable strategy-based signal generation
+enabled = true
+
+[strategies.weights]
+# Strategy weights for consensus (0.0 - 1.0)
+ema_crossover = 1.0
+rsi_reversal = 1.0
+macd_momentum = 1.0
+bollinger_breakout = 1.0
+
+[strategies.consensus]
+# Minimum agreement ratio for consensus signals
+min_agreement = 0.6
+# Minimum number of agreeing strategies
+min_strategies = 2
+
+[strategies.ema_crossover]
+enabled = true
+fast_period = 9
+slow_period = 21
+# Minimum EMA spread to trigger signal (percentage)
+min_spread_pct = 0.1
+
+[strategies.rsi_reversal]
+enabled = true
+period = 14
+overbought_threshold = 70.0
+oversold_threshold = 30.0
+# Confirmation candles required
+confirmation_candles = 1
+
+[strategies.macd_momentum]
+enabled = true
+fast_period = 12
+slow_period = 26
+signal_period = 9
+# Histogram threshold for signal strength
+histogram_threshold = 0.0
+
+[strategies.bollinger_breakout]
+enabled = true
+period = 20
+std_dev = 2.0
+# Require close outside bands
+require_close_outside = true
+
+# ============================================================================
+# RISK MANAGEMENT
+# ============================================================================
+
+[risk]
+# Account balance for position sizing
+account_balance = 100000.0
+# Maximum position size (percentage of account)
+max_position_size_pct = 0.02
+# Maximum portfolio risk (percentage of account)
+max_portfolio_risk_pct = 0.10
+# Risk threshold for signal filtering
+risk_threshold = 0.8
+
+[risk.stop_loss]
+# Default stop loss percentage
+default_pct = 0.02
+# Use ATR-based stops
+use_atr = true
+# ATR multiplier for stop distance
+atr_multiplier = 2.0
+
+[risk.take_profit]
+# Risk/reward ratio
+risk_reward_ratio = 2.0
+# Enable trailing take profit
+enable_trailing = false
+
+[risk.position_sizing]
+# Method: fixed | risk_based | kelly | volatility
+method = "risk_based"
+# Risk per trade (percentage)
+risk_per_trade_pct = 0.01
+
+# ============================================================================
+# EXECUTION CLIENT
+# ============================================================================
+
+[execution]
+# Enable order execution
+enabled = false
+# Execution endpoint (localhost — execution is built into the janus binary)
+endpoint = "http://localhost:50052"
+# Connection timeout (seconds)
+connect_timeout_secs = 10
+# Request timeout (seconds)
+request_timeout_secs = 30
+# Enable TLS
+enable_tls = false
+# Maximum retries
+max_retries = 3
+# Retry backoff (milliseconds)
+retry_backoff_ms = 100
+
+# ============================================================================
+# WEBSOCKET CONFIGURATION
+# ============================================================================
+
+[websocket]
+# Maximum connections per IP
+max_connections_per_ip = 10
+# Heartbeat interval (seconds)
+heartbeat_interval_secs = 30
+# Connection timeout (seconds)
+connection_timeout_secs = 60
+# Message buffer size
+message_buffer_size = 100
+# Enable compression
+enable_compression = true
+
+# ============================================================================
+# MARKET DATA
+# ============================================================================
+
+[market]
+# Primary exchange
+exchange = "kraken"
+# Update interval (milliseconds)
+update_interval_ms = 1000
+
+[market.timeframes]
+# Enabled timeframes
+enabled = ["1m", "5m", "15m", "1h", "4h", "1d"]
+# Primary timeframe for signals
+primary = "5m"
+
+# ============================================================================
+# ASSETS CONFIGURATION
+# ============================================================================
+
+[assets]
+# List of enabled trading assets
+enabled = ["BTC", "ETH", "SOL", "AVAX", "LINK", "MATIC", "ARB", "OP", "DOGE", "XRP"]
+
+# Default quote currency
+default_quote = "USD"
+
+# Assets for optimization
+optimize_assets = ["BTC", "ETH", "SOL"]
+
+# High priority assets (more frequent updates)
+priority_assets = ["BTC", "ETH"]
+
+# Per-asset configuration
+[assets.BTC]
+symbol = "BTC/USD"
+enabled = true
+max_position_size_pct = 0.03
+atr_multiplier = 2.5
+rsi_overbought = 75.0
+rsi_oversold = 25.0
+min_order_size = 0.0001
+max_order_size = 1.0
+
+[assets.ETH]
+symbol = "ETH/USD"
+enabled = true
+max_position_size_pct = 0.03
+atr_multiplier = 2.5
+rsi_overbought = 75.0
+rsi_oversold = 25.0
+min_order_size = 0.001
+max_order_size = 10.0
+
+[assets.SOL]
+symbol = "SOL/USD"
+enabled = true
+max_position_size_pct = 0.02
+atr_multiplier = 3.0
+min_order_size = 0.01
+max_order_size = 100.0
+
+[assets.AVAX]
+symbol = "AVAX/USD"
+enabled = true
+max_position_size_pct = 0.015
+atr_multiplier = 3.0
+min_order_size = 0.1
+max_order_size = 500.0
+
+[assets.LINK]
+symbol = "LINK/USD"
+enabled = true
+max_position_size_pct = 0.015
+atr_multiplier = 2.5
+min_order_size = 0.1
+max_order_size = 1000.0
+
+[assets.MATIC]
+symbol = "MATIC/USD"
+enabled = true
+max_position_size_pct = 0.01
+atr_multiplier = 3.0
+min_order_size = 1.0
+max_order_size = 10000.0
+
+[assets.ARB]
+symbol = "ARB/USD"
+enabled = true
+max_position_size_pct = 0.01
+atr_multiplier = 3.5
+min_order_size = 1.0
+max_order_size = 5000.0
+
+[assets.OP]
+symbol = "OP/USD"
+enabled = true
+max_position_size_pct = 0.01
+atr_multiplier = 3.5
+min_order_size = 1.0
+max_order_size = 5000.0
+
+[assets.DOGE]
+symbol = "DOGE/USD"
+enabled = true
+max_position_size_pct = 0.01
+atr_multiplier = 4.0
+rsi_overbought = 65.0
+rsi_oversold = 35.0
+min_order_size = 10.0
+max_order_size = 100000.0
+
+[assets.XRP]
+symbol = "XRP/USD"
+enabled = true
+max_position_size_pct = 0.015
+atr_multiplier = 3.0
+min_order_size = 1.0
+max_order_size = 50000.0
+
+# ============================================================================
+# PARAMETER HOT-RELOAD
+# ============================================================================
+
+[param_reload]
+# Enable parameter hot-reload from Redis
+enabled = true
+# Redis URL
+redis_url = "redis://redis:6379"
+# Instance ID for namespacing
+instance_id = "default"
+# Reconnection delay (milliseconds)
+reconnect_delay_ms = 5000
+# Maximum reconnection attempts (0 = unlimited)
+max_retries = 0
+
+# ============================================================================
+# FEATURE ENGINEERING
+# ============================================================================
+
+[features]
+# Enable feature engineering
+enabled = true
+
+[features.gaf]
+# Enable Gramian Angular Field images
+enabled = false
+# Image size
+image_size = 32
+# Method: summation | difference
+method = "summation"
+
+[features.normalization]
+# Enable normalization
+enabled = true
+# Method: minmax | zscore | robust
+method = "zscore"
+
+[features.lookback]
+# Lookback windows for feature calculation
+windows = [5, 10, 20, 50, 100]
+
+# ============================================================================
+# ML INFERENCE (Optional)
+# ============================================================================
+
+[ml]
+# Enable ML model inference
+enabled = false
+# Model path
+model_path = "/models"
+# Model name
+model_name = "signal_classifier"
+# Inference batch size
+batch_size = 32
+# Minimum prediction confidence
+min_confidence = 0.7
+
+# ============================================================================
+# SHARED MEMORY (IPC with Backward service)
+# ============================================================================
+
+[shared_memory]
+# Shared memory path for Forward<->Backward IPC
+path = "/dev/shm/janus_forward_backward"
+# Buffer size in MB
+buffer_size_mb = 1024
+# Enable shared memory IPC
+enabled = true
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+[logging]
+# Log level: trace | debug | info | warn | error
+level = "info"
+# Log format: json | pretty
+format = "json"

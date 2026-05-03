@@ -1,0 +1,83 @@
+# =============================================================================
+# Cargo Audit Configuration — FKS / JANUS Platform
+# =============================================================================
+# This file documents acknowledged security advisories that are transitive
+# (not directly fixable in this workspace) with justifications and tracking.
+#
+# Last reviewed: 2025-07-14
+# Reviewer: audit-remediation workflow
+# =============================================================================
+
+[advisories]
+
+# -------------------------------------------------------------------------
+# VULNERABILITIES (transitive, blocked by upstream)
+# -------------------------------------------------------------------------
+
+# fast-float 0.2.0 — segfault due to lack of bound check
+# Transitive via: polars 0.44 → polars-io → fast-float
+# Impact: Only triggered by malformed float input in CSV/text parsing paths.
+#         JANUS uses polars for structured DataFrame ops (parquet, lazy),
+#         not raw text float parsing. Risk is low in our usage pattern.
+# Tracking: Monitor polars releases for fast-float bump or replacement.
+# No fix available upstream as of 2025-07.
+ignore = [
+    # fast-float segfault — transitive via polars, no fix available
+    "RUSTSEC-2025-0003",
+
+    # pyo3 0.21.2 buffer overflow in PyString::from_object
+    # Transitive via: polars 0.44 → polars-utils → pyo3
+    # Impact: Only affects Python interop (PyString). JANUS is pure Rust;
+    #         we never call PyString::from_object. Zero runtime exposure.
+    # Fix: pyo3 >= 0.24.1, but polars 0.44 pins pyo3 0.21.x.
+    # Tracking: Upgrade polars to >= 0.46 when API migration is feasible.
+    "RUSTSEC-2025-0020",
+
+    # rsa 0.9.10 — Marvin Attack (timing side-channel for key recovery)
+    # Transitive via: sqlx 0.8 → sqlx-mysql → rsa
+    # Impact: Only relevant for RSA PKCS#1 v1.5 decryption. JANUS uses
+    #         sqlx for PostgreSQL/QuestDB, not MySQL with RSA auth.
+    #         The vulnerable code path is never exercised.
+    # No fix available upstream as of 2025-07.
+    "RUSTSEC-2023-0071",
+]
+
+# -------------------------------------------------------------------------
+# WARNINGS (unmaintained / yanked — all transitive)
+# -------------------------------------------------------------------------
+# Warnings are informational and don't block builds, but we document them
+# here for tracking and periodic review.
+#
+# atomic-polyfill 1.0.3 (RUSTSEC-2023-0089)
+#   Transitive via: heapless → atomic-polyfill (postcard dep chain)
+#   Status: heapless 0.8+ removes this dep. postcard 1.1 still uses heapless 0.7.
+#   Tracking: Upgrade postcard when heapless 0.8 support lands.
+#
+# bincode 2.0.1 (RUSTSEC-2025-0141)
+#   Transitive via: burn-core 0.19 → bincode 2.0, vision (excluded) → bincode 2.0
+#   Status: All direct FKS bincode usage migrated to postcard.
+#           Remaining bincode is burn framework transitive — cannot remove.
+#   Tracking: Monitor burn releases for bincode replacement.
+#
+# paste 1.0.15 (RUSTSEC-2024-0436)
+#   Transitive via: multiple crates (burn, polars ecosystem)
+#   Status: paste is widely used as a proc-macro utility. The "unmaintained"
+#           status reflects author stepping back; the crate is stable and
+#           has no known vulnerabilities.
+#   Tracking: No action required unless a vulnerability is found.
+#
+# rustls-pemfile 2.2.0 (RUSTSEC-2025-0134)
+#   Transitive via: tonic 0.12 → rustls-pemfile, bollard → rustls-pemfile
+#   Status: rustls-pemfile functionality merged into rustls main crate.
+#           Waiting for tonic and qdrant-client to update.
+#   Tracking: Upgrade tonic to >= 0.14 (already done for main dep, but
+#           qdrant-client 1.16 still pulls tonic 0.12).
+#
+# fast-float 0.2.0 unsound (RUSTSEC-2024-0379)
+#   Same crate as RUSTSEC-2025-0003 above. See justification there.
+#
+# zip 7.4.0 yanked (no RUSTSEC ID)
+#   Transitive via: candle-core 0.9.2 → zip
+#   Status: candle-core pins zip 7.4.0 which was yanked. Functionally
+#           identical to replacement versions. Waiting for candle update.
+#   Tracking: Monitor candle-core releases for zip version bump.

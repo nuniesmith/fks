@@ -1,0 +1,722 @@
+// ============================================================================
+// FKS Signals Protocol Buffer Definitions
+// ============================================================================
+// Defines the signal bus, inference interface, and feature vector schema used
+// by the Janus Rust trading brain and the Python data/engine services.
+//
+// Session 4 gRPC work will generate Rust (via tonic-build) and Python (via
+// buf) bindings from this file and swap the current HTTP transport in
+// JanusHTTPClient for a JanusGRPCClient with the same public interface.
+//
+// Service topology:
+//   Python (data / engine)
+//       └── JanusGRPCClient (replaces JanusHTTPClient)
+//               ├── InferenceService  — request inference on a FeatureVector
+//               └── SignalBusService  — publish / subscribe live signals
+//
+//   Janus (Rust)
+//       └── implements InferenceService + SignalBusService
+//
+// Key design decisions:
+//   - FeatureVector carries all ML-consumable inputs in a single flat
+//     message so the server can run any model without schema changes.
+//   - TradingSignal is a superset of every signal shape Janus emits;
+//     optional fields are zero-valued when not populated by a given module.
+//   - InferenceService RPCs are unary for low-latency point-in-time use.
+//   - SignalBusService streams use server-streaming so a single Python
+//     subscriber gets all new signals without polling.
+//   - All enum zero values are UNSPECIFIED to honour proto3 defaults and
+//     allow safe version-to-version additions.
+// ============================================================================
+
+syntax = "proto3";
+
+package fks.signals.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/signals/v1;signalsv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.signals.v1";
+
+// ============================================================================
+// InferenceService — point-in-time inference from Janus modules
+// ============================================================================
+
+// InferenceService exposes Janus ML modules for synchronous inference.
+// Python callers construct a FeatureVector from live bar data and receive a
+// TradingSignal (or set of signals) in return, without touching Redis.
+service InferenceService {
+  // Infer a single TradingSignal from a FeatureVector.
+  // Returns the highest-confidence signal from all enabled modules.
+  rpc Infer(InferRequest) returns (InferResponse);
+
+  // Infer signals for multiple symbols in a single round-trip.
+  // Each entry in the request maps one symbol to one FeatureVector.
+  rpc BatchInfer(BatchInferRequest) returns (BatchInferResponse);
+
+  // Run only the regime-detection module and return the current market
+  // regime for the given feature vector.  Lightweight alternative to a
+  // full Infer call when only regime context is needed.
+  rpc DetectRegime(DetectRegimeRequest) returns (DetectRegimeResponse);
+
+  // Return the health and readiness status of each loaded Janus module.
+  rpc ModuleHealth(ModuleHealthRequest) returns (ModuleHealthResponse);
+}
+
+// ============================================================================
+// SignalBusService — publish / subscribe live signals via Redis
+// ============================================================================
+
+// SignalBusService bridges the Redis signal bus to gRPC so Python services
+// can subscribe to live signals without polling REST endpoints.
+service SignalBusService {
+  // Publish a signal into the Janus Redis bus.
+  // Equivalent to POST /api/signals/publish.
+  rpc Publish(PublishRequest) returns (PublishResponse);
+
+  // Stream all new signals as they arrive on the bus.
+  // The server pushes each signal once; the client must reconnect on
+  // disconnect (the SSE bridge handles reconnection automatically).
+  rpc Subscribe(SubscribeRequest) returns (stream SignalEvent);
+
+  // Fetch the most recent N signals from Redis (catch-up on connect).
+  // Equivalent to GET /api/signals/latest?limit=N.
+  rpc GetLatest(GetLatestRequest) returns (GetLatestResponse);
+
+  // Fetch signals for a single instrument.
+  // Equivalent to GET /api/signals/by-symbol/{symbol}.
+  rpc GetBySymbol(GetBySymbolRequest) returns (GetBySymbolResponse);
+
+  // Fetch aggregated signal statistics for a category.
+  // Equivalent to GET /api/signals/summary.
+  rpc GetSummary(GetSummaryRequest) returns (GetSummaryResponse);
+}
+
+// ============================================================================
+// FeatureVector — ML-ready input derived from OHLCV bars
+// ============================================================================
+
+// FeatureVector is the canonical input to every Janus inference module.
+// It carries the union of all features any module might consume; unused
+// fields are zero-valued and modules are expected to handle missing data
+// gracefully (matching the Python _import_* lazy-guard pattern).
+//
+// Field numbering convention:
+//   1–19    Identity / metadata
+//   20–49   Price action (OHLCV derivatives)
+//   50–79   Trend & momentum indicators
+//   80–109  Volume & order-flow metrics
+//   110–139 Volatility metrics
+//   140–169 ICT / market-structure levels
+//   170–199 Regime context
+//   200–249 Multi-timeframe alignment
+//   250+    Extensibility / raw feature array
+message FeatureVector {
+  // -----------------------------------------------------------------------
+  // Identity / metadata  (1–19)
+  // -----------------------------------------------------------------------
+
+  // Instrument symbol (e.g. "MES", "MGC", "BTCUSD")
+  string symbol = 1;
+
+  // Timeframe of the primary bar series (e.g. "1m", "5m", "1h")
+  string timeframe = 2;
+
+  // Bar close timestamp (Unix milliseconds, UTC)
+  int64 timestamp_ms = 3;
+
+  // Data source identifier (e.g. "massive", "kraken", "rithmic")
+  string source = 4;
+
+  // Number of bars used to compute this feature vector
+  int32 bar_count = 5;
+
+  // -----------------------------------------------------------------------
+  // Price action (20–49)
+  // -----------------------------------------------------------------------
+
+  // Most recent close price
+  double close = 20;
+
+  // Most recent open price
+  double open = 21;
+
+  // Most recent high price
+  double high = 22;
+
+  // Most recent low price
+  double low = 23;
+
+  // Most recent bar volume
+  double volume = 24;
+
+  // Price return over the last bar: (close - prev_close) / prev_close
+  double bar_return = 25;
+
+  // Rolling N-bar return (default N = 5)
+  double rolling_return_5 = 26;
+
+  // Rolling N-bar return (default N = 20)
+  double rolling_return_20 = 27;
+
+  // -----------------------------------------------------------------------
+  // Trend & momentum (50–79)
+  // -----------------------------------------------------------------------
+
+  // 9-period EMA of close
+  double ema_9 = 50;
+
+  // 21-period EMA of close
+  double ema_21 = 51;
+
+  // 50-period EMA of close
+  double ema_50 = 52;
+
+  // 200-period EMA of close
+  double ema_200 = 53;
+
+  // EMA crossover signal: ema_9 - ema_21 (positive = fast above slow)
+  double ema_cross_9_21 = 54;
+
+  // RSI (14-period) normalised to [0, 1]
+  double rsi_14 = 55;
+
+  // MACD line (12/26/9)
+  double macd_line = 56;
+
+  // MACD signal line
+  double macd_signal = 57;
+
+  // MACD histogram (macd_line - macd_signal)
+  double macd_histogram = 58;
+
+  // Rate of change over 10 bars
+  double roc_10 = 59;
+
+  // -----------------------------------------------------------------------
+  // Volume & order-flow (80–109)
+  // -----------------------------------------------------------------------
+
+  // Latest cumulative volume delta (CVD), anchored daily
+  double cvd = 80;
+
+  // Normalised 5-bar rolling slope of CVD
+  // Positive = accelerating buys; negative = accelerating sells
+  double cvd_slope = 81;
+
+  // Buy volume for the most recent bar
+  double buy_volume = 82;
+
+  // Sell volume for the most recent bar
+  double sell_volume = 83;
+
+  // Delta (buy_volume - sell_volume) for the most recent bar
+  double volume_delta = 84;
+
+  // On-balance volume (OBV), normalised by rolling std
+  double obv_normalised = 85;
+
+  // Volume-weighted average price (VWAP, session-anchored)
+  double vwap = 86;
+
+  // Ratio of current bar volume to 20-bar average volume
+  double volume_ratio = 87;
+
+  // Level-2 bid/ask imbalance ratio (bid_total / ask_total)
+  // Clamped to [0.1, 10.0]; 0.0 = L2 data not available
+  double l2_imbalance_ratio = 88;
+
+  // -----------------------------------------------------------------------
+  // Volatility (110–139)
+  // -----------------------------------------------------------------------
+
+  // Average True Range, 14-period
+  double atr_14 = 110;
+
+  // ATR as a percentage of close price (normalised ATR)
+  double atr_pct = 111;
+
+  // Bollinger Band width: (upper - lower) / middle
+  double bb_width = 112;
+
+  // Bollinger Band %B: (close - lower) / (upper - lower)
+  double bb_pct_b = 113;
+
+  // Historical volatility (20-bar annualised std of log returns)
+  double hist_vol_20 = 114;
+
+  // -----------------------------------------------------------------------
+  // ICT / market-structure levels (140–169)
+  // -----------------------------------------------------------------------
+
+  // Distance (in price) to nearest FVG / order block above current price
+  double nearest_level_above_distance = 140;
+
+  // Distance (in price) to nearest FVG / order block below current price
+  double nearest_level_below_distance = 141;
+
+  // Label of the nearest level above ("FVG", "OB", "SSL", etc.)
+  string nearest_level_above_label = 142;
+
+  // Label of the nearest level below
+  string nearest_level_below_label = 143;
+
+  // Volume Profile point-of-control (POC) price
+  double vp_poc = 144;
+
+  // Volume Profile value-area high (VAH)
+  double vp_vah = 145;
+
+  // Volume Profile value-area low (VAL)
+  double vp_val = 146;
+
+  // Current price position relative to the value area:
+  //   1.0 = above VAH, 0.0 = at POC, -1.0 = below VAL
+  double vp_position = 147;
+
+  // Number of FVGs identified in the primary timeframe
+  int32 fvg_count = 148;
+
+  // Number of order blocks identified in the primary timeframe
+  int32 ob_count = 149;
+
+  // -----------------------------------------------------------------------
+  // Regime context (170–199)
+  // -----------------------------------------------------------------------
+
+  // Market regime label (see MarketRegime enum)
+  MarketRegime regime = 170;
+
+  // HMM confidence probability for the current regime (0.0–1.0)
+  double regime_confidence = 171;
+
+  // Regime-derived position-sizing multiplier
+  //   1.0 = trending, 0.5 = volatile, 0.25 = choppy
+  double position_multiplier = 172;
+
+  // Whether the regime detector considers this regime "confident"
+  // (above its internal confidence threshold)
+  bool regime_confident = 173;
+
+  // -----------------------------------------------------------------------
+  // Multi-timeframe alignment (200–249)
+  // -----------------------------------------------------------------------
+
+  // Confluence score from the multi-timeframe analysis module (0–3)
+  //   3 = HTF + Setup + Entry all aligned, 0 = no confluence
+  int32 confluence_score = 200;
+
+  // Composite confluence quality (0.0–1.0):
+  //   HTF weight 40% + Setup 35% + Entry trigger 25%
+  double confluence_quality = 201;
+
+  // Confluence direction: "bullish", "bearish", or "neutral"
+  string confluence_direction = 202;
+
+  // Whether the confluence module considers the setup tradeable
+  bool confluence_tradeable = 203;
+
+  // Higher-timeframe bias (see SignalDirection enum)
+  SignalDirection htf_bias = 204;
+
+  // -----------------------------------------------------------------------
+  // Raw / extensibility (250+)
+  // -----------------------------------------------------------------------
+
+  // Arbitrary named scalar features for experimental modules.
+  // Keys are feature names; values are float64 feature values.
+  map<string, double> extra_features = 250;
+
+  // Reserved for future structured sub-messages (e.g. tick-level features)
+  // without requiring a schema change.
+  repeated double raw_feature_array = 251;
+}
+
+// ============================================================================
+// TradingSignal — output of a Janus inference module
+// ============================================================================
+
+// TradingSignal is the canonical output of every Janus signal generator.
+// It is a superset of all signal fields; modules populate only the fields
+// relevant to their strategy.  Mirrors the Python JanusSignal dataclass
+// exactly so JanusGRPCClient.from_proto() is a trivial field-copy.
+message TradingSignal {
+  // -----------------------------------------------------------------------
+  // Identity
+  // -----------------------------------------------------------------------
+
+  // Unique signal ID (UUID v4)
+  string signal_id = 1;
+
+  // Instrument symbol
+  string symbol = 2;
+
+  // Timeframe of the signal (e.g. "1m", "5m")
+  string timeframe = 3;
+
+  // Signal type / strategy label (e.g. "breakout", "reversal", "ict_ob")
+  string signal_type = 4;
+
+  // Trading direction
+  SignalDirection direction = 5;
+
+  // Source module that generated the signal
+  string source = 6;
+
+  // Broad category (e.g. "swing", "scalp", "day")
+  string category = 7;
+
+  // Signal generation timestamp (Unix milliseconds, UTC)
+  int64 timestamp_ms = 8;
+
+  // -----------------------------------------------------------------------
+  // Scoring
+  // -----------------------------------------------------------------------
+
+  // Model confidence (0.0–1.0)
+  double confidence = 10;
+
+  // Signal strength / magnitude (0.0–1.0)
+  double strength = 11;
+
+  // Composite quality score (0.0–1.0), combining multiple sub-scores
+  double quality = 12;
+
+  // -----------------------------------------------------------------------
+  // Price levels
+  // -----------------------------------------------------------------------
+
+  // Reference price at signal generation (typically last close)
+  double price = 20;
+
+  // Suggested entry price (0.0 = use market)
+  double suggested_entry = 21;
+
+  // Suggested stop-loss price (0.0 = not set)
+  double suggested_stop_loss = 22;
+
+  // Take-profit levels (up to three)
+  double suggested_tp1 = 23;
+  double suggested_tp2 = 24;
+  double suggested_tp3 = 25;
+
+  // -----------------------------------------------------------------------
+  // Risk parameters
+  // -----------------------------------------------------------------------
+
+  // Risk/reward ratio (suggested_tp1 vs suggested_stop_loss)
+  double risk_reward_ratio = 30;
+
+  // Suggested position size in USD
+  double position_size_usd = 31;
+
+  // Maximum tolerated slippage (0.0 = no limit)
+  double max_slippage = 32;
+
+  // -----------------------------------------------------------------------
+  // Technical context (populated by the generating module)
+  // -----------------------------------------------------------------------
+
+  // Average True Range at signal time
+  double atr = 40;
+
+  // Fast EMA at signal time
+  double ema_fast = 41;
+
+  // Slow EMA at signal time
+  double ema_slow = 42;
+
+  // CVD at signal time
+  double cvd = 43;
+
+  // CVD slope at signal time
+  double cvd_slope = 44;
+
+  // Confluence score that contributed to this signal
+  int32 confluence_score = 45;
+
+  // Regime context at signal time
+  MarketRegime regime = 46;
+
+  // -----------------------------------------------------------------------
+  // Narrative / metadata
+  // -----------------------------------------------------------------------
+
+  // Human-readable reason for the signal (e.g. "ICT OB reclaim above EQ")
+  string reason = 50;
+
+  // Expiry timestamp after which this signal should be ignored (0 = none)
+  int64 expiry_ms = 51;
+
+  // Free-form metadata (strategy-specific key-value pairs)
+  map<string, string> metadata = 52;
+
+  // Feature vector snapshot used to generate this signal (optional).
+  // Populated when the caller sets include_features = true in InferRequest.
+  FeatureVector feature_snapshot = 53;
+}
+
+// ============================================================================
+// InferenceService messages
+// ============================================================================
+
+message InferRequest {
+  // Feature vector for a single symbol / timeframe
+  FeatureVector features = 1;
+
+  // Modules to run (empty = all enabled modules)
+  repeated string module_ids = 2;
+
+  // If true, attach the FeatureVector to the returned TradingSignal
+  bool include_features = 3;
+
+  // Minimum confidence threshold — signals below this are not returned
+  double min_confidence = 4;
+}
+
+message InferResponse {
+  // Highest-confidence signal across all modules (null if none qualify)
+  TradingSignal signal = 1;
+
+  // All signals from all modules (before confidence filtering)
+  repeated TradingSignal all_signals = 2;
+
+  // Per-module latency in milliseconds
+  map<string, double> module_latency_ms = 3;
+
+  // Whether inference succeeded
+  bool success = 4;
+
+  // Error message (empty on success)
+  string error = 5;
+}
+
+message BatchInferRequest {
+  // Map from symbol to its FeatureVector
+  map<string, FeatureVector> features_by_symbol = 1;
+
+  // Applied to all symbols (overrideable per-symbol via metadata)
+  repeated string module_ids = 2;
+
+  // Minimum confidence threshold
+  double min_confidence = 3;
+}
+
+message BatchInferResponse {
+  // Best signal per symbol (symbol → signal)
+  map<string, TradingSignal> signals_by_symbol = 1;
+
+  // Error per symbol if inference failed for that symbol
+  map<string, string> errors_by_symbol = 2;
+
+  // Total wall-clock time for the batch (milliseconds)
+  double total_latency_ms = 3;
+}
+
+message DetectRegimeRequest {
+  // Feature vector for the symbol whose regime should be detected
+  FeatureVector features = 1;
+}
+
+message DetectRegimeResponse {
+  // Detected regime
+  MarketRegime regime = 1;
+
+  // HMM confidence for this regime
+  double confidence = 2;
+
+  // Raw probability for each regime class
+  map<string, double> probabilities = 3;
+
+  // Whether the detector considers this regime "confident"
+  bool confident = 4;
+
+  // Position-sizing multiplier derived from the regime
+  double position_multiplier = 5;
+
+  // Regime detector module version
+  string detector_version = 6;
+}
+
+message ModuleHealthRequest {
+  // Specific module IDs to query (empty = all modules)
+  repeated string module_ids = 1;
+}
+
+message ModuleHealthResponse {
+  // Health info per module
+  repeated ModuleInfo modules = 1;
+
+  // True if every requested module is healthy
+  bool all_healthy = 2;
+}
+
+message ModuleInfo {
+  // Module identifier (e.g. "swing", "ict", "regime")
+  string id = 1;
+
+  // Human-readable module name
+  string name = 2;
+
+  // Whether the module is loaded and ready
+  bool healthy = 3;
+
+  // Additional status detail (e.g. "HMM not converged", "OK")
+  string status = 4;
+
+  // Module version string
+  string version = 5;
+
+  // Inference latency p50 (milliseconds), rolling over last 100 calls
+  double latency_p50_ms = 6;
+
+  // Inference latency p99 (milliseconds)
+  double latency_p99_ms = 7;
+
+  // Total inference calls served since startup
+  int64 total_calls = 8;
+}
+
+// ============================================================================
+// SignalBusService messages
+// ============================================================================
+
+message PublishRequest {
+  // Signal to publish.  signal_id is generated by Janus if empty.
+  TradingSignal signal = 1;
+
+  // If true, block until the signal is written to Redis
+  bool wait_for_ack = 2;
+}
+
+message PublishResponse {
+  // True if the signal was accepted and written to Redis
+  bool accepted = 1;
+
+  // Assigned signal_id (may differ from the input if server generated it)
+  string signal_id = 2;
+
+  // Error message (empty on success)
+  string error = 3;
+}
+
+message SubscribeRequest {
+  // Filter by symbol (empty = subscribe to all symbols)
+  repeated string symbols = 1;
+
+  // Filter by category (empty = all categories)
+  repeated string categories = 2;
+
+  // Minimum confidence threshold for streamed signals (0.0 = no filter)
+  double min_confidence = 3;
+
+  // If true, replay the most recent signal per subscribed symbol on connect
+  // (catch-up equivalent to _get_janus_signals_from_cache)
+  bool replay_latest = 4;
+}
+
+// SignalEvent wraps a TradingSignal with bus metadata for the stream.
+message SignalEvent {
+  // The signal
+  TradingSignal signal = 1;
+
+  // Redis stream entry ID (e.g. "1234567890123-0")
+  string stream_id = 2;
+
+  // Server-side publish timestamp (Unix milliseconds, UTC)
+  int64 published_ms = 3;
+
+  // Redis channel the signal arrived on
+  string channel = 4;
+}
+
+message GetLatestRequest {
+  // Maximum number of signals to return (server may cap this)
+  int32 limit = 1;
+}
+
+message GetLatestResponse {
+  repeated TradingSignal signals = 1;
+
+  // Total signals in Redis at query time (may exceed limit)
+  int64 total_available = 2;
+}
+
+message GetBySymbolRequest {
+  // Symbol to query (case-insensitive)
+  string symbol = 1;
+
+  // Maximum number of signals to return
+  int32 limit = 2;
+
+  // Optional date filter (YYYY-MM-DD)
+  string date = 3;
+}
+
+message GetBySymbolResponse {
+  repeated TradingSignal signals = 1;
+}
+
+message GetSummaryRequest {
+  // Signal category to aggregate (e.g. "swing", "scalp")
+  string category = 1;
+
+  // Filter by symbols (empty = all symbols)
+  repeated string symbols = 2;
+}
+
+message GetSummaryResponse {
+  // Category that was queried
+  string category = 1;
+
+  // Symbols with at least one signal
+  repeated string symbols = 2;
+
+  // Total signals in the category
+  int64 total_signals = 3;
+
+  // Signals above the "strong" confidence threshold (0.7)
+  int64 strong_signals = 4;
+
+  // Average confidence across all signals in this category
+  double average_confidence = 5;
+
+  // Signal count broken down by signal_type
+  map<string, int64> by_type = 6;
+
+  // Timestamp of the most recent signal (Unix milliseconds)
+  int64 latest_signal_ms = 7;
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+// SignalDirection represents the directional bias of a signal.
+enum SignalDirection {
+  SIGNAL_DIRECTION_UNSPECIFIED = 0;
+  SIGNAL_DIRECTION_LONG = 1; // Bullish / long bias
+  SIGNAL_DIRECTION_SHORT = 2; // Bearish / short bias
+  SIGNAL_DIRECTION_NEUTRAL = 3; // No directional bias (e.g. regime only)
+  SIGNAL_DIRECTION_EXIT = 4; // Exit / close an existing position
+}
+
+// MarketRegime represents the current market condition as detected by the
+// Hidden Markov Model regime detector (lib.analysis.regime).
+enum MarketRegime {
+  MARKET_REGIME_UNSPECIFIED = 0;
+  MARKET_REGIME_TRENDING = 1; // Clear directional trend; multiplier = 1.0
+  MARKET_REGIME_VOLATILE = 2; // High volatility / choppy trend; multiplier = 0.5
+  MARKET_REGIME_CHOPPY = 3; // Range-bound / mean-reverting; multiplier = 0.25
+  MARKET_REGIME_UNKNOWN = 4; // Insufficient data or detector not converged
+}
+
+// SignalQuality categorises a signal's composite quality score into
+// human-readable tiers for dashboard display.
+enum SignalQuality {
+  SIGNAL_QUALITY_UNSPECIFIED = 0;
+  SIGNAL_QUALITY_LOW = 1; // quality < 0.4
+  SIGNAL_QUALITY_MEDIUM = 2; // 0.4 <= quality < 0.7
+  SIGNAL_QUALITY_HIGH = 3; // 0.7 <= quality < 0.9
+  SIGNAL_QUALITY_ELITE = 4; // quality >= 0.9
+}
+

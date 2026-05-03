@@ -1,0 +1,518 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: "RUSTCODE ModelRouter Classification — local vs remote routing correctness"
+
+# How routing verification works here:
+#   openai:auto  — the special RUSTCODE model alias that passes through ModelRouter.
+#   ModelRouter inspects the prompt and selects either:
+#     local  → Ollama (fast, cheap, good enough for scaffold stubs)
+#     remote → grok-4-1-fast-reasoning via xAI (expensive, used for review/arch)
+#
+#   RUSTCODE injects the routing decision into the response body as a top-level
+#   `x_routed_to` field (non-standard extension), and also sets the `model`
+#   field in the OpenAI-compatible response to the resolved model name.
+#
+#   Assertions use two strategies:
+#     1. javascript — check response metadata (`model`, `x_routed_to`) directly.
+#     2. llm-rubric  — assess response quality/depth as a secondary signal.
+#
+#   If you want to test the classifier in isolation without paying for real
+#   completions, point the provider at the dedicated classification endpoint:
+#     apiBaseUrl: http://rc-app:3500/v1/classify
+#   which returns a JSON body `{ "route": "local" | "remote", "reason": "..." }`
+#   instead of a completion.
+
+providers:
+  # All tests run through ModelRouter via the `auto` alias.
+  - id: openai:auto
+    label: router
+    config:
+      apiBaseUrl: http://rc-app:3500/v1
+      apiKey: "{{env.OPENAI_API_KEY}}"
+
+  # Dedicated classification-only provider (no token cost, returns route + reason).
+  # Uncomment and use label: classifier on individual tests once RUSTCODE exposes this.
+  # - id: openai:chat
+  #   label: classifier
+  #   config:
+  #     apiBaseUrl: http://rc-app:3500/v1
+  #     apiKey: "{{env.OPENAI_API_KEY}}"
+  #     model: classify
+
+prompts:
+  - "{{user_message}}"
+
+defaultTest:
+  options:
+    provider: router
+
+tests:
+  # ---------------------------------------------------------------------------
+  # LOCAL ROUTE — scaffold / stub generation
+  # These tasks are deterministic, syntactic, and do not require deep reasoning.
+  # ModelRouter should keep them on the local Ollama model to reduce latency/cost.
+  # ---------------------------------------------------------------------------
+
+  - description: "Routing — scaffold axum handler → local"
+    vars:
+      user_message: >
+        Generate a minimal axum GET handler stub named `get_health` that returns
+        a JSON object `{ "status": "ok" }`. Include necessary imports.
+    assert:
+      - type: javascript
+        value: |
+          // RUSTCODE embeds the resolved model name in the OpenAI response `model` field.
+          // Local routes resolve to an ollama model slug; remote routes contain
+          // "grok" or "claude" etc.  Adjust the regex to match your Ollama model name.
+          const model = context.response?.model ?? "";
+          const isLocal = /ollama|llama|mistral|codellama|qwen|deepseek/i.test(model);
+          if (!isLocal) {
+            throw new Error(`Expected local route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: contains
+        value: "async fn get_health"
+      - type: llm-rubric
+        value: >
+          The response is a short, compilable Rust function stub — not a multi-paragraph
+          explanation. It uses axum types (Json, StatusCode, or IntoResponse) and
+          includes the async keyword. This brevity is consistent with a fast local model
+          handling a straightforward generation task.
+
+  - description: "Routing — scaffold sqlx struct → local"
+    vars:
+      user_message: >
+        Scaffold a Rust struct `Bar` with fields: symbol String, open f64, high f64,
+        low f64, close f64, volume i64, ts OffsetDateTime. Derive sqlx::FromRow,
+        serde::Serialize, and serde::Deserialize.
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isLocal = /ollama|llama|mistral|codellama|qwen|deepseek/i.test(model);
+          if (!isLocal) {
+            throw new Error(`Expected local route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: contains
+        value: "struct Bar"
+      - type: contains
+        value: "sqlx::FromRow"
+      - type: contains
+        value: "Serialize"
+      - type: llm-rubric
+        value: >
+          The response contains exactly the struct definition requested with all seven
+          fields and the three derives. It does not pad the answer with explanations
+          about what sqlx::FromRow does or why the fields are typed this way — a local
+          model completing a pure scaffolding task should output code, not prose.
+
+  - description: "Routing — scaffold Tokio channel module → local"
+    vars:
+      user_message: >
+        Generate a Rust module `event_bus` that wraps a tokio::sync::broadcast channel
+        for a generic event type T. Provide a new() constructor, a publish(&self, T)
+        method, and a subscribe(&self) method returning a broadcast::Receiver<T>.
+        Keep it under 40 lines.
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isLocal = /ollama|llama|mistral|codellama|qwen|deepseek/i.test(model);
+          if (!isLocal) {
+            throw new Error(`Expected local route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: contains
+        value: "broadcast"
+      - type: contains
+        value: "subscribe"
+      - type: llm-rubric
+        value: >
+          The module is concise and self-contained. It compiles given standard tokio
+          imports, uses a generic type parameter correctly, and does not exceed the
+          40-line constraint by a significant margin. The response is code-only or
+          has at most a one-line comment — not a tutorial explanation.
+
+  - description: "Routing — scaffold CLI arg parser → local"
+    vars:
+      user_message: >
+        Scaffold a clap 4.x CLI struct `Cli` with three subcommands:
+        `run` (takes --symbol String), `backtest` (takes --from String, --to String),
+        and `status` (no args). Derive Parser on Cli and Subcommand on the subcommand enum.
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isLocal = /ollama|llama|mistral|codellama|qwen|deepseek/i.test(model);
+          if (!isLocal) {
+            throw new Error(`Expected local route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: contains
+        value: "clap"
+      - type: contains
+        value: "Subcommand"
+      - type: contains
+        value: "backtest"
+
+  # ---------------------------------------------------------------------------
+  # REMOTE ROUTE — code review
+  # Code review requires semantic understanding, pattern recognition across the
+  # whole codebase context, and nuanced judgment. ModelRouter should escalate to
+  # the remote frontier model.
+  # ---------------------------------------------------------------------------
+
+  - description: "Routing — code review of unsafe block → remote"
+    vars:
+      user_message: |
+        Review this Rust code for correctness and safety:
+
+        ```rust
+        pub fn read_ring_buffer(ptr: *const u8, len: usize) -> &'static [u8] {
+            unsafe { std::slice::from_raw_parts(ptr, len) }
+        }
+        ```
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The review identifies that returning &'static [u8] from a raw pointer is
+          unsound — it lies about the lifetime and will cause undefined behaviour if
+          the pointed-to data is freed or moved. The response is detailed enough to
+          explain *why* this is unsound (lifetime extension beyond actual data lifetime),
+          which requires the deeper reasoning capability of a frontier model, not just
+          pattern-matching on "unsafe block found".
+      - type: llm-rubric
+        value: >
+          The response is structured with clear sections (Issues, Suggestions, Verdict)
+          consistent with the code_review system prompt, and the Verdict is
+          "Request Changes" given the critical soundness issue.
+
+  - description: "Routing — code review of concurrency bug → remote"
+    vars:
+      user_message: |
+        Review this order book update logic for correctness:
+
+        ```rust
+        pub struct OrderBook {
+            bids: Arc<Vec<(f64, f64)>>,
+            asks: Arc<Vec<(f64, f64)>>,
+        }
+
+        impl OrderBook {
+            pub async fn update_bid(&self, price: f64, qty: f64) {
+                let mut bids = Arc::clone(&self.bids);
+                Arc::make_mut(&mut bids).push((price, qty));
+            }
+        }
+        ```
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The review identifies the data race: Arc::make_mut on a local clone does not
+          mutate the shared Arc stored in self.bids — the update is silently discarded
+          every call. The reviewer should recommend Arc<RwLock<Vec<...>>> or
+          Arc<Mutex<Vec<...>>> for shared mutable state. This analysis requires
+          reasoning about Arc semantics beyond surface-level syntax checking.
+
+  - description: "Routing — code review of financial calculation error → remote"
+    vars:
+      user_message: |
+        Review this PnL calculation used in end-of-day reporting:
+
+        ```rust
+        pub fn daily_pnl(trades: &[(f32, f32, i32)]) -> f32 {
+            // (entry_price, exit_price, qty)
+            trades.iter().map(|(e, x, q)| (x - e) * *q as f32).sum()
+        }
+        ```
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The review flags f32 as inappropriate for financial P&L accumulation:
+          f32 has only ~7 significant decimal digits of precision, which causes
+          compounding rounding errors in sum() over many trades. It recommends f64
+          at minimum, or rust_decimal / fixed-point for production financial code.
+          This is a domain-knowledge judgment call requiring a frontier model.
+
+  - description: "Routing — code review of missing transaction rollback → remote"
+    vars:
+      user_message: |
+        Review this order persistence code:
+
+        ```rust
+        pub async fn place_order(db: &PgPool, order: &Order) -> Result<(), DbError> {
+            sqlx::query("INSERT INTO orders (id, symbol, qty, status) VALUES ($1,$2,$3,$4)")
+                .bind(order.id).bind(&order.symbol).bind(order.qty).bind("pending")
+                .execute(db).await?;
+            sqlx::query("INSERT INTO audit_log (order_id, event) VALUES ($1, $2)")
+                .bind(order.id).bind("order_placed")
+                .execute(db).await?;
+            Ok(())
+        }
+        ```
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The review identifies the missing transaction: if the audit_log INSERT fails,
+          the orders INSERT has already committed and will not be rolled back. The
+          order exists in the system with no audit record, violating the invariant.
+          The fix requires wrapping both statements in a sqlx transaction with
+          begin()/commit()/rollback(). This is a multi-step reasoning task.
+
+  # ---------------------------------------------------------------------------
+  # REMOTE ROUTE — architectural reasoning
+  # Architecture questions involve trade-off analysis, system-level thinking,
+  # and domain expertise that must go to the frontier model.
+  # ---------------------------------------------------------------------------
+
+  - description: "Routing — architecture question about database selection → remote"
+    vars:
+      user_message: >
+        We are adding a position-limit risk check that must run synchronously in the
+        hot order path (target < 2ms added latency). The check reads current open
+        positions for a symbol and rejects the order if the resulting position would
+        exceed a configured limit. Should we read from Postgres, Redis, or an in-process
+        cache? What are the consistency guarantees of each option?
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The response compares all three options with concrete latency expectations
+          (Postgres round-trip ~1-5ms, Redis round-trip ~0.2-1ms, in-process ~microseconds)
+          and consistency trade-offs. It makes a concrete recommendation rather than
+          listing pros/cons without a conclusion. The depth of analysis — covering
+          cache invalidation correctness in the face of concurrent orders — demonstrates
+          frontier-model capability.
+
+  - description: "Routing — architecture question about service decomposition → remote"
+    vars:
+      user_message: >
+        The Ruby Python service currently handles bar ingestion, signal computation,
+        strategy execution, order management, and the web dashboard all in one process
+        via supervisord. At what point does it make sense to split these into separate
+        services, and what would be the first seam to cut? Consider our single-host
+        deployment constraint.
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The response identifies the trainer/GPU workload or the web dashboard as
+          the first natural seam to cut (since they have the most orthogonal resource
+          profiles from the latency-sensitive signal/order path) and explains the
+          single-host constraint makes network overhead minimal. It does not recommend
+          splitting into microservices prematurely and gives a clear threshold (e.g.
+          when resource contention is measurable, not hypothetical).
+
+  - description: "Routing — architecture question about event ordering guarantees → remote"
+    vars:
+      user_message: >
+        We use a tokio::sync::broadcast channel to fan out TradingSignal events to
+        three consumers: order executor, risk monitor, and audit logger. Under heavy
+        load, consumers can lag and broadcasts are dropped (RecvError::Lagged).
+        How do we guarantee the audit logger never misses an event even when the
+        order executor is slow?
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The response identifies that broadcast channels give no delivery guarantee
+          to lagging consumers and recommends separating the audit logger onto a
+          dedicated unbounded mpsc or a persistent queue (e.g. Redis stream, Postgres
+          table with LISTEN/NOTIFY) so that the audit path is never subject to the
+          broadcast capacity constraint. It explains why a larger broadcast buffer
+          is not sufficient alone.
+
+  # ---------------------------------------------------------------------------
+  # REMOTE ROUTE — generic / open-ended questions
+  # Questions that don't clearly fit scaffold patterns should fall back to remote
+  # to avoid a low-quality local-model response on an ambiguous task.
+  # ---------------------------------------------------------------------------
+
+  - description: "Routing — generic technical question falls back to remote"
+    vars:
+      user_message: >
+        What is the difference between optimistic and pessimistic concurrency control,
+        and when would you choose each in a trading system context?
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The response explains both strategies accurately and gives at least one
+          trading-specific example for each (e.g. optimistic: order updates with
+          version column; pessimistic: SELECT FOR UPDATE on position rows during
+          risk checks). The answer is appropriately detailed — this is a concept
+          explanation task where a frontier model adds clear value over a local model.
+
+  - description: "Routing — open-ended debugging question falls back to remote"
+    vars:
+      user_message: >
+        Our Janus service sometimes hangs for 30-60 seconds under load before recovering.
+        We see no panics in the logs. The hang appears correlated with high database
+        query volume. How would you systematically diagnose this?
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The response provides a concrete, ordered diagnostic approach that includes
+          at least: checking the sqlx connection pool saturation (pool exhaustion
+          causes callers to block waiting for a connection), reviewing slow query logs
+          in Postgres, and using tokio-console or tracing spans to identify which
+          async task is blocked. It does not give a generic "check logs and add
+          metrics" answer — it is specific to the Tokio + sqlx + Postgres stack.
+
+  - description: "Routing — ambiguous question with no clear category falls back to remote"
+    vars:
+      user_message: >
+        Is our current system design good?
+    assert:
+      - type: javascript
+        value: |
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(`Expected remote route but model=${JSON.stringify(model)}`);
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The response either asks clarifying questions about what "current system"
+          refers to (correct behaviour for an underspecified question) or provides a
+          thoughtful answer about what "good" means in a trading system context
+          (reliability, latency, observability, correctness). It does not hallucinate
+          specific details about the system that were not provided. The fallback to
+          remote is correct because ambiguous prompts should not be handled by a
+          pattern-matched local model that may misclassify the intent.
+
+  # ---------------------------------------------------------------------------
+  # ROUTING BOUNDARY — confirm local/remote threshold holds under edge cases
+  # ---------------------------------------------------------------------------
+
+  - description: "Routing boundary — scaffold request with review phrasing stays local"
+    vars:
+      user_message: >
+        Please generate (not review) a complete Rust struct for a trade journal entry
+        with fields: id UUID, symbol String, direction Direction enum (Long/Short),
+        entry_price Decimal, exit_price Option<Decimal>, notes String, created_at OffsetDateTime.
+        Derive what makes sense. I just need the code.
+    assert:
+      - type: javascript
+        value: |
+          // Even though the prompt says "please generate... I just need the code"
+          // with some conversational framing, the core intent is scaffolding.
+          // ModelRouter should classify this as local, not escalate due to prose framing.
+          const model = context.response?.model ?? "";
+          const isLocal = /ollama|llama|mistral|codellama|qwen|deepseek/i.test(model);
+          if (!isLocal) {
+            throw new Error(
+              `Expected local route for scaffold-despite-prose-framing but model=${JSON.stringify(model)}`
+            );
+          }
+          return true;
+      - type: contains
+        value: "struct"
+      - type: contains
+        value: "Decimal"
+      - type: llm-rubric
+        value: >
+          The response is purely the struct definition with appropriate derives — not
+          a review or analysis. The ModelRouter correctly identified this as a
+          code-generation task despite the conversational framing, keeping it local.
+
+  - description: "Routing boundary — review request disguised as 'take a look' → remote"
+    vars:
+      user_message: |
+        Hey, can you take a quick look at this and tell me if anything is off?
+
+        ```rust
+        pub fn best_bid(book: &[(f64, f64)]) -> f64 {
+            book.iter().map(|(p, _)| p).cloned().fold(f64::NEG_INFINITY, f64::max)
+        }
+        ```
+    assert:
+      - type: javascript
+        value: |
+          // "take a look and tell me if anything is off" is a code review request
+          // despite informal phrasing. ModelRouter should escalate to remote.
+          const model = context.response?.model ?? "";
+          const isRemote = /grok|claude|gpt|gemini|sonnet|opus|haiku/i.test(model);
+          if (!isRemote) {
+            throw new Error(
+              `Expected remote route for informal code review but model=${JSON.stringify(model)}`
+            );
+          }
+          return true;
+      - type: llm-rubric
+        value: >
+          The response reviews the function and identifies at least one issue or
+          confirms correctness with reasoning — it does not just scaffold a new
+          implementation. It should note that the function returns NEG_INFINITY on
+          an empty slice (may be intentional but worth flagging) and correctly
+          identifies the fold as equivalent to max() over prices. This demonstrates
+          the remote model performing semantic analysis, not just code generation.

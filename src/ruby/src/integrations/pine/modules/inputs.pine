@@ -1,0 +1,68 @@
+// ── Module: inputs ──────────────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 1. SETTINGS  — stripped to essentials only
+//    volMult, minQualityPct, tp1R/2R/3R are now ADAPTIVE (computed in §7).
+// ══════════════════════════════════════════════════════════════════════════════
+
+var g1 = "⚙️ Strategy"
+biasMode         = input.string("Auto", "Session Bias",
+     options=["Auto","Long Only","Short Only"], group=g1)
+requireVWAP      = input.bool(true,  "Require VWAP Alignment",   group=g1)
+orbMinutes       = input.int(5,      "ORB Minutes", minval=1, maxval=120, group=g1)
+htfTF            = input.string("3", "HTF Timeframe",
+     options=["3","5","10","15","30","60"],       group=g1)
+sessionHours     = input.string("0000-0000", "Session Hours (RTH)",
+     tooltip="Set 0000-0000 + disable filter for 24/7 assets.", group=g1)
+useSession       = input.bool(true,  "Use Session Filter",
+     tooltip="Disable for crypto, FX.", group=g1)
+ibMinutes        = input.int(60,     "IB Minutes", minval=15, maxval=480, group=g1)
+// [NEW] ORB window session — user-configurable, replaces hardcoded US/EU/Asia times.
+//       Uses syminfo.timezone so it aligns with the chart's exchange time.
+orbWindowSession = input.string("0930-1000", "ORB Window Session",
+     tooltip="Bars inside this window get 'ORB' label; others get 'RB'. " +
+             "Default = NYSE open. Crypto: try 0000-0030. " +
+             "Uses chart timezone (syminfo.timezone).", group=g1)
+// [NEW] Optional HTF Awesome Oscillator direction confirmation
+useHTFAO         = input.bool(false, "Require HTF AO Confirmation",
+     tooltip="When enabled, adds higher-timeframe AO direction as a filter. " +
+             "Long signals require HTF AO > 0; shorts require HTF AO < 0.", group=g1)
+
+var g2 = "📊 Top G Channel"
+topGLen            = input.int(50,    "Channel Length",      minval=10,                        group=g2)
+showMid            = input.bool(true, "Show Mid Line",                                         group=g2)
+sigSens            = input.float(0.5, "Signal Sensitivity",  minval=0.1, maxval=2.0, step=0.1, group=g2,
+     tooltip="One knob that scales TG proximity, momentum, and wave gates together.")
+showTGDots         = input.bool(true,  "Show Strong TG Dots",                                  group=g2)
+showSimpleDots     = input.bool(true,  "Show Simple Touch Dots",                               group=g2)
+showPotDots        = input.bool(false, "Show Potential Zone Dots",                             group=g2)
+showBreakoutLabels = input.bool(true,  "Show Breakout Entry Labels",                           group=g2)
+suppressRegime     = input.bool(false, "Suppress Counter-Trend Signals",                       group=g2,
+     tooltip="Blocks longs in TRENDING ↓ and shorts in TRENDING ↑.")
+filterORBQuality   = input.bool(true,  "Gate ORB/RB on Quality + Wave",                       group=g2)
+
+var g3 = "🎨 Display"
+showVWAP        = input.bool(true,  "Show VWAP",         group=g3)
+showEMA9        = input.bool(true,  "Show EMA9",         group=g3)
+showDash        = input.bool(true,  "Show Dashboard",    group=g3)
+showEntryLabels = input.bool(true,  "Show Entry Labels", group=g3)
+dashPos_str     = input.string("Top Right", "Dashboard Position",
+     options=["Top Right","Bottom Right","Top Left","Bottom Left"], group=g3)
+maxLabelsDay    = input.int(6,     "Max Labels Per Day", minval=2, maxval=30, group=g3)
+minLabelDistATR = input.float(1.5, "Min Label Spacing (ATR ×)", minval=0.5, step=0.25, group=g3)
+
+var g5 = "📐 Position Management"
+dynSL        = input.bool(true,  "Dynamic SL (vol + sweep)",     group=g5)
+sweepBars    = input.int(8,      "Stop Hunt Lookback (bars)",    minval=3, maxval=20, group=g5)
+slVolBoost   = input.bool(true,  "Widen SL on Volume Surges",    group=g5)
+showTrail    = input.bool(true,  "Show Trailing Stop",           group=g5)
+showScaleIn  = input.bool(true,  "Show Scale-In Levels (E2/E3)", group=g5)
+
+var g4 = "📈 Trade Tracker"
+showTracker    = input.bool(true,  "Show Trade Tracker",        group=g4)
+trackerPos_str = input.string("Bottom Right", "Tracker Position",
+     options=["Top Right","Bottom Right","Top Left","Bottom Left"], group=g4)
+resetOnDay     = input.bool(false, "Reset Stats Each Session Day", group=g4)
+winTarget      = input.string("TP1", "Win = Hit",
+     options=["TP1","TP2","TP3"], group=g4)

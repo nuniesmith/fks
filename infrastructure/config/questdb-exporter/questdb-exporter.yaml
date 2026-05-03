@@ -1,0 +1,508 @@
+# QuestDB Prometheus Exporter
+# Sidecar container to export QuestDB-specific metrics that aren't available via application metrics
+# QuestDB Production Monitoring
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: questdb-exporter-config
+    namespace: data-service-prod
+    labels:
+        app: questdb-exporter
+data:
+    exporter.py: |
+        #!/usr/bin/env python3
+        """
+        QuestDB Prometheus Exporter
+        Exposes internal QuestDB metrics for Prometheus scraping
+        """
+        import os
+        import time
+        import logging
+        import requests
+        from prometheus_client import start_http_server, Gauge, Counter, Info
+        from prometheus_client.core import GaugeMetricFamily, REGISTRY
+        import signal
+        import sys
+
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        logger = logging.getLogger('questdb-exporter')
+
+        # Configuration
+        QUESTDB_HOST = os.getenv('QUESTDB_HOST', 'localhost')
+        QUESTDB_PORT = os.getenv('QUESTDB_PORT', '9000')
+        EXPORTER_PORT = int(os.getenv('EXPORTER_PORT', '9104'))
+        SCRAPE_INTERVAL = int(os.getenv('SCRAPE_INTERVAL', '30'))
+
+        QUESTDB_BASE_URL = f'http://{QUESTDB_HOST}:{QUESTDB_PORT}'
+
+        # Graceful shutdown
+        shutdown_flag = False
+
+        def signal_handler(sig, frame):
+            global shutdown_flag
+            logger.info('Shutdown signal received, exiting gracefully...')
+            shutdown_flag = True
+
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        class QuestDBCollector:
+            """Custom collector for QuestDB metrics"""
+
+            def __init__(self):
+                self.questdb_url = QUESTDB_BASE_URL
+
+            def _query(self, sql):
+                """Execute SQL query against QuestDB"""
+                try:
+                    response = requests.get(
+                        f'{self.questdb_url}/exec',
+                        params={'query': sql},
+                        timeout=10
+                    )
+                    response.raise_for_status()
+                    return response.json()
+                except Exception as e:
+                    logger.error(f'Query failed: {sql[:100]}... Error: {e}')
+                    return None
+
+            def collect(self):
+                """Collect all metrics"""
+
+                # Table-level metrics
+                table_metrics = self._collect_table_metrics()
+                if table_metrics:
+                    for metric in table_metrics:
+                        yield metric
+
+                # Partition metrics
+                partition_metrics = self._collect_partition_metrics()
+                if partition_metrics:
+                    for metric in partition_metrics:
+                        yield metric
+
+                # WAL metrics
+                wal_metrics = self._collect_wal_metrics()
+                if wal_metrics:
+                    for metric in wal_metrics:
+                        yield metric
+
+                # Storage metrics
+                storage_metrics = self._collect_storage_metrics()
+                if storage_metrics:
+                    for metric in storage_metrics:
+                        yield metric
+
+            def _collect_table_metrics(self):
+                """Collect per-table metrics"""
+                sql = """
+                    SELECT
+                        name as table_name,
+                        directoryName,
+                        partitionBy,
+                        maxUncommittedRows,
+                        o3MaxLag,
+                        walEnabled
+                    FROM tables()
+                    WHERE name IN ('trades_crypto', 'candles_crypto', 'market_metrics', 'system_health')
+                """
+
+                result = self._query(sql)
+                if not result or 'dataset' not in result:
+                    return []
+
+                # Row counts per table
+                row_count_metric = GaugeMetricFamily(
+                    'questdb_table_rows',
+                    'Number of rows in table',
+                    labels=['table']
+                )
+
+                # Disk size per table
+                disk_size_metric = GaugeMetricFamily(
+                    'questdb_table_size_bytes',
+                    'Disk size of table in bytes',
+                    labels=['table']
+                )
+
+                # WAL enabled status
+                wal_enabled_metric = GaugeMetricFamily(
+                    'questdb_table_wal_enabled',
+                    'Whether WAL is enabled for table (1=yes, 0=no)',
+                    labels=['table']
+                )
+
+                # O3 max lag
+                o3_lag_metric = GaugeMetricFamily(
+                    'questdb_table_o3_max_lag_micros',
+                    'O3 maximum lag in microseconds',
+                    labels=['table']
+                )
+
+                for row in result.get('dataset', []):
+                    table_name = row[0]
+                    wal_enabled = 1 if row[5] else 0
+                    o3_max_lag = row[4] if row[4] else 0
+
+                    # Get row count
+                    count_result = self._query(f"SELECT count() FROM {table_name}")
+                    if count_result and 'dataset' in count_result:
+                        row_count = count_result['dataset'][0][0]
+                        row_count_metric.add_metric([table_name], row_count)
+
+                    # Get size (approximate via partition data)
+                    size_result = self._query(f"""
+                        SELECT sum(size)
+                        FROM table_partitions('{table_name}')
+                    """)
+                    if size_result and 'dataset' in size_result:
+                        size = size_result['dataset'][0][0] or 0
+                        disk_size_metric.add_metric([table_name], size)
+
+                    wal_enabled_metric.add_metric([table_name], wal_enabled)
+                    o3_lag_metric.add_metric([table_name], o3_max_lag)
+
+                return [row_count_metric, disk_size_metric, wal_enabled_metric, o3_lag_metric]
+
+            def _collect_partition_metrics(self):
+                """Collect partition-level metrics"""
+                metrics = []
+
+                for table in ['trades_crypto', 'candles_crypto']:
+                    sql = f"""
+                        SELECT
+                            name as partition,
+                            size as size_bytes,
+                            numRows as row_count
+                        FROM table_partitions('{table}')
+                        ORDER BY name DESC
+                        LIMIT 30
+                    """
+
+                    result = self._query(sql)
+                    if not result or 'dataset' not in result:
+                        continue
+
+                    partition_size = GaugeMetricFamily(
+                        f'questdb_partition_size_bytes',
+                        'Size of partition in bytes',
+                        labels=['table', 'partition']
+                    )
+
+                    partition_rows = GaugeMetricFamily(
+                        f'questdb_partition_rows',
+                        'Number of rows in partition',
+                        labels=['table', 'partition']
+                    )
+
+                    for row in result.get('dataset', []):
+                        partition_name = row[0]
+                        size_bytes = row[1] or 0
+                        num_rows = row[2] or 0
+
+                        partition_size.add_metric([table, partition_name], size_bytes)
+                        partition_rows.add_metric([table, partition_name], num_rows)
+
+                    metrics.extend([partition_size, partition_rows])
+
+                return metrics
+
+            def _collect_wal_metrics(self):
+                """Collect Write-Ahead Log metrics"""
+                sql = """
+                    SELECT
+                        name as table_name,
+                        walEnabled,
+                        sequencerTxn
+                    FROM tables()
+                    WHERE walEnabled = true
+                """
+
+                result = self._query(sql)
+                if not result or 'dataset' not in result:
+                    return []
+
+                wal_txn_metric = GaugeMetricFamily(
+                    'questdb_wal_sequencer_txn',
+                    'WAL sequencer transaction number',
+                    labels=['table']
+                )
+
+                # Get WAL lag by comparing sequencer txn to applied txn
+                wal_lag_metric = GaugeMetricFamily(
+                    'questdb_wal_lag_transactions',
+                    'Number of unapplied WAL transactions',
+                    labels=['table']
+                )
+
+                for row in result.get('dataset', []):
+                    table_name = row[0]
+                    sequencer_txn = row[2] or 0
+
+                    wal_txn_metric.add_metric([table_name], sequencer_txn)
+
+                    # Calculate lag (simplified - would need more detailed WAL status query)
+                    # For now, use sequencer txn as a proxy
+                    wal_lag_metric.add_metric([table_name], 0)
+
+                return [wal_txn_metric, wal_lag_metric]
+
+            def _collect_storage_metrics(self):
+                """Collect overall storage metrics"""
+                metrics = []
+
+                # Total database size
+                sql = """
+                    SELECT
+                        sum(size) as total_size
+                    FROM (
+                        SELECT sum(size) as size FROM table_partitions('trades_crypto')
+                        UNION ALL
+                        SELECT sum(size) as size FROM table_partitions('candles_crypto')
+                        UNION ALL
+                        SELECT sum(size) as size FROM table_partitions('market_metrics')
+                    )
+                """
+
+                result = self._query(sql)
+                if result and 'dataset' in result:
+                    total_size = result['dataset'][0][0] or 0
+
+                    total_size_metric = GaugeMetricFamily(
+                        'questdb_total_size_bytes',
+                        'Total database size in bytes'
+                    )
+                    total_size_metric.add_metric([], total_size)
+                    metrics.append(total_size_metric)
+
+                return metrics
+
+        def main():
+            """Main exporter loop"""
+            logger.info(f'Starting QuestDB Exporter on port {EXPORTER_PORT}')
+            logger.info(f'Connecting to QuestDB at {QUESTDB_BASE_URL}')
+            logger.info(f'Scrape interval: {SCRAPE_INTERVAL} seconds')
+
+            # Register custom collector
+            collector = QuestDBCollector()
+            REGISTRY.register(collector)
+
+            # Start HTTP server
+            start_http_server(EXPORTER_PORT)
+            logger.info(f'Exporter listening on :{EXPORTER_PORT}/metrics')
+
+            # Keep running
+            while not shutdown_flag:
+                time.sleep(1)
+
+            logger.info('Exporter shutdown complete')
+
+        if __name__ == '__main__':
+            main()
+
+    requirements.txt: |
+        prometheus-client==0.19.0
+        requests==2.31.0
+
+---
+# Deployment for QuestDB Exporter (standalone for testing)
+# In production, this runs as a sidecar in the QuestDB StatefulSet
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: questdb-exporter
+    namespace: data-service-prod
+    labels:
+        app: questdb-exporter
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: questdb-exporter
+    template:
+        metadata:
+            labels:
+                app: questdb-exporter
+            annotations:
+                prometheus.io/scrape: "true"
+                prometheus.io/port: "9104"
+                prometheus.io/path: "/metrics"
+        spec:
+            containers:
+                - name: exporter
+                  image: python:3.13-slim
+                  command:
+                      - /bin/sh
+                      - -c
+                      - |
+                          pip install --no-cache-dir -r /config/requirements.txt
+                          python /config/exporter.py
+                  env:
+                      - name: QUESTDB_HOST
+                        value: "questdb-http.data-service-prod.svc.cluster.local"
+                      - name: QUESTDB_PORT
+                        value: "9000"
+                      - name: EXPORTER_PORT
+                        value: "9104"
+                      - name: SCRAPE_INTERVAL
+                        value: "30"
+                  ports:
+                      - name: metrics
+                        containerPort: 9104
+                        protocol: TCP
+                  volumeMounts:
+                      - name: config
+                        mountPath: /config
+                  resources:
+                      requests:
+                          cpu: "100m"
+                          memory: "128Mi"
+                      limits:
+                          cpu: "200m"
+                          memory: "256Mi"
+                  livenessProbe:
+                      httpGet:
+                          path: /metrics
+                          port: 9104
+                      initialDelaySeconds: 30
+                      periodSeconds: 30
+                  readinessProbe:
+                      httpGet:
+                          path: /metrics
+                          port: 9104
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+            volumes:
+                - name: config
+                  configMap:
+                      name: questdb-exporter-config
+            securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                fsGroup: 1000
+
+---
+# Service for exporter metrics
+apiVersion: v1
+kind: Service
+metadata:
+    name: questdb-exporter
+    namespace: data-service-prod
+    labels:
+        app: questdb-exporter
+    annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9104"
+spec:
+    type: ClusterIP
+    selector:
+        app: questdb-exporter
+    ports:
+        - name: metrics
+          port: 9104
+          targetPort: 9104
+          protocol: TCP
+
+---
+# ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+    name: questdb-exporter
+    namespace: data-service-prod
+    labels:
+        app: questdb-exporter
+        prometheus: production
+spec:
+    selector:
+        matchLabels:
+            app: questdb-exporter
+    endpoints:
+        - port: metrics
+          interval: 30s
+          path: /metrics
+          scheme: http
+
+---
+# PrometheusRule for QuestDB-specific alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+    name: questdb-internal-alerts
+    namespace: data-service-prod
+    labels:
+        prometheus: production
+spec:
+    groups:
+        - name: questdb-internal
+          interval: 30s
+          rules:
+              # Table size growing too fast
+              - alert: QuestDBTableGrowthAnomaly
+                expr: |
+                    (
+                      rate(questdb_table_rows{table="trades_crypto"}[1h])
+                      >
+                      1.5 * rate(questdb_table_rows{table="trades_crypto"}[24h] offset 1h)
+                    )
+                for: 15m
+                labels:
+                    severity: warning
+                    component: questdb
+                annotations:
+                    summary: "QuestDB table {{ $labels.table }} growing faster than expected"
+                    description: "Row growth rate is {{ $value | humanize }} rows/sec, 50% higher than 24h average"
+
+              # Partition size anomaly
+              - alert: QuestDBPartitionSizeAnomaly
+                expr: |
+                    questdb_partition_size_bytes > 100 * 1024 * 1024 * 1024
+                for: 5m
+                labels:
+                    severity: warning
+                    component: questdb
+                annotations:
+                    summary: "QuestDB partition {{ $labels.partition }} unusually large"
+                    description: "Partition size is {{ $value | humanizeBytes }}, exceeds 100GB"
+
+              # WAL transaction lag
+              - alert: QuestDBWALLagHigh
+                expr: |
+                    questdb_wal_lag_transactions > 10000
+                for: 10m
+                labels:
+                    severity: warning
+                    component: questdb
+                annotations:
+                    summary: "QuestDB WAL lag high for {{ $labels.table }}"
+                    description: "{{ $value }} unapplied WAL transactions"
+
+              # Total database size approaching limit
+              - alert: QuestDBTotalSizeHigh
+                expr: |
+                    questdb_total_size_bytes > 4 * 1024 * 1024 * 1024 * 1024
+                for: 30m
+                labels:
+                    severity: warning
+                    component: questdb
+                annotations:
+                    summary: "QuestDB total size exceeds 4TB"
+                    description: "Total database size is {{ $value | humanizeBytes }}, plan for expansion"
+
+              # Empty partition detected (potential data issue)
+              - alert: QuestDBEmptyPartition
+                expr: |
+                    questdb_partition_rows == 0
+                for: 1h
+                labels:
+                    severity: info
+                    component: questdb
+                annotations:
+                    summary: "QuestDB partition {{ $labels.partition }} is empty"
+                    description: "Partition has 0 rows, may indicate data gap"

@@ -1,0 +1,717 @@
+# QuestDB Production Deployment
+# Optimized for high-throughput time-series data ingestion (10k+ trades/sec)
+# Week 11 - Production QuestDB Infrastructure
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data-service-prod
+  labels:
+    environment: production
+    app: questdb
+
+---
+# ConfigMap for QuestDB server configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: questdb-config
+  namespace: data-service-prod
+  labels:
+    app: questdb
+data:
+  # QuestDB server.conf - Production optimized settings
+  server.conf: |
+    # ============================================================================
+    # QuestDB Production Configuration
+    # Optimized for 10,000+ trades/sec ingestion
+    # ============================================================================
+
+    # HTTP Server
+    http.enabled=true
+    http.bind.to=0.0.0.0:9000
+    http.net.connection.limit=256
+    http.net.connection.timeout=300000
+    http.worker.count=4
+    http.min.enabled=false
+
+    # PostgreSQL Wire Protocol
+    pg.enabled=true
+    pg.net.bind.to=0.0.0.0:8812
+    pg.net.connection.limit=64
+    pg.worker.count=2
+
+    # InfluxDB Line Protocol (ILP) - Primary ingestion method
+    line.tcp.enabled=true
+    line.tcp.net.bind.to=0.0.0.0:9009
+    line.tcp.connection.pool.capacity=16
+    line.tcp.io.worker.count=4
+    line.tcp.writer.worker.count=4
+    line.tcp.maintenance.job.interval=30000
+
+    # Write-Ahead Log (WAL) - Critical for durability
+    cairo.wal.enabled.default=true
+    cairo.wal.apply.worker.count=4
+
+    # Performance Tuning
+    # Commit lag: Higher = better batching, lower = faster queries
+    cairo.commit.lag=10000
+    # Max uncommitted rows before flush
+    cairo.max.uncommitted.rows=100000
+    # O3 (Out-of-Order) support - critical for distributed systems
+    cairo.o3.enabled=true
+    cairo.o3.max.lag=10000
+
+    # Worker threads
+    shared.worker.count=4
+
+    # Memory settings
+    cairo.sql.page.frame.max.rows=1000000
+    cairo.sql.page.frame.min.rows=10000
+
+    # Sampling
+    cairo.sql.copy.buffer.size=2097152
+
+    # System
+    cairo.max.file.name.length=127
+
+    # Telemetry
+    telemetry.enabled=false
+    metrics.enabled=true
+
+    # Circuit breaker for system protection
+    http.security.readonly=false
+
+  # Log configuration
+  log.conf: |
+    # QuestDB logging configuration
+    handlers=java.util.logging.ConsoleHandler
+    .level=INFO
+
+    # Production: INFO level, ERROR for troubleshooting
+    io.questdb.level=INFO
+    com.questdb.level=INFO
+
+    java.util.logging.ConsoleHandler.level=INFO
+    java.util.logging.ConsoleHandler.formatter=io.questdb.log.LogConsoleWriter
+
+---
+# Secret for QuestDB (managed by Vault in production)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: questdb-secrets
+  namespace: data-service-prod
+type: Opaque
+stringData:
+  # Auth tokens for HTTP API (if enabled)
+  # In production, these come from Vault
+  admin-password: "REPLACE_FROM_VAULT"
+  readonly-password: "REPLACE_FROM_VAULT"
+
+---
+# Service for QuestDB - HTTP/REST API
+apiVersion: v1
+kind: Service
+metadata:
+  name: questdb-http
+  namespace: data-service-prod
+  labels:
+    app: questdb
+    service: http
+spec:
+  type: ClusterIP
+  clusterIP: None  # Headless service for StatefulSet
+  selector:
+    app: questdb
+  ports:
+  - name: http
+    port: 9000
+    targetPort: 9000
+    protocol: TCP
+  - name: health
+    port: 9003
+    targetPort: 9003
+    protocol: TCP
+
+---
+# Service for QuestDB - ILP (InfluxDB Line Protocol)
+apiVersion: v1
+kind: Service
+metadata:
+  name: questdb-ilp
+  namespace: data-service-prod
+  labels:
+    app: questdb
+    service: ilp
+spec:
+  type: ClusterIP
+  selector:
+    app: questdb
+  ports:
+  - name: ilp
+    port: 9009
+    targetPort: 9009
+    protocol: TCP
+
+---
+# Service for QuestDB - PostgreSQL Wire Protocol
+apiVersion: v1
+kind: Service
+metadata:
+  name: questdb-pg
+  namespace: data-service-prod
+  labels:
+    app: questdb
+    service: postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: questdb
+  ports:
+  - name: postgres
+    port: 8812
+    targetPort: 8812
+    protocol: TCP
+
+---
+# Service for external load balancer (if needed)
+apiVersion: v1
+kind: Service
+metadata:
+  name: questdb-prod
+  namespace: data-service-prod
+  labels:
+    app: questdb
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: questdb
+  ports:
+  - name: http
+    port: 9000
+    targetPort: 9000
+    protocol: TCP
+  - name: ilp
+    port: 9009
+    targetPort: 9009
+    protocol: TCP
+  - name: postgres
+    port: 8812
+    targetPort: 8812
+    protocol: TCP
+
+---
+# StatefulSet for QuestDB - Production HA deployment
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: questdb
+  namespace: data-service-prod
+  labels:
+    app: questdb
+    version: 7.3.10
+    environment: production
+spec:
+  serviceName: questdb-http
+  replicas: 3  # HA setup with 3 replicas
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: questdb
+  template:
+    metadata:
+      labels:
+        app: questdb
+        version: 7.3.10
+        environment: production
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9003"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Anti-affinity to spread pods across nodes
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - questdb
+            topologyKey: kubernetes.io/hostname
+        # Prefer different availability zones
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - questdb
+              topologyKey: topology.kubernetes.io/zone
+
+      # Init container to set proper permissions
+      initContainers:
+      - name: init-permissions
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          chown -R 10001:10001 /var/lib/questdb
+          chmod 755 /var/lib/questdb
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/questdb
+        securityContext:
+          runAsUser: 0
+
+      containers:
+      - name: questdb
+        image: questdb/questdb:7.3.10
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: http
+          containerPort: 9000
+          protocol: TCP
+        - name: ilp
+          containerPort: 9009
+          protocol: TCP
+        - name: postgres
+          containerPort: 8812
+          protocol: TCP
+        - name: health
+          containerPort: 9003
+          protocol: TCP
+
+        env:
+        # Java/JVM Settings
+        - name: JAVA_OPTS
+          value: >-
+            -XX:+UseG1GC
+            -XX:MaxGCPauseMillis=50
+            -XX:G1HeapRegionSize=16m
+            -XX:+ParallelRefProcEnabled
+            -XX:InitiatingHeapOccupancyPercent=45
+            -XX:+UnlockExperimentalVMOptions
+            -XX:+UseStringDeduplication
+            -Xms12g
+            -Xmx12g
+            -XX:MaxDirectMemorySize=4g
+
+        # QuestDB Configuration
+        - name: QDB_TELEMETRY_ENABLED
+          value: "false"
+        - name: QDB_LOG_W_STDOUT_LEVEL
+          value: "INFO"
+
+        # HTTP
+        - name: QDB_HTTP_ENABLED
+          value: "true"
+        - name: QDB_HTTP_BIND_TO
+          value: "0.0.0.0:9000"
+        - name: QDB_HTTP_WORKER_COUNT
+          value: "4"
+
+        # PostgreSQL Wire Protocol
+        - name: QDB_PG_ENABLED
+          value: "true"
+        - name: QDB_PG_WORKER_COUNT
+          value: "2"
+
+        # InfluxDB Line Protocol (Primary ingestion)
+        - name: QDB_LINE_TCP_ENABLED
+          value: "true"
+        - name: QDB_LINE_TCP_IO_WORKER_COUNT
+          value: "4"
+        - name: QDB_LINE_TCP_WRITER_WORKER_COUNT
+          value: "4"
+
+        # WAL Settings
+        - name: QDB_CAIRO_WAL_ENABLED_DEFAULT
+          value: "true"
+        - name: QDB_CAIRO_WAL_APPLY_WORKER_COUNT
+          value: "4"
+
+        # Performance Tuning
+        - name: QDB_CAIRO_COMMIT_LAG
+          value: "10000"
+        - name: QDB_CAIRO_MAX_UNCOMMITTED_ROWS
+          value: "100000"
+        - name: QDB_SHARED_WORKER_COUNT
+          value: "4"
+
+        # O3 (Out-of-Order) Support
+        - name: QDB_CAIRO_O3_ENABLED
+          value: "true"
+        - name: QDB_CAIRO_O3_MAX_LAG
+          value: "10000"
+
+        # Metadata
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        # Resource requests and limits
+        # High memory for in-memory operations and page cache
+        resources:
+          requests:
+            cpu: "4000m"      # 4 cores
+            memory: "16Gi"    # 16GB RAM
+            ephemeral-storage: "10Gi"
+          limits:
+            cpu: "8000m"      # 8 cores max
+            memory: "24Gi"    # 24GB RAM max
+            ephemeral-storage: "20Gi"
+
+        # Liveness probe - restart if unhealthy
+        livenessProbe:
+          httpGet:
+            path: /status
+            port: 9003
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+
+        # Readiness probe - accept traffic when ready
+        readinessProbe:
+          httpGet:
+            path: /status
+            port: 9003
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 2
+
+        # Startup probe - allow slow startup with data recovery
+        startupProbe:
+          httpGet:
+            path: /status
+            port: 9003
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 30  # 5 minutes max startup time
+
+        # Volume mounts
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/questdb
+        - name: config
+          mountPath: /var/lib/questdb/conf/server.conf
+          subPath: server.conf
+        - name: config
+          mountPath: /var/lib/questdb/conf/log.conf
+          subPath: log.conf
+
+        # Security context
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          runAsGroup: 10001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+
+      # Volumes
+      volumes:
+      - name: config
+        configMap:
+          name: questdb-config
+
+      # Node selector for production database nodes
+      nodeSelector:
+        workload: database
+
+      # Tolerations for database node taints
+      tolerations:
+      - key: "database"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+  # Volume claim templates for persistent storage
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app: questdb
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: gp3-encrypted  # AWS EBS GP3 with encryption
+      resources:
+        requests:
+          storage: 5Ti  # 5TB initial, scales with data growth
+
+---
+# PodDisruptionBudget to ensure availability during voluntary disruptions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: questdb-pdb
+  namespace: data-service-prod
+spec:
+  minAvailable: 2  # Always keep at least 2 pods running
+  selector:
+    matchLabels:
+      app: questdb
+
+---
+# ServiceMonitor for Prometheus (if using Prometheus Operator)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: questdb
+  namespace: data-service-prod
+  labels:
+    app: questdb
+    prometheus: production
+spec:
+  selector:
+    matchLabels:
+      app: questdb
+  endpoints:
+  - port: health
+    interval: 30s
+    path: /metrics
+    scheme: http
+
+---
+# NetworkPolicy for QuestDB security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: questdb-network-policy
+  namespace: data-service-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: questdb
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow from data-service pods
+  - from:
+    - podSelector:
+        matchLabels:
+          app: data-service
+    ports:
+    - protocol: TCP
+      port: 9009  # ILP
+    - protocol: TCP
+      port: 9000  # HTTP
+    - protocol: TCP
+      port: 8812  # PostgreSQL
+  # Allow from monitoring (Prometheus)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    ports:
+    - protocol: TCP
+      port: 9003  # Metrics/Health
+  # Allow inter-QuestDB communication (for future clustering)
+  - from:
+    - podSelector:
+        matchLabels:
+          app: questdb
+    ports:
+    - protocol: TCP
+      port: 9000
+    - protocol: TCP
+      port: 9009
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow inter-QuestDB communication
+  - to:
+    - podSelector:
+        matchLabels:
+          app: questdb
+    ports:
+    - protocol: TCP
+      port: 9000
+    - protocol: TCP
+      port: 9009
+  # Allow external backup to S3 (if using AWS VPC endpoints)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+# CronJob for automated snapshots/backups to S3
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: questdb-backup
+  namespace: data-service-prod
+  labels:
+    app: questdb-backup
+spec:
+  # Daily at 2 AM UTC
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        app: questdb-backup
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: questdb-backup
+        spec:
+          serviceAccountName: questdb-backup
+          restartPolicy: OnFailure
+          containers:
+          - name: backup
+            image: amazon/aws-cli:2.13.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Starting QuestDB backup at $(date)"
+
+              # Create snapshot via QuestDB HTTP API
+              SNAPSHOT_ID=$(curl -s -X POST "http://questdb-http.data-service-prod.svc.cluster.local:9000/exec?query=BACKUP%20DATABASE;" | jq -r '.snapshot_id')
+
+              echo "Snapshot created: $SNAPSHOT_ID"
+
+              # Sync snapshot to S3
+              aws s3 sync /var/lib/questdb/backup/$SNAPSHOT_ID \
+                s3://${S3_BACKUP_BUCKET}/questdb/production/$(date +%Y%m%d)/ \
+                --storage-class INTELLIGENT_TIERING \
+                --sse AES256
+
+              echo "Backup completed successfully at $(date)"
+
+              # Clean up old snapshots (keep last 7 days)
+              find /var/lib/questdb/backup/ -type d -mtime +7 -exec rm -rf {} +
+
+            env:
+            - name: S3_BACKUP_BUCKET
+              value: "fks-questdb-backups"
+            - name: AWS_REGION
+              value: "us-east-1"
+            volumeMounts:
+            - name: questdb-data
+              mountPath: /var/lib/questdb
+              readOnly: true
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "1Gi"
+              limits:
+                cpu: "1000m"
+                memory: "2Gi"
+          volumes:
+          - name: questdb-data
+            persistentVolumeClaim:
+              claimName: data-questdb-0  # Backup from first replica
+
+---
+# ServiceAccount for backup job with S3 access
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: questdb-backup
+  namespace: data-service-prod
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/questdb-backup-role
+
+---
+# CronJob for data retention/cleanup
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: questdb-retention
+  namespace: data-service-prod
+  labels:
+    app: questdb-retention
+spec:
+  # Daily at 3 AM UTC (after backup)
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    metadata:
+      labels:
+        app: questdb-retention
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: retention
+            image: curlimages/curl:8.1.0
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Starting data retention cleanup at $(date)"
+
+              # Drop partitions older than 90 days for trades_crypto
+              CUTOFF_DATE=$(date -d '90 days ago' +%Y-%m-%d)
+
+              curl -G "http://questdb-http.data-service-prod.svc.cluster.local:9000/exec" \
+                --data-urlencode "query=ALTER TABLE trades_crypto DROP PARTITION LIST WHERE ts < '$CUTOFF_DATE';"
+
+              # Drop partitions older than 90 days for candles_crypto
+              curl -G "http://questdb-http.data-service-prod.svc.cluster.local:9000/exec" \
+                --data-urlencode "query=ALTER TABLE candles_crypto DROP PARTITION LIST WHERE ts < '$CUTOFF_DATE';"
+
+              # Keep market_metrics for 24 months (partitioned by month)
+              METRICS_CUTOFF=$(date -d '24 months ago' +%Y-%m)
+              curl -G "http://questdb-http.data-service-prod.svc.cluster.local:9000/exec" \
+                --data-urlencode "query=ALTER TABLE market_metrics DROP PARTITION LIST WHERE ts < '$METRICS_CUTOFF-01';"
+
+              echo "Retention cleanup completed at $(date)"
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "128Mi"
+              limits:
+                cpu: "200m"
+                memory: "256Mi"

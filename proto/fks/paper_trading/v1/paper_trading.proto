@@ -1,0 +1,1221 @@
+// ============================================================================
+// FKS Paper Trading Protocol Buffer Definitions
+// ============================================================================
+// Defines the Paper Trading Management service for the FKS trading platform.
+//
+// Paper trading allows running full strategy execution against live market
+// data without risking real capital.  Sessions coordinate one or more
+// execution accounts (crypto exchanges, Rithmic/CME futures) and route
+// Janus AI signals through configurable execution policies:
+//
+//   AUTO_EXECUTE         – fully automated order placement (crypto exchanges)
+//   SIGNALS_ONLY         – signal display only, manual execution (Rithmic)
+//   CONFIRMATION_REQUIRED – signal + human confirmation before execution
+//
+// Architecture overview:
+//   WebUI (FastAPI)
+//       └── PaperTradingService (this proto)
+//               ├── Session lifecycle management
+//               ├── Execution account configuration
+//               ├── Janus AI signal processing config
+//               ├── Redis simulation state bus
+//               └── Performance metrics & P&L tracking
+//
+//   Redis acts as the simulation state bus — all simulated fills, positions,
+//   and account balances are maintained in Redis during an active session so
+//   that multiple consumers (WebUI, Janus, alerting) share a single source
+//   of truth without touching real exchange state.
+//
+// Key design decisions:
+//   - Sessions are the top-level organisational unit; every account, config,
+//     and metric roll up to a session.
+//   - Credential references (credentials_key_ref) are vault/secret-manager
+//     keys — raw secrets never transit the wire.
+//   - All enum zero values are UNSPECIFIED per proto3 convention.
+//   - Timestamps are int64 Unix milliseconds for consistency with the rest
+//     of the FKS proto surface.
+//   - Streaming RPCs are provided for live metrics and signal events so the
+//     WebUI can render real-time dashboards without polling.
+// ============================================================================
+
+syntax = "proto3";
+
+package fks.paper_trading.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/paper_trading/v1;papertradingv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.paper_trading.v1";
+
+// ============================================================================
+// PaperTradingService — session lifecycle, accounts, routing, and metrics
+// ============================================================================
+
+// PaperTradingService manages paper-trading sessions that coordinate Janus AI
+// signal generation, execution routing across crypto and futures accounts, and
+// simulated P&L tracking backed by Redis.
+service PaperTradingService {
+  // ---------------------------------------------------------------------------
+  // Session Management
+  // ---------------------------------------------------------------------------
+
+  // Create a new paper-trading session (state = CREATED, not yet running).
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+
+  // Start a previously created or stopped session.  Initialises the Redis sim
+  // environment, connects to configured exchanges, and begins processing
+  // Janus signals.
+  rpc StartSession(StartSessionRequest) returns (StartSessionResponse);
+
+  // Pause a running session.  Open positions are preserved but no new signals
+  // are processed until the session is resumed via StartSession.
+  rpc PauseSession(PauseSessionRequest) returns (PauseSessionResponse);
+
+  // Stop a running or paused session.  All simulated positions are closed,
+  // final metrics are computed, and the Redis sim state is archived.
+  rpc StopSession(StopSessionRequest) returns (StopSessionResponse);
+
+  // Get the full status of a single session.
+  rpc GetSessionStatus(GetSessionStatusRequest) returns (GetSessionStatusResponse);
+
+  // List all paper-trading sessions with optional filters.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+
+  // Delete a stopped session and its associated data.
+  rpc DeleteSession(DeleteSessionRequest) returns (DeleteSessionResponse);
+
+  // ---------------------------------------------------------------------------
+  // Account Configuration
+  // ---------------------------------------------------------------------------
+
+  // Add an execution account to a session.
+  rpc AddAccount(AddAccountRequest) returns (AddAccountResponse);
+
+  // Remove an execution account from a session.  Only allowed when the
+  // account has no open simulated positions.
+  rpc RemoveAccount(RemoveAccountRequest) returns (RemoveAccountResponse);
+
+  // Update an execution account's configuration (e.g. change policy).
+  rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse);
+
+  // List all execution accounts attached to a session.
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+
+  // ---------------------------------------------------------------------------
+  // Execution Routing Configuration
+  // ---------------------------------------------------------------------------
+
+  // Set execution routing rules for a session (which accounts are auto,
+  // signals-only, or confirmation-required).
+  rpc SetRoutingConfig(SetRoutingConfigRequest) returns (SetRoutingConfigResponse);
+
+  // Get the current execution routing configuration for a session.
+  rpc GetRoutingConfig(GetRoutingConfigRequest) returns (GetRoutingConfigResponse);
+
+  // ---------------------------------------------------------------------------
+  // Performance Metrics & P&L
+  // ---------------------------------------------------------------------------
+
+  // Get performance metrics and P&L for a session.
+  rpc GetSessionMetrics(GetSessionMetricsRequest) returns (GetSessionMetricsResponse);
+
+  // Get per-account performance breakdown.
+  rpc GetAccountMetrics(GetAccountMetricsRequest) returns (GetAccountMetricsResponse);
+
+  // Stream live metrics updates for a running session (server-streaming).
+  rpc StreamSessionMetrics(StreamSessionMetricsRequest) returns (stream SessionMetricsSnapshot);
+
+  // Get signal history with outcome tracking.
+  rpc ListSignals(ListSignalsRequest) returns (ListSignalsResponse);
+
+  // ---------------------------------------------------------------------------
+  // Signal Processing Configuration (Janus AI)
+  // ---------------------------------------------------------------------------
+
+  // Update the Janus AI signal-processing settings for a session.
+  rpc UpdateJanusConfig(UpdateJanusConfigRequest) returns (UpdateJanusConfigResponse);
+
+  // Get the current Janus AI configuration for a session.
+  rpc GetJanusConfig(GetJanusConfigRequest) returns (GetJanusConfigResponse);
+
+  // ---------------------------------------------------------------------------
+  // Redis Simulation Environment
+  // ---------------------------------------------------------------------------
+
+  // Reset the Redis simulation state for a session (clears positions,
+  // balances, and order history).  Session must be stopped first.
+  rpc ResetSimEnvironment(ResetSimEnvironmentRequest) returns (ResetSimEnvironmentResponse);
+
+  // Get the current Redis simulation environment status and statistics.
+  rpc GetSimEnvironmentStatus(GetSimEnvironmentStatusRequest) returns (GetSimEnvironmentStatusResponse);
+
+  // ---------------------------------------------------------------------------
+  // Health Check
+  // ---------------------------------------------------------------------------
+
+  // Health check for the paper-trading service.
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+// SessionState tracks the lifecycle of a paper-trading session.
+enum SessionState {
+  SESSION_STATE_UNSPECIFIED = 0;
+  SESSION_STATE_CREATED = 1; // Session defined but never started
+  SESSION_STATE_STARTING = 2; // Initialising exchanges and Redis sim state
+  SESSION_STATE_RUNNING = 3; // Actively processing signals
+  SESSION_STATE_PAUSED = 4; // Temporarily halted, positions preserved
+  SESSION_STATE_STOPPING = 5; // Closing positions and archiving state
+  SESSION_STATE_STOPPED = 6; // Cleanly shut down, metrics finalised
+  SESSION_STATE_ERROR = 7; // Unrecoverable error — manual intervention needed
+}
+
+// AccountType classifies the market and instrument type for an account.
+enum AccountType {
+  ACCOUNT_TYPE_UNSPECIFIED = 0;
+  ACCOUNT_TYPE_CRYPTO_SPOT = 1; // Spot crypto (e.g. Kraken spot, Binance spot)
+  ACCOUNT_TYPE_CRYPTO_FUTURES = 2; // Crypto perpetuals / dated futures
+  ACCOUNT_TYPE_RITHMIC_FUTURES = 3; // CME / ICE futures via Rithmic gateway
+}
+
+// ExecutionPolicy determines how signals are handled for a given account.
+enum ExecutionPolicy {
+  EXECUTION_POLICY_UNSPECIFIED = 0;
+  EXECUTION_POLICY_AUTO_EXECUTE = 1; // Fully automated simulated execution
+  EXECUTION_POLICY_SIGNALS_ONLY = 2; // Display signals, no execution (Rithmic)
+  EXECUTION_POLICY_CONFIRMATION_REQUIRED = 3; // Signal + human confirmation before fill
+}
+
+// ExchangeName enumerates the supported exchange connections.
+enum ExchangeName {
+  EXCHANGE_NAME_UNSPECIFIED = 0;
+  EXCHANGE_NAME_KRAKEN = 1; // Kraken (spot + futures)
+  EXCHANGE_NAME_BYBIT = 2; // Bybit (spot + derivatives)
+  EXCHANGE_NAME_BINANCE = 3; // Binance (spot + futures)
+  EXCHANGE_NAME_RITHMIC = 4; // Rithmic (CME/ICE futures)
+  EXCHANGE_NAME_CRYPTO_COM = 5; // Crypto.com
+  EXCHANGE_NAME_NETCOINS = 6; // Netcoins (Canadian exchange)
+}
+
+// SignalOutcome tracks what happened to a signal after generation.
+enum SignalOutcome {
+  SIGNAL_OUTCOME_UNSPECIFIED = 0;
+  SIGNAL_OUTCOME_PENDING = 1; // Awaiting execution or confirmation
+  SIGNAL_OUTCOME_EXECUTED = 2; // Successfully executed (simulated fill)
+  SIGNAL_OUTCOME_CONFIRMED = 3; // Human-confirmed and then executed
+  SIGNAL_OUTCOME_REJECTED = 4; // Rejected by risk or human
+  SIGNAL_OUTCOME_EXPIRED = 5; // Signal expired before action
+  SIGNAL_OUTCOME_SKIPPED = 6; // Signals-only mode — displayed but not executed
+  SIGNAL_OUTCOME_FAILED = 7; // Execution attempt failed
+}
+
+// SignalDirection represents the directional bias of a signal.
+enum SignalDirection {
+  SIGNAL_DIRECTION_UNSPECIFIED = 0;
+  SIGNAL_DIRECTION_LONG = 1; // Buy / go long
+  SIGNAL_DIRECTION_SHORT = 2; // Sell / go short
+  SIGNAL_DIRECTION_CLOSE_LONG = 3; // Close an existing long
+  SIGNAL_DIRECTION_CLOSE_SHORT = 4; // Close an existing short
+  SIGNAL_DIRECTION_FLAT = 5; // Flatten all positions
+}
+
+// ============================================================================
+// Core Messages
+// ============================================================================
+
+// PaperTradingSession is the top-level entity that groups accounts, config,
+// and metrics into a single coordinated paper-trading run.
+message PaperTradingSession {
+  // Unique session identifier (UUID).
+  string session_id = 1;
+
+  // Human-readable session name (e.g. "BTC Momentum Q1 2025").
+  string name = 2;
+
+  // Optional description / notes.
+  string description = 3;
+
+  // Current session lifecycle state.
+  SessionState state = 4;
+
+  // Execution accounts attached to this session.
+  repeated ExecutionAccount accounts = 5;
+
+  // Session-level configuration (AI, risk, Redis).
+  SessionConfig config = 6;
+
+  // Symbols this session is actively trading.
+  repeated string symbols = 7;
+
+  // Tags for organisation and filtering.
+  repeated string tags = 8;
+
+  // Session creation timestamp (Unix ms).
+  int64 created_at = 9;
+
+  // Last state-change timestamp (Unix ms).
+  int64 updated_at = 10;
+
+  // Session start timestamp — zero if never started (Unix ms).
+  int64 started_at = 11;
+
+  // Session stop timestamp — zero if still active (Unix ms).
+  int64 stopped_at = 12;
+
+  // ID of the user who created the session.
+  string created_by = 13;
+
+  // Latest error message when state == ERROR.
+  string error_message = 14;
+}
+
+// ExecutionAccount represents a single exchange / broker connection within a
+// paper-trading session, together with its routing policy and configuration.
+message ExecutionAccount {
+  // Unique account identifier within this session (UUID).
+  string account_id = 1;
+
+  // Human-readable label (e.g. "Bybit Futures Demo").
+  string label = 2;
+
+  // Exchange this account connects to.
+  ExchangeName exchange = 3;
+
+  // Account / instrument type.
+  AccountType account_type = 4;
+
+  // How signals are handled on this account.
+  ExecutionPolicy policy = 5;
+
+  // Vault / secret-manager key for API credentials — raw secrets are never
+  // stored in the proto or transmitted over the wire.
+  string credentials_key_ref = 6;
+
+  // Whether this account is currently enabled for signal routing.
+  bool enabled = 7;
+
+  // Simulated starting balance for this account (in quote currency).
+  double initial_balance = 8;
+
+  // Quote currency for this account (e.g. "USDT", "USD").
+  string quote_currency = 9;
+
+  // Symbols this account is allowed to trade (empty = all session symbols).
+  repeated string allowed_symbols = 10;
+
+  // Maximum leverage permitted on this account (1.0 = no leverage).
+  double max_leverage = 11;
+
+  // Simulated maker fee rate (e.g. 0.001 = 0.1%).
+  double simulated_maker_fee = 12;
+
+  // Simulated taker fee rate (e.g. 0.001 = 0.1%).
+  double simulated_taker_fee = 13;
+
+  // Simulated slippage in basis points (e.g. 5 = 0.05%).
+  double simulated_slippage_bps = 14;
+
+  // Arbitrary metadata (e.g. sub-account tags, strategy labels).
+  map<string, string> metadata = 15;
+
+  // Timestamp when this account was added to the session (Unix ms).
+  int64 created_at = 16;
+
+  // Timestamp of last configuration change (Unix ms).
+  int64 updated_at = 17;
+}
+
+// SessionConfig holds session-wide settings for Janus AI integration,
+// risk management, and the Redis simulation environment.
+message SessionConfig {
+  // Janus AI signal-processing configuration.
+  JanusAIConfig janus_config = 1;
+
+  // Risk management parameters.
+  RiskConfig risk_config = 2;
+
+  // Redis simulation environment configuration.
+  RedisSimConfig redis_config = 3;
+
+  // Global execution mode override (paper is the default for this service).
+  string execution_mode = 4;
+
+  // How often (ms) the session snapshots metrics to Redis.
+  int64 metrics_snapshot_interval_ms = 5;
+
+  // Whether to record every tick / candle into the session archive for
+  // post-session analysis.
+  bool record_market_data = 6;
+
+  // Timeframe for primary signal evaluation (e.g. "1m", "5m", "1h").
+  string primary_timeframe = 7;
+
+  // Additional timeframes for multi-timeframe analysis.
+  repeated string secondary_timeframes = 8;
+}
+
+// JanusAIConfig controls how the Janus AI/ML engine generates and filters
+// signals for this paper-trading session.
+message JanusAIConfig {
+  // Whether Janus signal generation is enabled for this session.
+  bool enabled = 1;
+
+  // Janus model identifier to use (e.g. "janus-v3-momentum", "janus-v3-mean-revert").
+  string model_id = 2;
+
+  // Model version / checkpoint tag (empty = latest).
+  string model_version = 3;
+
+  // Minimum confidence score (0.0–1.0) for a signal to be acted upon.
+  double min_confidence_threshold = 4;
+
+  // Maximum number of concurrent signals allowed across the session.
+  int32 max_concurrent_signals = 5;
+
+  // Enable market-regime detection; when enabled, Janus adapts strategy
+  // selection based on detected regime (trending, mean-reverting, volatile).
+  bool regime_detection_enabled = 6;
+
+  // Regime detection model identifier (empty = use default sub-module).
+  string regime_model_id = 7;
+
+  // How frequently (ms) the regime detector re-evaluates market conditions.
+  int64 regime_eval_interval_ms = 8;
+
+  // Feature vector override: additional feature columns to inject into
+  // inference requests (e.g. custom on-chain metrics).
+  map<string, double> extra_features = 9;
+
+  // Strategy allow-list — if non-empty, only these strategy IDs may fire.
+  repeated string allowed_strategy_ids = 10;
+
+  // Strategy deny-list — these strategy IDs are silenced even if the model
+  // produces them.
+  repeated string denied_strategy_ids = 11;
+
+  // Warm-up period: number of bars the model must observe before it is
+  // allowed to emit actionable signals.
+  int32 warmup_bars = 12;
+
+  // Ensemble mode: combine outputs from multiple Janus modules.
+  bool ensemble_enabled = 13;
+
+  // Ensemble model IDs to include (used only when ensemble_enabled = true).
+  repeated string ensemble_model_ids = 14;
+
+  // Ensemble minimum agreement ratio (0.0–1.0) — fraction of ensemble
+  // members that must agree on direction before a signal is emitted.
+  double ensemble_agreement_threshold = 15;
+}
+
+// RiskConfig defines session-level risk management guardrails that are
+// enforced before any simulated order is placed.
+message RiskConfig {
+  // Maximum position size per trade in quote currency.
+  double max_position_size = 1;
+
+  // Maximum total portfolio exposure in quote currency across all accounts.
+  double max_total_exposure = 2;
+
+  // Maximum drawdown (fraction, e.g. 0.10 = 10%) before the session is
+  // automatically paused.
+  double max_drawdown = 3;
+
+  // Daily loss limit in quote currency — session pauses if breached.
+  double daily_loss_limit = 4;
+
+  // Maximum number of open positions across all accounts.
+  int32 max_open_positions = 5;
+
+  // Maximum number of trades allowed per day (0 = unlimited).
+  int32 max_daily_trades = 6;
+
+  // Default stop-loss distance in percentage from entry (0 = no default SL).
+  double default_stop_loss_pct = 7;
+
+  // Default take-profit distance in percentage from entry (0 = no default TP).
+  double default_take_profit_pct = 8;
+
+  // Maximum allowed leverage across all accounts (overrides per-account
+  // settings if lower).
+  double max_leverage = 9;
+
+  // Risk per trade as a fraction of current equity (e.g. 0.02 = 2%).
+  double risk_per_trade = 10;
+
+  // Enable automatic position sizing based on risk_per_trade and stop
+  // distance.
+  bool auto_position_sizing = 11;
+
+  // Cool-down period (ms) after a losing trade before the next entry is
+  // allowed.
+  int64 cooldown_after_loss_ms = 12;
+
+  // Maximum correlation exposure — limits concentrated bets on correlated
+  // assets (0.0 = disabled).
+  double max_correlation_exposure = 13;
+}
+
+// RedisSimConfig controls the Redis-backed simulation state bus.
+message RedisSimConfig {
+  // Redis connection URI (e.g. "redis://localhost:6379/0").
+  string redis_uri = 1;
+
+  // Key prefix for all simulation state (e.g. "fks:paper:{session_id}:").
+  string key_prefix = 2;
+
+  // TTL (seconds) for transient sim keys (order book snapshots, tick data).
+  // 0 = no expiry.
+  int64 transient_key_ttl_seconds = 3;
+
+  // Whether to persist final session state to a Redis hash for post-analysis.
+  bool persist_final_state = 4;
+
+  // Redis pub/sub channel for broadcasting session events to other services.
+  string event_channel = 5;
+
+  // Maximum memory budget (MB) for this session's Redis keyspace.  The
+  // service will prune oldest transient keys when this limit is approached.
+  int64 max_memory_mb = 6;
+
+  // Enable Redis cluster mode (for production deployments with sharding).
+  bool cluster_mode = 7;
+
+  // Snapshot interval (ms) for writing position / balance state to Redis.
+  // Lower values give more real-time dashboards but increase write load.
+  int64 snapshot_interval_ms = 8;
+}
+
+// ============================================================================
+// Metrics Messages
+// ============================================================================
+
+// SessionMetrics aggregates performance across all accounts in a session.
+message SessionMetrics {
+  // Session this metrics block belongs to.
+  string session_id = 1;
+
+  // --- P&L ---
+
+  // Total realised profit/loss in quote currency.
+  double realized_pnl = 2;
+
+  // Total unrealised P&L of open positions.
+  double unrealized_pnl = 3;
+
+  // Combined P&L (realized + unrealized).
+  double total_pnl = 4;
+
+  // Total fees paid (simulated).
+  double total_fees = 5;
+
+  // Net P&L after fees.
+  double net_pnl = 6;
+
+  // --- Trade statistics ---
+
+  // Total number of completed (round-trip) trades.
+  int64 total_trades = 7;
+
+  // Number of winning trades.
+  int64 winning_trades = 8;
+
+  // Number of losing trades.
+  int64 losing_trades = 9;
+
+  // Win rate (0.0–1.0).
+  double win_rate = 10;
+
+  // Average profit on winning trades (quote currency).
+  double average_win = 11;
+
+  // Average loss on losing trades (quote currency, positive number).
+  double average_loss = 12;
+
+  // Profit factor (gross profit / gross loss).
+  double profit_factor = 13;
+
+  // Expectancy per trade (quote currency).
+  double expectancy = 14;
+
+  // --- Risk metrics ---
+
+  // Current drawdown from peak equity (fraction).
+  double current_drawdown = 15;
+
+  // Maximum drawdown experienced during the session (fraction).
+  double max_drawdown = 16;
+
+  // Annualised Sharpe ratio.
+  double sharpe_ratio = 17;
+
+  // Annualised Sortino ratio.
+  double sortino_ratio = 18;
+
+  // Calmar ratio (annualised return / max drawdown).
+  double calmar_ratio = 19;
+
+  // --- Equity tracking ---
+
+  // Starting equity across all accounts.
+  double starting_equity = 20;
+
+  // Current equity across all accounts.
+  double current_equity = 21;
+
+  // Peak equity achieved during the session.
+  double peak_equity = 22;
+
+  // Return on equity (fraction).
+  double return_on_equity = 23;
+
+  // --- Per-account breakdown ---
+  repeated AccountMetrics account_metrics = 24;
+
+  // --- Signal statistics ---
+
+  // Total signals received from Janus.
+  int64 total_signals_received = 25;
+
+  // Signals that resulted in execution.
+  int64 signals_executed = 26;
+
+  // Signals rejected by risk filters.
+  int64 signals_rejected = 27;
+
+  // Signals that expired before action.
+  int64 signals_expired = 28;
+
+  // Metrics computation timestamp (Unix ms).
+  int64 computed_at = 29;
+
+  // Session uptime in seconds.
+  int64 uptime_seconds = 30;
+}
+
+// AccountMetrics holds per-account performance data.
+message AccountMetrics {
+  // Account identifier.
+  string account_id = 1;
+
+  // Account label (for display convenience).
+  string label = 2;
+
+  // Exchange name.
+  ExchangeName exchange = 3;
+
+  // Account type.
+  AccountType account_type = 4;
+
+  // Realised P&L for this account.
+  double realized_pnl = 5;
+
+  // Unrealised P&L for open positions on this account.
+  double unrealized_pnl = 6;
+
+  // Total P&L.
+  double total_pnl = 7;
+
+  // Total fees.
+  double total_fees = 8;
+
+  // Number of completed trades.
+  int64 total_trades = 9;
+
+  // Win rate.
+  double win_rate = 10;
+
+  // Current simulated balance.
+  double current_balance = 11;
+
+  // Starting balance (for ROI calculation).
+  double starting_balance = 12;
+
+  // Number of currently open positions.
+  int32 open_positions = 13;
+
+  // Maximum drawdown (fraction).
+  double max_drawdown = 14;
+
+  // Sharpe ratio for this account.
+  double sharpe_ratio = 15;
+
+  // Best single trade P&L.
+  double best_trade_pnl = 16;
+
+  // Worst single trade P&L.
+  double worst_trade_pnl = 17;
+
+  // Average trade duration in milliseconds.
+  int64 avg_trade_duration_ms = 18;
+}
+
+// SessionMetricsSnapshot is emitted on the StreamSessionMetrics RPC and
+// represents a point-in-time snapshot of live session performance.
+message SessionMetricsSnapshot {
+  // Full metrics payload.
+  SessionMetrics metrics = 1;
+
+  // Snapshot sequence number (monotonically increasing).
+  int64 sequence = 2;
+
+  // Snapshot timestamp (Unix ms).
+  int64 timestamp = 3;
+}
+
+// SignalRecord captures a single Janus signal together with its routing
+// decision and execution outcome for audit and analysis.
+message SignalRecord {
+  // Unique signal identifier (matches Janus signal_id).
+  string signal_id = 1;
+
+  // Session this signal belongs to.
+  string session_id = 2;
+
+  // Account the signal was routed to (empty if unrouted).
+  string account_id = 3;
+
+  // Trading symbol.
+  string symbol = 4;
+
+  // Signal direction.
+  SignalDirection direction = 5;
+
+  // Janus confidence score (0.0–1.0).
+  double confidence = 6;
+
+  // Strategy / model that produced the signal.
+  string strategy_id = 7;
+
+  // Suggested entry price.
+  double suggested_price = 8;
+
+  // Suggested quantity (in base asset).
+  double suggested_quantity = 9;
+
+  // Suggested stop-loss price.
+  double suggested_stop_loss = 10;
+
+  // Suggested take-profit price.
+  double suggested_take_profit = 11;
+
+  // Execution policy that applied at the time of routing.
+  ExecutionPolicy applied_policy = 12;
+
+  // What happened to this signal.
+  SignalOutcome outcome = 13;
+
+  // Actual fill price (if executed).
+  double executed_price = 14;
+
+  // Actual fill quantity (if executed).
+  double executed_quantity = 15;
+
+  // Realised P&L attributed to this signal (populated after position close).
+  double realized_pnl = 16;
+
+  // Slippage from suggested price (basis points).
+  double slippage_bps = 17;
+
+  // Fees incurred by this signal's execution.
+  double fees = 18;
+
+  // Detected market regime at signal time.
+  string market_regime = 19;
+
+  // Signal generation timestamp (Unix ms).
+  int64 generated_at = 20;
+
+  // Execution / routing timestamp (Unix ms, 0 if not executed).
+  int64 executed_at = 21;
+
+  // Position close timestamp (Unix ms, 0 if still open or never executed).
+  int64 closed_at = 22;
+
+  // Rejection / skip reason (if outcome is REJECTED, SKIPPED, or FAILED).
+  string rejection_reason = 23;
+
+  // Arbitrary metadata from Janus or the routing engine.
+  map<string, string> metadata = 24;
+}
+
+// ============================================================================
+// Execution Routing Messages
+// ============================================================================
+
+// RoutingRule maps a symbol pattern + exchange to an execution policy and a
+// target account.  Rules are evaluated in priority order.
+message RoutingRule {
+  // Unique rule identifier (UUID).
+  string rule_id = 1;
+
+  // Symbol glob pattern (e.g. "BTC*", "ES*", "*").  Empty = match all.
+  string symbol_pattern = 2;
+
+  // Exchange constraint (UNSPECIFIED = any exchange).
+  ExchangeName exchange = 3;
+
+  // Target account ID to route matching signals to.
+  string target_account_id = 4;
+
+  // Execution policy override for this rule.
+  ExecutionPolicy policy = 5;
+
+  // Priority — lower numbers are evaluated first.
+  int32 priority = 6;
+
+  // Whether this rule is active.
+  bool enabled = 7;
+
+  // Optional description.
+  string description = 8;
+}
+
+// RoutingConfig is the complete set of routing rules for a session.
+message RoutingConfig {
+  // Session this routing config belongs to.
+  string session_id = 1;
+
+  // Ordered routing rules (evaluated by priority, then list order).
+  repeated RoutingRule rules = 2;
+
+  // Default execution policy when no rule matches.
+  ExecutionPolicy default_policy = 3;
+
+  // Default account ID when no rule matches (empty = reject unmatched).
+  string default_account_id = 4;
+
+  // Last update timestamp (Unix ms).
+  int64 updated_at = 5;
+}
+
+// ============================================================================
+// Request / Response Messages — Session Management
+// ============================================================================
+
+message CreateSessionRequest {
+  // Human-readable session name.
+  string name = 1;
+
+  // Optional description.
+  string description = 2;
+
+  // Symbols to trade in this session.
+  repeated string symbols = 3;
+
+  // Initial session configuration.
+  SessionConfig config = 4;
+
+  // Pre-configure accounts at creation time (can also be added later).
+  repeated ExecutionAccount accounts = 5;
+
+  // Optional routing rules to attach immediately.
+  repeated RoutingRule routing_rules = 6;
+
+  // Tags for filtering / organisation.
+  repeated string tags = 7;
+}
+
+message CreateSessionResponse {
+  // Whether creation succeeded.
+  bool success = 1;
+
+  // The newly created session.
+  PaperTradingSession session = 2;
+
+  // Human-readable status message.
+  string message = 3;
+}
+
+message StartSessionRequest {
+  // Session ID to start.
+  string session_id = 1;
+
+  // Optionally override config settings at start time.
+  SessionConfig config_overrides = 2;
+}
+
+message StartSessionResponse {
+  bool success = 1;
+  string session_id = 2;
+  SessionState state = 3;
+  string message = 4;
+  int64 started_at = 5;
+}
+
+message PauseSessionRequest {
+  // Session ID to pause.
+  string session_id = 1;
+
+  // Reason for pausing (logged for audit).
+  string reason = 2;
+}
+
+message PauseSessionResponse {
+  bool success = 1;
+  string session_id = 2;
+  SessionState state = 3;
+  string message = 4;
+  int64 paused_at = 5;
+}
+
+message StopSessionRequest {
+  // Session ID to stop.
+  string session_id = 1;
+
+  // Force-close all open positions immediately.
+  bool force_close_positions = 2;
+
+  // Reason for stopping (logged for audit).
+  string reason = 3;
+}
+
+message StopSessionResponse {
+  bool success = 1;
+  string session_id = 2;
+  SessionState state = 3;
+  string message = 4;
+
+  // Final session metrics at time of stop.
+  SessionMetrics final_metrics = 5;
+
+  int64 stopped_at = 6;
+}
+
+message GetSessionStatusRequest {
+  // Session ID.
+  string session_id = 1;
+
+  // Whether to include full metrics in the response.
+  bool include_metrics = 2;
+
+  // Whether to include account details.
+  bool include_accounts = 3;
+}
+
+message GetSessionStatusResponse {
+  PaperTradingSession session = 1;
+
+  // Included only if include_metrics was true.
+  SessionMetrics metrics = 2;
+}
+
+message ListSessionsRequest {
+  // Filter by session state (empty = all states).
+  repeated SessionState states = 1;
+
+  // Filter by tag (sessions must have ALL specified tags).
+  repeated string tags = 2;
+
+  // Pagination: page number (1-indexed).
+  int32 page = 3;
+
+  // Pagination: items per page (default 20, max 100).
+  int32 page_size = 4;
+
+  // Sort by field (e.g. "created_at", "name", "state").
+  string sort_by = 5;
+
+  // Sort direction: true = ascending.
+  bool ascending = 6;
+}
+
+message ListSessionsResponse {
+  repeated PaperTradingSession sessions = 1;
+
+  // Total number of matching sessions.
+  int64 total_count = 2;
+
+  // Current page number.
+  int32 page = 3;
+
+  // Items per page.
+  int32 page_size = 4;
+
+  // Whether more pages exist.
+  bool has_more = 5;
+}
+
+message DeleteSessionRequest {
+  // Session ID to delete.  Must be in STOPPED or CREATED state.
+  string session_id = 1;
+
+  // Also purge all Redis sim data for this session.
+  bool purge_sim_data = 2;
+}
+
+message DeleteSessionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================================================
+// Request / Response Messages — Account Configuration
+// ============================================================================
+
+message AddAccountRequest {
+  // Session to add the account to.
+  string session_id = 1;
+
+  // Account configuration.
+  ExecutionAccount account = 2;
+}
+
+message AddAccountResponse {
+  bool success = 1;
+
+  // The account with its generated account_id.
+  ExecutionAccount account = 2;
+
+  string message = 3;
+}
+
+message RemoveAccountRequest {
+  string session_id = 1;
+  string account_id = 2;
+
+  // Force removal even if the account has open positions (positions will be
+  // force-closed in the simulation).
+  bool force = 3;
+}
+
+message RemoveAccountResponse {
+  bool success = 1;
+  string message = 2;
+
+  // Number of positions that were force-closed (if force = true).
+  int32 positions_closed = 3;
+}
+
+message UpdateAccountRequest {
+  string session_id = 1;
+
+  // Updated account configuration.  The account_id field must be set to
+  // identify which account to update.
+  ExecutionAccount account = 2;
+}
+
+message UpdateAccountResponse {
+  bool success = 1;
+  ExecutionAccount account = 2;
+  string message = 3;
+}
+
+message ListAccountsRequest {
+  string session_id = 1;
+
+  // Optional filter by exchange.
+  ExchangeName exchange = 2;
+
+  // Optional filter by account type.
+  AccountType account_type = 3;
+
+  // Only return enabled accounts.
+  bool enabled_only = 4;
+}
+
+message ListAccountsResponse {
+  repeated ExecutionAccount accounts = 1;
+  int32 total_count = 2;
+}
+
+// ============================================================================
+// Request / Response Messages — Execution Routing
+// ============================================================================
+
+message SetRoutingConfigRequest {
+  string session_id = 1;
+
+  // Complete routing configuration (replaces any existing config).
+  RoutingConfig config = 2;
+}
+
+message SetRoutingConfigResponse {
+  bool success = 1;
+  RoutingConfig config = 2;
+  string message = 3;
+}
+
+message GetRoutingConfigRequest {
+  string session_id = 1;
+}
+
+message GetRoutingConfigResponse {
+  RoutingConfig config = 1;
+}
+
+// ============================================================================
+// Request / Response Messages — Metrics & Signals
+// ============================================================================
+
+message GetSessionMetricsRequest {
+  string session_id = 1;
+
+  // Optional time range — if omitted returns lifetime metrics.
+  int64 start_timestamp = 2;
+  int64 end_timestamp = 3;
+}
+
+message GetSessionMetricsResponse {
+  SessionMetrics metrics = 1;
+}
+
+message GetAccountMetricsRequest {
+  string session_id = 1;
+  string account_id = 2;
+
+  // Optional time range.
+  int64 start_timestamp = 3;
+  int64 end_timestamp = 4;
+}
+
+message GetAccountMetricsResponse {
+  AccountMetrics metrics = 1;
+}
+
+message StreamSessionMetricsRequest {
+  string session_id = 1;
+
+  // How often (ms) to emit snapshots (0 = use session default).
+  int64 interval_ms = 2;
+}
+
+message ListSignalsRequest {
+  string session_id = 1;
+
+  // Optional filters.
+  string account_id = 2;
+  string symbol = 3;
+  SignalDirection direction = 4;
+  SignalOutcome outcome = 5;
+
+  // Time range.
+  int64 start_timestamp = 6;
+  int64 end_timestamp = 7;
+
+  // Minimum confidence filter.
+  double min_confidence = 8;
+
+  // Pagination.
+  int32 page = 9;
+  int32 page_size = 10;
+}
+
+message ListSignalsResponse {
+  repeated SignalRecord signals = 1;
+  int64 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+  bool has_more = 5;
+}
+
+// ============================================================================
+// Request / Response Messages — Janus AI Config
+// ============================================================================
+
+message UpdateJanusConfigRequest {
+  string session_id = 1;
+  JanusAIConfig config = 2;
+}
+
+message UpdateJanusConfigResponse {
+  bool success = 1;
+  JanusAIConfig config = 2;
+  string message = 3;
+}
+
+message GetJanusConfigRequest {
+  string session_id = 1;
+}
+
+message GetJanusConfigResponse {
+  JanusAIConfig config = 1;
+}
+
+// ============================================================================
+// Request / Response Messages — Redis Simulation Environment
+// ============================================================================
+
+message ResetSimEnvironmentRequest {
+  // Session must be in STOPPED or CREATED state.
+  string session_id = 1;
+
+  // Archive current state before reset (recommended).
+  bool archive_before_reset = 2;
+}
+
+message ResetSimEnvironmentResponse {
+  bool success = 1;
+  string message = 2;
+
+  // Number of Redis keys cleared.
+  int64 keys_cleared = 3;
+
+  // Archive key (if archive_before_reset was true).
+  string archive_key = 4;
+}
+
+message GetSimEnvironmentStatusRequest {
+  string session_id = 1;
+}
+
+message GetSimEnvironmentStatusResponse {
+  // Whether the Redis sim environment is initialised for this session.
+  bool initialised = 1;
+
+  // Number of Redis keys owned by this session.
+  int64 key_count = 2;
+
+  // Approximate memory usage (bytes) of this session's keyspace.
+  int64 memory_usage_bytes = 3;
+
+  // Redis server info.
+  string redis_version = 4;
+
+  // Whether Redis is reachable and healthy.
+  bool redis_healthy = 5;
+
+  // Last snapshot timestamp (Unix ms).
+  int64 last_snapshot_at = 6;
+
+  // Number of open simulated positions in Redis.
+  int32 open_positions = 7;
+
+  // Number of pending simulated orders in Redis.
+  int32 pending_orders = 8;
+
+  // Pub/sub channel status.
+  bool event_channel_active = 9;
+}
+
+// ============================================================================
+// Health Check
+// ============================================================================
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  // Overall service health.
+  bool healthy = 1;
+
+  // Status string ("healthy", "degraded", "unhealthy").
+  string status = 2;
+
+  // Per-component health (e.g. "redis", "janus", "kraken_ws").
+  map<string, string> components = 3;
+
+  // Number of active sessions.
+  int32 active_sessions = 4;
+
+  // Service version.
+  string version = 5;
+
+  // Service uptime in seconds.
+  int64 uptime_seconds = 6;
+
+  // Response timestamp (Unix ms).
+  int64 timestamp = 7;
+}
+

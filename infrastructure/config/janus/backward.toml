@@ -1,0 +1,307 @@
+# ============================================================================
+# JANUS BACKWARD SERVICE CONFIGURATION
+# ============================================================================
+# Historical analysis, persistence, and analytics service
+# Handles: Database Persistence • Analytics • Performance Metrics • Scheduled Jobs
+# ============================================================================
+
+[service]
+name = "janus-backward"
+version = "0.1.0"
+
+[server]
+# Bind address
+host = "0.0.0.0"
+# HTTP API port
+http_port = 8082
+# Prometheus metrics port
+metrics_port = 9091
+# Enable metrics endpoint
+enable_metrics = true
+
+# ============================================================================
+# DATABASE CONFIGURATION
+# ============================================================================
+
+[database]
+# PostgreSQL connection URL
+url = "postgresql://fks_user:password@postgres:5432/fks"
+# Maximum connections in pool
+max_connections = 10
+# Minimum connections in pool
+min_connections = 2
+# Connection timeout (seconds)
+connect_timeout_secs = 30
+# Idle timeout (seconds)
+idle_timeout_secs = 600
+# Maximum connection lifetime (seconds)
+max_lifetime_secs = 1800
+# Enable SQL query logging (WARNING: verbose)
+enable_logging = false
+
+# ============================================================================
+# REDIS CONFIGURATION
+# ============================================================================
+
+[redis]
+# Redis connection URL
+url = "redis://redis:6379"
+# Connection pool size
+pool_size = 5
+# Connection timeout (seconds)
+connect_timeout_secs = 10
+
+# ============================================================================
+# PERSISTENCE CONFIGURATION
+# ============================================================================
+
+[persistence]
+# Batch size for database writes
+batch_size = 100
+# Flush interval (seconds)
+flush_interval_secs = 5
+# Enable write-ahead logging
+enable_wal = true
+# Maximum pending writes before flush
+max_pending_writes = 1000
+# Enable async writes
+async_writes = true
+
+[persistence.signals]
+# Enable signal persistence
+enabled = true
+# Table name
+table = "signals"
+# Partition by time
+partition_by = "day"
+
+[persistence.trades]
+# Enable trade persistence
+enabled = true
+# Table name
+table = "trades"
+# Partition by time
+partition_by = "month"
+
+[persistence.positions]
+# Enable position persistence
+enabled = true
+# Table name
+table = "positions"
+# Track position history
+track_history = true
+
+[persistence.metrics]
+# Enable metrics persistence
+enabled = true
+# Table name
+table = "metrics"
+# Aggregation interval (seconds)
+aggregation_interval_secs = 60
+
+# ============================================================================
+# ANALYTICS CONFIGURATION
+# ============================================================================
+
+[analytics]
+# Analytics update interval (seconds)
+update_interval_secs = 60
+# Performance calculation window (hours)
+performance_window_hours = 24
+# Enable detailed trade analysis
+enable_trade_analysis = true
+# Enable drawdown tracking
+enable_drawdown_tracking = true
+
+[analytics.performance]
+# Calculate Sharpe ratio
+sharpe_ratio = true
+# Calculate Sortino ratio
+sortino_ratio = true
+# Calculate max drawdown
+max_drawdown = true
+# Calculate win rate
+win_rate = true
+# Calculate profit factor
+profit_factor = true
+# Risk-free rate for ratio calculations
+risk_free_rate = 0.02
+
+[analytics.aggregations]
+# Time windows for aggregation
+windows = ["1h", "4h", "1d", "1w", "1M"]
+# Metrics to aggregate
+metrics = ["pnl", "trades", "win_rate", "sharpe"]
+
+# ============================================================================
+# WORKER CONFIGURATION
+# ============================================================================
+
+[workers]
+# Number of worker threads
+threads = 4
+# Task queue size
+queue_size = 1000
+# Worker heartbeat interval (seconds)
+heartbeat_interval_secs = 30
+# Task timeout (seconds)
+task_timeout_secs = 300
+
+# ============================================================================
+# SCHEDULER CONFIGURATION
+# ============================================================================
+
+[scheduler]
+# Enable scheduled jobs
+enabled = true
+# Timezone for cron expressions
+timezone = "UTC"
+
+# Scheduled job definitions
+[[scheduler.jobs]]
+name = "signal_cleanup"
+description = "Clean up old signals"
+cron = "0 0 * * *"  # Daily at midnight
+enabled = true
+
+[[scheduler.jobs]]
+name = "metrics_aggregation"
+description = "Aggregate performance metrics"
+cron = "0 */15 * * * *"  # Every 15 minutes
+enabled = true
+
+[[scheduler.jobs]]
+name = "analytics_update"
+description = "Update analytics dashboard"
+cron = "0 */5 * * * *"  # Every 5 minutes
+enabled = true
+
+[[scheduler.jobs]]
+name = "database_vacuum"
+description = "Vacuum analyze database"
+cron = "0 3 * * 0"  # Weekly on Sunday at 3 AM
+enabled = true
+
+# ============================================================================
+# DATA RETENTION
+# ============================================================================
+
+[retention]
+# Signal retention period (days)
+signals_days = 90
+# Trade history retention (days)
+trades_days = 365
+# Raw tick data retention (days)
+ticks_days = 7
+# Metrics retention (days)
+metrics_days = 30
+# Aggregated data retention (days)
+aggregated_days = 365
+# Enable automatic cleanup
+auto_cleanup = true
+# Cleanup batch size
+cleanup_batch_size = 10000
+
+# ============================================================================
+# MEMORY CONSOLIDATION (Qdrant)
+# ============================================================================
+
+[memory]
+# Qdrant vector database URL
+qdrant_url = "http://qdrant:6333"
+# Collection name for experiences
+collection_name = "experiences"
+# Replay buffer size
+replay_buffer_size = 100000
+# Enable memory consolidation
+enabled = false
+
+[memory.consolidation]
+# Consolidation schedule (cron)
+schedule = "0 */15 * * * *"  # Every 15 minutes
+# Batch size for consolidation
+batch_size = 1000
+# Minimum experiences before consolidation
+min_experiences = 100
+
+# ============================================================================
+# TRAINING CONFIGURATION (for RL)
+# ============================================================================
+
+[training]
+# Enable training mode
+enabled = false
+# Training batch size
+batch_size = 32
+# Learning rate
+learning_rate = 0.001
+# Priority exponent (alpha)
+alpha = 0.6
+# Importance sampling exponent (beta)
+beta = 0.4
+# Target network update frequency
+target_update_frequency = 1000
+
+# ============================================================================
+# EXPORT CONFIGURATION
+# ============================================================================
+
+[export]
+# Export directory
+directory = "/data/exports"
+# Enable CSV exports
+csv_enabled = true
+# Enable Parquet exports
+parquet_enabled = true
+# Compression: none | gzip | snappy | zstd
+compression = "zstd"
+
+# ============================================================================
+# SHARED MEMORY (IPC with Forward service)
+# ============================================================================
+
+[shared_memory]
+# Shared memory path for Forward<->Backward IPC
+path = "/dev/shm/janus_forward_backward"
+# Buffer size in MB
+buffer_size_mb = 1024
+# Enable shared memory IPC
+enabled = true
+
+# ============================================================================
+# GRPC CONFIGURATION
+# ============================================================================
+
+[grpc]
+# gRPC listen address
+listen_address = "0.0.0.0:50052"
+# Maximum message size (bytes)
+max_message_size = 16777216  # 16MB
+# Enable reflection
+enable_reflection = true
+
+# ============================================================================
+# HTTP API CONFIGURATION
+# ============================================================================
+
+[http]
+# Request timeout (seconds)
+request_timeout_secs = 30
+# Maximum request body size (bytes)
+max_body_size = 10485760  # 10MB
+# Enable CORS
+enable_cors = true
+# CORS allowed origins
+cors_origins = "*"
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+[logging]
+# Log level: trace | debug | info | warn | error
+level = "info"
+# Log format: json | pretty
+format = "json"
+# Enable SQL query logging
+sql_logging = false

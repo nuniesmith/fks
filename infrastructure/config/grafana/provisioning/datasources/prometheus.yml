@@ -1,0 +1,74 @@
+# Grafana Datasource Provisioning - Prometheus
+# Automatically configures Prometheus as a datasource when Grafana starts
+
+apiVersion: 1
+
+# List of datasources to insert/update
+datasources:
+  # Prometheus - Primary metrics datasource
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      queryTimeout: 60s
+      # Enable Prometheus metric metadata queries
+      manageAlerts: true
+      prometheusType: Prometheus
+      prometheusVersion: 2.48.0
+      # Cache settings
+      cacheLevel: 'High'
+      incrementalQuerying: true
+      incrementalQueryOverlapWindow: 10m
+      # Exemplars support (for traces correlation)
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+    version: 1
+
+  # Prometheus - Alternative endpoint (for testing/comparison)
+  - name: Prometheus-Dev
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
+      manageAlerts: false
+    orgId: 1
+    version: 1
+
+# Optional: Loki for logs (if deployed)
+# - name: Loki
+#   type: loki
+#   access: proxy
+#   url: http://loki:3100
+#   isDefault: false
+#   editable: true
+#   jsonData:
+#     maxLines: 1000
+#   version: 1
+
+# Optional: Tempo for traces (if deployed)
+# - name: Tempo
+#   type: tempo
+#   access: proxy
+#   url: http://tempo:3200
+#   uid: tempo
+#   isDefault: false
+#   editable: true
+#   jsonData:
+#     nodeGraph:
+#       enabled: true
+#   version: 1
+
+# Delete datasources that are not in this list
+deleteDatasources:
+  - name: TestData DB
+    orgId: 1

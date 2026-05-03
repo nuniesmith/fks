@@ -1,0 +1,31 @@
+# Template metadata
+id: signal-observer
+name: "Signal Observer"
+description: >
+  Watches all symbols and logs every signal — no fills, no execution.
+  Perfect for validating signal quality and pipeline health without
+  risking paper balance.
+category: observer
+icon: "👁"
+accent: "#06b6d4"
+
+# Session defaults (maps 1:1 to CreateSessionRequest fields)
+# NOTE: max_position_size must be > 0 and max_open_positions must be >= 1
+# per model validation — observer intent is enforced at the strategy layer.
+session:
+  name: "Signal Observer"
+  initial_balance: 10000
+  symbols: []   # empty = all symbols
+  data_source: kraken
+  tags:
+    - observer
+    - signal-only
+  risk:
+    max_position_size: 1
+    max_daily_loss: 0
+    max_open_positions: 1
+  janus_ai:
+    enabled: true
+    min_confidence: 0.5
+    auto_execute: false
+    auto_execute_threshold: 0.85

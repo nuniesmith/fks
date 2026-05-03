@@ -1,0 +1,346 @@
+# =============================================================================
+# JANUS Regime Detection Configuration
+# =============================================================================
+#
+# This file controls the regime detection system that classifies market
+# conditions and routes signals to the appropriate trading strategy.
+#
+# Regime detection pipeline:
+#   Ticks → CandleAggregator → EnhancedRouter → RoutedSignal → Strategy
+#
+# Three detection methods are available:
+#   - "Indicators" — Fast, rule-based (ADX, BB, ATR, EMA)
+#   - "HMM"        — Statistical, learns from returns (Hidden Markov Model)
+#   - "Ensemble"   — Combines both (recommended for production)
+
+# =============================================================================
+# Regime Manager (Forward Service Integration)
+# =============================================================================
+
+[manager]
+# Number of ticks aggregated into one candle before the regime detector updates.
+# Lower = faster reaction, noisier. Higher = smoother, slower reaction.
+#   25  — scalping / HFT
+#   100 — default (intraday)
+#   500 — swing trading
+ticks_per_candle = 100
+
+# Detection method: "Indicators", "HMM", or "Ensemble"
+detection_method = "Ensemble"
+
+# Minimum confidence (0.0–1.0) required to act on a regime signal.
+# Below this threshold, the system treats the regime as Uncertain.
+#   0.4 — aggressive (more trades, more noise)
+#   0.5 — balanced (default)
+#   0.6 — conservative (fewer trades, higher conviction)
+min_confidence = 0.5
+
+# Position size multiplier applied when regime is Volatile (0.0–1.0).
+# Lower values reduce exposure during high-volatility periods.
+volatile_position_factor = 0.3
+
+# Whether to emit tracing::info! logs on regime transitions.
+log_regime_changes = true
+
+# Number of completed candles used to compute the rolling average volume
+# for the relative-volume indicator (`current_volume / rolling_avg`).
+# Higher values = smoother average but slower reaction to volume shifts.
+#   10  — fast reaction, noisier
+#   20  — default (balanced)
+#   50  — very smooth, slow to reflect volume regime changes
+volume_lookback = 20
+
+# Per-asset overrides for volume_lookback. When a symbol is listed here,
+# its value is used instead of the global volume_lookback above.
+# Useful when different assets have very different volume profiles.
+#
+# Example:
+#   BTCUSD  — high liquidity, fast reaction desired
+#   ETHUSD  — moderate liquidity, smoother baseline
+#   SOLUSD  — thinner book, need more smoothing
+[manager.volume_lookback_overrides]
+# BTCUSD = 10
+# ETHUSD = 30
+# SOLUSD = 50
+
+# =============================================================================
+# Indicator-Based Detector
+# =============================================================================
+# Rule-based classification using ADX, Bollinger Bands, ATR, and EMAs.
+# Fast to react, interpretable, but can whipsaw in choppy markets.
+
+[indicators]
+# ADX (Average Directional Index) — measures trend strength
+adx_period = 14
+adx_trending_threshold = 25.0    # ADX > this → Trending
+adx_ranging_threshold = 20.0     # ADX < this → MeanReverting
+
+# Bollinger Bands — measures volatility envelope
+bb_period = 20
+bb_std_dev = 2.0
+bb_width_volatility_threshold = 4.0  # BB width percentile > this → Volatile
+
+# EMA pair — measures trend direction
+ema_short_period = 8
+ema_long_period = 21
+
+# ATR (Average True Range) — measures volatility magnitude
+atr_period = 14
+atr_expansion_threshold = 1.5   # ATR > 1.5× average → volatility expanding
+
+# Stability filter — prevents rapid regime switching (anti-whipsaw)
+# Minimum consecutive bars a regime must persist before allowing a switch.
+regime_stability_bars = 3
+
+# Minimum bars the detector must stay in a regime before considering a change.
+# Higher values = more stable regime classification, slower transitions.
+min_regime_duration = 5
+
+# =============================================================================
+# Hidden Markov Model Detector
+# =============================================================================
+# Learns regime distributions from returns data using forward algorithm
+# and Baum-Welch re-estimation. Slower to warm up, but adapts to the
+# specific asset's statistical properties.
+
+[hmm]
+# Number of hidden states (regimes). 3 is standard:
+#   State 0 = low volatility (trending/ranging)
+#   State 1 = medium volatility (normal)
+#   State 2 = high volatility (volatile/crisis)
+n_states = 3
+
+# Minimum observations before the HMM starts producing predictions.
+# During warmup, the ensemble falls back to indicator-only detection.
+min_observations = 30
+
+# Online learning rate for parameter updates (0.0 = no online learning).
+# Higher values adapt faster to regime changes but are less stable.
+#   0.0  — frozen after initial Baum-Welch
+#   0.01 — slow adaptation (conservative)
+#   0.05 — moderate adaptation (crypto_optimized default)
+#   0.10 — fast adaptation (aggressive)
+learning_rate = 0.05
+
+# Smoothing factor for transition probability matrix.
+# Prevents transition probabilities from collapsing to 0/1.
+#   0.01 — minimal smoothing
+#   0.05 — moderate (default)
+#   0.10 — heavy smoothing (more stable transitions)
+transition_smoothing = 0.05
+
+# Window size for return calculations.
+# Larger windows capture more history but react slower.
+lookback_window = 100
+
+# Confidence threshold for HMM regime classification.
+# State probability must exceed this to be classified with confidence.
+min_confidence = 0.5
+
+# =============================================================================
+# Ensemble Detector
+# =============================================================================
+# Combines indicator-based and HMM detectors with weighted averaging
+# and agreement/disagreement logic.
+
+[ensemble]
+# Relative weight for the indicator detector (0.0–1.0).
+# indicator_weight + hmm_weight should equal 1.0.
+indicator_weight = 0.6
+
+# Relative weight for the HMM detector (0.0–1.0).
+hmm_weight = 0.4
+
+# Minimum threshold for methods to be considered "in agreement".
+# When both methods agree, confidence receives a boost.
+agreement_threshold = 0.6
+
+# If true, use only indicators until HMM has warmed up.
+# Recommended: true for production (avoids noisy early HMM signals).
+require_hmm_warmup = true
+
+# Confidence boost when both methods agree on the regime.
+# Added to the weighted-average confidence.
+agreement_confidence_boost = 0.1
+
+# Confidence penalty when methods disagree.
+# Subtracted from the weighted-average confidence.
+disagreement_confidence_penalty = 0.15
+
+# =============================================================================
+# Router Configuration
+# =============================================================================
+# Maps detected regimes to trading strategies and position sizing factors.
+
+[router]
+# Position size multiplier for volatile regimes (0.0–1.0).
+# Applied on top of per-strategy regime_size_factor().
+volatile_position_factor = 0.3
+
+# Minimum confidence to recommend any trade.
+# Below this, the router emits ActiveStrategy::NoTrade.
+min_confidence = 0.5
+
+# Log regime changes to stdout/tracing.
+log_changes = true
+
+# =============================================================================
+# Strategy Tuning — Mean Reversion
+# =============================================================================
+# Bollinger Bands mean reversion with RSI confirmation.
+# Active when regime = MeanReverting.
+
+[strategies.mean_reversion]
+bb_period = 20
+bb_std_dev = 2.0
+entry_threshold = 0.05          # Price within 5% of band width from band
+exit_at_middle = true           # Exit at middle band (SMA) vs opposite band
+rsi_period = 14
+rsi_oversold = 30.0
+rsi_overbought = 70.0
+require_rsi_confirmation = false
+atr_period = 14
+atr_stop_multiplier = 2.0      # Stop loss = entry ± (ATR × multiplier)
+min_band_width_pct = 2.0        # Skip trades when BB squeeze < 2%
+
+# =============================================================================
+# Strategy Tuning — Bollinger Squeeze Breakout
+# =============================================================================
+# Detects BB squeeze → breakout. Active at MeanReverting→Trending transitions.
+
+[strategies.bollinger_squeeze]
+bb_period = 20
+bb_std_dev = 2.0
+squeeze_threshold = 0.03        # BB width < 3% = squeeze detected
+breakout_multiplier = 1.0       # Price must exceed band by this × ATR
+adx_confirmation = 20.0         # ADX > this confirms breakout direction
+volume_spike_threshold = 1.5    # Volume > 1.5× average for confirmation
+atr_period = 14
+atr_stop_multiplier = 1.5
+
+# =============================================================================
+# Strategy Tuning — VWAP Scalper
+# =============================================================================
+# Mean reversion around VWAP bands. Active when regime = MeanReverting.
+
+[strategies.vwap_scalper]
+std_dev_bands = 2.0             # VWAP ± N standard deviations
+atr_period = 14
+atr_stop_multiplier = 1.5
+min_volume_ratio = 0.8          # Skip if volume < 80% of average
+session_reset = true            # Reset VWAP on session boundaries
+
+# =============================================================================
+# Strategy Tuning — Opening Range Breakout
+# =============================================================================
+# Trades breakouts from the first N candles of a session.
+
+[strategies.opening_range]
+range_candles = 5               # First N candles define the opening range
+breakout_buffer_pct = 0.1       # Price must exceed range by this %
+volume_confirmation = 1.3       # Volume > 1.3× average for confirmation
+atr_period = 14
+atr_stop_multiplier = 2.0
+max_trades_per_session = 2      # Limit breakout trades per session
+
+# =============================================================================
+# Strategy Tuning — EMA Ribbon Scalper
+# =============================================================================
+# 8/13/21 EMA ribbon pullback scalper. Active when regime = TrendFollowing.
+
+[strategies.ema_ribbon]
+ema_fast = 8
+ema_mid = 13
+ema_slow = 21
+pullback_threshold = 0.3        # Price within 30% of ribbon width
+volume_confirmation = 1.2       # Volume > 1.2× average
+atr_period = 14
+atr_stop_multiplier = 1.5
+
+# =============================================================================
+# Strategy Tuning — Trend Pullback
+# =============================================================================
+# Fibonacci retracement entries within established trends.
+# Active when regime = TrendFollowing.
+
+[strategies.trend_pullback]
+ema_trend_fast = 50
+ema_trend_slow = 200
+fib_entry_level = 0.382         # Enter at 38.2% retracement
+fib_deep_level = 0.618          # Secondary entry at 61.8%
+rsi_period = 14
+rsi_divergence_threshold = 5.0  # RSI divergence detection sensitivity
+atr_period = 14
+atr_stop_multiplier = 2.5
+require_candlestick_pattern = true  # Require pin bar or engulfing
+
+# =============================================================================
+# Strategy Tuning — Momentum Surge
+# =============================================================================
+# Detects sudden price surges with volume spikes.
+# Active when regime = TrendFollowing or Volatile.
+
+[strategies.momentum_surge]
+surge_threshold_pct = 1.5       # Price move > 1.5% in lookback
+volume_spike_threshold = 2.0    # Volume > 2× average
+lookback_candles = 5            # Lookback window for surge detection
+pullback_entry_pct = 0.3        # Enter on 30% retracement of surge
+atr_period = 14
+atr_stop_multiplier = 2.0
+
+# =============================================================================
+# Strategy Tuning — Multi-Timeframe Trend
+# =============================================================================
+# EMA 50/200 crossover with HTF alignment and ADX confirmation.
+# Active when regime = TrendFollowing. Requires HTF trend bias.
+
+[strategies.multi_tf_trend]
+ema_fast = 50
+ema_slow = 200
+adx_period = 14
+adx_threshold = 25.0            # ADX > 25 confirms trend strength
+require_htf_alignment = true    # Must align with higher timeframe
+atr_period = 14
+atr_stop_multiplier = 3.0       # Wider stops for swing trades
+
+# =============================================================================
+# HTF Aggregator
+# =============================================================================
+# Higher-timeframe candle aggregation for multi-timeframe strategies.
+
+[htf]
+# Ratio of LTF candles per HTF candle.
+# If ticks_per_candle = 100, ratio = 15 → 1 HTF candle = 1500 ticks.
+ratio = 15
+
+# EMA periods for HTF trend detection.
+ema_fast = 20
+ema_slow = 50
+
+# =============================================================================
+# Presets
+# =============================================================================
+# Named configuration presets for common scenarios.
+# Use: REGIME_PRESET=crypto_aggressive (env var) or --preset flag.
+#
+# Preset: crypto_aggressive
+#   manager.ticks_per_candle = 50
+#   manager.min_confidence = 0.4
+#   indicators.adx_trending_threshold = 22.0
+#   hmm.learning_rate = 0.08
+#   strategies.mean_reversion.entry_threshold = 0.10
+#   strategies.mean_reversion.exit_at_middle = false
+#   strategies.mean_reversion.rsi_oversold = 35.0
+#   strategies.mean_reversion.rsi_overbought = 65.0
+#   strategies.mean_reversion.atr_stop_multiplier = 2.5
+#
+# Preset: conservative
+#   manager.ticks_per_candle = 200
+#   manager.min_confidence = 0.6
+#   indicators.adx_trending_threshold = 28.0
+#   indicators.min_regime_duration = 8
+#   hmm.learning_rate = 0.01
+#   ensemble.require_hmm_warmup = true
+#   strategies.mean_reversion.require_rsi_confirmation = true
+#   strategies.mean_reversion.atr_stop_multiplier = 1.5
+#   strategies.mean_reversion.min_band_width_pct = 3.0

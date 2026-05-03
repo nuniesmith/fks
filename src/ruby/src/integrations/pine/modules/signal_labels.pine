@@ -1,0 +1,209 @@
+// ── Module: signal_labels ───────────────────────────────────────────────────
+// Part of the Ruby indicator — assembled by PineScriptGenerator
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 15. SIGNAL SHAPES + LABELS
+// [FIX] Trailing stop lines: unconditional delete before recreation.
+//       Old code only deleted if not na(trail_l_line), which left stale
+//       lines when barstate.islast flipped on bar close.
+// [NEW] All label.new() calls replaced with f_label_new() from §0b.
+//       label_pool auto-prunes at 450 entries — prevents exhausting the
+//       max_labels_count=500 ceiling on active charts.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Full-filter confirmed signals — large triangle (trade-ready setup) ────────
+plotshape(longSignal,  "Long",  shape.triangleup,   location.belowbar, color.new(color.green, 0), size=size.large)
+plotshape(shortSignal, "Short", shape.triangledown, location.abovebar, color.new(color.red,   0), size=size.large)
+
+// ── Line-set trackers — cleared on each new signal to avoid clutter ───────────
+var array<line> l_sig_lines   = array.new<line>()
+var array<line> s_sig_lines   = array.new<line>()
+var array<line> l_bo_lines    = array.new<line>()
+var array<line> s_bo_lines    = array.new<line>()
+var array<line> l_scale_lines = array.new<line>()
+var array<line> s_scale_lines = array.new<line>()
+
+// ── Daily label throttle + ORB spacing guards ─────────────────────────────────
+var int   daily_label_count = 0
+var int   last_rbl_bar      = 0
+var float last_rbl_price    = na
+var int   last_rbs_bar      = 0
+var float last_rbs_price    = na
+
+if newDay
+    daily_label_count := 0
+    last_rbl_bar      := 0
+    last_rbl_price    := na
+    last_rbs_bar      := 0
+    last_rbs_price    := na
+
+// ── Trailing stop state ───────────────────────────────────────────────────────
+var bool  trail_l_on     = false
+var bool  trail_s_on     = false
+var float trail_l_peak   = na
+var float trail_s_trough = na
+var float trail_l_stop   = na
+var float trail_s_stop   = na
+var line  trail_l_line   = na
+var line  trail_s_line   = na
+
+if longSignal
+    trail_l_on     := true
+    trail_s_on     := false
+    trail_l_peak   := high
+    trail_l_stop   := high - atr14 * trailATRMult
+
+if shortSignal
+    trail_s_on     := true
+    trail_l_on     := false
+    trail_s_trough := low
+    trail_s_stop   := low + atr14 * trailATRMult
+
+if trail_l_on and barstate.isconfirmed
+    if high > trail_l_peak
+        trail_l_peak := high
+        trail_l_stop := trail_l_peak - atr14 * trailATRMult
+    if low <= trail_l_stop
+        trail_l_on := false
+
+if trail_s_on and barstate.isconfirmed
+    if low < trail_s_trough
+        trail_s_trough := low
+        trail_s_stop   := trail_s_trough + atr14 * trailATRMult
+    if high >= trail_s_stop
+        trail_s_on := false
+
+// [FIX] Unconditional delete before re-creation — no conditional na-check.
+//       Calling line.delete(na) is a no-op in Pine v6, so this is safe.
+if showTrail and barstate.islast
+    line.delete(trail_l_line)
+    line.delete(trail_s_line)
+    trail_l_line := na
+    trail_s_line := na
+    if trail_l_on
+        trail_l_line := line.new(bar_index - 1, trail_l_stop, bar_index + 15, trail_l_stop,
+             color=color.new(color.yellow, 20), style=line.style_dotted, width=2)
+    if trail_s_on
+        trail_s_line := line.new(bar_index - 1, trail_s_stop, bar_index + 15, trail_s_stop,
+             color=color.new(color.yellow, 20), style=line.style_dotted, width=2)
+
+// ── Compact signal labels (entry / SL / TP1 on one line) ─────────────────────
+if showEntryLabels
+    if longSignal
+        f_label_new(bar_index, low - atr14 * 0.6,
+             "▲  " + str.tostring(l_entry, format.mintick) +
+             "   ✗" + str.tostring(l_sl,   format.mintick) +
+             "   ✓" + str.tostring(l_tp1,  format.mintick),
+             color.new(color.green, 15), label.style_label_up, color.white, size.small)
+    if shortSignal
+        f_label_new(bar_index, high + atr14 * 0.6,
+             "▼  " + str.tostring(s_entry, format.mintick) +
+             "   ✗" + str.tostring(s_sl,   format.mintick) +
+             "   ✓" + str.tostring(s_tp1,  format.mintick),
+             color.new(color.red, 15), label.style_label_down, color.white, size.small)
+
+// ── TP / SL guide lines + end-price labels — cleared on next signal ───────────
+if longSignal
+    int _n = array.size(l_sig_lines)
+    if _n > 0
+        for _i = 0 to _n - 1
+            line.delete(array.get(l_sig_lines, _i))
+    array.clear(l_sig_lines)
+    array.push(l_sig_lines, line.new(bar_index, l_tp1, bar_index + 30, l_tp1, color=color.new(color.lime,  20), style=line.style_solid,  width=2))
+    array.push(l_sig_lines, line.new(bar_index, l_tp2, bar_index + 30, l_tp2, color=color.new(color.green, 35), style=line.style_dashed, width=1))
+    array.push(l_sig_lines, line.new(bar_index, l_tp3, bar_index + 30, l_tp3, color=color.new(color.teal,  45), style=line.style_dashed, width=1))
+    array.push(l_sig_lines, line.new(bar_index, l_sl,  bar_index + 30, l_sl,  color=color.new(color.red,   20), style=line.style_solid,  width=2))
+    f_label_new(bar_index + 30, l_tp1, str.tostring(l_tp1, format.mintick), color.new(color.lime, 20), label.style_label_left, color.white, size.tiny)
+    f_label_new(bar_index + 30, l_sl,  str.tostring(l_sl,  format.mintick), color.new(color.red,  20), label.style_label_left, color.white, size.tiny)
+
+    // ── Scale-in levels E2 / E3 ───────────────────────────────────────────────
+    if showScaleIn
+        int _ls = array.size(l_scale_lines)
+        if _ls > 0
+            for _i = 0 to _ls - 1
+                line.delete(array.get(l_scale_lines, _i))
+        array.clear(l_scale_lines)
+        array.push(l_scale_lines, line.new(bar_index, l_e2, bar_index + 20, l_e2, color=color.new(color.aqua, 40), style=line.style_dashed))
+        array.push(l_scale_lines, line.new(bar_index, l_e3, bar_index + 20, l_e3, color=color.new(color.aqua, 55), style=line.style_dashed))
+        f_label_new(bar_index, l_e2, "E2", color.new(color.aqua, 30), label.style_label_right, color.white, size.tiny)
+        f_label_new(bar_index, l_e3, "E3", color.new(color.aqua, 45), label.style_label_right, color.white, size.tiny)
+
+if shortSignal
+    int _n = array.size(s_sig_lines)
+    if _n > 0
+        for _i = 0 to _n - 1
+            line.delete(array.get(s_sig_lines, _i))
+    array.clear(s_sig_lines)
+    array.push(s_sig_lines, line.new(bar_index, s_tp1, bar_index + 30, s_tp1, color=color.new(color.red,    20), style=line.style_solid,  width=2))
+    array.push(s_sig_lines, line.new(bar_index, s_tp2, bar_index + 30, s_tp2, color=color.new(color.orange, 35), style=line.style_dashed, width=1))
+    array.push(s_sig_lines, line.new(bar_index, s_tp3, bar_index + 30, s_tp3, color=color.new(color.maroon, 45), style=line.style_dashed, width=1))
+    array.push(s_sig_lines, line.new(bar_index, s_sl,  bar_index + 30, s_sl,  color=color.new(color.lime,   20), style=line.style_solid,  width=2))
+    f_label_new(bar_index + 30, s_tp1, str.tostring(s_tp1, format.mintick), color.new(color.red,  20), label.style_label_left, color.white, size.tiny)
+    f_label_new(bar_index + 30, s_sl,  str.tostring(s_sl,  format.mintick), color.new(color.lime, 20), label.style_label_left, color.white, size.tiny)
+
+    // ── Scale-in levels E2 / E3 ───────────────────────────────────────────────
+    if showScaleIn
+        int _ss = array.size(s_scale_lines)
+        if _ss > 0
+            for _i = 0 to _ss - 1
+                line.delete(array.get(s_scale_lines, _i))
+        array.clear(s_scale_lines)
+        array.push(s_scale_lines, line.new(bar_index, s_e2, bar_index + 20, s_e2, color=color.new(color.fuchsia, 40), style=line.style_dashed))
+        array.push(s_scale_lines, line.new(bar_index, s_e3, bar_index + 20, s_e3, color=color.new(color.fuchsia, 55), style=line.style_dashed))
+        f_label_new(bar_index, s_e2, "E2", color.new(color.fuchsia, 30), label.style_label_right, color.white, size.tiny)
+        f_label_new(bar_index, s_e3, "E3", color.new(color.fuchsia, 45), label.style_label_right, color.white, size.tiny)
+
+// ── Breakout entry labels — quality/wave gate + daily cap + spacing guard ─────
+if showBreakoutLabels
+    bool _orbL_ok     = not filterORBQuality or (quality >= minQualityPct and waveOK_L)
+    bool _orbS_ok     = not filterORBQuality or (quality >= minQualityPct and waveOK_S)
+    bool _rbl_dist_ok = na(last_rbl_price) or math.abs(close - last_rbl_price) > atr14 * minLabelDistATR or bar_index - last_rbl_bar > cooldownBars * 2
+    bool _rbs_dist_ok = na(last_rbs_price) or math.abs(close - last_rbs_price) > atr14 * minLabelDistATR or bar_index - last_rbs_bar > cooldownBars * 2
+
+    if orbBreakUp and _orbL_ok and _rbl_dist_ok and daily_label_count < maxLabelsDay
+        float _bo_sl   = rLow - atr14
+        float _bo_risk = close - _bo_sl
+        string _bo_tag = orbWindow ? "LONG ORB 🚀" : "LONG RB 🚀"
+        int _n = array.size(l_bo_lines)
+        if _n > 0
+            for _i = 0 to _n - 1
+                line.delete(array.get(l_bo_lines, _i))
+        array.clear(l_bo_lines)
+        f_label_new(bar_index, low - atr14 * 1.8,
+             _bo_tag +
+             "\nEntry : " + str.tostring(close,                   format.mintick) +
+             "\nSL    : " + str.tostring(_bo_sl,                  format.mintick) +
+             "\nTP 1  : " + str.tostring(close + _bo_risk * tp1R, format.mintick) + "  (" + str.tostring(tp1R, "#.##") + "R)" +
+             "\nTP 2  : " + str.tostring(close + _bo_risk * tp2R, format.mintick) + "  (" + str.tostring(tp2R, "#.##") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%",
+             color.new(color.green, 20), label.style_label_up, color.white, size.normal)
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp1R, bar_index + 20, close + _bo_risk * tp1R, color=color.new(color.lime,  40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, close + _bo_risk * tp2R, bar_index + 20, close + _bo_risk * tp2R, color=color.new(color.green, 40), style=line.style_dashed))
+        array.push(l_bo_lines, line.new(bar_index, _bo_sl,                  bar_index + 20, _bo_sl,                  color=color.new(color.red,   50), style=line.style_dashed))
+        last_rbl_bar       := bar_index
+        last_rbl_price     := close
+        daily_label_count  += 1
+
+    if orbBreakDn and _orbS_ok and _rbs_dist_ok and daily_label_count < maxLabelsDay
+        float _bo_sl   = rHigh + atr14
+        float _bo_risk = _bo_sl - close
+        string _bo_tag = orbWindow ? "SHORT ORB 📉" : "SHORT RB 📉"
+        int _n = array.size(s_bo_lines)
+        if _n > 0
+            for _i = 0 to _n - 1
+                line.delete(array.get(s_bo_lines, _i))
+        array.clear(s_bo_lines)
+        f_label_new(bar_index, high + atr14 * 1.8,
+             _bo_tag +
+             "\nEntry : " + str.tostring(close,                   format.mintick) +
+             "\nSL    : " + str.tostring(_bo_sl,                  format.mintick) +
+             "\nTP 1  : " + str.tostring(close - _bo_risk * tp1R, format.mintick) + "  (" + str.tostring(tp1R, "#.##") + "R)" +
+             "\nTP 2  : " + str.tostring(close - _bo_risk * tp2R, format.mintick) + "  (" + str.tostring(tp2R, "#.##") + "R)" +
+             "\nQual  : " + str.tostring(math.round(quality)) + "%",
+             color.new(color.red, 20), label.style_label_down, color.white, size.normal)
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp1R, bar_index + 20, close - _bo_risk * tp1R, color=color.new(color.red,    40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, close - _bo_risk * tp2R, bar_index + 20, close - _bo_risk * tp2R, color=color.new(color.orange, 40), style=line.style_dashed))
+        array.push(s_bo_lines, line.new(bar_index, _bo_sl,                  bar_index + 20, _bo_sl,                  color=color.new(color.lime,   50), style=line.style_dashed))
+        last_rbs_bar       := bar_index
+        last_rbs_price     := close
+        daily_label_count  += 1

@@ -1,0 +1,256 @@
+# ============================================================================
+# Promtail Configuration for FKS Trading Platform
+# ============================================================================
+# Collects logs from all Docker containers and ships to Loki
+# Includes service-specific labels and filtering
+# ============================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+# Position file to track which logs have been read
+positions:
+  filename: /tmp/positions/positions.yaml
+
+# Loki client configuration
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    timeout: 30s
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+    # Batch configuration for performance
+    batchwait: 1s
+    batchsize: 1048576  # 1MB
+
+# Scrape configurations
+scrape_configs:
+  # ========================================================================
+  # DOCKER CONTAINER LOGS
+  # ========================================================================
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["com.docker.compose.project=compose"]
+
+    relabel_configs:
+      # Container name
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+
+      # Container ID (short)
+      - source_labels: ['__meta_docker_container_id']
+        regex: '(.{12}).*'
+        target_label: 'container_id'
+
+      # Service name from compose
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+
+      # Environment from logging labels
+      - source_labels: ['__meta_docker_container_label_logging_labels']
+        regex: '.*environment=([^,]+).*'
+        target_label: 'environment'
+
+      # Project name
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'project'
+
+      # Image name
+      - source_labels: ['__meta_docker_container_image']
+        target_label: 'image'
+
+      # Log path
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'stream'
+
+    pipeline_stages:
+      # ================================================================
+      # STAGE 1: Parse JSON logs (Docker default)
+      # ================================================================
+      - json:
+          expressions:
+            output: log
+            stream: stream
+            timestamp: time
+
+      # ================================================================
+      # STAGE 2: Extract timestamps
+      # ================================================================
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+
+      # ================================================================
+      # STAGE 3: Service-specific parsing
+      # ================================================================
+
+      # --- RUST SERVICES (Forward, Backward, Data Factory, CNS, Audit) ---
+      - match:
+          selector: '{service=~"forward|backward|data|cns|audit"}'
+          stages:
+            # Parse Rust structured logs (tracing format)
+            - regex:
+                expression: '^(?P<timestamp>\S+)\s+(?P<level>\S+)\s+(?P<target>\S+):\s+(?P<message>.*)$'
+            - labels:
+                level:
+                target:
+            # Extract key-value pairs from message
+            - regex:
+                expression: '(?P<key>\w+)=(?P<value>[^\s]+)'
+                source: message
+            # Mark critical errors
+            - match:
+                selector: '{level="ERROR"}'
+                stages:
+                  - labels:
+                      severity: critical
+
+      # --- PYTHON GATEWAY SERVICE ---
+      - match:
+          selector: '{service="gateway"}'
+          stages:
+            # Parse Python logging format
+            - regex:
+                expression: '^(?P<timestamp>\S+\s+\S+)\s+\|\s+(?P<level>\S+)\s+\|\s+(?P<logger>\S+)\s+\|\s+(?P<message>.*)$'
+            - labels:
+                level:
+                logger:
+            # Extract request IDs if present
+            - regex:
+                expression: 'request_id=(?P<request_id>[^\s]+)'
+                source: message
+            - labels:
+                request_id:
+
+      # --- NGINX ACCESS LOGS ---
+      - match:
+          selector: '{service="nginx", stream="stdout"}'
+          stages:
+            # Parse nginx access log format
+            - regex:
+                expression: '^(?P<remote_addr>[\w\.]+) - (?P<remote_user>[\w-]+) \[(?P<timestamp>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) (?P<protocol>\S+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]*)" "(?P<http_user_agent>[^"]*)"'
+            - labels:
+                method:
+                status:
+                path:
+            # Mark 4xx and 5xx as errors
+            - match:
+                selector: '{status=~"[45].*"}'
+                stages:
+                  - labels:
+                      severity: error
+
+      # --- NGINX ERROR LOGS ---
+      - match:
+          selector: '{service="nginx", stream="stderr"}'
+          stages:
+            - regex:
+                expression: '^(?P<timestamp>\S+\s+\S+)\s+\[(?P<level>\w+)\]\s+(?P<message>.*)$'
+            - labels:
+                level:
+
+      # --- REDIS LOGS ---
+      - match:
+          selector: '{service="redis"}'
+          stages:
+            - regex:
+                expression: '^(?P<pid>\d+):(?P<role>\w+)\s+(?P<timestamp>\S+\s+\S+)\s+(?P<level>[*#-.])\s+(?P<message>.*)$'
+            - labels:
+                level:
+                role:
+
+      # --- POSTGRESQL LOGS ---
+      - match:
+          selector: '{service="postgres"}'
+          stages:
+            - regex:
+                expression: '^(?P<timestamp>\S+\s+\S+)\s+\[(?P<pid>\d+)\]\s+(?P<level>\w+):\s+(?P<message>.*)$'
+            - labels:
+                level:
+
+      # --- QUESTDB LOGS ---
+      - match:
+          selector: '{service="questdb"}'
+          stages:
+            - regex:
+                expression: '^(?P<timestamp>\S+\s+\S+)\s+I\s+i\.q\.(?P<class>[\w\.]+)\s+(?P<message>.*)$'
+            - labels:
+                class:
+
+      # --- PROMETHEUS LOGS ---
+      - match:
+          selector: '{service="prometheus"}'
+          stages:
+            - regex:
+                expression: '^level=(?P<level>\w+)\s+ts=(?P<timestamp>[\d\-T:.Z]+)\s+caller=(?P<caller>\S+)\s+(?P<message>.*)$'
+            - labels:
+                level:
+                caller:
+
+      # --- GRAFANA LOGS ---
+      - match:
+          selector: '{service="grafana"}'
+          stages:
+            - regex:
+                expression: '^t=(?P<timestamp>[\d\-T:.Z]+)\s+lvl=(?P<level>\w+)\s+msg="(?P<message>[^"]+)"'
+            - labels:
+                level:
+
+      # --- JAEGER LOGS ---
+      - match:
+          selector: '{service="jaeger"}'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  msg: msg
+                  ts: ts
+            - labels:
+                level:
+
+      # ================================================================
+      # STAGE 4: Output formatting
+      # ================================================================
+      - output:
+          source: output
+
+      # ================================================================
+      # STAGE 5: Drop noisy logs (optional)
+      # ================================================================
+      - match:
+          selector: '{service="prometheus"}'
+          drop_counter_reason: prometheus_scrape
+          stages:
+            - drop:
+                expression: ".*scrape_pool_sync.*"
+                older_than: 24h
+
+      - match:
+          selector: '{service="grafana"}'
+          stages:
+            - drop:
+                expression: ".*plugin scan duration.*"
+
+# ============================================================================
+# LIMITS CONFIGURATION
+# ============================================================================
+limits_config:
+  readline_rate: 10000        # Max lines per second
+  readline_burst: 20000       # Burst capacity
+  max_streams: 0              # No limit on streams
+  max_line_size: 256kb        # Max log line size (for large stack traces)
+  max_line_size_truncate: true
+
+# ============================================================================
+# TARGET CONFIGURATION
+# ============================================================================
+target_config:
+  sync_period: 10s

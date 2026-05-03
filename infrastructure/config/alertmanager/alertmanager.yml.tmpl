@@ -1,0 +1,326 @@
+# JANUS Vision - AlertManager Configuration
+# Routes alerts to appropriate notification channels based on severity and component
+#
+# This file is copied directly to alertmanager.yml at deploy time.
+# No secrets or environment variables are embedded here — the Discord webhook URLs
+# live on the alertmanager-discord container environment.
+#
+# Discord Integration:
+# The alertmanager-discord sidecar (http://alertmanager-discord:9094/)
+# routes Alertmanager webhook payloads to the correct Discord channel based on either:
+#   • The URL path:  /signals → DISCORD_WEBHOOK_SIGNALS
+#                    /analysis → DISCORD_WEBHOOK_ANALYSIS
+#                    /  (auto) → routes by alert labels (see bridge code)
+#   • Alert labels:  category=trade-signal   → DISCORD_WEBHOOK_SIGNALS
+#                    category=performance     → DISCORD_WEBHOOK_ANALYSIS
+#                    category=quality         → DISCORD_WEBHOOK_ANALYSIS
+#                    everything else          → DISCORD_WEBHOOK_GENERAL
+#
+# Set DISCORD_WEBHOOK_GENERAL, DISCORD_WEBHOOK_SIGNALS, and DISCORD_WEBHOOK_ANALYSIS
+# in your .env file.
+#
+# To set up Discord notifications:
+# 1. Go to your Discord server settings > Integrations > Webhooks
+# 2. Create a new webhook for each channel (general, signals, analysis)
+# 3. Copy each webhook URL (native format — do NOT append /slack)
+# 4. Set the corresponding variables in your .env file
+
+global:
+    # Global settings
+    resolve_timeout: 5m
+
+    # SMTP settings (for email notifications — uncomment and configure to enable)
+    # smtp_from: "vision-alerts@janus.ai"
+    # smtp_smarthost: "smtp.example.com:587"
+    # smtp_auth_username: "vision-alerts@janus.ai"
+    # smtp_auth_password: "SMTP_PASSWORD_HERE"
+    # smtp_require_tls: true
+
+# Templates for notification formatting
+templates:
+    - "/etc/alertmanager/templates/*.tmpl"
+
+# Routing tree - determines where alerts go
+route:
+    # Default receiver for all alerts
+    receiver: "default"
+
+    # Group alerts by these labels
+    group_by: ["alertname", "cluster", "service", "severity"]
+
+    # Wait time before sending first notification
+    group_wait: 30s
+
+    # Wait time before sending notification about new alerts in group
+    group_interval: 5m
+
+    # Wait time before re-sending notification
+    repeat_interval: 4h
+
+    # Child routes with specific matching rules
+    routes:
+        # ========================================================================
+        # Critical Alerts - Page immediately
+        # ========================================================================
+        - match:
+              severity: critical
+          receiver: "pagerduty-critical"
+          group_wait: 10s
+          group_interval: 2m
+          repeat_interval: 30m
+          continue: true # Also send to other matching routes
+
+        - match:
+              severity: critical
+          receiver: "discord-critical"
+          group_wait: 10s
+          continue: true
+
+        # ========================================================================
+        # Warning Alerts
+        # ========================================================================
+        - match:
+              severity: warning
+          receiver: "discord-warnings"
+          group_wait: 2m
+          group_interval: 10m
+          repeat_interval: 4h
+
+        # ========================================================================
+        # Execution Quality Alerts
+        # ========================================================================
+        - match:
+              category: quality
+          receiver: "discord-execution-quality"
+          group_by: ["alertname", "venue", "instance"]
+          group_interval: 5m
+          repeat_interval: 2h
+
+        # ========================================================================
+        # Execution Performance Alerts
+        # ========================================================================
+        - match:
+              category: performance
+          receiver: "discord-performance"
+          group_by: ["alertname", "instance"]
+          group_interval: 10m
+          repeat_interval: 4h
+
+        # ========================================================================
+        # System Health Alerts
+        # ========================================================================
+        - match:
+              category: availability
+          receiver: "pagerduty-critical"
+          group_wait: 30s
+          repeat_interval: 15m
+          continue: true
+
+        - match:
+              category: availability
+          receiver: "discord-critical"
+          continue: true
+
+        # ========================================================================
+        # Cost Alerts - Send to trading team
+        # ========================================================================
+        - match:
+              category: costs
+          receiver: "email-trading-team"
+          group_by: ["alertname"]
+          group_interval: 30m
+          repeat_interval: 12h
+
+        # ========================================================================
+        # Trade Signal Alerts — route to Python signal monitor
+        # Must come BEFORE severity: info catch-all since trade signals also
+        # carry severity=info. continue: true ensures they also reach discord-signals.
+        # ========================================================================
+        - match:
+              category: trade-signal
+          receiver: "python-signal-webhook"
+          group_wait: 0s
+          group_interval: 5m
+          repeat_interval: 1h
+          continue: true
+
+        - match:
+              category: trade-signal
+          receiver: "discord-signals"
+          group_wait: 0s
+          group_interval: 5m
+          repeat_interval: 1h
+
+        # ========================================================================
+        # Info/Monitoring Alerts - Low priority
+        # ========================================================================
+        - match:
+              severity: info
+          receiver: "discord-info"
+          group_interval: 30m
+          repeat_interval: 24h
+
+# Inhibition rules - suppress certain alerts when others are firing
+inhibit_rules:
+    # Suppress warning if critical alert is firing
+    - source_match:
+          severity: "critical"
+      target_match:
+          severity: "warning"
+      equal: ["alertname", "instance"]
+
+    # Suppress specific alerts if service is down
+    - source_match:
+          alertname: "VisionServiceDown"
+      target_match_re:
+          alertname: "(HighExecutionLatency|NoExecutionMetrics|ExecutionRateDrop)"
+      equal: ["instance"]
+
+    # Suppress partial fill alerts if high rejection rate
+    - source_match:
+          alertname: "HighOrderRejectionRate"
+      target_match:
+          alertname: "HighPartialFillRate"
+      equal: ["instance"]
+
+# Notification receivers/integrations
+#
+# Active receivers use webhook_configs pointing at the alertmanager-discord
+# sidecar (http://alertmanager-discord:9094/). The bridge converts the
+# Alertmanager webhook payload into Discord-native rich embeds and forwards them
+# to the correct Discord webhook URL based on the URL path or alert labels.
+#
+# This avoids the unreliable Discord /slack compatibility endpoint entirely.
+receivers:
+    # ==========================================================================
+    # Default Receiver - Sends to Discord via bridge (auto-routes by label)
+    # ==========================================================================
+    - name: "default"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/"
+            send_resolved: true
+
+    # ==========================================================================
+    # PagerDuty - Critical alerts that require immediate attention
+    # Disabled by default - uncomment and configure to enable
+    # ==========================================================================
+    - name: "pagerduty-critical"
+      # pagerduty_configs:
+      #     - routing_key: "YOUR_PAGERDUTY_INTEGRATION_KEY"
+      #       severity: '{{ if eq .GroupLabels.severity "critical" }}critical{{ else }}error{{ end }}'
+      #       description: "{{ .GroupLabels.alertname }}: {{ .CommonAnnotations.summary }}"
+      #       details:
+      #           firing: "{{ .Alerts.Firing | len }}"
+      #           resolved: "{{ .Alerts.Resolved | len }}"
+      #           instance: "{{ .GroupLabels.instance }}"
+      #           service: "{{ .GroupLabels.service }}"
+      #           description: "{{ .CommonAnnotations.description }}"
+      #           runbook: "{{ .CommonAnnotations.runbook_url }}"
+
+    # ==========================================================================
+    # Discord - Critical Alerts (via bridge)
+    # ==========================================================================
+    - name: "discord-critical"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/"
+            send_resolved: true
+
+    # ==========================================================================
+    # Discord - Warning Alerts (via bridge)
+    # ==========================================================================
+    - name: "discord-warnings"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/"
+            send_resolved: true
+
+    # ==========================================================================
+    # Discord - Execution Quality Alerts (via bridge → analysis channel)
+    # ==========================================================================
+    - name: "discord-execution-quality"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/analysis"
+            send_resolved: true
+
+    # ==========================================================================
+    # Discord - Performance Alerts (via bridge → analysis channel)
+    # ==========================================================================
+    - name: "discord-performance"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/analysis"
+            send_resolved: true
+
+    # ==========================================================================
+    # Discord - Info/Monitoring Alerts (via bridge)
+    # ==========================================================================
+    - name: "discord-info"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/"
+            send_resolved: true
+
+    # ==========================================================================
+    # Discord - Trade Signal Alerts (via bridge → signals channel)
+    # ==========================================================================
+    - name: "discord-signals"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/signals"
+            send_resolved: true
+
+    # ==========================================================================
+    # Email - Trading Team (for cost alerts)
+    # Disabled by default - uncomment and configure to enable
+    # ==========================================================================
+    - name: "email-trading-team"
+      # email_configs:
+      #     - to: "trading-team@example.com"
+      #       from: "alerts@example.com"
+      #       smarthost: "smtp.example.com:587"
+      #       auth_username: "alerts@example.com"
+      #       auth_password: "SMTP_PASSWORD_HERE"
+      #       require_tls: true
+      #       headers:
+      #           Subject: "FKS Execution Cost Alert: {{ .GroupLabels.alertname }}"
+      #       html: |
+      #           <h2>FKS Execution Cost Alert</h2>
+      #           <p><strong>Alert:</strong> {{ .CommonAnnotations.summary }}</p>
+      #           <p><strong>Description:</strong> {{ .CommonAnnotations.description }}</p>
+      #           <p><strong>Instance:</strong> {{ .GroupLabels.instance }}</p>
+      #           <p><strong>Severity:</strong> {{ .GroupLabels.severity }}</p>
+      #           <hr>
+      #           <p><a href="{{ .CommonAnnotations.runbook_url }}">View Runbook</a></p>
+      #       send_resolved: true
+
+    # ==========================================================================
+    # Python Signal Webhook — receives Janus trade signals for execution routing
+    #
+    # Alertmanager POSTs trade-signal alerts directly to the Ruby (Python) data
+    # service on the internal Docker network. The Python side routes each signal
+    # by account_type:
+    #   - prop-firm       → Redis publish for manual WebUI confirmation
+    #   - personal-crypto → ExecutionGate for automated execution
+    #   - hardware-wallet → Redis publish for monitoring only
+    #
+    # NOTE: targets fks_ruby:8000 directly (not via nginx) so the /api/signals/
+    # prefix is handled by the Python service, not routed to janus-execution.
+    # ==========================================================================
+    - name: "python-signal-webhook"
+      webhook_configs:
+          - url: "http://fks_ruby:8000/api/signals/webhook"
+            send_resolved: true
+            max_alerts: 0
+
+    # ==========================================================================
+    # Webhook - Custom integrations (optional)
+    # Disabled by default - uncomment and configure to enable
+    # ==========================================================================
+    - name: "webhook-custom"
+      # webhook_configs:
+      #     - url: "http://custom-service:8080/alerts"
+      #       send_resolved: true
+      #       http_config:
+      #           basic_auth:
+      #               username: "fks"
+      #               password: "webhook_password"
+
+# Time-based silences can be configured via AlertManager UI or API
+# Example: Silence all alerts during maintenance window
+# amtool silence add alertname=~".+" --start="2024-01-15T02:00:00Z" --end="2024-01-15T04:00:00Z" --comment="Scheduled maintenance"

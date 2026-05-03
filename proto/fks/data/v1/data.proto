@@ -1,0 +1,466 @@
+syntax = "proto3";
+
+package fks.data.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/data/v1;datav1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.data.v1";
+
+import "fks/common/v1/common.proto";
+
+// ============================================================================
+// DATA SERVICE - Consolidated Market Data API
+// ============================================================================
+
+// DataService - Comprehensive market data ingestion, storage, and retrieval
+service DataService {
+  // Historical data operations
+  rpc GetHistoricalData(GetHistoricalDataRequest) returns (GetHistoricalDataResponse);
+
+  // Real-time streaming
+  rpc StreamRealTimeData(StreamRealTimeDataRequest) returns (stream StreamRealTimeDataResponse);
+
+  // Market metrics and analysis
+  rpc GetMarketMetrics(GetMarketMetricsRequest) returns (GetMarketMetricsResponse);
+
+  // Data quality analysis
+  rpc GetGaps(GetGapsRequest) returns (GetGapsResponse);
+
+  // Symbol management
+  rpc GetSymbols(GetSymbolsRequest) returns (GetSymbolsResponse);
+
+  // Health check — uses shared type from fks.common.v1
+  rpc HealthCheck(fks.common.v1.HealthCheckRequest) returns (fks.common.v1.HealthCheckResponse);
+}
+
+// UMAP service (internal, for Python microservice)
+service UmapService {
+  // Train a new UMAP model
+  rpc TrainModel(TrainModelRequest) returns (TrainModelResponse);
+
+  // Project a vector using existing model
+  rpc Project(ProjectRequest) returns (ProjectResponse);
+}
+
+// ============================================================================
+// Historical Data Messages
+// ============================================================================
+
+message GetHistoricalDataRequest {
+  // Trading symbol (e.g., "BTCUSD")
+  string symbol = 1;
+
+  // Timeframe ("1m", "5m", "15m", "1h", "4h", "1d")
+  string timeframe = 2;
+
+  // Start timestamp (Unix milliseconds)
+  int64 start_timestamp = 3;
+
+  // End timestamp (Unix milliseconds)
+  int64 end_timestamp = 4;
+
+  // Maximum number of candles to return
+  int32 limit = 5;
+
+  // Optional: Exchange filter
+  string exchange = 6;
+}
+
+message GetHistoricalDataResponse {
+  // Trading symbol
+  string symbol = 1;
+
+  // OHLCV candles
+  repeated Candle candles = 2;
+
+  // Total count (may be more than returned if limited)
+  int32 total_count = 3;
+}
+
+message Candle {
+  // Timestamp (Unix milliseconds)
+  int64 timestamp = 1;
+
+  // Open price
+  double open = 2;
+
+  // High price
+  double high = 3;
+
+  // Low price
+  double low = 4;
+
+  // Close price
+  double close = 5;
+
+  // Volume
+  double volume = 6;
+}
+
+// ============================================================================
+// Real-time Streaming Messages
+// ============================================================================
+
+message StreamRealTimeDataRequest {
+  // Symbols to stream (e.g., ["BTCUSD", "ETHUSDT"])
+  repeated string symbols = 1;
+
+  // Include orderbook data
+  bool include_orderbook = 2;
+
+  // Include trade data
+  bool include_trades = 3;
+
+  // Optional: Exchange filter
+  repeated string exchanges = 4;
+}
+
+message StreamRealTimeDataResponse {
+  // Trading symbol
+  string symbol = 1;
+
+  // Timestamp (Unix milliseconds)
+  int64 timestamp = 2;
+
+  // Current price
+  double price = 3;
+
+  // Best bid price
+  double bid = 4;
+
+  // Best ask price
+  double ask = 5;
+
+  // Bid size
+  double bid_size = 6;
+
+  // Ask size
+  double ask_size = 7;
+
+  // 24h volume
+  double volume = 8;
+
+  // Volume-weighted average price
+  double vwap = 9;
+
+  // Optional: Orderbook snapshot
+  OrderBook orderbook = 10;
+
+  // Optional: Last trade
+  Trade last_trade = 11;
+}
+
+message OrderBook {
+  // Bid levels (sorted by price descending)
+  repeated OrderBookLevel bids = 1;
+
+  // Ask levels (sorted by price ascending)
+  repeated OrderBookLevel asks = 2;
+
+  // Timestamp (Unix milliseconds)
+  int64 timestamp = 3;
+}
+
+message OrderBookLevel {
+  // Price level
+  double price = 1;
+
+  // Size at this level
+  double size = 2;
+}
+
+message Trade {
+  // Trade ID
+  string id = 1;
+
+  // Trade price
+  double price = 2;
+
+  // Trade size
+  double size = 3;
+
+  // Side ("buy" or "sell")
+  string side = 4;
+
+  // Timestamp (Unix milliseconds)
+  int64 timestamp = 5;
+}
+
+// Normalized trade tick from any exchange
+message TradeTick {
+  // Timestamp in microseconds since epoch
+  int64 timestamp_us = 1;
+
+  // Trading pair (e.g., "BTC-USDT")
+  string symbol = 2;
+
+  // Exchange name (e.g., "binance", "bybit", "kucoin")
+  string exchange = 3;
+
+  // Trade side: "buy" or "sell"
+  string side = 4;
+
+  // Price as string to preserve precision
+  string price = 5;
+
+  // Amount/quantity as string to preserve precision
+  string amount = 6;
+
+  // Exchange-specific trade ID
+  string trade_id = 7;
+
+  // Latency from exchange timestamp to receipt (milliseconds)
+  int64 latency_ms = 8;
+}
+
+// ============================================================================
+// Market Metrics Messages
+// ============================================================================
+
+message GetMarketMetricsRequest {
+  // Metric types to retrieve (e.g., "fear_greed", "dvol_index", "volatility")
+  repeated string metric_types = 1;
+
+  // Asset filter (e.g., "BTC", "ETH", "GLOBAL")
+  string asset = 2;
+
+  // Start time (RFC3339 format or Unix timestamp)
+  string start_time = 3;
+
+  // End time (RFC3339 format or Unix timestamp)
+  string end_time = 4;
+
+  // Limit number of results
+  int32 limit = 5;
+}
+
+message GetMarketMetricsResponse {
+  // Metrics by type
+  map<string, MetricValue> metrics = 1;
+
+  // Timestamp of response
+  int64 timestamp = 2;
+
+  // Historical metrics (if time range requested)
+  repeated MarketMetric historical = 3;
+
+  // Total count
+  int32 count = 4;
+}
+
+message MetricValue {
+  // Numeric value
+  double value = 1;
+
+  // Human-readable label (e.g., "Extreme Fear", "High Volatility")
+  string label = 2;
+
+  // Additional metadata
+  map<string, string> metadata = 3;
+}
+
+message MarketMetric {
+  // Timestamp in microseconds since epoch
+  int64 timestamp_us = 1;
+
+  // Metric type (e.g., "fear_greed", "dvol_index", "etf_inflow")
+  string metric_type = 2;
+
+  // Asset symbol (e.g., "BTC", "ETH", "GLOBAL")
+  string asset = 3;
+
+  // Data source (e.g., "alternative_me", "deribit", "farside")
+  string source = 4;
+
+  // Numeric value
+  double value = 5;
+
+  // Optional metadata (JSON string)
+  string meta = 6;
+}
+
+// ============================================================================
+// Gap Analysis Messages
+// ============================================================================
+
+message GetGapsRequest {
+  // Symbol to analyze (e.g., "BTC-USDT")
+  string symbol = 1;
+
+  // Start time (RFC3339 format)
+  string start_time = 2;
+
+  // End time (RFC3339 format)
+  string end_time = 3;
+
+  // Minimum gap duration in milliseconds
+  int64 threshold_ms = 4;
+
+  // Optional: Exchange filter
+  string exchange = 5;
+}
+
+message GetGapsResponse {
+  // List of detected gaps
+  repeated Gap gaps = 1;
+
+  // Total number of gaps found
+  int32 total_gaps = 2;
+
+  // Total missing time in milliseconds
+  int64 total_missing_ms = 3;
+
+  // Query execution time in milliseconds
+  int64 query_time_ms = 4;
+}
+
+message Gap {
+  // Start of gap (RFC3339 or Unix timestamp)
+  string gap_start = 1;
+
+  // End of gap (RFC3339 or Unix timestamp)
+  string gap_end = 2;
+
+  // Duration in milliseconds
+  int64 duration_ms = 3;
+
+  // Symbol
+  string symbol = 4;
+
+  // Exchange
+  string exchange = 5;
+}
+
+// ============================================================================
+// Symbol Management Messages
+// ============================================================================
+
+message GetSymbolsRequest {
+  // Exchange filter (empty string = all exchanges)
+  string exchange = 1;
+}
+
+message GetSymbolsResponse {
+  // Available symbols
+  repeated string symbols = 1;
+}
+
+// ============================================================================
+// UMAP Service Messages
+// ============================================================================
+
+message TrainModelRequest {
+  // Model ID to assign
+  string model_id = 1;
+
+  // Historical vectors (flattened)
+  repeated double vectors = 2;
+
+  // Number of features per vector
+  int32 dimensions = 3;
+
+  // Number of output dimensions (2 or 3)
+  int32 output_dims = 4;
+
+  // Number of neighbors (UMAP hyperparameter)
+  int32 n_neighbors = 5;
+
+  // Minimum distance (UMAP hyperparameter)
+  double min_dist = 6;
+}
+
+message TrainModelResponse {
+  bool success = 1;
+  string model_id = 2;
+  string message = 3;
+  int64 training_time_ms = 4;
+}
+
+message ProjectRequest {
+  // Model ID to use
+  string model_id = 1;
+
+  // Vector to project
+  repeated double vector = 2;
+}
+
+message ProjectResponse {
+  bool success = 1;
+  double x = 2;
+  double y = 3;
+  double z = 4;
+  string message = 5;
+}
+
+message UmapCoordinate {
+  // Timestamp in microseconds since epoch
+  int64 timestamp_us = 1;
+
+  // Symbol this projection represents
+  string symbol = 2;
+
+  // Model ID used for projection
+  string model_id = 3;
+
+  // X coordinate
+  double x = 4;
+
+  // Y coordinate
+  double y = 5;
+
+  // Optional Z coordinate (for 3D)
+  double z = 6;
+
+  // Color hint (hex color code, e.g., "#FF5733")
+  string color = 7;
+}
+
+// HealthCheckRequest and HealthCheckResponse have been removed from this package.
+// Use fks.common.v1.HealthCheckRequest and fks.common.v1.HealthCheckResponse instead.
+// The common versions are field-for-field identical.
+
+// ============================================================================
+// WebSocket Streaming Messages (for WebSocket API)
+// ============================================================================
+
+message StreamMessage {
+  oneof payload {
+    TradeTick trade = 1;
+    MarketMetric metric = 2;
+    UmapCoordinate umap = 3;
+    Heartbeat heartbeat = 4;
+  }
+}
+
+message Heartbeat {
+  int64 timestamp_us = 1;
+  string status = 2; // "ok" or error message
+}
+
+message SubscribeRequest {
+  // Symbols to subscribe to (e.g., ["BTC-USDT", "ETH-USDT"])
+  repeated string symbols = 1;
+
+  // Message types to receive
+  repeated MessageType types = 2;
+
+  // Optional: Exchange filter
+  repeated string exchanges = 3;
+}
+
+message SubscribeResponse {
+  bool success = 1;
+  string message = 2;
+  int32 subscribed_count = 3;
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_TRADE = 1;
+  MESSAGE_TYPE_METRIC = 2;
+  MESSAGE_TYPE_UMAP = 3;
+}

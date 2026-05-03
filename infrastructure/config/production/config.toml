@@ -1,0 +1,360 @@
+# Production Environment Configuration for Data Service
+# This configuration is used for production deployment with high availability
+
+[service]
+name = "data-service"
+environment = "production"
+version = "1.0.0"
+log_level = "info"  # Production uses info level
+port = 8080
+health_check_port = 8081
+metrics_port = 9090
+
+[server]
+host = "0.0.0.0"
+port = 8080
+# Production timeouts are slightly more generous
+request_timeout_ms = 30000
+shutdown_timeout_ms = 30000
+# Higher capacity for production traffic
+max_connections = 1000
+max_concurrent_requests = 500
+# Graceful shutdown
+graceful_shutdown_timeout_ms = 45000
+
+[questdb]
+# Production QuestDB cluster
+host = "${QUESTDB_HOST}"
+ilp_port = 9009
+http_port = 9000
+# Production connection pool
+max_connections = 50
+connection_timeout_ms = 5000
+# Buffer settings optimized for production throughput
+buffer_size = 15000  # Increased from staging (10000)
+flush_interval_ms = 500  # Reduced from staging (1000ms) for lower latency
+# Verification settings
+verification_enabled = true
+verification_timeout_ms = 15000
+# Production table prefix
+table_prefix = "prod_"
+# Write retry settings
+max_write_retries = 3
+write_retry_delay_ms = 500
+
+[redis]
+# Production Redis Cluster
+# Format: "redis://node1:6379,redis://node2:6379,redis://node3:6379"
+cluster_urls = "${REDIS_CLUSTER_URLS}"
+# Fallback for single-node (not recommended for production)
+host = "${REDIS_HOST:-redis-prod.internal}"
+port = 6379
+# Production uses DB 0
+database = 0
+max_connections = 100
+connection_timeout_ms = 3000
+# Lock settings
+lock_ttl_seconds = 300
+lock_retry_attempts = 5
+lock_retry_delay_ms = 200
+# Deduplication settings
+dedup_ttl_seconds = 86400  # 24 hours
+# Redis Cluster specific
+cluster_enabled = true
+read_from_replicas = true
+
+[rate_limiter]
+# Production rate limits based on exchange API tiers
+enabled = true
+# Global rate limit (conservative for safety)
+requests_per_second = 200
+burst_size = 300
+
+# Per-exchange rate limits (production capacity)
+[rate_limiter.exchanges.binance]
+requests_per_second = 100
+burst_size = 150
+# Binance weight-based limiting
+enable_weight_limiting = true
+max_weight_per_minute = 1000
+
+[rate_limiter.exchanges.kraken]
+requests_per_second = 15
+burst_size = 20
+# Kraken tier-based limiting
+api_tier = "intermediate"
+
+[rate_limiter.exchanges.coinbase]
+requests_per_second = 30
+burst_size = 40
+
+[circuit_breaker]
+enabled = true
+# Production uses longer timeout for recovery
+failure_threshold = 5
+success_threshold = 2
+timeout_seconds = 120  # Increased from staging (60s)
+half_open_max_requests = 3
+# Circuit breaker metrics
+emit_metrics = true
+log_state_changes = true
+
+[backfill]
+# Backfill executor settings
+default_batch_size = 1000  # Larger batches for production
+max_concurrent_backfills = 5  # Higher concurrency
+max_retries = 3
+retry_delay_ms = 1000
+# Page size for exchange API pagination
+default_page_size = 1000
+max_page_size = 1000
+# Validation settings
+enable_validation = true
+max_allowed_gap_hours = 24
+# Priority queue for backfills
+enable_priority_queue = true
+# Automatic gap detection and backfill
+auto_backfill_gaps = true
+gap_detection_interval_seconds = 300
+
+[metrics]
+# Prometheus metrics configuration
+enabled = true
+port = 9090
+path = "/metrics"
+# Production collects comprehensive metrics
+collect_runtime_metrics = true
+collect_system_metrics = true
+# Histogram buckets for latency (milliseconds)
+latency_buckets = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+# Custom metrics
+enable_custom_metrics = true
+# Metrics sampling (100% in production for complete visibility)
+sample_rate = 1.0
+
+[logging]
+# Structured logging configuration
+format = "json"
+level = "info"  # Production uses info level
+# Correlation ID settings
+include_correlation_id = true
+correlation_id_header = "X-Correlation-ID"
+# Log sampling for high-volume endpoints (1% sampling)
+sample_rate = 1.0
+# Production logs to stdout for container orchestration
+outputs = ["stdout"]
+# Additional log destinations (optional)
+# syslog_address = "syslog.prod.internal:514"
+# file_path = "/var/log/data-service/production.log"
+# Sensitive data filtering
+filter_sensitive_data = true
+# Log rotation (if using file output)
+file_max_size_mb = 100
+file_max_age_days = 30
+file_max_backups = 10
+
+[observability]
+# Distributed tracing configuration
+tracing_enabled = true
+jaeger_endpoint = "${JAEGER_ENDPOINT:-http://jaeger-prod.internal:14268/api/traces}"
+trace_sample_rate = 0.1  # 10% sampling for production
+# Service name for tracing
+service_name = "data-service-prod"
+# Environment tag
+environment = "production"
+
+# Alerting configuration
+alerting_enabled = true
+alertmanager_url = "${ALERTMANAGER_URL:-http://alertmanager-prod.internal:9093}"
+
+[health_checks]
+enabled = true
+interval_seconds = 30
+# Production health checks are comprehensive
+check_questdb = true
+check_redis = true
+check_exchange_connectivity = true
+# Degraded state threshold
+max_consecutive_failures = 3
+# Health check timeout
+timeout_seconds = 10
+
+[deployment]
+# Deployment metadata
+deployed_by = "${DEPLOYED_BY:-ci-cd-pipeline}"
+deployment_strategy = "progressive-rollout"
+# Canary deployment settings
+canary_enabled = true
+canary_percentage = 10
+canary_duration_seconds = 172800  # 48 hours
+# Feature flags
+[deployment.features]
+enable_experimental_batching = false  # Disabled in production until proven
+enable_verification_alerts = true
+enable_chaos_testing_endpoints = false  # MUST BE FALSE IN PRODUCTION
+enable_auto_scaling = true
+enable_multi_region = false  # Future feature
+
+[chaos]
+# Chaos testing endpoints (DISABLED IN PRODUCTION)
+enabled = false
+endpoints_enabled = false
+# All chaos features disabled for production
+allow_circuit_breaker_trip = false
+allow_redis_failure_simulation = false
+allow_questdb_failure_simulation = false
+allow_rate_limit_simulation = false
+
+[exchanges]
+# Exchange API configurations (production uses real endpoints)
+
+[exchanges.binance]
+enabled = true
+# Production Binance API
+base_url = "https://api.binance.com"
+# Production API keys from secrets management
+api_key = "${BINANCE_PROD_API_KEY}"
+api_secret = "${BINANCE_PROD_API_SECRET}"
+timeout_ms = 10000
+max_retries = 3
+# Rate limiting
+requests_per_second = 100
+# Binance-specific settings
+use_testnet = false
+api_weight_limit = 1200
+
+[exchanges.kraken]
+enabled = true
+# Production Kraken API
+base_url = "https://api.kraken.com"
+api_key = "${KRAKEN_PROD_API_KEY}"
+api_secret = "${KRAKEN_PROD_API_SECRET}"
+timeout_ms = 15000
+max_retries = 3
+# Rate limiting
+requests_per_second = 15
+# Kraken-specific settings
+api_tier = "intermediate"
+
+[exchanges.coinbase]
+enabled = true
+# Production Coinbase API
+base_url = "https://api.exchange.coinbase.com"
+api_key = "${COINBASE_PROD_API_KEY}"
+api_secret = "${COINBASE_PROD_API_SECRET}"
+passphrase = "${COINBASE_PROD_PASSPHRASE}"
+timeout_ms = 10000
+max_retries = 3
+# Rate limiting
+requests_per_second = 30
+
+[testing]
+# Testing settings (all disabled in production)
+load_test_mode = false
+enable_synthetic_data = false
+synthetic_data_rate = 0.0
+
+[storage]
+# Data retention in production
+retention_days = 365  # 1 year retention
+# Archival settings
+archive_enabled = true
+archive_destination = "${ARCHIVE_S3_BUCKET:-s3://data-service-archive}"
+archive_after_days = 90
+# Compression
+enable_compression = true
+compression_algorithm = "zstd"
+
+[security]
+# Security settings
+tls_enabled = false
+tls_cert_path = "${TLS_CERT_PATH:-/etc/tls/cert.pem}"
+tls_key_path = "${TLS_KEY_PATH:-/etc/tls/key.pem}"
+# API authentication
+require_api_key = true
+api_keys = "${DATA_SERVICE_API_KEYS}"  # Comma-separated list from vault
+# CORS settings (restricted in production)
+cors_enabled = true
+cors_allowed_origins = ["${ALLOWED_ORIGINS:-https://dashboard.prod.internal}"]
+# Security headers
+enable_security_headers = true
+# Rate limiting for API endpoints
+api_rate_limit_enabled = true
+api_requests_per_minute = 1000
+
+[performance]
+# Performance tuning for production
+worker_threads = 8  # Match production VM CPUs
+blocking_threads = 16
+stack_size_kb = 2048
+# Memory limits (production has more memory than staging)
+max_memory_mb = 8192
+# Connection pooling
+connection_pool_size = 100
+# Batch processing
+batch_processing_enabled = true
+max_batch_size = 5000
+
+[auto_scaling]
+# Auto-scaling configuration (for cloud deployments)
+enabled = true
+min_instances = 3
+max_instances = 10
+# Scale up thresholds
+scale_up_cpu_threshold = 70
+scale_up_memory_threshold = 80
+scale_up_cooldown_seconds = 300
+# Scale down thresholds
+scale_down_cpu_threshold = 30
+scale_down_memory_threshold = 40
+scale_down_cooldown_seconds = 600
+
+[monitoring]
+# Additional monitoring settings
+enable_profiling = false  # Enable only for debugging
+profiling_port = 6060
+# APM integration
+apm_enabled = true
+apm_service_name = "data-service"
+apm_environment = "production"
+# Custom dashboards
+dashboard_refresh_interval_seconds = 30
+
+[disaster_recovery]
+# Disaster recovery settings
+enable_multi_region_replication = false  # Future feature
+backup_enabled = true
+backup_interval_hours = 6
+backup_retention_days = 30
+# Recovery point objective (RPO)
+target_rpo_minutes = 60
+# Recovery time objective (RTO)
+target_rto_minutes = 30
+
+[slo]
+# Service Level Objectives
+availability_target = 0.999  # 99.9% uptime
+latency_p99_target_ms = 1000
+error_rate_target = 0.001  # 0.1% error rate
+data_completeness_target = 0.995  # 99.5% completeness
+
+[alerts]
+# Alert thresholds (tuned for production)
+high_error_rate_threshold = 0.05  # 5%
+high_latency_p99_threshold_ms = 2000
+low_availability_threshold = 0.99
+buffer_capacity_threshold = 0.85  # 85%
+circuit_breaker_open_alert = true
+
+# Production-specific settings
+[production]
+# Environment identifiers
+region = "${AWS_REGION:-us-east-1}"
+availability_zone = "${AWS_AZ:-us-east-1a}"
+deployment_id = "${DEPLOYMENT_ID}"
+# Blue-green deployment
+blue_green_enabled = true
+active_slot = "${ACTIVE_SLOT:-blue}"
+# Canary analysis
+canary_analysis_enabled = true
+canary_success_rate_threshold = 0.99

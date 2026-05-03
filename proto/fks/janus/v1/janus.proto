@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package fks.janus.v1;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/janus/v1;janusv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.janus.v1";
+
+// Forward Service (Wake State) - Real-time trading engine
+service ForwardService {
+  // Start trading on a symbol
+  rpc Start(StartRequest) returns (StartResponse);
+
+  // Stop trading
+  rpc Stop(StopRequest) returns (StopResponse);
+
+  // Get current status
+  rpc Status(StatusRequest) returns (StatusResponse);
+
+  // Update configuration
+  rpc UpdateConfig(UpdateConfigRequest) returns (UpdateConfigResponse);
+}
+
+// Backward Service (Sleep State) - Memory consolidation
+service BackwardService {
+  // Trigger memory consolidation
+  rpc Consolidate(ConsolidateRequest) returns (ConsolidateResponse);
+
+  // Get memory statistics
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+
+  // Query similar market regimes
+  rpc QueryRegimes(QueryRegimesRequest) returns (QueryRegimesResponse);
+}
+
+// ============================================================================
+// Forward Service Messages
+// ============================================================================
+
+message StartRequest {
+  string symbol = 1;
+  double risk_factor = 2;
+  map<string, string> config = 3;
+}
+
+message StartResponse {
+  string engine_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+message StopRequest {
+  string engine_id = 1;
+}
+
+message StopResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message StatusRequest {
+  string engine_id = 1;
+}
+
+message StatusResponse {
+  string engine_id = 1;
+  bool is_running = 2;
+  string symbol = 3;
+  int64 ticks_processed = 4;
+  int64 orders_submitted = 5;
+  double pnl = 6;
+}
+
+message UpdateConfigRequest {
+  string engine_id = 1;
+  map<string, string> config = 2;
+}
+
+message UpdateConfigResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================================================
+// Backward Service Messages
+// ============================================================================
+
+message ConsolidateRequest {
+  int32 batch_size = 1;
+}
+
+message ConsolidateResponse {
+  bool success = 1;
+  int32 experiences_processed = 2;
+  string message = 3;
+}
+
+message GetStatsRequest {}
+
+message GetStatsResponse {
+  int64 total_experiences = 1;
+  int64 total_regimes = 2;
+  double memory_usage_mb = 3;
+}
+
+message QueryRegimesRequest {
+  repeated double query_vector = 1;
+  int32 limit = 2;
+}
+
+message QueryRegimesResponse {
+  repeated MarketRegime regimes = 1;
+}
+
+message MarketRegime {
+  string id = 1;
+  string name = 2;
+  repeated double features = 3;
+  double volatility = 4;
+  double trend = 5;
+}

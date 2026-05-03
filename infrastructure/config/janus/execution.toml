@@ -1,0 +1,46 @@
+# fks/infrastructure/config/execution.toml (Full Paper Trading Config)
+[service]
+name = "fks-execution"
+version = "0.1.0"
+
+[grpc]
+host = "0.0.0.0"
+port = 50052
+
+[http]
+host = "0.0.0.0"
+port = 8081
+
+[execution]
+mode = "paper_trading"  # paper_trading | simulated | live
+
+[redis]
+# NOTE: Override with REDIS_URL environment variable in production
+# The compose file sets REDIS_URL with the correct password from .env
+url = "redis://redis:6379"
+
+[questdb]
+host = "questdb"
+ilp_port = 9009  # Line protocol for orders
+
+[risk]
+max_position_size_usd = 10000
+max_portfolio_exposure_usd = 50000
+max_open_positions = 10
+max_daily_loss_usd = 1000
+max_position_hold_hours = 24
+
+[simulation]
+initial_balance = 100000
+slippage_bps = 5
+fee_bps = 10
+fill_delay_ms = 200
+enable_slippage = true
+
+[exchanges.bybit]
+enabled = false  # Paper sim only
+testnet = true
+
+[exchanges.binance]
+enabled = false
+testnet = true

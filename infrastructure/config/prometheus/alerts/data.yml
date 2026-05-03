@@ -1,0 +1,389 @@
+groups:
+  - name: data_factory_critical
+    interval: 30s
+    rules:
+      - alert: DataCompletenessLow
+        expr: data_completeness_percent < 99.9
+        # Extended from 5m → 1h: this metric starts at 0 on every Janus
+        # restart and rises as the backward module persists signal data.
+        # A 5m window fires immediately on every restart; 1h gives the
+        # system time to accumulate historical data before alerting.
+        for: 1h
+        labels:
+          severity: critical
+          component: data-factory
+          slo: completeness
+        annotations:
+          summary: "Data completeness below SLO threshold"
+          description: "Data completeness is {{ $value | humanizePercentage }} (threshold: 99.9%). This indicates potential data loss or gaps in market data coverage."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-slo-error-budget"
+
+      - alert: IngestionLatencyHigh
+        expr: histogram_quantile(0.99, rate(ingestion_latency_ms_bucket[5m])) > 1000
+        for: 5m
+        labels:
+          severity: critical
+          component: data-factory
+          slo: latency
+        annotations:
+          summary: "Ingestion latency P99 exceeds SLO"
+          description: "P99 ingestion latency is {{ $value | humanizeDuration }} (threshold: 1000ms). Market data may be stale."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-latency-high.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-slo-error-budget"
+
+      - alert: CircuitBreakerOpen
+        expr: circuit_breaker_state == 1
+        for: 1m
+        labels:
+          severity: critical
+          component: rate-limiter
+        annotations:
+          summary: "Circuit breaker is OPEN - traffic blocked"
+          description: "The circuit breaker has opened due to repeated failures. All requests are being rejected to prevent cascading failures."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/circuit-breaker-open.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-rate-limiter"
+
+      - alert: DiskUsageHigh
+        expr: questdb_disk_usage_percent > 80
+        for: 5m
+        labels:
+          severity: critical
+          component: questdb
+        annotations:
+          summary: "QuestDB disk usage critically high"
+          description: "QuestDB disk usage is {{ $value | humanizePercentage }} (threshold: 80%). Database writes may fail soon."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/disk-usage-high.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
+
+      # Host disk space alert — fired 2026-03-26 when Docker build cache
+      # filled the 3.6TB NVMe to 100%, crashing Postgres and Prometheus WAL.
+      # Run `docker builder prune -f` and `docker image prune -a` to recover.
+      - alert: HostDiskSpaceCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 5
+        for: 2m
+        labels:
+          severity: critical
+          component: host
+        annotations:
+          summary: "Host root filesystem below 5% free"
+          description: "Root filesystem has {{ $value | humanize }}% space remaining. Run `docker builder prune -f && docker image prune -a` to recover Docker build cache space."
+
+      - alert: HostDiskSpaceWarning
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 10m
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: "Host root filesystem below 15% free"
+          description: "Root filesystem has {{ $value | humanize }}% space remaining. Consider pruning Docker build cache."
+
+      - alert: AllExchangesDown
+        expr: sum(websocket_connected) == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: data-factory
+        annotations:
+          summary: "All exchange WebSocket connections down"
+          description: "No active WebSocket connections to any exchange. Market data ingestion has stopped completely."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/all-exchanges-down.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
+
+  - name: data_factory_warning
+    interval: 30s
+    rules:
+      - alert: DataCompletenessWarning
+        expr: data_completeness_percent < 99.95 and data_completeness_percent >= 99.9
+        for: 10m
+        labels:
+          severity: warning
+          component: data-factory
+          slo: completeness
+        annotations:
+          summary: "Data completeness approaching SLO threshold"
+          description: "Data completeness is {{ $value | humanizePercentage }} (warning: <99.95%). Investigate potential gaps."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
+
+      - alert: HighRateLimitRejectionRate
+        expr: 100 * rate(rate_limiter_rejected_requests[5m]) / rate(rate_limiter_total_requests[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: rate-limiter
+        annotations:
+          summary: "High rate of rate-limited requests"
+          description: "{{ $value | humanizePercentage }} of requests are being rate-limited (threshold: 10%). Consider adjusting limits or investigating traffic patterns."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-rate-limit-rejection.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-rate-limiter"
+
+      - alert: GapDetectionAccuracyLow
+        expr: gap_detection_accuracy_percent < 99.0
+        for: 10m
+        labels:
+          severity: warning
+          component: gap-detection
+        annotations:
+          summary: "Gap detection accuracy below expected threshold"
+          description: "Gap detection accuracy is {{ $value | humanizePercentage }} (expected: >99%). High false positive rate detected."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/gap-detection-accuracy-low.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-gap-detection"
+
+      - alert: ActiveGapsHigh
+        expr: gap_detection_active_gaps > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: gap-detection
+        annotations:
+          summary: "High number of active data gaps"
+          description: "{{ $value }} active gaps detected (threshold: 10). Data may be incomplete or backfill is struggling to keep up."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/active-gaps-high.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-gap-detection"
+
+      - alert: ExchangeDisconnected
+        expr: websocket_connected == 0
+        for: 3m
+        labels:
+          severity: warning
+          component: data-factory
+        annotations:
+          summary: "Exchange WebSocket disconnected"
+          description: "WebSocket connection to {{ $labels.exchange }} has been down for >3 minutes."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/exchange-disconnected.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
+
+      - alert: DiskUsageWarning
+        expr: questdb_disk_usage_percent > 70 and questdb_disk_usage_percent <= 80
+        for: 10m
+        labels:
+          severity: warning
+          component: questdb
+        annotations:
+          summary: "QuestDB disk usage elevated"
+          description: "QuestDB disk usage is {{ $value | humanizePercentage }} (warning: >70%). Plan for cleanup or expansion."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/disk-usage-high.md"
+
+      - alert: HighBackfillQueueSize
+        expr: backfill_queue_size > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: backfill
+        annotations:
+          summary: "Backfill queue size is high"
+          description: "Backfill queue has {{ $value }} pending requests (threshold: 100). Backfill processing may be lagging."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-backfill-queue.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
+
+      - alert: QuestDBWriteErrors
+        expr: rate(questdb_write_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: questdb
+        annotations:
+          summary: "QuestDB experiencing write errors"
+          description: "QuestDB write error rate is {{ $value }} errors/sec. Check database health and disk space."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/questdb-write-errors.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
+
+  - name: data_factory_info
+    interval: 1m
+    rules:
+      - alert: CircuitBreakerHalfOpen
+        expr: circuit_breaker_state == 2
+        for: 30s
+        labels:
+          severity: info
+          component: rate-limiter
+        annotations:
+          summary: "Circuit breaker is HALF-OPEN - testing recovery"
+          description: "The circuit breaker is in half-open state, allowing test traffic to check if the issue has resolved."
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-rate-limiter"
+
+      - alert: DataFactoryRestarted
+        expr: changes(up{job="data-factory"}[5m]) > 0
+        for: 30s
+        labels:
+          severity: info
+          component: data-factory
+        annotations:
+          summary: "Data Factory service restarted"
+          description: "The Data Factory service has restarted. Monitor for any issues during recovery."
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
+
+      - alert: HighWebSocketReconnectionRate
+        expr: rate(websocket_reconnections_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: info
+          component: data-factory
+        annotations:
+          summary: "Elevated WebSocket reconnection rate"
+          description: "WebSocket connections to {{ $labels.exchange }} are reconnecting frequently ({{ $value }} reconnections/sec). Network instability possible."
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
+
+  - name: backfill_orchestration
+    interval: 30s
+    rules:
+      - alert: BackfillQueueSizeHigh
+        expr: backfill_queue_size > 100
+        for: 10m
+        labels:
+          severity: warning
+          component: backfill
+        annotations:
+          summary: "Backfill queue size is elevated"
+          description: "Backfill queue has {{ $value }} pending requests (threshold: 100). Processing may be lagging behind gap detection."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-backfill-queue.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+
+      - alert: BackfillQueueSizeCritical
+        expr: backfill_queue_size > 500
+        for: 5m
+        labels:
+          severity: critical
+          component: backfill
+        annotations:
+          summary: "Backfill queue size critically high"
+          description: "Backfill queue has {{ $value }} pending requests (threshold: 500). System may be unable to keep up with gap detection."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-backfill-queue.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+
+      - alert: BackfillFailureRateHigh
+        expr: 100 * (rate(backfills_completed_total{status="failed"}[10m]) / rate(backfills_completed_total[10m])) > 20
+        for: 10m
+        labels:
+          severity: warning
+          component: backfill
+        annotations:
+          summary: "High backfill failure rate"
+          description: "{{ $value | humanizePercentage }} of backfills are failing (threshold: 20%). Check logs for errors."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/backfill-failures.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+
+      - alert: BackfillMaxRetriesExceeded
+        expr: rate(backfill_max_retries_exceeded_total[10m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: backfill
+        annotations:
+          summary: "Backfills exceeding max retries"
+          description: "{{ $value }} backfills/sec are exceeding max retry attempts for {{ $labels.exchange }}/{{ $labels.symbol }}. Persistent failures detected."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/backfill-max-retries.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+
+      - alert: BackfillDurationHigh
+        expr: histogram_quantile(0.95, rate(backfill_duration_seconds_bucket[10m])) > 300
+        for: 10m
+        labels:
+          severity: warning
+          component: backfill
+        annotations:
+          summary: "Backfill duration p95 elevated"
+          description: "p95 backfill duration is {{ $value | humanizeDuration }} (threshold: 5m). Backfills taking longer than expected."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/slow-backfills.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+
+      - alert: BackfillThrottleRejectionHigh
+        expr: rate(backfill_throttle_rejections_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: info
+          component: backfill
+        annotations:
+          summary: "High backfill throttle rejection rate"
+          description: "{{ $value }} backfills/sec are being throttled due to {{ $labels.reason }}. Resources may be constrained."
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+
+      - alert: BackfillLockContentionHigh
+        expr: 100 * (rate(backfill_lock_failed_total[5m]) / rate(backfill_lock_acquired_total[5m])) > 30
+        for: 10m
+        labels:
+          severity: warning
+          component: backfill
+        annotations:
+          summary: "High backfill lock contention"
+          description: "{{ $value | humanizePercentage }} of lock attempts are failing (threshold: 30%). Multiple instances may be competing for same gaps."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/lock-contention.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+
+  - name: performance_slo
+    interval: 30s
+    rules:
+      - alert: IngestionLatencyP95High
+        expr: histogram_quantile(0.95, rate(ingestion_latency_ms_bucket[5m])) > 800
+        for: 10m
+        labels:
+          severity: warning
+          component: data-factory
+          slo: latency
+        annotations:
+          summary: "Ingestion latency p95 elevated"
+          description: "p95 ingestion latency is {{ $value }}ms (warning: >800ms). Performance degradation detected."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-latency-high.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
+
+      - alert: IngestionThroughputLow
+        expr: sum(rate(trades_ingested_total[5m])) < 50
+        for: 10m
+        labels:
+          severity: warning
+          component: data-factory
+        annotations:
+          summary: "Trade ingestion throughput is low"
+          description: "Only {{ $value }} trades/sec are being ingested (expected: >50). Market data ingestion may be impaired."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/low-throughput.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
+
+      - alert: QuestDBWriteLatencyHigh
+        expr: histogram_quantile(0.95, rate(questdb_write_latency_seconds_bucket[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          component: questdb
+        annotations:
+          summary: "QuestDB write latency elevated"
+          description: "p95 QuestDB write latency is {{ $value | humanizeDuration }} (threshold: 1s). Database may be slow."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/questdb-slow-writes.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
+
+      - alert: QuestDBWriteErrorRateHigh
+        expr: 100 * (rate(questdb_write_errors_total[5m]) / rate(questdb_writes_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: critical
+          component: questdb
+        annotations:
+          summary: "QuestDB write error rate critically high"
+          description: "{{ $value | humanizePercentage }} of QuestDB writes are failing (threshold: 1%). Data loss possible."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/questdb-write-errors.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
+
+      - alert: GapDetectionRateAnomaly
+        expr: abs(rate(gaps_detected_total[10m]) - rate(gaps_detected_total[10m] offset 1h)) > 5
+        for: 15m
+        labels:
+          severity: info
+          component: gap-detection
+        annotations:
+          summary: "Gap detection rate anomaly"
+          description: "Gap detection rate has changed significantly compared to 1h ago. Current: {{ $value }} gaps/sec."
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-gap-detection"
+
+      - alert: DedupSetSizeHigh
+        expr: backfill_dedup_set_size > 10000
+        for: 10m
+        labels:
+          severity: warning
+          component: backfill
+        annotations:
+          summary: "Deduplication set size is large"
+          description: "Dedup set contains {{ $value }} entries (threshold: 10000). Memory usage may be elevated. Consider implementing TTL cleanup."
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/dedup-set-cleanup.md"
+          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"

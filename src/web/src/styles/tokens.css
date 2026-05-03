@@ -1,0 +1,78 @@
+:root {
+  /* ── Backgrounds — layered darks ─────────────────────── */
+  --bg0: #07070d;   /* page / chart canvas */
+  --bg1: #0c0c14;   /* panels, strip, tabbar */
+  --bg2: #11111c;   /* inner cells, inputs */
+  --bg3: #16162a;   /* hover, active states */
+  --bg4: #1c1c30;   /* selection highlight */
+
+  /* ── Borders ─────────────────────────────────────────── */
+  --b1: #1a1a2e;    /* structural dividers */
+  --b2: #22223a;    /* card / panel borders */
+  --b3: #2a2a48;    /* focused / hover borders */
+
+  /* ── Text ────────────────────────────────────────────── */
+  --t1: #dde0f5;    /* primary */
+  --t2: #8890b8;    /* secondary / muted */
+  --t3: #454870;    /* dimmed / label */
+
+  /* ── Brand ───────────────────────────────────────────── */
+  --accent:      #5b6ef5;
+  --accent-dim:  rgba(91, 110, 245, .12);
+  --accent-brd:  rgba(91, 110, 245, .30);
+  --accent-glow: rgba(91, 110, 245, .18);
+
+  /* ── Semantic colours ────────────────────────────────── */
+  --green:  #16c784;
+  --red:    #ea3943;
+  --amber:  #f0a500;
+  --cyan:   #00d4e8;
+  --purple: #9b8cff;
+  --teal:   #2dd4bf;
+  --blue:   #3b82f6;
+
+  /* ── Semantic dims (fills & borders) ─────────────────── */
+  --green-dim:  rgba(22, 199, 132, .10);
+  --green-brd:  rgba(22, 199, 132, .25);
+  --red-dim:    rgba(234,  57,  67, .10);
+  --red-brd:    rgba(234,  57,  67, .25);
+  --amber-dim:  rgba(240, 165,   0, .10);
+  --amber-brd:  rgba(240, 165,   0, .25);
+  --cyan-dim:   rgba(  0, 212, 232, .10);
+  --cyan-brd:   rgba(  0, 212, 232, .25);
+  --purple-dim: rgba(155, 140, 255, .10);
+  --purple-brd: rgba(155, 140, 255, .25);
+
+  /* ── Layout heights ──────────────────────────────────── */
+  --strip-h:  48px;
+  --tabbar-h: 34px;
+  --status-h: 24px;
+
+  /* ── Radii ───────────────────────────────────────────── */
+  --r:    3px;
+  --r-md: 5px;
+
+  /* ── Monospace everywhere — this is a terminal ───────── */
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--t1);
+  background: var(--bg0);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--b2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--b3); }

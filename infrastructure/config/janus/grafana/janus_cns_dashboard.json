@@ -1,0 +1,870 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "janus-cns",
+    "title": "JANUS Central Nervous System (CNS) Health",
+    "tags": ["janus", "cns", "health", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {
+      "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]
+    },
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "templating": {
+      "list": []
+    },
+    "panels": [
+      {
+        "id": 1,
+        "type": "stat",
+        "title": "System Status",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "janus_cns_system_status",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "graphMode": "none",
+          "colorMode": "background",
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "STARTING",
+                    "color": "blue"
+                  },
+                  "1": {
+                    "text": "HEALTHY",
+                    "color": "green"
+                  },
+                  "2": {
+                    "text": "DEGRADED",
+                    "color": "yellow"
+                  },
+                  "3": {
+                    "text": "CRITICAL",
+                    "color": "red"
+                  },
+                  "4": {
+                    "text": "SHUTDOWN",
+                    "color": "dark-red"
+                  }
+                }
+              }
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 2,
+                  "color": "yellow"
+                },
+                {
+                  "value": 3,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "type": "gauge",
+        "title": "System Health Score",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "janus_cns_system_health_score",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "red"
+                },
+                {
+                  "value": 0.5,
+                  "color": "yellow"
+                },
+                {
+                  "value": 0.8,
+                  "color": "green"
+                }
+              ]
+            },
+            "unit": "percentunit"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "System Uptime",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "janus_cns_system_uptime_seconds",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Active Tasks",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "targets": [
+          {
+            "expr": "janus_resources_active_tasks",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "type": "row",
+        "title": "Component Health",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 4
+        },
+        "collapsed": false
+      },
+      {
+        "id": 11,
+        "type": "stat",
+        "title": "Component Health Status",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 5
+        },
+        "targets": [
+          {
+            "expr": "janus_cns_component_health",
+            "refId": "A",
+            "legendFormat": "{{component}}"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "value": null,
+                  "color": "red"
+                },
+                {
+                  "value": 0.25,
+                  "color": "orange"
+                },
+                {
+                  "value": 0.5,
+                  "color": "yellow"
+                },
+                {
+                  "value": 1,
+                  "color": "green"
+                }
+              ]
+            },
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "DOWN"
+                  },
+                  "0.25": {
+                    "text": "UNKNOWN"
+                  },
+                  "0.5": {
+                    "text": "DEGRADED"
+                  },
+                  "1": {
+                    "text": "UP"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": 12,
+        "type": "timeseries",
+        "title": "Component Health Over Time",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 13
+        },
+        "targets": [
+          {
+            "expr": "janus_cns_component_health",
+            "refId": "A",
+            "legendFormat": "{{component}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "drawStyle": "line",
+              "lineInterpolation": "smooth",
+              "fillOpacity": 10
+            },
+            "min": 0,
+            "max": 1
+          },
+          "overrides": []
+        }
+      },
+      {
+        "id": 20,
+        "type": "row",
+        "title": "Services Performance",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 21
+        },
+        "collapsed": false
+      },
+      {
+        "id": 21,
+        "type": "timeseries",
+        "title": "Component Response Times",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 22
+        },
+        "targets": [
+          {
+            "expr": "janus_cns_component_response_time_ms",
+            "refId": "A",
+            "legendFormat": "{{component}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "fillOpacity": 10
+            }
+          }
+        }
+      },
+      {
+        "id": 22,
+        "type": "timeseries",
+        "title": "Probe Execution Rate",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 22
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_cns_component_probe_total[1m])",
+            "refId": "A",
+            "legendFormat": "{{component}} - {{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 30,
+        "type": "row",
+        "title": "Forward Service (Wake State)",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 30
+        },
+        "collapsed": false
+      },
+      {
+        "id": 31,
+        "type": "stat",
+        "title": "Active Trading Engines",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 31
+        },
+        "targets": [
+          {
+            "expr": "janus_forward_active_engines",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            }
+          }
+        }
+      },
+      {
+        "id": 32,
+        "type": "stat",
+        "title": "Orders Submitted",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 31
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_forward_orders_submitted_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 33,
+        "type": "stat",
+        "title": "Orders Filled",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 31
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_forward_orders_filled_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 34,
+        "type": "stat",
+        "title": "Orders Rejected",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 31
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_forward_orders_rejected_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {
+                  "value": null,
+                  "color": "green"
+                },
+                {
+                  "value": 1,
+                  "color": "red"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 40,
+        "type": "row",
+        "title": "Backward Service (Sleep State)",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 35
+        },
+        "collapsed": false
+      },
+      {
+        "id": 41,
+        "type": "stat",
+        "title": "Training Iterations",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 0,
+          "y": 36
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_backward_training_iterations_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 42,
+        "type": "stat",
+        "title": "Memory Consolidations",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 8,
+          "y": 36
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_backward_memory_consolidations_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 43,
+        "type": "stat",
+        "title": "Regime Updates",
+        "gridPos": {
+          "h": 4,
+          "w": 8,
+          "x": 16,
+          "y": 36
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_backward_regime_updates_total[5m])",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 50,
+        "type": "row",
+        "title": "Dependencies",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 40
+        },
+        "collapsed": false
+      },
+      {
+        "id": 51,
+        "type": "timeseries",
+        "title": "Redis Command Rate",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 0,
+          "y": 41
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_redis_commands_total[1m])",
+            "refId": "A",
+            "legendFormat": "{{command}} - {{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 52,
+        "type": "timeseries",
+        "title": "Redis Command Duration",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 41
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(janus_redis_command_duration_seconds_bucket[1m]))",
+            "refId": "A",
+            "legendFormat": "{{command}} p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(janus_redis_command_duration_seconds_bucket[1m]))",
+            "refId": "B",
+            "legendFormat": "{{command}} p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 53,
+        "type": "stat",
+        "title": "Qdrant Vectors Stored",
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 0,
+          "y": 47
+        },
+        "targets": [
+          {
+            "expr": "janus_qdrant_vectors_stored",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 54,
+        "type": "timeseries",
+        "title": "Qdrant Search Performance",
+        "gridPos": {
+          "h": 6,
+          "w": 18,
+          "x": 6,
+          "y": 47
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_qdrant_search_requests_total[1m])",
+            "refId": "A",
+            "legendFormat": "Search Rate"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(janus_qdrant_search_duration_seconds_bucket[1m]))",
+            "refId": "B",
+            "legendFormat": "Search Duration p95"
+          }
+        ]
+      },
+      {
+        "id": 60,
+        "type": "row",
+        "title": "Circuit Breakers",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 53
+        },
+        "collapsed": false
+      },
+      {
+        "id": 61,
+        "type": "stat",
+        "title": "Circuit Breaker States",
+        "gridPos": {
+          "h": 6,
+          "w": 16,
+          "x": 0,
+          "y": 54
+        },
+        "targets": [
+          {
+            "expr": "janus_circuit_breaker_state",
+            "refId": "A",
+            "legendFormat": "{{component}}"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "textMode": "value_and_name",
+          "colorMode": "background"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "CLOSED",
+                    "color": "green"
+                  },
+                  "1": {
+                    "text": "OPEN",
+                    "color": "red"
+                  },
+                  "2": {
+                    "text": "HALF-OPEN",
+                    "color": "yellow"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": 62,
+        "type": "timeseries",
+        "title": "Circuit Breaker Trips",
+        "gridPos": {
+          "h": 6,
+          "w": 8,
+          "x": 16,
+          "y": 54
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_circuit_breaker_trips_total[5m])",
+            "refId": "A",
+            "legendFormat": "{{component}} - {{reason}}"
+          }
+        ]
+      },
+      {
+        "id": 70,
+        "type": "row",
+        "title": "Communication Channels",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 60
+        },
+        "collapsed": false
+      },
+      {
+        "id": 71,
+        "type": "timeseries",
+        "title": "Shared Memory Messages",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 0,
+          "y": 61
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_shm_messages_sent_total[1m])",
+            "refId": "A",
+            "legendFormat": "Sent"
+          },
+          {
+            "expr": "rate(janus_shm_messages_received_total[1m])",
+            "refId": "B",
+            "legendFormat": "Received"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "msgps"
+          }
+        }
+      },
+      {
+        "id": 72,
+        "type": "timeseries",
+        "title": "gRPC Request Rate",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 61
+        },
+        "targets": [
+          {
+            "expr": "rate(janus_grpc_requests_total[1m])",
+            "refId": "A",
+            "legendFormat": "{{service}}.{{method}} - {{status}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 80,
+        "type": "row",
+        "title": "Resource Utilization",
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 67
+        },
+        "collapsed": false
+      },
+      {
+        "id": 81,
+        "type": "timeseries",
+        "title": "Memory Usage",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 0,
+          "y": 68
+        },
+        "targets": [
+          {
+            "expr": "janus_resources_memory_usage_bytes",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 82,
+        "type": "timeseries",
+        "title": "CPU Usage",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 12,
+          "y": 68
+        },
+        "targets": [
+          {
+            "expr": "janus_resources_cpu_usage_percent",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        }
+      }
+    ]
+  }
+}

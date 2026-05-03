@@ -1,0 +1,124 @@
+# ============================================================================
+# Strategy Affinity Configuration
+# ============================================================================
+#
+# Defines which strategies are enabled/disabled per asset and which are
+# preferred for each market regime. This file is loaded at startup by the
+# StrategyGatingConfig deserializer.
+#
+# Regime keys:
+#   TrendFollowing  — MarketRegime::Trending (bullish or bearish)
+#   MeanReverting   — MarketRegime::MeanReverting
+#   Volatile        — MarketRegime::Volatile
+#   Uncertain       — MarketRegime::Uncertain
+#
+# Available strategies (from janus-strategies crate):
+#   EMAFlip, EmaRibbonScalper, TrendPullback, MomentumSurge,
+#   MultiTfTrend, MeanReversion, BollingerSqueeze, VWAPScalper,
+#   OpeningRange
+#
+# ============================================================================
+
+# Global settings
+min_weight      = 0.30
+allow_untested  = true
+
+# ============================================================================
+# BTCUSD — Bitcoin
+# ============================================================================
+
+[assets.BTCUSD]
+enabled_strategies  = [
+    "EMAFlip",
+    "TrendPullback",
+    "MomentumSurge",
+    "MultiTfTrend",
+    "BollingerSqueeze",
+    "MeanReversion",
+]
+disabled_strategies = []
+
+[assets.BTCUSD.preferred_regime_strategies]
+TrendFollowing = ["EMAFlip", "TrendPullback", "MomentumSurge", "MultiTfTrend"]
+MeanReverting  = ["BollingerSqueeze", "MeanReversion"]
+Volatile       = []      # empty = all enabled strategies allowed
+Uncertain      = []
+
+# ============================================================================
+# ETHUSD — Ethereum
+# ============================================================================
+
+[assets.ETHUSD]
+enabled_strategies  = [
+    "EMAFlip",
+    "EmaRibbonScalper",
+    "MeanReversion",
+    "VWAPScalper",
+    "MultiTfTrend",
+    "BollingerSqueeze",
+]
+disabled_strategies = ["MomentumSurge"]  # too choppy on ETH
+
+[assets.ETHUSD.preferred_regime_strategies]
+TrendFollowing = ["EMAFlip", "EmaRibbonScalper", "MultiTfTrend"]
+MeanReverting  = ["MeanReversion", "VWAPScalper", "BollingerSqueeze"]
+Volatile       = []
+Uncertain      = []
+
+# ============================================================================
+# SOLUSD — Solana
+# ============================================================================
+
+[assets.SOLUSD]
+enabled_strategies  = [
+    "EMAFlip",
+    "MomentumSurge",
+    "TrendPullback",
+    "OpeningRange",
+    "BollingerSqueeze",
+]
+disabled_strategies = ["MultiTfTrend"]  # insufficient HTF data on SOL
+
+[assets.SOLUSD.preferred_regime_strategies]
+TrendFollowing = ["EMAFlip", "MomentumSurge", "TrendPullback"]
+MeanReverting  = ["BollingerSqueeze", "OpeningRange"]
+Volatile       = ["MomentumSurge"]     # SOL momentum plays in vol
+Uncertain      = []
+
+# ============================================================================
+# XRPUSD — Ripple
+# ============================================================================
+
+[assets.XRPUSD]
+enabled_strategies  = [
+    "EMAFlip",
+    "MeanReversion",
+    "VWAPScalper",
+    "BollingerSqueeze",
+]
+disabled_strategies = ["MomentumSurge", "MultiTfTrend"]
+
+[assets.XRPUSD.preferred_regime_strategies]
+TrendFollowing = ["EMAFlip"]
+MeanReverting  = ["MeanReversion", "VWAPScalper", "BollingerSqueeze"]
+Volatile       = []
+Uncertain      = []
+
+# ============================================================================
+# DOGEUSD — Dogecoin
+# ============================================================================
+
+[assets.DOGEUSD]
+enabled_strategies  = [
+    "EMAFlip",
+    "MomentumSurge",
+    "OpeningRange",
+    "BollingerSqueeze",
+]
+disabled_strategies = ["MultiTfTrend", "EmaRibbonScalper"]
+
+[assets.DOGEUSD.preferred_regime_strategies]
+TrendFollowing = ["EMAFlip", "MomentumSurge"]
+MeanReverting  = ["BollingerSqueeze", "OpeningRange"]
+Volatile       = ["MomentumSurge"]
+Uncertain      = []

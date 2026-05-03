@@ -1,0 +1,253 @@
+// ============================================================================
+// FKS JANUS Regime Bridge Protocol Buffer Definitions
+// ============================================================================
+// Centralized wire format for neuromorphic regime state distribution.
+//
+// This proto was migrated from the forward service's local proto directory
+// (src/janus/services/forward/proto/janus/v1/regime_bridge.proto) into the
+// canonical fks-proto crate as part of STRUCT-C centralization.
+//
+// The forward service now imports these types via fks_proto::janus::regime_bridge.
+//
+// Package:  fks.janus.v1.bridge
+// Crate:    fks-proto  (src/proto)
+// Module:   fks_proto::janus::regime_bridge
+// ============================================================================
+
+syntax = "proto3";
+
+package fks.janus.v1.bridge;
+
+option go_package = "github.com/nuniesmith/fks/proto/fks/janus/v1;janusv1";
+option java_multiple_files = true;
+option java_package = "xyz.fkstrading.proto.janus.v1";
+
+// RegimeBridgeService — gRPC interface for neuromorphic consumers to receive
+// regime state updates from the JANUS forward service.
+//
+// Two consumption patterns are supported:
+//
+// 1. **Push (client → server):** The `regime-bridge-consumer` binary reads
+//    from the Redis stream and pushes each state to a remote neuromorphic
+//    service via `PushRegimeState`. The neuromorphic service implements the
+//    server side of this RPC.
+//
+// 2. **Stream (server → client):** A neuromorphic consumer connects directly
+//    to the forward service and calls `StreamRegimeUpdates` to receive a
+//    continuous stream of regime state changes. No Redis required.
+//
+// Both patterns deliver the same `RegimeState` payload.
+service RegimeBridgeService {
+  // Push a single regime state update to a neuromorphic consumer.
+  //
+  // Used by the `regime-bridge-consumer` binary (gRPC client) to forward
+  // states read from the Redis stream to a remote neuromorphic service
+  // (gRPC server).
+  rpc PushRegimeState(PushRegimeStateRequest) returns (PushRegimeStateResponse);
+
+  // Push a batch of regime state updates in a single call.
+  //
+  // More efficient than individual PushRegimeState calls when the consumer
+  // has accumulated multiple states (e.g. after a lag recovery).
+  rpc PushRegimeStateBatch(PushRegimeStateBatchRequest) returns (PushRegimeStateBatchResponse);
+
+  // Stream regime state updates from the forward service.
+  //
+  // The client subscribes with an optional symbol filter and receives a
+  // continuous stream of RegimeState messages. The stream remains open
+  // until the client disconnects or the server shuts down.
+  rpc StreamRegimeUpdates(StreamRegimeUpdatesRequest) returns (stream RegimeState);
+
+  // Get the current regime state for one or more symbols (point-in-time query).
+  rpc GetCurrentRegime(GetCurrentRegimeRequest) returns (GetCurrentRegimeResponse);
+}
+
+// ============================================================================
+// Core regime state payload
+// ============================================================================
+
+// Complete regime state as bridged from janus-regime to neuromorphic types.
+//
+// This is the canonical wire format for regime updates between the forward
+// service and neuromorphic consumers (hypothalamus, amygdala, etc.).
+message RegimeState {
+  // Trading symbol (e.g. "BTCUSD")
+  string symbol = 1;
+
+  // Hypothalamus regime classification
+  HypothalamusRegime hypothalamus_regime = 2;
+
+  // Amygdala regime classification
+  AmygdalaRegime amygdala_regime = 3;
+
+  // Recommended position scale factor (0.0–1.5+)
+  // Derived from hypothalamus regime base_scaling()
+  double position_scale = 4;
+
+  // Whether the current regime is considered high-risk
+  // (Crisis, HighVolTrending, Transitional in amygdala terms)
+  bool is_high_risk = 5;
+
+  // Confidence of the underlying regime detection (0.0–1.0)
+  double confidence = 6;
+
+  // Enriched indicator snapshot
+  RegimeIndicators indicators = 7;
+
+  // Timestamp of the regime state (Unix microseconds)
+  int64 timestamp_us = 8;
+
+  // Monotonic sequence number within this symbol's stream
+  uint64 sequence = 9;
+
+  // Whether this state represents a regime transition
+  // (hypothalamus or amygdala regime changed from previous state)
+  bool is_transition = 10;
+
+  // Previous hypothalamus regime (set only when is_transition = true)
+  HypothalamusRegime previous_hypothalamus_regime = 11;
+
+  // Previous amygdala regime (set only when is_transition = true)
+  AmygdalaRegime previous_amygdala_regime = 12;
+}
+
+// Indicator snapshot accompanying a regime state.
+//
+// Values are normalized where applicable:
+// - trend: positive = bullish, negative = bearish (magnitude = strength)
+// - trend_strength: 0.0–1.0 (ADX / 100)
+// - volatility: raw ATR value
+// - volatility_percentile: 0.0–1.0 (BB width percentile / 100)
+// - momentum: positive = upward, negative = downward
+// - relative_volume: 1.0 = average; >1 = above average
+// - liquidity_score: 0.0–1.0 (1.0 = best)
+// - fear_index: 0.0–1.0 (0.0 = calm, 1.0 = extreme fear)
+message RegimeIndicators {
+  double trend = 1;
+  double trend_strength = 2;
+  double volatility = 3;
+  double volatility_percentile = 4;
+  double correlation = 5;
+  double breadth = 6;
+  double momentum = 7;
+  double relative_volume = 8;
+  double liquidity_score = 9;
+  double fear_index = 10;
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+// Hypothalamus regime — maps to the forward service's position-sizing model.
+//
+// Integer values are chosen to match the Prometheus metric encoding used by
+// HypothalamusRegime::to_prometheus_i64() in regime_bridge.rs.
+enum HypothalamusRegime {
+  HYPOTHALAMUS_REGIME_UNSPECIFIED = 0;
+  HYPOTHALAMUS_REGIME_STRONG_BULLISH = 1;
+  HYPOTHALAMUS_REGIME_BULLISH = 2;
+  HYPOTHALAMUS_REGIME_NEUTRAL = 3;
+  HYPOTHALAMUS_REGIME_BEARISH = 4;
+  HYPOTHALAMUS_REGIME_STRONG_BEARISH = 5;
+  HYPOTHALAMUS_REGIME_HIGH_VOLATILITY = 6;
+  HYPOTHALAMUS_REGIME_LOW_VOLATILITY = 7;
+  HYPOTHALAMUS_REGIME_TRANSITIONAL = 8;
+  HYPOTHALAMUS_REGIME_CRISIS = 9;
+  HYPOTHALAMUS_REGIME_UNKNOWN = 10;
+}
+
+// Amygdala regime — maps to the forward service's threat-detection model.
+//
+// Integer values match AmygdalaRegime::to_prometheus_i64() encoding.
+enum AmygdalaRegime {
+  AMYGDALA_REGIME_UNSPECIFIED = 0;
+  AMYGDALA_REGIME_LOW_VOL_TRENDING = 1;
+  AMYGDALA_REGIME_LOW_VOL_MEAN_REVERTING = 2;
+  AMYGDALA_REGIME_HIGH_VOL_TRENDING = 3;
+  AMYGDALA_REGIME_HIGH_VOL_MEAN_REVERTING = 4;
+  AMYGDALA_REGIME_CRISIS = 5;
+  AMYGDALA_REGIME_TRANSITIONAL = 6;
+  AMYGDALA_REGIME_UNKNOWN = 7;
+}
+
+// ============================================================================
+// Push RPC messages
+// ============================================================================
+
+message PushRegimeStateRequest {
+  // The regime state to push
+  RegimeState state = 1;
+
+  // Optional: source identifier (e.g. "regime-bridge-consumer-1")
+  string source_id = 2;
+}
+
+message PushRegimeStateResponse {
+  // Whether the state was accepted
+  bool accepted = 1;
+
+  // Human-readable status message
+  string message = 2;
+
+  // Server-side processing latency (microseconds)
+  uint64 processing_time_us = 3;
+}
+
+message PushRegimeStateBatchRequest {
+  // Batch of regime states to push
+  repeated RegimeState states = 1;
+
+  // Optional: source identifier
+  string source_id = 2;
+}
+
+message PushRegimeStateBatchResponse {
+  // Number of states accepted
+  uint32 accepted_count = 1;
+
+  // Number of states rejected (e.g. stale sequence)
+  uint32 rejected_count = 2;
+
+  // Human-readable status message
+  string message = 3;
+
+  // Server-side processing latency (microseconds)
+  uint64 processing_time_us = 4;
+}
+
+// ============================================================================
+// Stream RPC messages
+// ============================================================================
+
+message StreamRegimeUpdatesRequest {
+  // Symbols to subscribe to (empty = all symbols)
+  repeated string symbols = 1;
+
+  // If true, only deliver transitions (regime changes), not every update
+  bool transitions_only = 2;
+
+  // Minimum confidence threshold — updates below this confidence are
+  // filtered out (0.0 = no filter, 1.0 = only max-confidence updates)
+  double min_confidence = 3;
+
+  // Optional: client identifier for server-side tracking
+  string client_id = 4;
+}
+
+// ============================================================================
+// Point-in-time query messages
+// ============================================================================
+
+message GetCurrentRegimeRequest {
+  // Symbols to query (empty = all tracked symbols)
+  repeated string symbols = 1;
+}
+
+message GetCurrentRegimeResponse {
+  // Current regime state per symbol
+  repeated RegimeState states = 1;
+
+  // Server timestamp (Unix microseconds)
+  int64 server_timestamp_us = 2;
+}

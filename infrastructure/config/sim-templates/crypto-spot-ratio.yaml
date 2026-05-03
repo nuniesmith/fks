@@ -1,0 +1,35 @@
+# Template metadata
+id: crypto-spot-ratio
+name: "Crypto Spot Ratio"
+description: >
+  Paper-trade Kraken spot crypto maintaining target allocations. Tracks BTC, ETH,
+  SOL, XRP, ADA with 10k starting balance. Great for validating the portfolio
+  rebalancer logic in simulation.
+category: crypto
+icon: "₿"
+accent: "#f59e0b"
+
+# Session defaults (maps 1:1 to CreateSessionRequest fields)
+session:
+  name: "Crypto Spot Ratio"
+  initial_balance: 10000.0
+  symbols:
+    - BTCUSD
+    - ETHUSD
+    - SOLUSD
+    - XRPUSD
+    - ADAUSD
+  data_source: kraken
+  tags:
+    - crypto
+    - spot
+    - ratio
+  risk:
+    max_position_size: 2000.0
+    max_daily_loss: -1000.0   # negative — RiskConfig constraint (le=0)
+    max_open_positions: 5
+  janus_ai:
+    enabled: false
+    min_confidence: 0.65
+    auto_execute: false
+    auto_execute_threshold: 0.85

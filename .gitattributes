@@ -1,0 +1,104 @@
+# =============================================================================
+# FKS Trading Platform — .gitattributes
+# =============================================================================
+# Canonical attribute file produced by deduplicating two copies that were
+# concatenated during a monorepo merge.  Organised into logical sections;
+# LFS tracking rules live at the bottom.
+
+# =============================================================================
+# Source Code
+# =============================================================================
+*.py    text eol=lf
+*.rs    text eol=lf
+*.go    text eol=lf
+*.js    text eol=lf
+*.ts    text eol=lf
+*.jsx   text eol=lf
+*.tsx   text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.scss  text eol=lf
+*.cs    text eol=lf
+*.java  text eol=lf
+*.kt    text eol=lf
+
+# =============================================================================
+# Config Files
+# =============================================================================
+*.toml  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.json  text eol=lf
+*.csv   text eol=lf
+*.txt   text eol=lf
+*.conf  text eol=lf
+*.ini   text eol=lf
+*.cfg   text eol=lf
+
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+.gitmodules   text eol=lf
+
+# =============================================================================
+# Scripts
+# =============================================================================
+# Unix — always LF
+*.sh    text eol=lf
+
+# Windows — always CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# =============================================================================
+# Docker & Kubernetes
+# =============================================================================
+Dockerfile           text eol=lf
+docker-compose*.yml  text eol=lf
+
+# =============================================================================
+# Documentation
+# =============================================================================
+*.md    text eol=lf
+*.rst   text eol=lf
+*.adoc  text eol=lf
+
+# =============================================================================
+# Binary Files
+# =============================================================================
+# Executables & libraries
+*.dll    binary
+*.exe    binary
+*.jar    binary
+*.so     binary
+*.dylib  binary
+
+# Archives
+*.zip    binary
+*.tar.gz binary
+
+# Images
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.svg    binary
+
+# Fonts
+*.ttf    binary
+*.otf    binary
+*.woff   binary
+*.woff2  binary
+
+# =============================================================================
+# Git LFS — Large Binary Model Files
+# =============================================================================
+# Champion model files (.pt, .onnx) are committed to this repo and tracked
+# via Git LFS because they exceed GitHub's 50 MB file-size warning
+# (.pt ≈ 81 MB, .onnx ≈ 85 MB).
+#
+# To set up LFS on a fresh clone:
+#   git lfs install
+#   git lfs pull
+models/breakout_cnn_best.pt   filter=lfs diff=lfs merge=lfs -text

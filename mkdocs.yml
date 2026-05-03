@@ -1,0 +1,272 @@
+# MkDocs Configuration for Project JANUS / FKS
+# Documentation Site: Neuromorphic Trading Platform
+
+site_name: Project JANUS / FKS
+site_description: Neuromorphic Algorithmic Trading Platform - Brain-Inspired Trading System
+site_author: Jordan (nuniesmith)
+site_url: https://nuniesmith.github.io/fks
+
+# Repository information
+repo_name: nuniesmith/fks
+repo_url: https://github.com/nuniesmith/fks
+edit_uri: edit/main/docs/
+
+# Copyright
+copyright: Copyright &copy; 2025 nuniesmith
+
+# Theme configuration
+theme:
+  name: material
+  language: en
+
+  # Color palette
+  palette:
+    # Dark mode (default)
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    # Light mode
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+  # Typography
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+  # Features
+  features:
+    - navigation.tabs # Top-level tabs
+    - navigation.tabs.sticky # Sticky tabs
+    - navigation.sections # Collapsible sections
+    - navigation.expand # Expand all sections by default
+    - navigation.indexes # Section index pages
+    - navigation.top # Back to top button
+    - search.highlight # Highlight search terms
+    - search.share # Share search results
+    - search.suggest # Search suggestions
+    - toc.follow # TOC follows scroll
+    - content.code.copy # Copy code button
+    - content.code.annotate # Code annotations
+
+  # Icon
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/brain
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\-\.]+'
+      lang: en
+
+  # Python docstring extraction
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_if_no_docstring: false
+            inherited_members: true
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+          paths: [src]
+          import:
+            - https://docs.python.org/3/objects.inv
+
+# Markdown extensions
+markdown_extensions:
+  # Python Markdown
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - meta
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+  # Python Markdown Extensions
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  # Emoji extension disabled due to Python 3.13 compatibility issue
+  # - pymdownx.emoji:                     # Requires mkdocs-material installed in the build env.
+  #     emoji_index: !!python/name:material.extensions.emoji.twemoji   # Not in local .venv — enable only
+  #     emoji_generator: !!python/name:material.extensions.emoji.to_svg # in Docker or CI mkdocs builds.
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Extra JavaScript for LaTeX rendering
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Extra CSS
+extra_css:
+  - stylesheets/extra.css
+
+# Extra configuration
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/nuniesmith/fks
+
+  # Version selector
+  version:
+    provider: mike
+
+  # Analytics (optional - uncomment and add your ID)
+  # analytics:
+  #   provider: google
+  #   property: G-XXXXXXXXXX
+
+# Navigation structure
+nav:
+  - Home: README.md
+
+  - Architecture:
+      - Overview: architecture/README.md
+      - System Architecture: architecture/SYSTEM_ARCHITECTURE.md
+      - Neuromorphic Design: architecture/NEUROMORPHIC_ARCHITECTURE.md
+      - Implementation Guide: architecture/NEUROMORPHIC_IMPLEMENTATION_GUIDE.md
+      - Getting Started: architecture/NEUROMORPHIC_GETTING_STARTED.md
+      - 3-Phase Plan: architecture/NEUROMORPHIC_3PHASE_PLAN.md
+      - CI/CD Architecture: architecture/CI_CD_ARCHITECTURE.md
+      - Startup Flow: architecture/STARTUP_FLOW.md
+
+  - Operations:
+      - Overview: operations/README.md
+      - Quick Start: operations/START_HERE.md
+      - Quick Reference: operations/QUICK_REFERENCE.md
+      - CI/CD Quick Start: operations/CICD-QUICK-START.md
+      - Troubleshooting: operations/TROUBLESHOOTING.md
+      - Deployment:
+          - Overview: operations/deployment/DEPLOYMENT.md
+          - Production Guide: operations/deployment/PRODUCTION_DEPLOYMENT.md
+          - Deployment Checklist: operations/deployment/PRODUCTION_DEPLOYMENT_CHECKLIST.md
+          - Monitoring Setup: operations/deployment/MONITORING_DEPLOYMENT.md
+          - Audit Deployment: operations/deployment/AUDIT_DEPLOYMENT_CHECKLIST.md
+      - Infrastructure:
+          - Docker Reference: operations/infrastructure/DOCKER_QUICK_REFERENCE.md
+          - Docker Troubleshooting: operations/infrastructure/DOCKER_TROUBLESHOOTING.md
+          - Tailscale Setup: operations/infrastructure/TAILSCALE_SETUP.md
+          - Tailscale ACL GitOps: operations/infrastructure/TAILSCALE_ACL_GITOPS.md
+          - Tailscale Quick Ref: operations/infrastructure/TAILSCALE_QUICK_REF.md
+          - Cloudflare DNS (Archived): operations/infrastructure/CLOUDFLARE_DNS_SETUP.md
+          - SSL Certificates (Archived): operations/infrastructure/SSL_CERTIFICATE_MANAGEMENT.md
+          - Secrets Setup: operations/infrastructure/SECRETS-SETUP.md
+          - GitHub Secrets: operations/infrastructure/GITHUB_SECRETS.md
+      - Runbooks:
+          - Overview: operations/runbooks/README.md
+          - Circuit Breaker Open: operations/runbooks/circuit-breaker-open.md
+          - All Exchanges Down: operations/runbooks/all-exchanges-down.md
+          - Ingestion Latency High: operations/runbooks/ingestion-latency-high.md
+          - Data Completeness Low: operations/runbooks/data-completeness-low.md
+          - Disk Usage High: operations/runbooks/disk-usage-high.md
+      - Exchange Adapters:
+          - Overview: operations/EXCHANGE_ADAPTERS.md
+          - Quick Start: operations/EXCHANGE_ADAPTERS_QUICKSTART.md
+      - Components: operations/PRODUCTION_COMPONENTS.md
+      - Testing:
+          - Quick Reference: testing/QUICK_REFERENCE.md
+          - Test Guide: testing/PAPER_TRADING_TEST_GUIDE.md
+          - Test Summary: testing/PAPER_TRADING_TEST_SUMMARY.md
+          - System Updates: testing/TEST_SYSTEM_UPDATES.md
+      - Troubleshooting:
+          - Redis Fix Checklist: troubleshooting/REDIS_FIX_CHECKLIST.md
+
+  - AI Agent:
+      - Overview: ai-agent/README.md
+      - RustCode:
+          - Architecture: ai-agent/rustcode/architecture.md
+          - API Reference: ai-agent/rustcode/api.md
+          - LLM Routing: ai-agent/rustcode/llm-routing.md
+          - Deployment: ai-agent/rustcode/deployment.md
+      - OpenClaw:
+          - Setup: ai-agent/openclaw/setup.md
+          - Agent Configuration: ai-agent/openclaw/agents.md
+          - Discord Integration: ai-agent/openclaw/discord.md
+
+  - Kotlin/KMP:
+      - Overview: kotlin/README.md
+      - Architecture: kotlin/KMP_ARCHITECTURE.md
+      - Implementation Summary: kotlin/KMP_IMPLEMENTATION_SUMMARY.md
+      - Getting Started:
+          - Phase 1 Quick Start: kotlin/PHASE_1_QUICK_START.md
+          - Phase 1 Implementation: kotlin/PHASE_1_IMPLEMENTATION.md
+          - Quick Reference: kotlin/QUICK_REFERENCE.md
+          - Mock Data Mode: kotlin/MOCK_DATA_MODE.md
+          - Persistence Guide: kotlin/PERSISTENCE_INTEGRATION_GUIDE.md
+      - UI:
+          - Overview: kotlin/ui/README.md
+          - Health Page: kotlin/ui/HEALTH_PAGE_REDESIGN.md
+          - Settings UI: kotlin/ui/SETTINGS_UI_IMPLEMENTATION.md
+          - Settings Integration: kotlin/ui/settings-ui-integration.md
+          - Settings Checklist: kotlin/ui/SETTINGS_UI_INTEGRATION_CHECKLIST.md
+          - Settings Testing: kotlin/ui/settings-ui-testing-checklist.md
+          - Strategy Settings: kotlin/ui/strategy-settings-ui.md
+          - UI Improvements: kotlin/ui/UI_IMPROVEMENTS.md
+          - Discord Web UI: kotlin/ui/DISCORD_WEB_UI_IMPLEMENTATION.md
+          - Web UI Status: kotlin/ui/WEB_UI_STATUS.md
+          - Web Build Guide: kotlin/ui/WEB_BUILD_GUIDE.md
+          - Web Deployment: kotlin/ui/web-deployment-guide.md
+      - Guides:
+          - Test Quick Reference: kotlin/guides/KOTLIN_TESTS_QUICK_REF.md
+          - Web Build: kotlin/guides/WEB_BUILD.md
+          - Web Quick Start: kotlin/guides/WEB_QUICKSTART.md
+      - Sprint History:
+          - Week 3 Summary: kotlin/WEEK3_SUMMARY.md
+          - Week 4 Plan: kotlin/WEEK4_PLAN.md
+          - Week 4 Summary: kotlin/WEEK4_SUMMARY.md
+          - Week 5 Plan: kotlin/WEEK5_PLAN.md
+          - Week 5 Progress: kotlin/WEEK5_PROGRESS.md
+          - Week 5 Day 1: kotlin/WEEK5_DAY1_COMPLETE.md
+          - Week 5 Session 1: kotlin/WEEK5_SESSION1_SUMMARY.md
+          - Week 5 Next Steps: kotlin/WEEK5_NEXT_STEPS.md
+
+  - Research:
+      - Overview: research/README.md
+      - JANUS Spec: research/JANUS_ARCHITECTURAL_SPECIFICATION.md
+      - Hyperparameters: research/HYPERPARAMETERS.md
+      - Empirical Validation: research/EMPIRICAL_VALIDATION_TEMPLATE.md
+      - Action Checklist: research/ACTION_CHECKLIST.md
+      - Glossary: research/GLOSSARY.md
+      - Threat Model: research/threat_model.md
+
+# Watch for changes (dev mode)
+watch:
+  - docs
+  - ai-agent
+  - mkdocs.yml

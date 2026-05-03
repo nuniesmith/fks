@@ -1,0 +1,160 @@
+# JANUS Central Nervous System (CNS) Configuration
+
+[service]
+name = "janus-cns"
+version = "0.1.0"
+# Port for metrics and health endpoint
+port = 9090
+# Host to bind to
+host = "0.0.0.0"
+
+[brain]
+# Health check interval in seconds
+health_check_interval_secs = 10
+# Enable automatic recovery reflexes
+enable_reflexes = true
+# Enable detailed logging
+verbose_logging = false
+
+[endpoints]
+# Forward service (Wake State) endpoint
+forward_service = "http://localhost:8081"
+# Backward service (Sleep State) endpoint
+backward_service = "http://localhost:8082"
+# Gateway service endpoint
+gateway_service = "http://localhost:8080"
+# Redis connection string
+redis = "redis://localhost:6379"
+# Qdrant vector database URL
+qdrant = "http://localhost:6333"
+# Shared memory path for Forward<->Backward IPC
+shared_memory_path = "/dev/shm/janus_forward_backward"
+
+[circuit_breakers]
+# Circuit breaker configuration for Redis
+[circuit_breakers.redis]
+failure_threshold = 5
+failure_window_secs = 60
+recovery_timeout_secs = 30
+success_threshold = 3
+
+# Circuit breaker configuration for Qdrant
+[circuit_breakers.qdrant]
+failure_threshold = 5
+failure_window_secs = 60
+recovery_timeout_secs = 30
+success_threshold = 3
+
+# Circuit breaker configuration for Forward service
+[circuit_breakers.forward]
+failure_threshold = 3
+failure_window_secs = 30
+recovery_timeout_secs = 20
+success_threshold = 2
+
+# Circuit breaker configuration for Backward service
+[circuit_breakers.backward]
+failure_threshold = 3
+failure_window_secs = 30
+recovery_timeout_secs = 20
+success_threshold = 2
+
+[metrics]
+# Enable Prometheus metrics
+enabled = true
+# Metrics endpoint path
+endpoint = "/metrics"
+# Include detailed component metadata
+include_metadata = true
+
+[health]
+# Health check endpoint path
+endpoint = "/health"
+# Include response time in health checks
+include_response_time = true
+# Health check timeout in seconds
+timeout_secs = 5
+
+[reflexes]
+# Reflex rules configuration
+
+# Alert when Forward service is down
+[[reflexes.rules]]
+id = "forward_down_alert"
+description = "Alert when Forward service is down"
+condition = { type = "ComponentDown", component = "forward_service" }
+action = { type = "SendAlert", severity = "Critical", message = "Forward service is DOWN - trading halted" }
+cooldown_secs = 300
+
+# Alert when Backward service is down
+[[reflexes.rules]]
+id = "backward_down_alert"
+description = "Alert when Backward service is down"
+condition = { type = "ComponentDown", component = "backward_service" }
+action = { type = "SendAlert", severity = "Error", message = "Backward service is DOWN - training/memory disabled" }
+cooldown_secs = 300
+
+# Open circuit breaker when Redis is down
+[[reflexes.rules]]
+id = "redis_down_circuit"
+description = "Open circuit breaker when Redis is down"
+condition = { type = "ComponentDown", component = "redis" }
+action = { type = "OpenCircuitBreaker", component = "redis" }
+cooldown_secs = 60
+
+# Warn when Qdrant is slow
+[[reflexes.rules]]
+id = "qdrant_slow_warning"
+description = "Warn when Qdrant is slow"
+condition = { type = "ResponseTimeSlow", component = "qdrant", threshold_ms = 1000 }
+action = { type = "LogWarning", message = "Qdrant response time exceeds 1000ms" }
+cooldown_secs = 120
+
+# Alert on low system health score
+[[reflexes.rules]]
+id = "low_health_score"
+description = "Alert when system health score drops below 50%"
+condition = { type = "HealthScoreBelow", threshold = 0.5 }
+action = { type = "SendAlert", severity = "Warning", message = "System health score below 50%" }
+cooldown_secs = 180
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+# Log format: json, pretty
+format = "json"
+# Enable console output
+console = true
+# Enable file logging
+file_enabled = false
+file_path = "/var/log/janus/cns.log"
+
+[tracing]
+# Enable distributed tracing
+enabled = false
+# Jaeger endpoint (if tracing enabled)
+jaeger_endpoint = "http://localhost:14268/api/traces"
+# Service name for tracing
+service_name = "janus-cns"
+
+[alerting]
+# Alerting configuration (future integration)
+# Slack webhook for alerts
+slack_webhook_url = ""
+# PagerDuty integration key
+pagerduty_key = ""
+# Email alerts
+email_enabled = false
+email_recipients = []
+smtp_host = "localhost"
+smtp_port = 587
+
+[advanced]
+# Maximum concurrent health probes
+max_concurrent_probes = 10
+# Probe retry attempts
+probe_retry_attempts = 2
+# Grace period on startup before health checks (seconds)
+startup_grace_period_secs = 30
+# Enable experimental features
+experimental_features = false

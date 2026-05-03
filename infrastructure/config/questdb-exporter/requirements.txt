@@ -1,0 +1,5 @@
+# QuestDB Prometheus Exporter — Python dependencies
+# Pin minor versions for reproducible builds; patch updates are safe via Dependabot / Renovate.
+
+prometheus-client==0.21.1
+requests==2.32.3

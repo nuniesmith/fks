@@ -74,6 +74,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Random (for backoff jitter)
+rand = "0.10"
+
 # Observability (optional in downstream crates)
 prometheus = "0.14"
 

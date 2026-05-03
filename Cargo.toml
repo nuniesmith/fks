@@ -1,102 +1,27 @@
 # ============================================================================
 # FKS Root Workspace
 # ============================================================================
-# Unified workspace for all FKS trading system services and crates.
+# Slim virtual workspace covering only the top-level Rust crates that don't
+# live inside a nested workspace under `crates/`.
 #
-# This workspace provides:
-# - Shared dependency management across all services
-# - Consistent versioning
-# - Unified build configuration
+# Nested workspaces (each builds independently from its own directory):
+#   - crates/janus       — JANUS ML/trading engine (28 sub-crates, 8 services)
+#   - crates/rustrade    — Open-source trading framework (core/risk/supervisor)
+#   - crates/rustcode    — AI coding assistant
+#   - crates/indicators-ta   — Standalone technical-analysis crate (publishable)
+#   - crates/exchange-apiws  — Standalone exchange REST/WS client (publishable)
 #
-# Services:
-# - janus: ML/Trading platform (main workspace with many crates)
-# - execution: Order execution service
-#
-# Shared Crates:
-# - fks-proto: Centralized Protocol Buffer definitions
+# This root workspace contains only:
+#   - src/proto    — fks-proto (centralised protobuf definitions)
+#   - src/spawner  — Bot spawner (Docker container lifecycle manager)
 # ============================================================================
 
 [workspace]
 resolver = "3"
 
 members = [
-    # Shared proto crate
     "src/proto",
-
-    # Bot Spawner — Docker container lifecycle manager (port 8090)
     "src/spawner",
-
-    # Janus ML/Trading workspace members
-    # Note: These are explicitly listed to be part of the root workspace
-    "src/janus/bin/janus",
-    "src/janus/bin/backtest-cli",
-    "src/janus/lib/janus-core",
-    "src/janus/lib/janus-api",
-    "src/janus/crates/indicators",
-    "src/janus/crates/regime",
-    "src/janus/crates/strategies",
-    "src/janus/crates/risk",
-    "src/janus/crates/models",
-    "src/janus/crates/bybit-client",
-    "src/janus/crates/questdb-writer",
-    "src/janus/crates/compliance",
-    "src/janus/crates/backtest",
-    "src/janus/crates/health",
-    "src/janus/crates/logic",
-    "src/janus/crates/common",
-    "src/janus/crates/rate-limiter",
-    "src/janus/crates/gap-detection",
-    "src/janus/crates/memory",
-    "src/janus/crates/cns",
-    "src/janus/crates/training",
-    "src/janus/crates/dsp",
-    "src/janus/crates/ltn",
-    "src/janus/crates/exchanges",
-    "src/janus/crates/data-quality",
-    "src/janus/crates/ml",
-    "src/janus/crates/lob",
-    "src/janus/services/api",
-    "src/janus/services/forward",
-    "src/janus/services/backward",
-    "src/janus/services/cns",
-    "src/janus/services/data",
-    "src/janus/services/registry",
-    "src/janus/services/optimizer",
-    "src/janus/crates/registry",
-    "src/janus/crates/optimizer",
-    "src/janus/neuromorphic",
-
-    # Vendored crates
-    "src/janus/crates/apalis-redis",
-
-    # Execution service
-    "src/janus/services/execution",
-
-    # RustCode — AI agent (LLM routing, code analysis, semantic search)
-    # NOTE: RUSTCODE currently uses its own dependency versions (axum 0.7, reqwest 0.11,
-    # redis 0.24, etc.) rather than workspace deps. These will be migrated to
-    # workspace = true as the versions are aligned.
-    "src/rustcode",
-    "src/rustcode/crates/api",
-    "src/rustcode/crates/commands",
-    "src/rustcode/crates/compat-harness",
-    "src/rustcode/crates/mock-anthropic-service",
-    "src/rustcode/crates/plugins",
-    "src/rustcode/crates/runtime",
-    "src/rustcode/crates/rusty-claude-cli",
-    "src/rustcode/crates/telemetry",
-    "src/rustcode/crates/tools",
-]
-
-exclude = [
-    # Excluded due to platform-specific dependencies
-    "src/janus/crates/vision",
-    # Integration tests run separately
-    "src/janus/tests",
-    # Kotlin clients
-    "src/kotlin",
-    # Chaos test scripts (built separately)
-    "scripts/chaos-test",
 ]
 
 # ============================================================================
@@ -104,298 +29,63 @@ exclude = [
 # ============================================================================
 
 [workspace.package]
-version = "0.1.0"
-edition = "2024"
-authors = ["nuniesmith"]
-license = "MIT"
-repository = "https://github.com/nuniesmith/fks"
+version      = "0.1.0"
+edition      = "2024"
+authors      = ["nuniesmith"]
+license      = "MIT"
+repository   = "https://github.com/nuniesmith/fks"
 rust-version = "1.94.1"
-publish = false
+publish      = false
 
 # ============================================================================
-# Workspace Dependencies
+# Workspace Dependencies (only those used by src/proto + src/spawner)
 # ============================================================================
-# All shared dependencies are defined here for consistency across services.
-# Individual crates should use: `dependency = { workspace = true }`
-#
-# NOTE: src/rc (RustCode) is a workspace member but currently manages its
-# own dependency versions. Shared deps will be migrated incrementally.
 
 [workspace.dependencies]
-# ---------------------------------------------------------------------------
-# Internal Crates
-# ---------------------------------------------------------------------------
-fks-proto = { path = "src/proto" }
-rustcode = { path = "src/rc" }
+# Async runtime
+tokio        = { version = "1.48", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures-util = "0.3"
 
-# Janus core libraries
-janus-core = { path = "src/janus/lib/janus-core" }
-janus-api = { path = "src/janus/lib/janus-api" }
+# HTTP server (spawner)
+axum = { version = "0.8", features = ["macros", "ws"] }
 
-# Janus feature crates
-janus-indicators      = { path = "src/janus/crates/indicators" }
-janus-strategies      = { path = "src/janus/crates/strategies" }
-janus-risk            = { path = "src/janus/crates/risk" }
-janus-models          = { path = "src/janus/crates/models" }
-janus-bybit-client    = { path = "src/janus/crates/bybit-client" }
-janus-questdb-writer  = { path = "src/janus/crates/questdb-writer" }
-janus-compliance      = { path = "src/janus/crates/compliance" }
-janus-backtest        = { path = "src/janus/crates/backtest" }
-janus-health          = { path = "src/janus/crates/health" }
-janus-logic           = { path = "src/janus/crates/logic" }
-janus-common          = { path = "src/janus/crates/common" }
-janus-rate-limiter    = { path = "src/janus/crates/rate-limiter" }
-janus-gap-detection   = { path = "src/janus/crates/gap-detection" }
-janus-memory          = { path = "src/janus/crates/memory" }
-janus-cns             = { path = "src/janus/crates/cns" }
-janus-training        = { path = "src/janus/crates/training" }
-janus-dsp             = { path = "src/janus/crates/dsp" }
-janus-ltn             = { path = "src/janus/crates/ltn" }
-janus-exchanges       = { path = "src/janus/crates/exchanges" }
-janus-data-quality    = { path = "src/janus/crates/data-quality" }
-janus-ml              = { path = "src/janus/crates/ml" }
-janus-optimizer       = { path = "src/janus/crates/optimizer" }
-janus-regime          = { path = "src/janus/crates/regime" }
-janus-lob             = { path = "src/janus/crates/lob" }
-
-# Janus services
-janus-data     = { path = "src/janus/services/data" }
-janus-forward  = { path = "src/janus/services/forward" }
-janus-backward = { path = "src/janus/services/backward" }
-
-# ---------------------------------------------------------------------------
-# Async Runtime
-# ---------------------------------------------------------------------------
-tokio            = { version = "1.48", features = ["full"] }
-tokio-util       = { version = "0.7.17", features = ["rt"] }
-tokio-stream     = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "0.28", features = ["native-tls"] }
-futures          = "0.3"
-futures-util     = "0.3"
-async-trait      = "0.1"
-
-# ---------------------------------------------------------------------------
-# Serialization
-# ---------------------------------------------------------------------------
+# Serialisation
 serde      = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-postcard   = { version = "1.1", features = ["alloc"] }
-toml       = "0.9"
 
-# ---------------------------------------------------------------------------
-# gRPC & Protobuf
-# ---------------------------------------------------------------------------
-tonic            = "0.14"
-tonic-build      = "0.14"
-tonic-prost      = "0.14"
-tonic-prost-build = "0.14"
-tonic-web        = "0.14"
-tonic-reflection = "0.14"
-prost            = "0.14"
-prost-types      = "0.14"
-prost-build      = "0.14"
+# Tracing
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "registry"] }
 
-# ---------------------------------------------------------------------------
-# HTTP & Web
-# ---------------------------------------------------------------------------
-reqwest    = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
-axum       = { version = "0.8", features = ["macros", "ws"] }
-tower      = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
-hyper      = "1.8"
+# Metrics
+prometheus = "0.14"
 
-# ---------------------------------------------------------------------------
-# Data Processing
-# ---------------------------------------------------------------------------
-polars  = { version = "0.44", features = ["lazy", "temporal", "parquet"] }
-ndarray = "0.17"
-arrow     = "57"
-arrow-ipc = "57"
-parquet   = "57"
-statrs    = "0.18"
-
-# ---------------------------------------------------------------------------
-# Zero-Copy Serialization
-# ---------------------------------------------------------------------------
-rkyv = "0.8"
-
-# ---------------------------------------------------------------------------
-# Database
-# ---------------------------------------------------------------------------
-sqlx          = { version = "0.8", default-features = false }
-redis         = { version = "1.0", features = ["tokio-comp", "connection-manager"] }
-qdrant-client = "1.16"
-
-# ---------------------------------------------------------------------------
-# Time & Date
-# ---------------------------------------------------------------------------
-chrono = { version = "0.4", features = ["serde"] }
-
-# ---------------------------------------------------------------------------
-# Logging & Tracing
-# ---------------------------------------------------------------------------
-tracing                            = "0.1"
-tracing-subscriber                 = { version = "0.3", features = ["env-filter", "json", "registry"] }
-tracing-appender                   = "0.2"
-opentelemetry                      = "0.27"
-opentelemetry-otlp                 = { version = "0.27", features = ["grpc-tonic"] }
-opentelemetry_sdk                  = { version = "0.27", features = ["rt-tokio"] }
-opentelemetry-semantic-conventions = "0.27"
-
-# ---------------------------------------------------------------------------
-# Error Handling
-# ---------------------------------------------------------------------------
+# Error handling
 anyhow    = "1.0"
 thiserror = "2.0"
 
-# ---------------------------------------------------------------------------
-# Cryptography
-# ---------------------------------------------------------------------------
-hmac   = "0.12"
-sha2   = "0.10"
-hex    = "0.4"
-ring   = "0.17"
-base64 = "0.22"
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-config  = "0.15"
-dotenvy = "0.15"
-
-# ---------------------------------------------------------------------------
-# Messaging & Channels
-# ---------------------------------------------------------------------------
-flume = "0.12"
-
-# ---------------------------------------------------------------------------
-# Metrics & Monitoring
-# ---------------------------------------------------------------------------
-prometheus = "0.14"
-
-# ---------------------------------------------------------------------------
-# ML/AI
-# ---------------------------------------------------------------------------
-tract-onnx  = "0.22"
-candle-core = "0.9"
-candle-nn   = "0.9"
-fastembed   = "4"
-
-# ---------------------------------------------------------------------------
-# DSP / Signal Processing
-# ---------------------------------------------------------------------------
-rustfft     = "6.2.0"
-num-complex = "0.4.6"
-
-# ---------------------------------------------------------------------------
-# Compression
-# ---------------------------------------------------------------------------
-flate2 = "1.0"
-
-# ---------------------------------------------------------------------------
 # Utilities
-# ---------------------------------------------------------------------------
-rand        = "0.10.0"
-rayon       = "1.11"
-uuid        = { version = "1.19", features = ["v4", "serde"] }
-bytes       = "1.11"
-parking_lot = "0.12"
-url         = "2.5"
-regex       = "1.12"
-walkdir     = "2.5"
-git2        = "0.19"
-notify      = { version = "6", features = ["macos_kqueue"] }
-
-# ---------------------------------------------------------------------------
-# Numeric Types
-# ---------------------------------------------------------------------------
-rust_decimal = { version = "1.39", features = ["serde-float"] }
-
-# ---------------------------------------------------------------------------
-# Job Queue
-# ---------------------------------------------------------------------------
-apalis       = "1.0.0-rc.3"
-apalis-redis = { path = "src/janus/crates/apalis-redis" }
-
-# ---------------------------------------------------------------------------
-# JWT & Auth
-# ---------------------------------------------------------------------------
-jsonwebtoken = "10.2"
-
-# ---------------------------------------------------------------------------
-# Network Utilities
-# ---------------------------------------------------------------------------
-socket2     = { version = "0.6", features = ["all"] }
-governor    = "0.10"
-tungstenite = "0.28"
-
-# ---------------------------------------------------------------------------
-# Web Scraping
-# ---------------------------------------------------------------------------
-scraper = "0.25"
-select  = "0.6"
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-clap    = { version = "4.5", features = ["derive"] }
-colored = "2"
-
-# ---------------------------------------------------------------------------
-# System
-# ---------------------------------------------------------------------------
-nix = { version = "0.30", features = ["fs"] }
-
-# ---------------------------------------------------------------------------
-# Testing
-# ---------------------------------------------------------------------------
-tokio-test = "0.4"
-mockito    = "1.7"
-tempfile   = "3.24"
-criterion  = { version = "0.5", features = ["async_tokio"] }
+uuid   = { version = "1.19", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 # ============================================================================
-# Profile Configuration
+# Profiles
 # ============================================================================
 
 [profile.dev]
 opt-level = 0
-debug = true
+debug     = true
 
 [profile.release]
-opt-level       = 3
-lto             = "thin"
-codegen-units   = 16
-strip           = true
-debug           = false
-panic           = "abort"  # Prevent silent task disappearance in Tokio — panics terminate the process cleanly for supervisor restart
+opt-level     = 3
+lto           = "thin"
+codegen-units = 16
+strip         = true
+debug         = false
+panic         = "abort"
 
 [profile.release-with-debug]
 inherits = "release"
 debug    = true
 strip    = false
-
-# Optimized build for CI (faster than release, still optimised)
-[profile.ci]
-inherits      = "release"
-lto           = false
-codegen-units = 256
-
-# ============================================================================
-# Lints Configuration
-# ============================================================================
-
-[workspace.lints.rust]
-unsafe_code  = "warn"
-missing_docs = "allow"
-
-[workspace.lints.clippy]
-# Lint groups must have lower priority than individual lints
-all      = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
-nursery  = { level = "warn", priority = -1 }
-# Allow common patterns
-missing_errors_doc       = "allow"
-missing_panics_doc       = "allow"
-module_name_repetitions  = "allow"
-must_use_candidate       = "allow"

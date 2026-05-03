@@ -24,23 +24,11 @@
 //!
 //! # Port status
 //!
-//! > **This is a skeleton.** The real implementation should be lifted almost
-//! > verbatim from `janus-main/lib/janus-core/src/supervisor/`:
-//! >
-//! > - `service.rs`      → this crate's `service.rs`   (rename trait)
-//! > - `backoff.rs`      → this crate's `backoff.rs`   (no changes)
-//! > - `lifecycle.rs`    → this crate's `lifecycle.rs` (no changes)
-//! > - `mod.rs`          → this crate's `supervisor.rs` (rename struct)
-//! >
-//! > Changes to make during the port:
-//! > 1. Rename `JanusService` → [`TradingService`].
-//! > 2. Rename `JanusSupervisor` → [`Supervisor`].
-//! > 3. Gate the Prometheus integration behind the `prometheus` feature
-//! >    flag. The atomic counters in `SupervisorMetrics` stay as-is; the
-//! >    `crate::metrics::metrics()` calls move behind `#[cfg(feature = "prometheus")]`.
-//! > 4. Drop the `janus-core::metrics` module dependency entirely — the
-//! >    host binary registers its own Prometheus collectors if it wants them.
-//! > 5. Keep all the chaos tests. They're the best proof the supervisor works.
+//! Ported from `janus-main/lib/janus-core/src/supervisor/`. The atomic
+//! counters in [`SupervisorMetrics`] are the authoritative source of truth;
+//! downstream binaries can read them via [`SupervisorMetrics::snapshot`] and
+//! publish to their own Prometheus registry. This crate does not own a
+//! global Prometheus registry.
 
 pub mod backoff;
 pub mod lifecycle;
@@ -48,6 +36,10 @@ pub mod service;
 pub mod supervisor;
 
 pub use backoff::{BackoffAction, BackoffConfig, BackoffState};
-pub use lifecycle::{ServiceLifecycle, ServicePhase, TerminationReason};
+pub use lifecycle::{
+    ServiceLifecycle, ServiceLifecycleSnapshot, ServicePhase, TerminationReason, TransitionError,
+};
 pub use service::{RestartPolicy, TradingService};
-pub use supervisor::{Supervisor, SupervisorConfig, SupervisorMetrics};
+pub use supervisor::{
+    MetricsSnapshot, SpawnOptions, Supervisor, SupervisorConfig, SupervisorMetrics,
+};

@@ -60,6 +60,21 @@ pub trait ExchangeClient: Send + Sync + 'static {
 
     /// Fetch the current balance in the given currency.
     async fn get_balance(&self, currency: &str) -> Result<f64>;
+
+    /// The contract multiplier for a symbol — i.e. the number of base-asset
+    /// units one contract represents.
+    ///
+    /// On spot exchanges (or futures pairs that quote in base units) this is
+    /// always `1.0` and the default implementation is correct.
+    ///
+    /// On contract-based futures exchanges (e.g. KuCoin Futures: `XBTUSDTM`
+    /// represents 0.001 BTC; `ETHUSDTM` represents 0.01 ETH) the adapter
+    /// must override this. The framework uses it to translate brain-side
+    /// `SizeHint::NotionalUsd` into a contract count via
+    /// `contracts = notional / (price * contract_value)`.
+    async fn contract_value(&self, _symbol: &str) -> Result<f64> {
+        Ok(1.0)
+    }
 }
 
 /// A source of live market data (WebSocket feed, backtest replay, simulator).

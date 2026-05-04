@@ -16,16 +16,14 @@
 //! The framework defers sizing decisions to the brain via [`SizeHint`]:
 //!
 //! - `Quantity(v)`        → place an order for exactly `v` units.
-//! - `NotionalUsd(usd)`   → `usd / last_price` units.
+//! - `NotionalUsd(usd)`   → `usd / (last_price * contract_value)` contracts,
+//!   where `contract_value` comes from
+//!   [`ExchangeClient::contract_value`](rustrade_core::ExchangeClient::contract_value)
+//!   (defaults to `1.0` for spot / base-quoted futures).
 //! - `MarginFraction(_)`  → currently unsupported (skipped); needs a
 //!   balance + leverage model the framework doesn't yet own.
 //! - `Default`            → falls back to [`ExecutionConfig::default_size`]
 //!   if set, otherwise the order is skipped.
-//!
-//! The [`PositionSizer`](rustrade_risk::PositionSizer) primitive in
-//! `rustrade-risk` is intentionally *not* wired in here — it requires
-//! contract-value information which is exchange-specific. Brains that want
-//! it can use it directly when constructing their [`SizeHint`].
 
 use std::sync::Arc;
 
@@ -85,10 +83,25 @@ impl ExecutionService {
     }
 
     /// Resolve the brain's [`SizeHint`] into a concrete [`Volume`].
-    fn resolve_size(&self, hint: SizeHint, last_price: f64) -> Option<Volume> {
+    ///
+    /// Async because `NotionalUsd` requires the exchange's contract multiplier.
+    async fn resolve_size(
+        &self,
+        hint: SizeHint,
+        last_price: f64,
+        symbol: &str,
+    ) -> Option<Volume> {
         let v = match hint {
             SizeHint::Quantity(v) => v.value(),
-            SizeHint::NotionalUsd(usd) if last_price > 0.0 => usd / last_price,
+            SizeHint::NotionalUsd(usd) if last_price > 0.0 => {
+                let contract_value = self
+                    .exchange
+                    .contract_value(symbol)
+                    .await
+                    .unwrap_or(1.0)
+                    .max(f64::MIN_POSITIVE);
+                usd / (last_price * contract_value)
+            }
             SizeHint::NotionalUsd(_) => return None,
             SizeHint::Default => return self.config.default_size,
             SizeHint::MarginFraction(_) => {
@@ -108,7 +121,7 @@ impl ExecutionService {
     }
 
     /// Translate a [`Decision`] + current [`Position`] into an [`Order`].
-    fn build_order(
+    async fn build_order(
         &self,
         symbol: &str,
         decision: &Decision,
@@ -127,7 +140,7 @@ impl ExecutionService {
             }
 
             SignalType::Buy | SignalType::Sell => {
-                let size = self.resolve_size(decision.size_hint, last_price)?;
+                let size = self.resolve_size(decision.size_hint, last_price, symbol).await?;
                 if size.value() <= 0.0 {
                     return None;
                 }
@@ -182,7 +195,8 @@ impl ExecutionService {
             MarketDataEvent::Trade { price, .. } => *price,
         };
 
-        let Some(order) = self.build_order(&symbol, &decision, &position, last_price) else {
+        let Some(order) = self.build_order(&symbol, &decision, &position, last_price).await
+        else {
             return Ok(());
         };
 

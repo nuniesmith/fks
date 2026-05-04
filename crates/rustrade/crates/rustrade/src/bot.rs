@@ -50,6 +50,21 @@ impl BotConfig {
         }
     }
 
+    /// Fluent builder. Equivalent to chaining the `with_*` methods on
+    /// [`BotConfig::new`], but reads more naturally for multi-line configs.
+    ///
+    /// ```ignore
+    /// let cfg = BotConfig::builder()
+    ///     .name("kucoin")
+    ///     .session_symbol("XBTUSDTM")
+    ///     .close_positions_on_shutdown(true)
+    ///     .flatten_symbols(["XBTUSDTM", "ETHUSDTM"])
+    ///     .build();
+    /// ```
+    pub fn builder() -> BotConfigBuilder {
+        BotConfigBuilder::default()
+    }
+
     pub fn with_supervisor(mut self, supervisor: SupervisorConfig) -> Self {
         self.supervisor = supervisor;
         self
@@ -87,6 +102,80 @@ impl BotConfig {
     {
         self.flatten_symbols = symbols.into_iter().map(Into::into).collect();
         self
+    }
+}
+
+/// Fluent builder for [`BotConfig`].
+///
+/// Every field has a sensible default, so building is infallible.
+#[derive(Debug, Default, Clone)]
+pub struct BotConfigBuilder {
+    name: Option<String>,
+    supervisor: Option<SupervisorConfig>,
+    execution: Option<ExecutionConfig>,
+    circuit_breaker: Option<CircuitBreakerConfig>,
+    session_pnl: Option<SessionPnlConfig>,
+    session_symbol: Option<String>,
+    close_positions_on_shutdown: bool,
+    flatten_symbols: Vec<String>,
+}
+
+impl BotConfigBuilder {
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    pub fn supervisor(mut self, cfg: SupervisorConfig) -> Self {
+        self.supervisor = Some(cfg);
+        self
+    }
+
+    pub fn execution(mut self, cfg: ExecutionConfig) -> Self {
+        self.execution = Some(cfg);
+        self
+    }
+
+    pub fn circuit_breaker(mut self, cfg: CircuitBreakerConfig) -> Self {
+        self.circuit_breaker = Some(cfg);
+        self
+    }
+
+    pub fn session_pnl(mut self, cfg: SessionPnlConfig) -> Self {
+        self.session_pnl = Some(cfg);
+        self
+    }
+
+    pub fn session_symbol(mut self, symbol: impl Into<String>) -> Self {
+        self.session_symbol = Some(symbol.into());
+        self
+    }
+
+    pub fn close_positions_on_shutdown(mut self, close: bool) -> Self {
+        self.close_positions_on_shutdown = close;
+        self
+    }
+
+    pub fn flatten_symbols<I, S>(mut self, symbols: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.flatten_symbols = symbols.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn build(self) -> BotConfig {
+        BotConfig {
+            name: self.name.unwrap_or_else(|| "rustrade-bot".to_string()),
+            supervisor: self.supervisor.unwrap_or_default(),
+            execution: self.execution.unwrap_or_default(),
+            circuit_breaker: self.circuit_breaker.unwrap_or_default(),
+            session_pnl: self.session_pnl.unwrap_or_default(),
+            session_symbol: self.session_symbol.unwrap_or_else(|| "portfolio".to_string()),
+            close_positions_on_shutdown: self.close_positions_on_shutdown,
+            flatten_symbols: self.flatten_symbols,
+        }
     }
 }
 

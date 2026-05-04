@@ -42,8 +42,8 @@ pub mod bot;
 pub mod execution;
 pub mod logging;
 
-pub use bot::{Bot, BotConfig};
-pub use execution::ExecutionService;
+pub use bot::{Bot, BotConfig, BotConfigBuilder};
+pub use execution::{ExecutionConfig, ExecutionService};
 
 // Re-export the building blocks so downstream code can `use rustrade::*`.
 pub use rustrade_core::{

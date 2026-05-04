@@ -39,8 +39,10 @@ members = [
     "crates/rustrade-supervisor",
     "crates/rustrade-risk",
     "crates/rustrade",
+    "crates/rustrade-kucoin",
     # "crates/rustrade-backtest",  # uncomment when Cargo.toml added
     "examples/noop-bot",
+    "examples/kucoin-stub-bot",
 ]
 resolver = "3"
 
@@ -85,6 +87,7 @@ rustrade            = { path = "crates/rustrade",            version = "0.1.0" }
 rustrade-core       = { path = "crates/rustrade-core",       version = "0.1.0" }
 rustrade-supervisor = { path = "crates/rustrade-supervisor", version = "0.1.0" }
 rustrade-risk       = { path = "crates/rustrade-risk",       version = "0.1.0" }
+rustrade-kucoin     = { path = "crates/rustrade-kucoin",     version = "0.1.0" }
 
 # ============================================================================
 # Profiles

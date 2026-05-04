@@ -1,0 +1,204 @@
+//! [`Bot`] — the entry point most users will use directly.
+//!
+//! Wires a fleet of [`Brain`]s and one [`ExchangeClient`] into a supervised
+//! runtime. See the crate-level docs for usage.
+
+use std::sync::Arc;
+
+use rustrade_core::{Brain, ExchangeClient, MarketDataBus};
+use rustrade_risk::{CircuitBreaker, CircuitBreakerConfig, SessionPnl, SessionPnlConfig};
+use rustrade_supervisor::{Supervisor, SupervisorConfig};
+use tokio::sync::Mutex;
+
+use crate::execution::{ExecutionConfig, ExecutionService};
+
+/// User-facing bot configuration.
+///
+/// Reasonable defaults; override only the bits you care about.
+#[derive(Debug, Clone)]
+pub struct BotConfig {
+    pub name: String,
+    pub supervisor: SupervisorConfig,
+    pub execution: ExecutionConfig,
+    pub circuit_breaker: CircuitBreakerConfig,
+    pub session_pnl: SessionPnlConfig,
+    /// PnL accounting symbol for [`SessionPnl`]. Most single-symbol bots
+    /// pass the trading symbol here; multi-symbol bots can pass `"portfolio"`
+    /// or similar.
+    pub session_symbol: String,
+    /// On graceful shutdown, attempt to close any open positions on the
+    /// exchange before exiting.
+    pub close_positions_on_shutdown: bool,
+    /// Symbols to flatten on shutdown (only consulted when
+    /// `close_positions_on_shutdown` is `true`). If empty, no positions
+    /// are closed even if the flag is set — the bot doesn't attempt to
+    /// enumerate every symbol the exchange knows about.
+    pub flatten_symbols: Vec<String>,
+}
+
+impl BotConfig {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            supervisor: SupervisorConfig::default(),
+            execution: ExecutionConfig::default(),
+            circuit_breaker: CircuitBreakerConfig::default(),
+            session_pnl: SessionPnlConfig::default(),
+            session_symbol: "portfolio".to_string(),
+            close_positions_on_shutdown: false,
+            flatten_symbols: Vec::new(),
+        }
+    }
+
+    pub fn with_supervisor(mut self, supervisor: SupervisorConfig) -> Self {
+        self.supervisor = supervisor;
+        self
+    }
+
+    pub fn with_execution(mut self, execution: ExecutionConfig) -> Self {
+        self.execution = execution;
+        self
+    }
+
+    pub fn with_circuit_breaker(mut self, cfg: CircuitBreakerConfig) -> Self {
+        self.circuit_breaker = cfg;
+        self
+    }
+
+    pub fn with_session_pnl(mut self, cfg: SessionPnlConfig) -> Self {
+        self.session_pnl = cfg;
+        self
+    }
+
+    pub fn with_session_symbol(mut self, symbol: impl Into<String>) -> Self {
+        self.session_symbol = symbol.into();
+        self
+    }
+
+    pub fn with_close_positions_on_shutdown(mut self, close: bool) -> Self {
+        self.close_positions_on_shutdown = close;
+        self
+    }
+
+    pub fn with_flatten_symbols<I, S>(mut self, symbols: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.flatten_symbols = symbols.into_iter().map(Into::into).collect();
+        self
+    }
+}
+
+/// The framework runtime. Holds the supervisor, market bus, and shared
+/// risk primitives that all spawned execution services see.
+pub struct Bot {
+    config: BotConfig,
+    exchange: Arc<dyn ExchangeClient>,
+    bus: MarketDataBus,
+    breaker: Arc<Mutex<CircuitBreaker>>,
+    session_pnl: Arc<Mutex<SessionPnl>>,
+    supervisor: Supervisor,
+}
+
+impl Bot {
+    /// Build a bot from config + exchange + brains. One execution service
+    /// is spawned per brain; all of them share the same market bus, circuit
+    /// breaker, and session PnL.
+    pub fn new(
+        config: BotConfig,
+        exchange: Arc<dyn ExchangeClient>,
+        brains: Vec<Arc<dyn Brain>>,
+    ) -> Self {
+        let bus = MarketDataBus::new();
+        let breaker = Arc::new(Mutex::new(CircuitBreaker::new(config.circuit_breaker.clone())));
+        let session_pnl = Arc::new(Mutex::new(SessionPnl::new(
+            config.session_symbol.clone(),
+            config.session_pnl.clone(),
+        )));
+        let supervisor = Supervisor::new(config.supervisor.clone());
+
+        for brain in brains {
+            let svc = ExecutionService::new(
+                brain,
+                Arc::clone(&exchange),
+                bus.clone(),
+                Arc::clone(&breaker),
+                Arc::clone(&session_pnl),
+                config.execution.clone(),
+            );
+            supervisor.spawn_service(Box::new(svc));
+        }
+
+        Self {
+            config,
+            exchange,
+            bus,
+            breaker,
+            session_pnl,
+            supervisor,
+        }
+    }
+
+    /// Borrow the market bus so external code (a feed adapter, a test
+    /// harness, a backtest replay) can publish events to the brain fleet.
+    pub fn market_bus(&self) -> &MarketDataBus {
+        &self.bus
+    }
+
+    /// Borrow the supervisor for advanced uses (custom services, lifecycle
+    /// inspection, programmatic shutdown).
+    pub fn supervisor(&self) -> &Supervisor {
+        &self.supervisor
+    }
+
+    /// Shared circuit breaker — exchange-side or brain-side code can
+    /// `record_loss()` / `record_win()` on it.
+    pub fn circuit_breaker(&self) -> Arc<Mutex<CircuitBreaker>> {
+        Arc::clone(&self.breaker)
+    }
+
+    /// Shared session PnL tracker.
+    pub fn session_pnl(&self) -> Arc<Mutex<SessionPnl>> {
+        Arc::clone(&self.session_pnl)
+    }
+
+    /// Run until Ctrl-C / SIGTERM, then drain services and (optionally)
+    /// flatten positions before returning.
+    pub async fn run_until_shutdown(self) -> anyhow::Result<()> {
+        tracing::info!(bot = %self.config.name, "bot starting");
+
+        self.supervisor.run_until_shutdown().await?;
+
+        if self.config.close_positions_on_shutdown && !self.config.flatten_symbols.is_empty() {
+            tracing::info!(
+                bot = %self.config.name,
+                symbols = ?self.config.flatten_symbols,
+                "closing positions on shutdown"
+            );
+            for symbol in &self.config.flatten_symbols {
+                match self.exchange.get_position(symbol).await {
+                    Ok(pos) if !pos.is_flat() => {
+                        match self.exchange.close_position(symbol, &pos).await {
+                            Ok(order_id) => {
+                                tracing::info!(symbol, order_id, "position closed on shutdown");
+                            }
+                            Err(e) => {
+                                tracing::error!(symbol, error = %e, "close_position failed on shutdown");
+                            }
+                        }
+                    }
+                    Ok(_) => {
+                        tracing::debug!(symbol, "already flat at shutdown");
+                    }
+                    Err(e) => {
+                        tracing::error!(symbol, error = %e, "get_position failed at shutdown");
+                    }
+                }
+            }
+        }
+
+        tracing::info!(bot = %self.config.name, "bot shutdown complete");
+        Ok(())
+    }
+}

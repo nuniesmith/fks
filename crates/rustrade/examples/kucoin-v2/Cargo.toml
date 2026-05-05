@@ -1,0 +1,47 @@
+[package]
+name        = "kucoin-v2"
+version     = "0.1.0"
+edition     = "2024"
+authors     = ["nuniesmith"]
+license     = "MIT"
+publish     = false
+description = "KuCoin Futures SAR trading bot — v2 built on the rustrade framework"
+
+[[bin]]
+name = "kucoin-v2"
+path = "src/main.rs"
+
+[dependencies]
+# rustrade framework
+rustrade        = { workspace = true }
+rustrade-core   = { workspace = true }
+rustrade-kucoin = { workspace = true }
+
+# Math + I/O — exchange-apiws lives outside this workspace, path-dep'd
+indicators-ta  = "0.1.3"
+exchange-apiws = { path = "../../../exchange-apiws", version = "0.1.10" }
+
+# Async runtime
+tokio       = { workspace = true, features = ["rt-multi-thread", "macros", "time", "signal", "sync"] }
+tokio-util  = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialisation
+serde      = { workspace = true }
+serde_json = "1"
+
+# Concurrency
+parking_lot = "0.12"
+
+# Logging
+tracing = { workspace = true }
+
+# Errors
+anyhow    = { workspace = true }
+thiserror = { workspace = true }
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+
+# Time
+chrono = { workspace = true }

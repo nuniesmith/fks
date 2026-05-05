@@ -43,6 +43,7 @@ members = [
     # "crates/rustrade-backtest",  # uncomment when Cargo.toml added
     "examples/noop-bot",
     "examples/kucoin-stub-bot",
+    "examples/kucoin-v2",
 ]
 resolver = "3"
 

@@ -2,6 +2,100 @@
 
 > **Status:** plan only — no code moved yet. Companion to
 > `crates/rustrade/NEXT_STEPS.md` step 5.
+>
+> **2026-05-06 update:** I tried to start phase 1 and hit three real
+> blockers the original plan glossed over. The "Findings from
+> attempted execution" section below captures them. The phase 1 section
+> further down has been corrected; the rest of the plan still stands.
+
+---
+
+## Findings from attempted execution
+
+When PR #7 (this plan) merged, I started phase 1 (delete
+`janus-indicators` + `janus-regime` + `janus-backtest` and migrate
+consumers). Three blockers surfaced that the original survey didn't
+catch:
+
+### 1. `janus-regime` is NOT a duplicate of `indicators-ta`
+
+The original plan grouped `janus-regime` with `janus-indicators` as
+"already covered by `indicators-ta`". That was wrong.
+
+`janus-regime` is **~5,000 lines across 7 files**:
+
+```
+detector.rs       760  ADX/Bollinger/ATR/EMA-based regime classifier
+ensemble.rs       754  combines indicator + HMM detectors
+hmm.rs            845  Hidden Markov Model regime detector
+indicators.rs    1057  per-detector indicator helpers
+router.rs         961  EnhancedRouter — strategy selection per regime
+types.rs          538  RegimeConfig, RoutedSignal, etc.
+```
+
+The HMM + router code has **no equivalent in `indicators-ta`**.
+Deleting `janus-regime` would lose this functionality unless either
+(a) it's ported into `indicators-ta` upstream, or (b) it stays as a
+private crate, or (c) it lifts into a new public sibling
+`regime-router-ta`. **Decision needed before phase 1 can complete.**
+
+### 2. `janus-indicators::IncrementalEma` is missing from `indicators-ta`
+
+`indicators-ta` exposes a struct `EMA` with different warmup
+semantics (averages first `period` bars, returns NaN until ready).
+`janus-indicators::IncrementalEma` initialises on the *first* tick
+(uses it as the initial state). These are not interchangeable for
+backtest replay code that expects per-tick output starting from bar 1.
+
+`crates/janus/crates/backtest/src/replay.rs` uses `IncrementalEma`.
+Migrating it requires either:
+- Adding `IncrementalEma` to `indicators-ta` upstream, or
+- Inlining the ~30-line struct into the consumer, or
+- Keeping `janus-indicators` private as a thin compatibility shim.
+
+The struct is small enough that **option (b) — inline it — is the
+pragmatic path**, since `crates/janus/crates/backtest/` is itself
+slated for deletion (replaced by `rustrade-backtest`).
+
+### 3. `bin/backtest-cli` uses APIs `rustrade-backtest` MVP doesn't expose
+
+`bin/backtest-cli/src/main.rs` imports from
+`janus_backtest::ohlcv_loader::*` (parquet/CSV loaders) and
+`janus_backtest::strategy_backtester::*` (a different replay surface
+from `rustrade-backtest`'s `BacktestEngine`).
+
+`rustrade-backtest` MVP intentionally deferred parquet/CSV loaders
+("write your own `Vec<Candle>` for now"). Migrating the CLI requires
+either:
+- Lifting `ohlcv_loader.rs` (~1,700 lines) into `rustrade-backtest`
+  behind a `polars` feature flag, or
+- Rewriting the CLI to use the simpler `BacktestEngine` API + roll
+  its own parquet/CSV loading code, or
+- Keeping `bin/backtest-cli` on `janus-backtest` until both
+  alternatives mature.
+
+### 4. `bin/janus` still uses `JanusSupervisor`
+
+The plan suggested `lib/janus-core/src/supervisor/` could be deleted
+to prevent drift from `rustrade-supervisor`. But `bin/janus/src/main.rs`
+still imports `JanusSupervisor`, `BackoffConfig`, `ApiModuleAdapter`,
+`SpawnOptions`, `ModuleAdapter` from it. Deleting the supervisor
+module from `janus-core` means rewriting `bin/janus/main.rs` to use
+`rustrade::Bot` (mirror of the kucoin-v2 port).
+
+That's a real port — analogous in scope to the kucoin-v2 PR, just
+inside the janus repo.
+
+### Net implication
+
+Phase 1 is **not 1–2 days of mechanical work**. It's:
+- ~3–5 days of structural decisions (regime routing, IncrementalEma,
+  ohlcv loaders) and ports
+- Or it can be split into smaller, less ambitious phase-1 sub-tasks
+
+See "Revised phase 1" below.
+
+---
 
 This document maps every sub-crate in `crates/janus/` to one of three
 destinations:
@@ -145,19 +239,67 @@ plumbing already replaced by rustrade, FKS-specific health/registry.
 The order minimises broken builds and keeps `kucoin-v2` running at
 every step.
 
-### Phase 1 — Cleanup (low-risk, can land in fks-full first)
+### Phase 1 — Cleanup (NOT as low-risk as originally estimated)
 
-1. **Delete `janus-indicators` + `janus-regime`.** Migrate
-   `crates/strategies/`, `crates/backtest/`, `crates/optimizer/`, and
-   the bin to `indicators-ta`. The lib name `indicators` already
-   matches; mostly just `Cargo.toml` swaps.
-2. **Decouple `janus-data-quality` and `janus-ml`** from `janus-core`
-   / `janus-cns`. Either drop the deps or feature-gate them.
-3. **Delete `janus-backtest`.** Migrate `optimizer` + the CLI to
-   `rustrade-backtest`. Reshape `crates/backtest-cli/src/main.rs`.
+> **2026-05-06 revision:** the original phase 1 was 1–2 days; the
+> findings above push it to 3–5 days because of the regime-routing,
+> IncrementalEma, and ohlcv-loader gaps. The sub-tasks below are
+> ordered by independence, so partial completion is fine.
 
-After phase 1: `crates/janus/` has a clean separable boundary. No code
-has moved repos yet.
+#### 1a. Decouple `janus-data-quality` + `janus-ml` (truly low-risk)
+
+Drop `janus-core` / `janus-cns` deps from `janus-data-quality` and
+`janus-ml`, or feature-gate them. **~half day.** No external blockers.
+
+#### 1b. Decide on `janus-regime` (decision-bound)
+
+Pick one of:
+- **(a)** Port HMM + router upstream into `indicators-ta` as a new
+  module — biggest blast radius, biggest payoff.
+- **(b)** Lift `janus-regime` into a new public sibling
+  `regime-router-ta` (or similar). Stays MIT-licensed, ~5K LOC
+  cleanup needed.
+- **(c)** Keep `janus-regime` as a private crate inside the eventual
+  janus-private repo.
+
+Recommendation: **(c) for v0** — the router code is tightly
+strategy-coupled and not obviously generic. Revisit after a second
+strategy stack uses regime routing.
+
+#### 1c. Delete `janus-indicators` (after 1b)
+
+After regime is settled:
+1. Inline `IncrementalEma` (and `IncrementalAtr` if also missing
+   from `indicators-ta`) into `crates/backtest/src/replay.rs` or a
+   new shared utility module — ~30 LOC each.
+2. Migrate all `use janus_indicators::*` imports to `use indicators::*`.
+   The lib name matches; mostly Cargo.toml + use-statement swaps.
+3. Delete `crates/janus/crates/indicators/`.
+
+#### 1d. Migrate the supervisor
+
+`bin/janus/src/main.rs` uses `JanusSupervisor`, `BackoffConfig`,
+`ApiModuleAdapter`, `SpawnOptions`, `ModuleAdapter` from
+`janus-core::supervisor`. Port it to `rustrade::Bot` like
+`kucoin-v2` was ported. **~1 day** (kucoin-v2 was ~115 lines of
+new `main.rs`; janus's is similar in scope).
+
+After this lands, delete `crates/janus/lib/janus-core/src/supervisor/`
+to prevent drift from `rustrade-supervisor`.
+
+#### 1e. Delete `janus-backtest` (decision-bound)
+
+Pick one of:
+- **(a)** Lift `ohlcv_loader.rs` (~1,700 LOC) into `rustrade-backtest`
+  behind a feature flag. Then migrate `bin/backtest-cli` and
+  `crates/optimizer` to `rustrade-backtest`. Delete `janus-backtest`.
+- **(b)** Keep `bin/backtest-cli` running on `janus-backtest` until
+  someone needs the ergonomic CLI elsewhere. `janus-backtest` becomes
+  a thin private crate; `crates/optimizer` either moves with it or
+  rewrites against `rustrade-backtest`.
+
+Recommendation: **(b)** — the CLI is fks-internal tooling. Don't
+spend a day migrating it before janus-private even exists.
 
 ### Phase 2 — Publish public siblings
 
@@ -212,13 +354,22 @@ Recommended publish order (smallest to largest blast radius):
 
 | Phase | Effort | Blocking? |
 |---|---|---|
-| 1. Cleanup (`indicators` migration, decouple data-quality/ml, delete janus-backtest) | 1–2 days | Lands in fks-full |
-| 2. Publish public siblings | 0.5–1 day per crate × 9 = ~1 week of focused time | Each crate independent — can park between |
+| 1a. Decouple data-quality/ml | ~half day | Lands in fks-full, no blockers |
+| 1b. Decide regime fate | discussion only | Decision-bound |
+| 1c. Delete janus-indicators (after 1b) | ~half day | Needs 1b decision |
+| 1d. Migrate `bin/janus` to `rustrade::Bot` | ~1 day | Independent |
+| 1e. Decide janus-backtest fate | ~half day to ~1 day | Decision-bound |
+| 2. Publish public siblings | 0.5–1 day per crate × 9 = ~1 week of focused time | Each crate independent |
 | 3. Private janus repo move + Brain wrappers | 1–2 days | Needs the private repo to exist |
 | 4. Archive `crates/janus/` | 1 day | After C migrates |
 
-**Total: 2–3 focused weeks** if done sequentially. Most of phase 2
-can run in parallel since the public siblings are independent crates.
+**Total: 3–4 focused weeks** if done sequentially. Phase 1 is now
+3–5 days (was 1–2). Phase 2 is unchanged since the public-sibling
+crates are independent of each other.
+
+**The cheapest progress today is sub-task 1a + 1d** (decouple
+data-quality/ml + port `bin/janus` to `rustrade::Bot`). Both are
+independent of the open decisions and total ~1.5 days of work.
 
 ---
 

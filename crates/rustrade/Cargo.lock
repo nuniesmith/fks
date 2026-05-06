@@ -1095,6 +1095,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -1364,6 +1365,7 @@ dependencies = [
  "rustrade",
  "rustrade-core",
  "rustrade-kucoin",
+ "rustrade-notify",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -2585,6 +2587,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -2768,6 +2771,23 @@ dependencies = [
  "async-trait",
  "exchange-apiws",
  "rustrade-core",
+ "tracing",
+]
+
+[[package]]
+name = "rustrade-notify"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "reqwest 0.12.28",
+ "rustrade-core",
+ "rustrade-supervisor",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 
@@ -3717,6 +3737,15 @@ checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52f5ee44c96cf55f1b349600768e3ece3a8f26010c05265ab73f945bb1a2eb9d"
+dependencies = [
+ "rustls-pki-types",
 ]
 
 [[package]]

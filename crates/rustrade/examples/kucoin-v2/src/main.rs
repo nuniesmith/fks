@@ -106,6 +106,33 @@ async fn main() -> anyhow::Result<()> {
 
     let bot = Bot::new(config, Arc::clone(&exchange), brains);
 
+    // ── Optional Discord heartbeat ──────────────────────────────────────────
+    // If KC_DISCORD_WEBHOOK is set, spawn a 5-minute heartbeat service
+    // through the supervisor. Failures inside the heartbeat (transient
+    // Discord outages) are logged and swallowed; the supervisor's restart
+    // loop handles the case where the future itself returns Err.
+    if let Ok(webhook) = std::env::var("KC_DISCORD_WEBHOOK") {
+        match rustrade_notify::DiscordNotifier::new(webhook) {
+            Ok(notifier) => {
+                let heartbeat = rustrade_notify::WebhookHeartbeatService::new(
+                    "kucoin-v2-heartbeat",
+                    Arc::new(notifier.with_username("kucoin-v2")),
+                    Duration::from_secs(300),
+                    format!(
+                        ":heartbeat: kucoin-v2 alive — symbols={:?}, mode={}",
+                        args.symbols,
+                        if sim_mode { "SIM" } else { "LIVE" },
+                    ),
+                );
+                bot.supervisor().spawn_service(Box::new(heartbeat));
+                info!("kucoin-v2-heartbeat spawned (KC_DISCORD_WEBHOOK set)");
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "KC_DISCORD_WEBHOOK invalid; skipping heartbeat");
+            }
+        }
+    }
+
     // ── Spawn one candle poller per symbol on the bot's supervisor ──────────
     // The supervisor manages their lifecycle the same way it manages the
     // execution services — restart on failure with exponential backoff,

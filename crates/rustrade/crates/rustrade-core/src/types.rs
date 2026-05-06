@@ -18,12 +18,15 @@ use crate::market::Side;
 pub struct Price(pub f64);
 
 impl Price {
+    /// The zero price.
     pub const ZERO: Self = Self(0.0);
 
+    /// Wrap a raw `f64` as a `Price`.
     #[inline]
     pub const fn new(v: f64) -> Self {
         Self(v)
     }
+    /// Unwrap to the raw `f64`.
     #[inline]
     pub const fn value(self) -> f64 {
         self.0
@@ -42,12 +45,15 @@ impl fmt::Display for Price {
 pub struct Volume(pub f64);
 
 impl Volume {
+    /// The zero volume.
     pub const ZERO: Self = Self(0.0);
 
+    /// Wrap a raw `f64` as a `Volume`.
     #[inline]
     pub const fn new(v: f64) -> Self {
         Self(v)
     }
+    /// Unwrap to the raw `f64`.
     #[inline]
     pub const fn value(self) -> f64 {
         self.0
@@ -63,6 +69,7 @@ impl fmt::Display for Volume {
 // ── Market data ──────────────────────────────────────────────────────────────
 
 /// A single trade tick or best-bid/best-ask snapshot.
+#[allow(missing_docs)] // self-evident OHLCV-style fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tick {
     pub symbol: String,
@@ -76,10 +83,12 @@ pub struct Tick {
 }
 
 impl Tick {
+    /// Midpoint of bid and ask.
     pub fn mid_price(&self) -> Price {
         Price((self.bid.0 + self.ask.0) / 2.0)
     }
 
+    /// Best-ask minus best-bid.
     pub fn spread(&self) -> Price {
         Price(self.ask.0 - self.bid.0)
     }
@@ -89,6 +98,7 @@ impl Tick {
 ///
 /// `time` is the open time of the candle in milliseconds since the UNIX epoch.
 /// Stored as `i64` (not `f64`) to avoid precision loss at millisecond granularity.
+#[allow(missing_docs)] // standard OHLCV fields
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Candle {
     pub time: i64,
@@ -105,7 +115,9 @@ pub struct Candle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OrderKind {
+    /// Cross the book at the next available price.
     Market,
+    /// Resting limit order at a specified price.
     Limit,
     /// Post-only limit (rejected if it would cross the book as taker).
     PostOnly,
@@ -120,6 +132,7 @@ pub enum OrderKind {
 /// This is the framework-level abstraction; concrete exchange adapters translate
 /// it into exchange-specific payloads. The `client_id` is optional but strongly
 /// recommended — it lets the framework reconcile fills back to this order.
+#[allow(missing_docs)] // self-evident order header fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     pub symbol: String,
@@ -136,6 +149,7 @@ pub struct Order {
 }
 
 impl Order {
+    /// Build a market order.
     pub fn market(symbol: impl Into<String>, side: Side, size: Volume) -> Self {
         Self {
             symbol: symbol.into(),
@@ -148,6 +162,7 @@ impl Order {
         }
     }
 
+    /// Build a limit order at the given price.
     pub fn limit(symbol: impl Into<String>, side: Side, size: Volume, price: Price) -> Self {
         Self {
             symbol: symbol.into(),
@@ -160,11 +175,14 @@ impl Order {
         }
     }
 
+    /// Set the `reduce_only` flag (exit orders that must not flip into a
+    /// fresh opposing position).
     pub fn with_reduce_only(mut self, reduce_only: bool) -> Self {
         self.reduce_only = reduce_only;
         self
     }
 
+    /// Attach a client-supplied id for fill reconciliation.
     pub fn with_client_id(mut self, id: impl Into<String>) -> Self {
         self.client_id = Some(id.into());
         self
@@ -172,6 +190,7 @@ impl Order {
 }
 
 /// A trade fill reported by the exchange.
+#[allow(missing_docs)] // self-evident fill fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fill {
     pub symbol: String,
@@ -190,6 +209,7 @@ pub struct Fill {
 /// Current exchange-reported position for a single symbol.
 ///
 /// `qty` is signed: positive = long, negative = short, zero = flat.
+#[allow(missing_docs)] // qty/entry_price/unrealised_pnl are self-evident
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub struct Position {
     pub qty: f64,
@@ -198,22 +218,26 @@ pub struct Position {
 }
 
 impl Position {
+    /// Sentinel value representing no open position.
     pub const FLAT: Self = Self {
         qty: 0.0,
         entry_price: None,
         unrealised_pnl: 0.0,
     };
 
+    /// `true` when no contracts are held.
     #[inline]
     pub fn is_flat(&self) -> bool {
         self.qty == 0.0
     }
 
+    /// `true` when `qty > 0`.
     #[inline]
     pub fn is_long(&self) -> bool {
         self.qty > 0.0
     }
 
+    /// `true` when `qty < 0`.
     #[inline]
     pub fn is_short(&self) -> bool {
         self.qty < 0.0

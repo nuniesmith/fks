@@ -31,6 +31,8 @@
 //!    of methods they don't care about.
 //! 4. **Traits are object-safe where possible** so `Box<dyn Brain>` works.
 
+#![warn(missing_docs)]
+
 pub mod brain;
 pub mod bus;
 pub mod error;

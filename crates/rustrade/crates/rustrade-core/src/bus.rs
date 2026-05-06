@@ -40,12 +40,12 @@ pub struct MarketDataBus {
 }
 
 impl MarketDataBus {
-    /// Create a new bus with the default capacity.
+    /// Build a new bus with the default capacity (1024).
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_CAPACITY)
     }
 
-    /// Create a new bus with an explicit channel capacity.
+    /// Build a new bus with an explicit channel capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         Self { tx }
@@ -86,23 +86,29 @@ pub struct SignalBus {
 }
 
 impl SignalBus {
+    /// Build a new bus with the default capacity (1024).
     pub fn new() -> Self {
         Self::with_capacity(DEFAULT_CAPACITY)
     }
 
+    /// Build a new bus with an explicit channel capacity.
     pub fn with_capacity(capacity: usize) -> Self {
         let (tx, _) = broadcast::channel(capacity);
         Self { tx }
     }
 
+    /// Subscribe a new consumer.
     pub fn subscribe(&self) -> broadcast::Receiver<Signal> {
         self.tx.subscribe()
     }
 
+    /// Publish a signal. Returns the number of active subscribers that
+    /// received it; `0` if there are no subscribers.
     pub fn publish(&self, signal: Signal) -> usize {
         self.tx.send(signal).unwrap_or(0)
     }
 
+    /// Current number of subscribers.
     pub fn subscriber_count(&self) -> usize {
         self.tx.receiver_count()
     }

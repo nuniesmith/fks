@@ -21,6 +21,8 @@ use parking_lot::Mutex;
 use rustrade_core::{Error, ExchangeClient, Fill, Order, OrderKind, Position, Result, Side};
 use thiserror::Error;
 
+/// Configuration for a [`SimExchange`].
+#[allow(missing_docs)] // each field has its own /// doc
 #[derive(Debug, Clone)]
 pub struct SimExchangeConfig {
     /// Starting balance in the quote currency (e.g. USDT).
@@ -56,28 +58,35 @@ impl Default for SimExchangeConfig {
 }
 
 impl SimExchangeConfig {
+    /// Builder: starting balance.
     pub fn with_initial_balance(mut self, b: f64) -> Self {
         self.initial_balance = b;
         self
     }
+    /// Builder: slippage in basis points of the next-bar open.
     pub fn with_slippage_bps(mut self, bps: f64) -> Self {
         self.slippage_bps = bps;
         self
     }
+    /// Builder: commission in basis points of notional.
     pub fn with_commission_bps(mut self, bps: f64) -> Self {
         self.commission_bps = bps;
         self
     }
+    /// Builder: register a contract multiplier for one symbol.
     pub fn with_contract_value(mut self, symbol: impl Into<String>, value: f64) -> Self {
         self.contract_values.insert(symbol.into(), value);
         self
     }
+    /// Builder: quote currency string for `get_balance` lookups.
     pub fn with_quote_currency(mut self, c: impl Into<String>) -> Self {
         self.quote_currency = c.into();
         self
     }
 }
 
+/// Errors returned by [`SimExchange`].
+#[allow(missing_docs)] // single self-evident variant
 #[derive(Debug, Error)]
 pub enum SimExchangeError {
     #[error("no current price set for {0} — engine must call set_last_price before processing orders")]
@@ -130,6 +139,7 @@ pub struct SimExchange {
 }
 
 impl SimExchange {
+    /// Build a fresh sim from the given config.
     pub fn new(config: SimExchangeConfig) -> Self {
         let mut s = State::default();
         s.balance = config.initial_balance;
@@ -246,7 +256,7 @@ impl SimExchange {
         fills
     }
 
-    /// Realised PnL net of fees accumulated over the run.
+    /// Realised PnL net of fees accumulated over the run so far.
     pub fn realised_pnl(&self) -> f64 {
         self.state.lock().realised_pnl
     }

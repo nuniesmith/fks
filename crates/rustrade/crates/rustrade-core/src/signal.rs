@@ -33,6 +33,7 @@ impl std::fmt::Display for SignalType {
 ///
 /// The framework's execution layer doesn't interpret `metadata` — it's there so
 /// a brain can record its rationale for post-hoc analysis.
+#[allow(missing_docs)] // self-evident header fields; see the docs on `confidence` and `metadata`
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signal {
     pub id: String,

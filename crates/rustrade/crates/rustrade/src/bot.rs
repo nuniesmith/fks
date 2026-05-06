@@ -15,6 +15,7 @@ use crate::execution::{ExecutionConfig, ExecutionService};
 /// User-facing bot configuration.
 ///
 /// Reasonable defaults; override only the bits you care about.
+#[allow(missing_docs)] // each field has its own /// doc; struct itself is the API surface
 #[derive(Debug, Clone)]
 pub struct BotConfig {
     pub name: String,
@@ -37,6 +38,7 @@ pub struct BotConfig {
 }
 
 impl BotConfig {
+    /// Build a config with the given name and defaults everywhere else.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -65,36 +67,44 @@ impl BotConfig {
         BotConfigBuilder::default()
     }
 
+    /// Builder: override the supervisor config.
     pub fn with_supervisor(mut self, supervisor: SupervisorConfig) -> Self {
         self.supervisor = supervisor;
         self
     }
 
+    /// Builder: override the execution config.
     pub fn with_execution(mut self, execution: ExecutionConfig) -> Self {
         self.execution = execution;
         self
     }
 
+    /// Builder: override the circuit-breaker config.
     pub fn with_circuit_breaker(mut self, cfg: CircuitBreakerConfig) -> Self {
         self.circuit_breaker = cfg;
         self
     }
 
+    /// Builder: override the session-PnL config.
     pub fn with_session_pnl(mut self, cfg: SessionPnlConfig) -> Self {
         self.session_pnl = cfg;
         self
     }
 
+    /// Builder: set the symbol attached to the [`SessionPnl`] tracker.
     pub fn with_session_symbol(mut self, symbol: impl Into<String>) -> Self {
         self.session_symbol = symbol.into();
         self
     }
 
+    /// Builder: enable position-flatten-on-shutdown.
     pub fn with_close_positions_on_shutdown(mut self, close: bool) -> Self {
         self.close_positions_on_shutdown = close;
         self
     }
 
+    /// Builder: list the symbols to flatten on shutdown (only consulted
+    /// when `close_positions_on_shutdown == true`).
     pub fn with_flatten_symbols<I, S>(mut self, symbols: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -121,41 +131,49 @@ pub struct BotConfigBuilder {
 }
 
 impl BotConfigBuilder {
+    /// Set the bot name.
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    /// Set the supervisor config.
     pub fn supervisor(mut self, cfg: SupervisorConfig) -> Self {
         self.supervisor = Some(cfg);
         self
     }
 
+    /// Set the execution-service config.
     pub fn execution(mut self, cfg: ExecutionConfig) -> Self {
         self.execution = Some(cfg);
         self
     }
 
+    /// Set the circuit-breaker config.
     pub fn circuit_breaker(mut self, cfg: CircuitBreakerConfig) -> Self {
         self.circuit_breaker = Some(cfg);
         self
     }
 
+    /// Set the session-PnL config.
     pub fn session_pnl(mut self, cfg: SessionPnlConfig) -> Self {
         self.session_pnl = Some(cfg);
         self
     }
 
+    /// Set the symbol attached to the session-PnL tracker.
     pub fn session_symbol(mut self, symbol: impl Into<String>) -> Self {
         self.session_symbol = Some(symbol.into());
         self
     }
 
+    /// Enable position-flatten-on-shutdown.
     pub fn close_positions_on_shutdown(mut self, close: bool) -> Self {
         self.close_positions_on_shutdown = close;
         self
     }
 
+    /// Symbols to flatten on shutdown.
     pub fn flatten_symbols<I, S>(mut self, symbols: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -165,6 +183,7 @@ impl BotConfigBuilder {
         self
     }
 
+    /// Finalise into a [`BotConfig`].
     pub fn build(self) -> BotConfig {
         BotConfig {
             name: self.name.unwrap_or_else(|| "rustrade-bot".to_string()),

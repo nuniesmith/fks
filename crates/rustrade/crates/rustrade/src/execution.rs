@@ -38,6 +38,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 /// Per-execution-service configuration.
+#[allow(missing_docs)] // self-evident `default_size` field
 #[derive(Debug, Clone, Default)]
 pub struct ExecutionConfig {
     /// Fallback order size when the brain returns `SizeHint::Default`.
@@ -62,6 +63,8 @@ pub struct ExecutionService {
 }
 
 impl ExecutionService {
+    /// Build a new execution service for one brain. The supervisor takes
+    /// ownership when spawned via `bot.supervisor().spawn_service(...)`.
     pub fn new(
         brain: Arc<dyn Brain>,
         exchange: Arc<dyn ExchangeClient>,

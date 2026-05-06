@@ -30,6 +30,8 @@
 //! publish to their own Prometheus registry. This crate does not own a
 //! global Prometheus registry.
 
+#![warn(missing_docs)]
+
 pub mod backoff;
 pub mod lifecycle;
 pub mod service;

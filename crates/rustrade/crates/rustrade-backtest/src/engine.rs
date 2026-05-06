@@ -29,6 +29,8 @@ use crate::metrics::{
 };
 use crate::sim_exchange::SimExchange;
 
+/// Configuration for a [`BacktestEngine`].
+#[allow(missing_docs)] // each field has its own /// doc
 #[derive(Debug, Clone)]
 pub struct BacktestConfig {
     /// Exchange identifier stamped onto each `MarketDataEvent` (purely
@@ -54,6 +56,8 @@ impl Default for BacktestConfig {
     }
 }
 
+/// Errors produced by [`BacktestEngine::run`].
+#[allow(missing_docs)] // variants are self-evident from the message format
 #[derive(Debug, Error)]
 pub enum BacktestError {
     #[error("brain returned an error: {0}")]
@@ -64,6 +68,7 @@ pub enum BacktestError {
 }
 
 /// The output of a single backtest run.
+#[allow(missing_docs)] // self-evident: aggregated metrics, the equity curve, and the trade log
 #[derive(Debug, Clone)]
 pub struct BacktestRun {
     pub metrics: BacktestMetrics,
@@ -71,6 +76,8 @@ pub struct BacktestRun {
     pub trades: Vec<TradeRecord>,
 }
 
+/// A configured replay engine. Build one per run; calling [`Self::run`]
+/// consumes the candle stream end-to-end.
 pub struct BacktestEngine {
     config: BacktestConfig,
     sim: SimExchange,
@@ -78,6 +85,8 @@ pub struct BacktestEngine {
 }
 
 impl BacktestEngine {
+    /// Build an engine. The same [`SimExchange`] is borrowed by the
+    /// engine; if you need to inspect it post-run, hold a clone.
     pub fn new(config: BacktestConfig, sim: SimExchange, brain: Arc<dyn Brain>) -> Self {
         Self { config, sim, brain }
     }
@@ -91,6 +100,8 @@ impl BacktestEngine {
     /// Replay candles through the brain. Candles must be sorted ascending
     /// by `time` — the engine doesn't sort them itself because in production
     /// they normally already are, and silent reordering would mask bugs.
+    /// Replay `candles` through the brain and return aggregated metrics +
+    /// the equity curve + the reconstructed trade log.
     pub async fn run(
         &self,
         symbol: &str,

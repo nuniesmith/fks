@@ -54,6 +54,7 @@ pub enum SizeHint {
 ///
 /// `signal` is always present; the other fields are hints and metadata that
 /// the execution and risk layers may or may not use.
+#[allow(missing_docs)] // `signal` is the only undocumented field; see the doc on the struct
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Decision {
     pub signal: SignalType,
@@ -84,6 +85,7 @@ impl Decision {
         }
     }
 
+    /// Convenience: "buy with the given confidence".
     pub fn buy(confidence: f64) -> Self {
         Self {
             signal: SignalType::Buy,
@@ -92,6 +94,7 @@ impl Decision {
         }
     }
 
+    /// Convenience: "sell with the given confidence".
     pub fn sell(confidence: f64) -> Self {
         Self {
             signal: SignalType::Sell,
@@ -100,6 +103,7 @@ impl Decision {
         }
     }
 
+    /// Convenience: "close the existing position".
     pub fn close() -> Self {
         Self {
             signal: SignalType::Close,
@@ -108,21 +112,25 @@ impl Decision {
         }
     }
 
+    /// Builder: attach a suggested stop-loss price.
     pub fn with_stop(mut self, price: Price) -> Self {
         self.stop_price = Some(price);
         self
     }
 
+    /// Builder: attach a suggested take-profit price.
     pub fn with_take_profit(mut self, price: Price) -> Self {
         self.take_profit_price = Some(price);
         self
     }
 
+    /// Builder: set the [`SizeHint`].
     pub fn with_size_hint(mut self, hint: SizeHint) -> Self {
         self.size_hint = hint;
         self
     }
 
+    /// Builder: attach free-form metadata for post-trade analysis.
     pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = metadata;
         self
@@ -144,6 +152,7 @@ pub struct BrainHealth {
 }
 
 impl BrainHealth {
+    /// Convenience: "healthy, no details".
     pub fn ok() -> Self {
         Self {
             healthy: true,
@@ -151,6 +160,7 @@ impl BrainHealth {
         }
     }
 
+    /// Convenience: "unhealthy with a free-form reason string".
     pub fn unhealthy(reason: impl Into<String>) -> Self {
         Self {
             healthy: false,

@@ -16,6 +16,7 @@ path = "src/main.rs"
 rustrade        = { workspace = true }
 rustrade-core   = { workspace = true }
 rustrade-kucoin = { workspace = true }
+rustrade-notify = { workspace = true }
 
 # Math + I/O — exchange-apiws lives outside this workspace, path-dep'd
 indicators-ta  = "0.1.3"

@@ -52,6 +52,8 @@
 //!   one symbol, one stream. Run multiple engines in parallel for
 //!   ensemble or parameter-sweep work.
 
+#![warn(missing_docs)]
+
 pub mod engine;
 pub mod metrics;
 pub mod sim_exchange;

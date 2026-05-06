@@ -32,6 +32,8 @@
 //!     Arc::new(KucoinExchangeAdapter::new(Arc::new(kucoin), 5));
 //! ```
 
+#![warn(missing_docs)]
+
 use std::sync::Arc;
 
 use async_trait::async_trait;

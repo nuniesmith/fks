@@ -38,6 +38,8 @@
 //! - On Ctrl-C / SIGTERM, runs graceful shutdown and (optionally) closes
 //!   open positions before exiting.
 
+#![warn(missing_docs)]
+
 pub mod bot;
 pub mod execution;
 pub mod logging;

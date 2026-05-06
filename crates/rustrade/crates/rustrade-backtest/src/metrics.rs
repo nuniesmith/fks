@@ -10,6 +10,7 @@ use rustrade_core::{Fill, Side};
 use serde::{Deserialize, Serialize};
 
 /// One point on the equity curve, recorded once per processed bar.
+#[allow(missing_docs)] // self-evident timestamp_ms / equity fields
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct EquityPoint {
     pub timestamp_ms: i64,
@@ -19,6 +20,7 @@ pub struct EquityPoint {
 /// One round-trip trade reconstructed from the fill log. The MVP assumes a
 /// single open position at a time per symbol — when a fill flips the
 /// position to flat, the previous open block is closed.
+#[allow(missing_docs)] // self-evident trade-record fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeRecord {
     pub symbol: String,
@@ -33,12 +35,14 @@ pub struct TradeRecord {
 }
 
 impl TradeRecord {
+    /// `true` when net PnL is strictly positive.
     pub fn is_winner(&self) -> bool {
         self.pnl > 0.0
     }
 }
 
 /// Knobs for the metric computation.
+#[allow(missing_docs)] // each field has its own /// doc above
 #[derive(Debug, Clone, Copy)]
 pub struct MetricsConfig {
     /// How many sample points are in one trading year. For minute bars, 60 *
@@ -60,6 +64,8 @@ impl Default for MetricsConfig {
     }
 }
 
+/// Aggregated backtest performance metrics produced at the end of a run.
+#[allow(missing_docs)] // standard performance metric names; see [`Self::compute`]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct BacktestMetrics {
     pub initial_equity: f64,

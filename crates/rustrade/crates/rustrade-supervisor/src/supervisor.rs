@@ -32,6 +32,7 @@ use crate::service::{RestartPolicy, TradingService};
 // ---------------------------------------------------------------------------
 
 /// Configuration for the [`Supervisor`].
+#[allow(missing_docs)] // each field has its own /// doc; struct itself is the API surface
 #[derive(Debug, Clone)]
 pub struct SupervisorConfig {
     /// Default backoff applied to services without their own override.
@@ -53,16 +54,19 @@ impl Default for SupervisorConfig {
 }
 
 impl SupervisorConfig {
+    /// Builder: override the shutdown timeout.
     pub fn with_shutdown_timeout(mut self, timeout: Duration) -> Self {
         self.shutdown_timeout = timeout;
         self
     }
 
+    /// Builder: override the default backoff.
     pub fn with_default_backoff(mut self, backoff: BackoffConfig) -> Self {
         self.default_backoff = backoff;
         self
     }
 
+    /// Builder: disable the auto-installed Ctrl-C / SIGTERM handler.
     pub fn without_signal_handler(mut self) -> Self {
         self.install_signal_handler = false;
         self
@@ -79,6 +83,7 @@ impl SupervisorConfig {
 /// is enabled, downstream binaries can read them via [`SupervisorMetrics::snapshot`]
 /// and publish to their own registry — rustrade-supervisor does not own a
 /// global Prometheus registry.
+#[allow(missing_docs)] // counter names are self-evident; see [`MetricsSnapshot`]
 #[derive(Debug, Default)]
 pub struct SupervisorMetrics {
     pub restarts_total: AtomicU64,
@@ -128,6 +133,7 @@ impl SupervisorMetrics {
 }
 
 /// Plain-data snapshot of supervisor metrics.
+#[allow(missing_docs)] // counter names mirror [`SupervisorMetrics`]; same semantics
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MetricsSnapshot {
     pub restarts_total: u64,
@@ -149,6 +155,7 @@ pub struct SpawnOptions {
 }
 
 impl SpawnOptions {
+    /// Build options carrying a per-service backoff override.
     pub fn with_backoff(backoff: BackoffConfig) -> Self {
         Self {
             backoff: Some(backoff),
@@ -176,6 +183,7 @@ pub struct Supervisor {
 }
 
 impl Supervisor {
+    /// Build a supervisor with the given config.
     pub fn new(config: SupervisorConfig) -> Self {
         Self {
             config,
@@ -186,18 +194,23 @@ impl Supervisor {
         }
     }
 
+    /// Build a supervisor with [`SupervisorConfig::default`].
     pub fn with_defaults() -> Self {
         Self::new(SupervisorConfig::default())
     }
 
+    /// Borrow the root cancellation token (cancel it to trigger graceful
+    /// shutdown of every service).
     pub fn cancel_token(&self) -> &CancellationToken {
         &self.cancel_token
     }
 
+    /// Borrow the shared metrics handle.
     pub fn metrics(&self) -> &Arc<SupervisorMetrics> {
         &self.metrics
     }
 
+    /// Snapshot every tracked service's lifecycle.
     pub async fn lifecycle_snapshots(&self) -> Vec<ServiceLifecycleSnapshot> {
         let lifecycles = self.lifecycles.read().await;
         lifecycles
@@ -206,21 +219,25 @@ impl Supervisor {
             .collect()
     }
 
+    /// Snapshot a single service's lifecycle by name.
     pub async fn service_lifecycle(&self, name: &str) -> Option<ServiceLifecycleSnapshot> {
         let lifecycles = self.lifecycles.read().await;
         lifecycles.get(name).map(ServiceLifecycleSnapshot::from)
     }
 
+    /// Number of tracked services (alive + terminated).
     pub async fn service_count(&self) -> usize {
         self.lifecycles.read().await.len()
     }
 
+    /// Cancel the root token, signalling every service to stop.
     #[tracing::instrument(skip(self))]
     pub fn trigger_shutdown(&self) {
         tracing::info!("Supervisor: shutdown triggered");
         self.cancel_token.cancel();
     }
 
+    /// `true` once [`Self::trigger_shutdown`] has been called.
     pub fn is_shutting_down(&self) -> bool {
         self.cancel_token.is_cancelled()
     }
@@ -228,6 +245,7 @@ impl Supervisor {
     // ── Spawn ─────────────────────────────────────────────────────────
 
     /// Spawn a service into the supervisor with default options.
+    /// Spawn a service with default options.
     pub fn spawn_service(&self, service: Box<dyn TradingService>) {
         self.spawn_service_with_options(service, SpawnOptions::default());
     }
@@ -237,6 +255,7 @@ impl Supervisor {
         skip(self, service, options),
         fields(service = %service.name(), policy = %service.restart_policy())
     )]
+    /// Spawn a service with custom options.
     pub fn spawn_service_with_options(
         &self,
         service: Box<dyn TradingService>,
@@ -473,6 +492,8 @@ impl Supervisor {
 
     /// Close the tracker and wait for all tasks to complete, with timeout.
     #[tracing::instrument(skip(self), fields(timeout_secs = self.config.shutdown_timeout.as_secs()))]
+    /// Close the task tracker and wait for every spawned task to exit, up
+    /// to [`SupervisorConfig::shutdown_timeout`].
     pub async fn wait_for_drain(&self) {
         self.tracker.close();
 
@@ -492,6 +513,9 @@ impl Supervisor {
 
     /// Run the supervisor until a shutdown signal is received.
     #[tracing::instrument(skip(self), fields(signal_handler = self.config.install_signal_handler))]
+    /// Block until shutdown is triggered (signal or programmatic), then
+    /// drain. Returns once every supervised service has exited or the
+    /// drain timeout has fired.
     pub async fn run_until_shutdown(&self) -> anyhow::Result<()> {
         if self.config.install_signal_handler {
             self.wait_for_signal_and_shutdown().await?;

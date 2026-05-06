@@ -53,6 +53,7 @@ impl Default for SessionPnlConfig {
 ///
 /// assert!(pnl.is_session_halted());
 /// ```
+#[allow(missing_docs)] // public counters are self-evident; method docs above describe their use
 #[derive(Debug, Clone)]
 pub struct SessionPnl {
     pub symbol: String,
@@ -70,6 +71,7 @@ pub struct SessionPnl {
 }
 
 impl SessionPnl {
+    /// Build a new session tracker for `symbol` with the given config.
     pub fn new(symbol: impl Into<String>, config: SessionPnlConfig) -> Self {
         Self {
             symbol: symbol.into(),

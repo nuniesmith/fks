@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 use rand::RngExt;
 
 /// Configuration for the exponential backoff strategy.
+#[allow(missing_docs)] // each field has its own /// doc; struct itself is the API surface
 #[derive(Debug, Clone)]
 pub struct BackoffConfig {
     /// Initial delay before the first retry (default: 100ms).
@@ -57,6 +58,8 @@ impl Default for BackoffConfig {
 }
 
 impl BackoffConfig {
+    /// Build a config with custom base and max delays; everything else
+    /// defaults.
     pub fn new(base_delay: Duration, max_delay: Duration) -> Self {
         Self {
             base_delay,
@@ -65,17 +68,20 @@ impl BackoffConfig {
         }
     }
 
+    /// Builder: override the cooldown period.
     pub fn with_cooldown(mut self, cooldown: Duration) -> Self {
         self.cooldown_period = cooldown;
         self
     }
 
+    /// Builder: configure the circuit breaker.
     pub fn with_circuit_breaker(mut self, max_retries: u32, window: Duration) -> Self {
         self.max_retries = max_retries;
         self.circuit_breaker_window = window;
         self
     }
 
+    /// Builder: disable the circuit breaker.
     pub fn without_circuit_breaker(mut self) -> Self {
         self.max_retries = 0;
         self
@@ -91,7 +97,9 @@ pub enum BackoffAction {
     /// The circuit breaker has tripped — too many failures within the
     /// configured window.
     CircuitOpen {
+        /// Failure count that tripped the breaker.
         failures: u32,
+        /// Configured trip threshold.
         max_retries: u32,
     },
 }
@@ -106,6 +114,7 @@ pub struct BackoffState {
 }
 
 impl BackoffState {
+    /// Build fresh state from the given config.
     pub fn new(config: BackoffConfig) -> Self {
         Self {
             config,
@@ -115,14 +124,19 @@ impl BackoffState {
         }
     }
 
+    /// Build state with [`BackoffConfig::default`].
     pub fn with_defaults() -> Self {
         Self::new(BackoffConfig::default())
     }
 
+    /// Mark the moment the supervised service entered its run loop, so
+    /// [`Self::maybe_reset_on_cooldown`] can later check uptime.
     pub fn record_start(&mut self) {
         self.last_start = Some(Instant::now());
     }
 
+    /// If the service has been running for at least
+    /// [`BackoffConfig::cooldown_period`], reset the attempt counter.
     pub fn maybe_reset_on_cooldown(&mut self) {
         if let Some(start) = self.last_start
             && start.elapsed() >= self.config.cooldown_period
@@ -136,6 +150,8 @@ impl BackoffState {
         }
     }
 
+    /// Record a failure and return the action the supervisor should take
+    /// (retry after a delay, or open the circuit breaker).
     pub fn next_backoff(&mut self) -> BackoffAction {
         let now = Instant::now();
 
@@ -160,16 +176,19 @@ impl BackoffState {
         BackoffAction::Retry(jittered)
     }
 
+    /// Force-clear all state.
     pub fn reset(&mut self) {
         self.attempt = 0;
         self.failure_timestamps.clear();
         self.last_start = None;
     }
 
+    /// Consecutive failures since the last reset.
     pub fn attempt(&self) -> u32 {
         self.attempt
     }
 
+    /// Number of failures still inside the circuit-breaker window.
     pub fn recent_failures(&self) -> usize {
         self.failure_timestamps.len()
     }

@@ -73,6 +73,7 @@ pub struct CircuitBreaker {
 }
 
 impl CircuitBreaker {
+    /// Build a new breaker with the given configuration.
     pub fn new(config: CircuitBreakerConfig) -> Self {
         Self {
             config,

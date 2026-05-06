@@ -25,6 +25,7 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 /// Lifecycle phase of a supervised service.
+#[allow(missing_docs)] // names mirror the state-machine diagram in the module-level docs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServicePhase {
@@ -48,21 +49,30 @@ impl fmt::Display for ServicePhase {
 }
 
 impl ServicePhase {
+    /// `true` if the phase is `Terminated`.
     pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Terminated)
     }
 
+    /// `true` if the service is in any non-terminal phase that the
+    /// supervisor still considers running.
     pub fn is_alive(&self) -> bool {
         matches!(self, Self::Starting | Self::Running | Self::BackingOff)
     }
 }
 
 /// Why a service reached the `Terminated` phase.
+#[allow(missing_docs)] // variants describe themselves; the enum doc covers the meaning
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TerminationReason {
     Completed,
     Cancelled,
-    CircuitBreakerOpen { failures: u32, max_retries: u32 },
+    CircuitBreakerOpen {
+        /// Failures observed at the moment of trip.
+        failures: u32,
+        /// Configured trip threshold.
+        max_retries: u32,
+    },
     Unrecoverable(String),
 }
 
@@ -80,6 +90,9 @@ impl fmt::Display for TerminationReason {
     }
 }
 
+/// Returned when an invalid state transition is attempted on a
+/// [`ServiceLifecycle`].
+#[allow(missing_docs)] // self-evident from/to fields
 #[derive(Debug, Clone, thiserror::Error)]
 #[error("invalid lifecycle transition: {from} → {to}")]
 pub struct TransitionError {
@@ -103,6 +116,7 @@ pub struct ServiceLifecycle {
 }
 
 impl ServiceLifecycle {
+    /// Build a fresh lifecycle in the `Starting` phase.
     pub fn new(service_name: impl Into<String>) -> Self {
         let now = Instant::now();
         Self {
@@ -119,38 +133,47 @@ impl ServiceLifecycle {
         }
     }
 
+    /// Current phase.
     pub fn phase(&self) -> ServicePhase {
         self.phase
     }
 
+    /// Name passed to [`Self::new`].
     pub fn service_name(&self) -> &str {
         &self.service_name
     }
 
+    /// Wall-clock time since first construction.
     pub fn age(&self) -> Duration {
         self.created_at.elapsed()
     }
 
+    /// Time elapsed since the most recent phase transition.
     pub fn time_in_current_phase(&self) -> Duration {
         self.phase_entered_at.elapsed()
     }
 
+    /// Total number of times the service has entered `Starting`.
     pub fn start_count(&self) -> u32 {
         self.start_count
     }
 
+    /// Total failures observed across the lifetime of this service.
     pub fn total_failures(&self) -> u32 {
         self.total_failures
     }
 
+    /// Stringified message of the most recent failure, if any.
     pub fn last_error(&self) -> Option<&str> {
         self.last_error.as_deref()
     }
 
+    /// `Some` once the service has terminated.
     pub fn termination_reason(&self) -> Option<&TerminationReason> {
         self.termination_reason.as_ref()
     }
 
+    /// Cumulative time spent in the `Running` phase.
     pub fn cumulative_running_time(&self) -> Duration {
         let extra = self
             .running_since
@@ -159,6 +182,7 @@ impl ServiceLifecycle {
         self.cumulative_running + extra
     }
 
+    /// Transition `Starting → Running`.
     pub fn transition_to_running(&mut self) -> Result<(), TransitionError> {
         self.validate_transition(ServicePhase::Running)?;
         self.set_phase(ServicePhase::Running);
@@ -171,6 +195,7 @@ impl ServiceLifecycle {
         Ok(())
     }
 
+    /// Transition any alive phase → `BackingOff` after a failure.
     pub fn transition_to_backing_off(
         &mut self,
         error: &str,
@@ -191,6 +216,7 @@ impl ServiceLifecycle {
         Ok(())
     }
 
+    /// Transition `BackingOff → Starting` for a restart attempt.
     pub fn transition_to_restarting(&mut self) -> Result<(), TransitionError> {
         self.validate_transition(ServicePhase::Starting)?;
         self.start_count += 1;
@@ -203,6 +229,7 @@ impl ServiceLifecycle {
         Ok(())
     }
 
+    /// Transition any alive phase → `Stopping` (graceful shutdown).
     pub fn transition_to_stopping(&mut self) -> Result<(), TransitionError> {
         self.validate_transition(ServicePhase::Stopping)?;
         self.accumulate_running_time();
@@ -214,6 +241,7 @@ impl ServiceLifecycle {
         Ok(())
     }
 
+    /// Transition any phase → `Terminated` with a reason.
     pub fn transition_to_terminated(
         &mut self,
         reason: TerminationReason,
@@ -287,6 +315,7 @@ impl fmt::Display for ServiceLifecycle {
 
 /// Point-in-time snapshot of a service's lifecycle, suitable for
 /// serialization (e.g. into a `/health` endpoint).
+#[allow(missing_docs)] // self-evident from the matching `ServiceLifecycle` field/getter docs
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ServiceLifecycleSnapshot {
     pub service_name: String,

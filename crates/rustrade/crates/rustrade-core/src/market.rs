@@ -9,7 +9,9 @@ use crate::types::{Candle, Tick};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Side {
+    /// Buy / long.
     Buy,
+    /// Sell / short.
     Sell,
 }
 
@@ -64,6 +66,7 @@ impl From<&str> for Exchange {
 ///
 /// Exchange adapters parse their native formats into this enum so the
 /// downstream brain and risk layers are exchange-agnostic.
+#[allow(missing_docs)] // each variant is structurally self-evident; see the doc on the enum
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MarketDataEvent {
     /// Best-bid/best-ask update.
@@ -90,6 +93,7 @@ pub enum MarketDataEvent {
 }
 
 impl MarketDataEvent {
+    /// The symbol this event applies to.
     pub fn symbol(&self) -> &Symbol {
         match self {
             Self::Ticker { symbol, .. }
@@ -98,6 +102,7 @@ impl MarketDataEvent {
         }
     }
 
+    /// The exchange that produced this event.
     pub fn exchange(&self) -> &Exchange {
         match self {
             Self::Ticker { exchange, .. }

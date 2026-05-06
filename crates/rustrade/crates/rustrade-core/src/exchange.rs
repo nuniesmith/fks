@@ -85,6 +85,7 @@ pub trait ExchangeClient: Send + Sync + 'static {
 /// and auto-restart); this trait exists just to document the contract.
 #[async_trait]
 pub trait MarketSource: Send + Sync + 'static {
+    /// Identifier for logs and metrics.
     fn name(&self) -> &str;
 
     /// Begin streaming events. Runs until the returned future completes

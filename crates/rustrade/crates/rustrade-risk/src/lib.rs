@@ -13,6 +13,8 @@
 //! needing to special-case a particular strategy, the logic belongs in
 //! the `Brain` implementation, not here.
 
+#![warn(missing_docs)]
+
 pub mod circuit_breaker;
 pub mod session_pnl;
 pub mod sizing;

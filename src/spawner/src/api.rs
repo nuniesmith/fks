@@ -16,7 +16,6 @@
 use std::{convert::Infallible, sync::Arc, time::Instant};
 
 use axum::{
-    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{
@@ -24,10 +23,10 @@ use axum::{
         Json,
     },
     routing::{delete, get, post},
+    Router,
 };
 use futures_util::StreamExt;
 use serde::Deserialize;
-use tokio_stream::wrappers::ReceiverStream;
 use tracing::{info, warn};
 
 use crate::{
@@ -39,6 +38,9 @@ use crate::{
     prometheus_sd,
 };
 
+#[cfg(feature = "db")]
+use crate::db::{BotRunStore, RecordSpawn};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared state
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,6 +49,9 @@ use crate::{
 pub struct AppState {
     pub docker: DockerClient,
     pub config: Arc<Config>,
+    /// Optional Postgres-backed bot_runs persistence. None = stateless mode.
+    #[cfg(feature = "db")]
+    pub store: Option<BotRunStore>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,7 +59,7 @@ pub struct AppState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub fn build_router(state: AppState) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .route("/spawn", post(spawn_handler))
@@ -63,8 +68,12 @@ pub fn build_router(state: AppState) -> Router {
         .route("/container/:id", delete(remove_handler))
         .route("/container/:id/stop", post(stop_handler))
         .route("/container/:id/restart", post(restart_handler))
-        .route("/container/:id/logs", get(logs_sse_handler))
-        .with_state(state)
+        .route("/container/:id/logs", get(logs_sse_handler));
+
+    #[cfg(feature = "db")]
+    let router = router.route("/runs", get(runs_handler));
+
+    router.with_state(state)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -130,6 +139,26 @@ async fn spawn_handler(
         "bot spawned successfully"
     );
 
+    // Persist to bot_runs (best-effort — never block the response on DB).
+    #[cfg(feature = "db")]
+    if let Some(store) = state.store.clone() {
+        let args = OwnedSpawnRecord::from(&resp);
+        tokio::spawn(async move {
+            if let Err(e) = store
+                .record_spawn(RecordSpawn {
+                    container_id: &args.container_id,
+                    container_name: &args.container_name,
+                    image: &args.image,
+                    mode: &args.mode,
+                    started_at: args.started_at,
+                })
+                .await
+            {
+                warn!(error = %e, container_id = %args.container_id, "record_spawn failed");
+            }
+        });
+    }
+
     // Update Prometheus SD file asynchronously — don't block the response.
     let docker = state.docker.clone();
     let config = state.config.clone();
@@ -138,6 +167,30 @@ async fn spawn_handler(
     });
 
     Ok((StatusCode::CREATED, Json(resp)))
+}
+
+/// Owned snapshot of a `SpawnResponse` for use inside `tokio::spawn` futures
+/// (the borrowed `RecordSpawn` can't outlive the handler).
+#[cfg(feature = "db")]
+struct OwnedSpawnRecord {
+    container_id: String,
+    container_name: String,
+    image: String,
+    mode: String,
+    started_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[cfg(feature = "db")]
+impl From<&SpawnResponse> for OwnedSpawnRecord {
+    fn from(r: &SpawnResponse) -> Self {
+        Self {
+            container_id: r.container_id.clone(),
+            container_name: r.container_name.clone(),
+            image: r.image.clone(),
+            mode: r.mode.clone(),
+            started_at: r.started_at,
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,6 +233,16 @@ async fn remove_handler(
     state.docker.remove(&id).await?;
     metrics::REMOVES_TOTAL.inc();
 
+    #[cfg(feature = "db")]
+    if let Some(store) = state.store.clone() {
+        let id_owned = id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = store.record_remove(&id_owned).await {
+                warn!(error = %e, container_id = %id_owned, "record_remove failed");
+            }
+        });
+    }
+
     let docker = state.docker.clone();
     let config = state.config.clone();
     tokio::spawn(async move {
@@ -199,6 +262,16 @@ async fn stop_handler(
 ) -> Result<Json<ActionResponse>, SpawnerError> {
     state.docker.stop(&id).await?;
     metrics::STOPS_TOTAL.inc();
+
+    #[cfg(feature = "db")]
+    if let Some(store) = state.store.clone() {
+        let id_owned = id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = store.record_stop(&id_owned).await {
+                warn!(error = %e, container_id = %id_owned, "record_stop failed");
+            }
+        });
+    }
 
     let docker = state.docker.clone();
     let config = state.config.clone();
@@ -229,6 +302,39 @@ async fn restart_handler(
 struct LogsQuery {
     /// Number of tail lines to return before following. Default: 100.
     tail: Option<String>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /runs  (db feature only) — recent bot_runs history
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+#[derive(Deserialize)]
+struct RunsQuery {
+    /// Max rows to return (clamped to 1..=500). Default: 50.
+    limit: Option<i64>,
+}
+
+#[cfg(feature = "db")]
+async fn runs_handler(
+    State(state): State<AppState>,
+    Query(params): Query<RunsQuery>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        // DB not configured — return an empty list so the WebUI degrades gracefully.
+        return Ok(Json(serde_json::json!({
+            "runs": [],
+            "total": 0,
+            "db_enabled": false,
+        })));
+    };
+
+    let rows = store.recent_runs(params.limit.unwrap_or(50)).await?;
+    Ok(Json(serde_json::json!({
+        "runs": rows,
+        "total": rows.len(),
+        "db_enabled": true,
+    })))
 }
 
 async fn logs_sse_handler(

@@ -17,14 +17,14 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use bollard::{
     container::{
         Config as ContainerConfig, CreateContainerOptions, InspectContainerOptions,
-        ListContainersOptions, LogOutput, LogsOptions, RemoveContainerOptions,
+        ListContainersOptions, LogOutput, LogsOptions, NetworkingConfig, RemoveContainerOptions,
         RestartContainerOptions, StartContainerOptions, StopContainerOptions,
     },
-    models::{HostConfig, NetworkingConfig, EndpointSettings, Resources},
+    models::{EndpointSettings, HostConfig, Resources},
     network::ConnectNetworkOptions,
     Docker,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use futures_util::StreamExt;
 use tokio_stream::Stream;
 use tracing::{debug, info, warn};
@@ -49,8 +49,7 @@ pub struct DockerClient {
 impl DockerClient {
     /// Connect to the Docker daemon via the Unix socket (default path).
     pub fn new(config: Arc<Config>) -> SpawnerResult<Self> {
-        let docker = Docker::connect_with_unix_defaults()
-            .map_err(SpawnerError::Docker)?;
+        let docker = Docker::connect_with_unix_defaults().map_err(SpawnerError::Docker)?;
         Ok(Self { docker, config })
     }
 
@@ -71,7 +70,8 @@ impl DockerClient {
         }
 
         // ── Bot identity ──────────────────────────────────────────────────────
-        let bot_id = req.bot_id
+        let bot_id = req
+            .bot_id
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         let container_name = format!("fks-bot-{}", bot_id);
@@ -87,7 +87,8 @@ impl DockerClient {
         labels.insert("fks.image".into(), req.image.clone());
 
         // ── Environment ───────────────────────────────────────────────────────
-        let env: Vec<String> = req.env
+        let env: Vec<String> = req
+            .env
             .iter()
             .map(|(k, v)| format!("{}={}", k, v))
             .chain(std::iter::once(format!("FKS_BOT_ID={}", bot_id)))
@@ -95,18 +96,21 @@ impl DockerClient {
             .collect();
 
         // ── Resource limits ───────────────────────────────────────────────────
-        let cpu_quota = req.cpu_limit
-            .unwrap_or(self.config.default_cpu_limit);
+        let cpu_quota = req.cpu_limit.unwrap_or(self.config.default_cpu_limit);
         // Docker CPU quota: period=100_000µs, quota = cores × period
         let cpu_quota_us = (cpu_quota * 100_000.0) as i64;
 
-        let memory_bytes = req.memory_limit_mb
+        let memory_bytes = req
+            .memory_limit_mb
             .map(|mb| mb * 1024 * 1024)
             .unwrap_or(self.config.default_memory_bytes);
 
         // ── Networking ────────────────────────────────────────────────────────
         let mut endpoints: HashMap<String, EndpointSettings> = HashMap::new();
-        endpoints.insert(self.config.allowed_network.clone(), EndpointSettings::default());
+        endpoints.insert(
+            self.config.allowed_network.clone(),
+            EndpointSettings::default(),
+        );
 
         // ── Host config ───────────────────────────────────────────────────────
         let host_config = HostConfig {
@@ -128,8 +132,8 @@ impl DockerClient {
             ..Default::default()
         };
 
-        let networking_config = NetworkingConfig {
-            endpoints_config: Some(endpoints),
+        let networking_config: NetworkingConfig<String> = NetworkingConfig {
+            endpoints_config: endpoints,
         };
 
         // ── Container config ──────────────────────────────────────────────────
@@ -163,7 +167,8 @@ impl DockerClient {
             platform: None,
         };
 
-        let created = self.docker
+        let created = self
+            .docker
             .create_container(Some(create_opts), container_cfg)
             .await
             .map_err(SpawnerError::Docker)?;
@@ -228,7 +233,11 @@ impl DockerClient {
         self.docker
             .remove_container(
                 id,
-                Some(RemoveContainerOptions { force: true, v: false, link: false }),
+                Some(RemoveContainerOptions {
+                    force: true,
+                    v: false,
+                    link: false,
+                }),
             )
             .await
             .map_err(SpawnerError::Docker)?;
@@ -241,13 +250,14 @@ impl DockerClient {
     // ─────────────────────────────────────────────────────────────────────────
 
     pub async fn inspect(&self, id: &str) -> SpawnerResult<ContainerInfo> {
-        let data = self.docker
+        let data = self
+            .docker
             .inspect_container(id, None::<InspectContainerOptions>)
             .await
             .map_err(|e| match e {
-                bollard::errors::Error::DockerResponseServerError { status_code: 404, .. } => {
-                    SpawnerError::NotFound(id.to_string())
-                }
+                bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404, ..
+                } => SpawnerError::NotFound(id.to_string()),
                 other => SpawnerError::Docker(other),
             })?;
 
@@ -268,7 +278,8 @@ impl DockerClient {
             ..Default::default()
         };
 
-        let summaries = self.docker
+        let summaries = self
+            .docker
             .list_containers(Some(opts))
             .await
             .map_err(SpawnerError::Docker)?;
@@ -334,10 +345,21 @@ impl DockerClient {
     pub async fn auto_prune(&self) -> SpawnerResult<usize> {
         let mut filters: HashMap<String, Vec<String>> = HashMap::new();
         filters.insert("label".to_string(), vec!["fks.bot=true".to_string()]);
-        filters.insert("status".to_string(), vec!["exited".to_string(), "dead".to_string()]);
+        filters.insert(
+            "status".to_string(),
+            vec!["exited".to_string(), "dead".to_string()],
+        );
 
-        let opts = ListContainersOptions { all: true, filters, ..Default::default() };
-        let stopped = self.docker.list_containers(Some(opts)).await.map_err(SpawnerError::Docker)?;
+        let opts = ListContainersOptions {
+            all: true,
+            filters,
+            ..Default::default()
+        };
+        let stopped = self
+            .docker
+            .list_containers(Some(opts))
+            .await
+            .map_err(SpawnerError::Docker)?;
 
         let threshold = chrono::Duration::seconds(self.config.prune_after_secs);
         let cutoff = Utc::now() - threshold;
@@ -353,8 +375,7 @@ impl DockerClient {
             // Use the Created timestamp from the summary as a proxy for
             // "finished_at" (good enough for prune purposes).
             let created_ts = c.created.unwrap_or(0);
-            let created_at = DateTime::from_timestamp(created_ts, 0)
-                .unwrap_or(Utc::now());
+            let created_at = DateTime::from_timestamp(created_ts, 0).unwrap_or(Utc::now());
 
             if created_at < cutoff {
                 match self.remove(id).await {
@@ -394,9 +415,7 @@ fn container_info_from_summary(s: bollard::models::ContainerSummary) -> Containe
     let bot_id = labels.get("fks.bot_id").cloned().unwrap_or_default();
     let mode = labels.get("fks.mode").cloned().unwrap_or_default();
 
-    let created_at = s
-        .created
-        .and_then(|ts| DateTime::from_timestamp(ts, 0));
+    let created_at = s.created.and_then(|ts| DateTime::from_timestamp(ts, 0));
 
     ContainerInfo {
         id,
@@ -404,7 +423,7 @@ fn container_info_from_summary(s: bollard::models::ContainerSummary) -> Containe
         name,
         image: s.image.clone().unwrap_or_default(),
         status: s.status.clone().unwrap_or_default(),
-        state: s.state.clone().unwrap_or_default(),
+        state: s.state.as_ref().map(|e| e.to_string()).unwrap_or_default(),
         bot_id,
         mode,
         created_at,
@@ -436,7 +455,10 @@ fn container_info_from_inspect(d: bollard::models::ContainerInspectResponse) -> 
     let mode = labels.get("fks.mode").cloned().unwrap_or_default();
 
     let state = d.state.as_ref();
-    let status = state.and_then(|s| s.status.as_ref()).map(|s| s.to_string()).unwrap_or_default();
+    let status = state
+        .and_then(|s| s.status.as_ref())
+        .map(|s| s.to_string())
+        .unwrap_or_default();
     let state_str = status.clone();
 
     let parse_dt = |s: Option<&String>| -> Option<DateTime<Utc>> {
@@ -444,7 +466,11 @@ fn container_info_from_inspect(d: bollard::models::ContainerInspectResponse) -> 
             // Docker returns times like "0001-01-01T00:00:00Z" for "never"
             let dt = DateTime::parse_from_rfc3339(ts).ok()?;
             let utc = dt.with_timezone(&Utc);
-            if utc.year() < 2000 { None } else { Some(utc) }
+            if utc.year() < 2000 {
+                None
+            } else {
+                Some(utc)
+            }
         })
     };
 
@@ -461,7 +487,11 @@ fn container_info_from_inspect(d: bollard::models::ContainerInspectResponse) -> 
         id,
         id_full,
         name,
-        image: d.config.as_ref().and_then(|c| c.image.clone()).unwrap_or_default(),
+        image: d
+            .config
+            .as_ref()
+            .and_then(|c| c.image.clone())
+            .unwrap_or_default(),
         status,
         state: state_str,
         bot_id,

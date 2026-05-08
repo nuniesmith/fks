@@ -1,22 +1,32 @@
 <script lang="ts">
-  interface FilterOption {
-    value: string;
-    label: string;
-  }
+    /**
+     * Reusable filter-chip group — radiogroup of pill-shaped buttons.
+     *
+     * Props match the contract callers (e.g. signals/+page.svelte) actually
+     * use: `chips` (with `{id, label}` shape), `active` (the currently
+     * selected id), and `onselect(id)` callback.
+     */
+    interface ChipOption {
+        id: string;
+        label: string;
+    }
 
-  let { options, active, onchange } = $props<{
-    options: FilterOption[];
-    active
+    let { chips, active, onselect } = $props<{
+        chips: ChipOption[];
+        active: string;
+        onselect: (id: string) => void;
+    }>();
 </script>
 
 <div class="chips" role="radiogroup" aria-label="Filter options">
-    {#each options as opt (opt.value)}
+    {#each chips as opt (opt.id)}
         <button
+            type="button"
             class="chip"
-            class:active={active === opt.value}
+            class:active={active === opt.id}
             role="radio"
-            aria-checked={active === opt.value}
-            onclick={() => onchange(opt.value)}
+            aria-checked={active === opt.id}
+            onclick={() => onselect(opt.id)}
         >
             {opt.label}
         </button>

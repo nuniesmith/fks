@@ -114,7 +114,9 @@
             await api(`/api/signals/${id}/reject`, { method: "POST" });
             await fetchSignals();
         } catch (e: unknown) {
-            const err;
+            const err = e instanceof Error ? e : new Error(String(e));
+            alert(`Reject failed: ${err.message}`);
+        } finally {
             const next = { ...actionBusy };
             delete next[id];
             actionBusy = next;

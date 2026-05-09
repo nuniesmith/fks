@@ -1,6 +1,12 @@
 // =============================================================================
 // docker_client.rs — Docker SDK wrapper for FKS Bot Spawner
 //
+// TODO(spawner): migrate from `bollard::container::*Options` (deprecated in
+// 0.19) to the OpenAPI-generated `bollard::query_parameters::*Options` +
+// `*OptionsBuilder` types. Not done here to keep the build-rot fix focused;
+// every method in this file would need updating.
+#![allow(deprecated)]
+//
 // Wraps bollard to provide:
 //   spawn()        — create + start a bot container with safety guards
 //   stop()         — graceful stop
@@ -12,7 +18,7 @@
 //   auto_prune()   — remove exited bot containers older than threshold
 // =============================================================================
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
 use bollard::{
     container::{
@@ -20,8 +26,7 @@ use bollard::{
         ListContainersOptions, LogOutput, LogsOptions, NetworkingConfig, RemoveContainerOptions,
         RestartContainerOptions, StartContainerOptions, StopContainerOptions,
     },
-    models::{EndpointSettings, HostConfig, Resources},
-    network::ConnectNetworkOptions,
+    models::{EndpointSettings, HostConfig},
     Docker,
 };
 use chrono::{DateTime, Datelike, Utc};

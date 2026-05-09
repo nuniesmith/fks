@@ -43,9 +43,8 @@ impl SpawnerError {
 // Allow returning SpawnerError directly from Axum handlers.
 impl axum::response::IntoResponse for SpawnerError {
     fn into_response(self) -> axum::response::Response {
-        use axum::http::StatusCode;
-        use axum::Json;
         use crate::models::ErrorResponse;
+        use axum::Json;
 
         let status = self.http_status();
         let body = Json(ErrorResponse::new(self.to_string()));

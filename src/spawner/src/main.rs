@@ -21,6 +21,8 @@
 
 mod api;
 mod config;
+#[cfg(feature = "db")]
+mod db;
 mod docker_client;
 mod error;
 mod metrics;
@@ -31,9 +33,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tracing::info;
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-use api::{AppState, build_router};
+use api::{build_router, AppState};
 use config::Config;
 use docker_client::DockerClient;
 
@@ -64,6 +66,17 @@ async fn main() -> anyhow::Result<()> {
     let docker = DockerClient::new(config.clone())?;
     info!("connected to Docker daemon");
 
+    // ── Postgres (optional) ───────────────────────────────────────────────────
+    #[cfg(feature = "db")]
+    let store = {
+        let s = db::BotRunStore::try_connect(&config.database_url).await;
+        if let Some(s) = &s {
+            // Probe schema; failure is logged inside the helper, not fatal.
+            let _ = s.check_schema().await;
+        }
+        s
+    };
+
     // ── Initial SD file write ─────────────────────────────────────────────────
     prometheus_sd::update_sd_file(&docker, &config).await;
 
@@ -88,7 +101,17 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ── HTTP server ───────────────────────────────────────────────────────────
-    let state = AppState { docker, config: config.clone() };
+    #[cfg(feature = "db")]
+    let state = AppState {
+        docker,
+        config: config.clone(),
+        store,
+    };
+    #[cfg(not(feature = "db"))]
+    let state = AppState {
+        docker,
+        config: config.clone(),
+    };
     let app = build_router(state);
     let bind_addr = config.bind_addr();
 

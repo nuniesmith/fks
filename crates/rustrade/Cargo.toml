@@ -46,6 +46,7 @@ members = [
     "examples/kucoin-stub-bot",
     "examples/kucoin-v2",
     "examples/backtest-demo",
+    "examples/fks-bot-example",
 ]
 resolver = "3"
 

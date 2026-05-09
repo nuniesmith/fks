@@ -12,9 +12,11 @@ that surfaces signals and analysis to a human trader who makes all final executi
 |------------------|------------|-----------------------------------------------------------------------------|
 | **Janus**        | Rust       | Neuromorphic ML engine — live signals, regime detection, backtesting        |
 | **Ruby**         | Python     | Data pipeline, ML models, HTMX dashboard, broker integrations, GPU training |
-| **WebUI**        | SvelteKit  | SvelteKit 5 frontend — replaces the HTMX dashboard                         |
-| **RUSTCODE**           | Rust       | RustCode — AI agent, LLM routing, semantic search, OpenAI proxy        |
-| **OpenClaw**     | Node.js    | Discord bot + GitHub integration — routes LLM calls through RUSTCODE              |
+| **WebUI**        | SvelteKit  | SvelteKit 5 frontend — replaces the HTMX dashboard. Includes `/bots` for spawner control. |
+| **RustCode**     | Rust       | AI agent, LLM routing, semantic search, OpenAI-compatible proxy             |
+| **rustrade**     | Rust       | Open-source trading framework — supervisor, risk, backtest, kucoin adapter |
+| **Spawner**      | Rust       | Bot container lifecycle manager — spawns/stops/streams logs of `fks-bot-*` containers via Docker socket |
+| **OpenClaw**     | Node.js    | Discord bot + GitHub integration — routes LLM calls through RustCode        |
 | **Infrastructure** | Docker   | Postgres, Redis, QuestDB, Qdrant, Prometheus, Grafana, Nginx, Jaeger        |
 
 ---
@@ -23,10 +25,12 @@ that surfaces signals and analysis to a human trader who makes all final executi
 
 | Service           | Path                  | Host Port(s)           | Container Port(s) | Notes                              |
 |-------------------|-----------------------|------------------------|-------------------|------------------------------------|
-| **Janus**         | `src/janus/`          | 7000 (HTTP), 9051 (gRPC), 9092 (metrics) | 8080, 50051, 9092 | Rust ML/neuromorphic engine |
+| **Janus**         | `crates/janus/`       | 7000 (HTTP), 9051 (gRPC), 9092 (metrics) | 8080, 50051, 9092 | Rust ML/neuromorphic engine |
 | **Ruby**          | `src/ruby/`           | 8050 (data API), 8080 (HTMX web) | 8000, 8080 | Python trading system (supervisord) |
 | **WebUI**         | `src/web/`            | 3001                   | 3000              | SvelteKit frontend                 |
-| **RUSTCODE**        | `src/rustcode/`             | 3500                   | 3500              | Rust AI
+| **RustCode**      | `crates/rustcode/`    | 3500                   | 3500              | Rust AI assistant (workspace currently has 32 build errors — incomplete TASK-A/B work) |
+| **rustrade**      | `crates/rustrade/`    | —                      | —                 | Open-source trading framework (library, not a service) |
+| **Spawner**       | `src/spawner/`        | 8090                   | 8090              | Bot container lifecycle (mounts `/var/run/docker.sock`, writes Prometheus SD) |
 | **Kotlin**        | `src/kotlin/`         | —                      | —                 | KMP cross-platform apps (excluded from workspace) |
 | **Trainer**       | —                     | 8200                   | 8200              | GPU CNN retraining (profile: training) |
 | **Postgres**      | —                     | 5432                   | 5432              | `janus_db` + `ruby_db` on one instance |
@@ -37,13 +41,21 @@ that surfaces signals and analysis to a human trader who makes all final executi
 | **Grafana**       | —                     | 3000                   | 3000              | Dashboards (served at `/grafana/`) |
 | **Prometheus**    | —                     | 9090                   | 9090              | Metrics                            |
 | **Alertmanager**  | —                     | 9093                   | 9093              | Alerts + Discord bridge            |
-| **RUSTCODE Postgres**   | —                     | 5433                   | 5432              | RustCode-only database        |
-| **RUSTCODE Redis**      | —                     | 6380                   | 6379              | RustCode cache                |
+| **RustCode Postgres** | —                 | 5433                   | 5432              | RustCode-only database             |
+| **RustCode Redis**    | —                 | 6380                   | 6379              | RustCode cache                     |
 | **OpenClaw**      | —                     | 18789, 18790           | 18789, 18790      | Discord bot WebSocket              |
 | **Jaeger**        | —                     | 16686                  | 16686             | Distributed tracing UI             |
 
 > ⚠️ **All ports are bound to `127.0.0.1`** — only reachable via localhost or Tailscale serve.
-> RUSTCODE and RUSTCODE Redis bind to `${TAILSCALE_IP}` instead of `127.0.0.1`.
+> RustCode and RustCode Redis bind to `${TAILSCALE_IP}` instead of `127.0.0.1`.
+>
+> **Spawned bot containers** (anything matching `ALLOWED_IMAGE_PREFIX=fks-bot-`)
+> are placed on the `fks_network` Docker network with `cap_drop: ALL`,
+> `security_opt: no-new-privileges:true`, CPU/memory caps from the
+> spawn request (or spawner defaults), and forced `fks.bot=true` +
+> `fks.bot_id=<uuid>` + `fks.mode=<paper|live|backtest|optimise|train>`
+> labels. They expose `:9091/metrics` to be scraped by Prometheus via
+> the file_sd config the spawner writes to `/prometheus-sd/bots.json`.
 
 ---
 
@@ -191,32 +203,39 @@ fks/
 │   ├── data/                   # Data service protos
 │   ├── rc/                     # RustCode protos
 │   └── ...
-├── src/
-│   ├── janus/                  # Rust engine (workspace members)
-│   │   ├── bin/janus/          # Main binary entry point
-│   │   ├── bin/backtest-cli/   # Backtest CLI tool
-│   │   ├── lib/janus-core/     # Core types & traits
-│   │   ├── lib/janus-api/      # HTTP API layer
-│   │   ├── crates/             # Feature crates (indicators, risk, regime, ml, …)
-│   │   ├── services/           # Service crates (forward, backward, data, execution, …)
-│   │   └── neuromorphic/       # Brain-region modules
-│   ├── ruby/                   # Python trading system
+├── crates/                      # Rust crates outside the root virtual workspace
+│   ├── janus/                   # Janus ML/neuromorphic engine (28 sub-crates, 8 services)
+│   │   ├── bin/janus/           # Main binary entry point
+│   │   ├── bin/backtest-cli/    # Backtest CLI tool
+│   │   ├── lib/janus-core/      # Core types & traits
+│   │   ├── lib/janus-api/       # HTTP API layer
+│   │   ├── crates/              # Feature crates (indicators, risk, regime, ml, …)
+│   │   ├── services/            # Service crates (forward, backward, data, execution, …)
+│   │   └── neuromorphic/        # Brain-region modules
+│   ├── rustrade/                # Open-source trading framework (rustrade-{core,supervisor,risk,backtest,kucoin,notify} + facade + examples)
+│   ├── rustcode/                # AI coding assistant (workspace currently broken — see TODO.md)
+│   ├── indicators-ta/           # Standalone technical-analysis crate (publishable)
+│   └── exchange-apiws/          # Standalone exchange REST/WS client (publishable)
+├── src/                         # Top-level virtual workspace (proto + spawner)
+│   ├── ruby/                    # Python trading system
 │   │   ├── lib/
-│   │   │   ├── core/           # DB, Redis, config, logging_config
-│   │   │   ├── analysis/       # Market analysis (ICT, regime, CVD, ML)
-│   │   │   ├── indicators/     # Technical indicators
-│   │   │   ├── integrations/   # Kraken, Rithmic, Massive, Binance, etc.
-│   │   │   ├── model/          # CNN inference
-│   │   │   ├── services/       # FastAPI apps (data, engine, web, trainer)
-│   │   │   └── trading/        # ORB, signals, journal
-│   │   └── tests/              # Python test suite
-│   ├── rc/                     # RustCode Rust crate
-│   ├── web/svelte/             # SvelteKit WebUI
-│   ├── web/                    # Static HTMX assets (CSS, JS, HTML)
-│   ├── proto/                  # fks-proto Rust crate (protobuf build)
-│   └── sql/                    # SQL schemas and migrations
-│       ├── rc/                 # RUSTCODE migrations (copied into src/rc/migrations at build)
-│       └── ...
+│   │   │   ├── core/            # DB, Redis, config, logging_config
+│   │   │   ├── analysis/        # Market analysis (ICT, regime, CVD, ML)
+│   │   │   ├── indicators/      # Technical indicators
+│   │   │   ├── integrations/    # Kraken, Rithmic, Massive, Binance, etc.
+│   │   │   ├── model/           # CNN inference
+│   │   │   ├── services/        # FastAPI apps (data, engine, web, trainer)
+│   │   │   └── trading/         # ORB, signals, journal
+│   │   └── tests/               # Python test suite
+│   ├── spawner/                 # Bot container lifecycle service (Rust + bollard + axum + sqlx)
+│   │   └── src/                 # api.rs, db.rs, docker_client.rs, prometheus_sd.rs, …
+│   ├── web/                     # SvelteKit 5 WebUI
+│   │   └── src/routes/          # Includes /bots route for spawner control
+│   ├── proto/                   # fks-proto Rust crate (protobuf build)
+│   └── sql/                     # SQL schemas and migrations
+│       ├── ruby/                # Ruby DB migrations (incl. 007_spawner.sql for bot_runs/bot_configs)
+│       ├── janus/               # Janus DB migrations
+│       └── rustcode/            # RustCode migrations
 ├── infrastructure/
 │   ├── docker/                 # All Dockerfiles
 │   │   ├── base/rust/          # Rust multi-stage build
@@ -270,8 +289,9 @@ fks/
 - **Lints:** Workspace lints enforce `clippy::all`, `clippy::pedantic`, `clippy::nursery`.
   Fix warnings before committing. `unsafe_code = "warn"`.
 - **Release profile:** `panic = "abort"` — panics terminate the process cleanly for supervisor restart
-- **RUSTCODE note:** `src/rc` is a workspace member but currently uses its own dependency versions
-  (axum 0.7, reqwest 0.11, redis 0.24). These will be migrated to `workspace = true` incrementally.
+- **RustCode note:** `crates/rustcode` is a nested workspace and currently uses its own dependency versions
+  (axum 0.7, reqwest 0.11, redis 0.24) instead of inheriting from the root. The workspace also has
+  32 build errors from incomplete TASK-A/B in-flight work — see `TODO.md` for the decision needed.
 
 ### Python (Ruby)
 
@@ -350,6 +370,9 @@ Janus consumes it via `PYTHON_DATA_SERVICE_URL=http://fks_ruby:8000`.
 
 Janus is organised into brain-region inspired modules under `src/janus/neuromorphic/`:
 
+> Path note: this code now lives at `crates/janus/neuromorphic/` after the
+> rustrade extraction. The brain-region structure described below is unchanged.
+
 | Module            | Brain Region       | Function                                      |
 |-------------------|--------------------|-----------------------------------------------|
 | `amygdala`        | Fear response      | Circuit breakers, kill switch                 |
@@ -394,7 +417,7 @@ Janus is organised into brain-region inspired modules under `src/janus/neuromorp
 
 ### Adding a New Rust Crate
 
-1. Create the crate under the appropriate path (e.g. `src/janus/crates/my-crate/`)
+1. Create the crate under the appropriate path (e.g. `crates/janus/crates/my-crate/`)
 2. Add it to the `members` list in the root `Cargo.toml`
 3. Add an entry under `[workspace.dependencies]` if other crates will depend on it
 4. Use `dependency = { workspace = true }` in dependent crates
@@ -428,8 +451,10 @@ docker compose build --no-cache <service>
 
 ## Gotchas & Notes
 
-- **`src/rc` dependency mismatch:** RUSTCODE uses older dep versions than the workspace. When adding
-  deps to RUSTCODE, check the existing `src/rc/Cargo.toml` versions first before using `workspace = true`.
+- **`crates/rustcode` dependency mismatch:** RustCode uses older dep versions than the workspace.
+  When adding deps to RustCode, check the existing `crates/rustcode/Cargo.toml` versions first
+  before using `workspace = true`. The crate is also currently broken (32 errors) — needs decision
+  documented in `TODO.md`.
 - **Python imports in Docker:** `PYTHONPATH=/app/src` is set in all Python containers. Locally,
   run from `src/ruby/` or set `PYTHONPATH` manually.
 - **QuestDB auth:** HTTP console (port 9000) and ILP (9009) are unauthenticated by default.

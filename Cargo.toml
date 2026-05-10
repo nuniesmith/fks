@@ -1,19 +1,22 @@
 # ============================================================================
 # FKS Root Workspace
 # ============================================================================
-# Slim virtual workspace covering only the top-level Rust crates that don't
-# live inside a nested workspace under `crates/`.
+# Slim virtual workspace. Each Rust sub-codebase that's heading for its own
+# repo lives in a nested workspace under `crates/` and builds independently
+# from its own directory:
 #
-# Nested workspaces (each builds independently from its own directory):
-#   - crates/janus       — JANUS ML/trading engine (28 sub-crates, 8 services)
-#   - crates/rustrade    — Open-source trading framework (core/risk/supervisor)
-#   - crates/rustcode    — AI coding assistant
+#   - crates/janus           — JANUS ML/trading engine
+#   - crates/rustrade        — Open-source trading framework
+#   - crates/spawner         — Bot container lifecycle service
 #   - crates/indicators-ta   — Standalone technical-analysis crate (publishable)
 #   - crates/exchange-apiws  — Standalone exchange REST/WS client (publishable)
 #
-# This root workspace contains only:
+# This root workspace exists only to wire up the one Rust crate that
+# stays in fks-full long-term:
+#
 #   - src/proto    — fks-proto (centralised protobuf definitions)
-#   - src/spawner  — Bot spawner (Docker container lifecycle manager)
+#
+# See `SPLIT_PLAN.md` for the planned moves to separate repos.
 # ============================================================================
 
 [workspace]
@@ -21,7 +24,6 @@ resolver = "3"
 
 members = [
     "src/proto",
-    "src/spawner",
 ]
 
 # ============================================================================

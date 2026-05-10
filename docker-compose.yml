@@ -1,6 +1,6 @@
 # =============================================================================
 # FKS — Development Environment
-# Janus (Rust) + Ruby (Python) + RustCode (AI agent) + OpenClaw (Discord)
+# Janus (Rust) + Ruby (Python)
 #
 # Architecture:
 #   ruby      — consolidated Python container running data + engine + factory
@@ -8,16 +8,12 @@
 #   webui     — SvelteKit frontend, replaces HTMX dashboard (src/webui/Dockerfile)
 #   janus     — Rust trading brain (base/rust/Dockerfile target: workspace)
 #   trainer   — GPU CNN retraining (base/python-gpu/Dockerfile target: trainer)
-#   rustcode    — RustCode API server (AI agent, semantic search, LLM proxy)
-#   openclaw    — Discord bot + GitHub readonly (routes LLM calls through rustcode)
 #
 # Postgres: three logical databases on two instances
 #   - janus_db       — Janus schema (signals, regime, backtest tables)
 #   - ruby_db        — Ruby schema (bars, journal, orb events, tasks…)
-#   - rustcode       — RustCode schema (repos, documents, tasks)
 #   - Single FKS redis (custom image with kernel tuning), three DBs:
 #       db 0 — janus_db + ruby (shared trading state)
-#       db 1 — rustcode_db (AI agent cache)
 #   - Single RUSTCODE redis  (Alpine, for caching)
 #   - Single prometheus + grafana
 #   - Trainer          GPU service
@@ -25,7 +21,6 @@
 # Usage:
 #   docker compose up -d                          # all core services
 #   docker compose --profile training up -d       # + GPU trainer
-#   docker compose --profile ollama up -d         # + Ollama local LLM
 #   docker compose logs -f [service]
 #
 # Port map (host):
@@ -34,7 +29,7 @@
 #   ── Trading Platform ──────────────────────────────────────────────────────
 #   80         nginx reverse proxy
 #   5432       postgres (janus_db + ruby_db)
-#   6379       redis (FKS, shared — db 0 janus/ruby, db 1 rustcode)
+#   6379       redis (shared — janus / ruby pub-sub + state)
 #   7000       janus HTTP API
 #   8000       Ruby API (FastAPI REST + SSE)
 #   8200       trainer
@@ -55,14 +50,7 @@
 #   9191       questdb-exporter
 #   16686      jaeger UI
 #
-#   ── AI Assistant (RustCode + OpenClaw) ───────────────────────────────────
-#   3500       rustcode (RustCode API + OpenAI-compatible proxy)
-#   11434      ollama (local LLM, optional — profile: ollama)
-#   18789      openclaw (WebSocket + Control UI)
-#   18790      openclaw (secondary)
-#
 #   ── Evaluation Tools ─────────────────────────────────────────────────────
-#   4000       promptfoo (LLM eval UI, optional — profile: tools)
 # =============================================================================
 services:
     # ===========================================================================
@@ -269,7 +257,7 @@ services:
             - "127.0.0.1:6333:6333" # REST
             - "127.0.0.1:6334:6334" # gRPC
         volumes:
-            - fks_qdrant_data:/qdrant/storage
+            - qdrant_data:/qdrant/storage
         tmpfs:
             - /tmp
         networks:
@@ -1263,246 +1251,6 @@ services:
                 max-file: "3"
                 labels: "service=questdb-exporter,environment=dev"
 
-    # =============================================================================
-    # AI ASSISTANT — RustCode + OpenClaw
-    # =============================================================================
-
-    rustcode:
-        build:
-            context: .
-            dockerfile: infrastructure/docker/services/rustcode/Dockerfile
-            args:
-                SERVICE_PORT: "3500"
-        image: ${RUSTCODE_IMAGE:-nuniesmith/fks:rustcode}
-        container_name: fks_rustcode
-        depends_on:
-            postgres:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
-        environment:
-            DATABASE_URL: postgres://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/rustcode
-            REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
-            OLLAMA_BASE_URL: http://fks_ollama:11434
-            LOCAL_MODEL: qwen2.5-coder:7b
-            XAI_API_KEY: ${XAI_API_KEY}
-            XAI_MODEL: ${XAI_MODEL:-grok-4-fast}
-            GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-            GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
-            RUSTCODE_PROXY_API_KEYS: ${RUSTCODE_PROXY_API_KEYS}
-            HOST: 0.0.0.0
-            PORT: "3500"
-            RUST_LOG: info
-            CACHE_ENABLED: "true"
-            CACHE_PREFIX: "rustcode:"
-            MULTI_TENANT_MODE: "false"
-            TELEMETRY_ENABLED: "false"
-            ANALYTICS_ENABLED: "true"
-            TZ: ${TZ:-America/Toronto}
-        ports:
-            - "${TAILSCALE_IP:-127.0.0.1}:3500:3500"
-        volumes:
-            - rustcode-data:/app/data
-            - rustcode-docs:/app/docs
-            - rustcode-workspace:/app/workspace
-        networks:
-            - fks-network
-        restart: unless-stopped
-        healthcheck:
-            test: ["CMD", "curl", "-sf", "http://127.0.0.1:3500/health"]
-            interval: 30s
-            timeout: 5s
-            retries: 5
-            start_period: 30s
-        deploy:
-            resources:
-                limits:
-                    cpus: "2.0"
-                    memory: 2g
-                reservations:
-                    cpus: "0.5"
-                    memory: 512m
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "50m"
-                max-file: "5"
-                labels: "service=fks_rustcode,environment=dev"
-
-    fks_ollama:
-        build:
-            context: .
-            dockerfile: infrastructure/docker/services/ollama/Dockerfile
-        image: nuniesmith/fks:ollama
-        container_name: fks_ollama
-        profiles: [ollama]
-        environment:
-            OLLAMA_NUM_GPU: 0
-        volumes:
-            - rustcode-ollama-data:/root/.ollama
-        ports:
-            - "${TAILSCALE_IP:-127.0.0.1}:11434:11434"
-        networks:
-            - fks-network
-        restart: unless-stopped
-        deploy:
-            resources:
-                limits:
-                    cpus: "4.0"
-                    memory: 8g
-                reservations:
-                    cpus: "1.0"
-                    memory: 2g
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "20m"
-                max-file: "3"
-                labels: "service=fks_ollama,environment=dev"
-
-    fks_ollama_init:
-        image: nuniesmith/fks:ollama
-        container_name: fks_ollama_init
-        profiles: [ollama]
-        depends_on:
-            - fks_ollama
-        entrypoint: >
-            sh -c "sleep 5 && ollama pull qwen2.5-coder:7b"
-        environment:
-            OLLAMA_HOST: http://fks_ollama:11434
-        networks:
-            - fks-network
-        restart: "no"
-
-    openclaw:
-        build:
-            context: .
-            dockerfile: infrastructure/docker/services/openclaw/Dockerfile
-            args:
-                OPENCLAW_BASE_IMAGE: ${OPENCLAW_BASE_IMAGE:-openclaw-base:local}
-        image: ${OPENCLAW_IMAGE:-openclaw:local}
-        container_name: fks_openclaw
-        depends_on:
-            rustcode:
-                condition: service_healthy
-        environment:
-            HOME: /home/node
-            TERM: xterm-256color
-            TZ: ${TZ:-America/Toronto}
-            NODE_OPTIONS: "--max-old-space-size=768"
-            OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
-            OPENAI_API_BASE: http://fks_rustcode:3500/v1
-            OPENAI_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
-            DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
-            GITHUB_TOKEN: ${GITHUB_TOKEN}
-            GITHUB_USERNAME: ${GITHUB_USERNAME:-}
-            GITHUB_ORG: ${GITHUB_ORG:-}
-            RUSTCODE_BASE_URL: http://fks_rustcode:3500
-            RUSTCODE_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
-        volumes:
-            - openclaw-config:/home/node/.openclaw
-            - openclaw-workspace:/home/node/.openclaw/workspace
-            - ./infrastructure/config/openclaw/openclaw.json:/home/node/.openclaw/openclaw.json:ro
-        ports:
-            - "${TAILSCALE_IP:-127.0.0.1}:18789:18789"
-            - "${TAILSCALE_IP:-127.0.0.1}:18790:18790"
-        networks:
-            - fks-network
-        init: true
-        restart: unless-stopped
-        command:
-            - node
-            - openclaw.mjs
-            - gateway
-            - --bind
-            - lan
-            - --port
-            - "18789"
-            - --allow-unconfigured
-        healthcheck:
-            test:
-                - CMD
-                - node
-                - -e
-                - "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-            interval: 30s
-            timeout: 5s
-            retries: 5
-            start_period: 20s
-        deploy:
-            resources:
-                limits:
-                    cpus: "1.0"
-                    memory: 1.5g
-                reservations:
-                    cpus: "0.25"
-                    memory: 512m
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "20m"
-                max-file: "5"
-                labels: "service=fks_openclaw,environment=dev"
-
-    openclaw_cli:
-        image: ${OPENCLAW_IMAGE:-openclaw:local}
-        container_name: fks_openclaw_cli
-        network_mode: "service:openclaw"
-        cap_drop:
-            - NET_RAW
-            - NET_ADMIN
-        security_opt:
-            - no-new-privileges:true
-        depends_on:
-            - openclaw
-        environment:
-            HOME: /home/node
-            TERM: xterm-256color
-            TZ: ${TZ:-America/Toronto}
-            OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
-            OPENAI_API_BASE: http://fks_rustcode:3500/v1
-            OPENAI_API_KEY: ${RUSTCODE_PROXY_API_KEYS}
-            BROWSER: echo
-        volumes:
-            - openclaw-config:/home/node/.openclaw
-            - openclaw-workspace:/home/node/.openclaw/workspace
-        stdin_open: true
-        tty: true
-        init: true
-        entrypoint: ["node", "openclaw.mjs"]
-
-    promptfoo:
-        # Node.js eval runner baked into image via infrastructure/docker/services/promptfoo/Dockerfile.
-        # Source: infrastructure/config/promptfoo/
-        # Rebuild with: docker compose --profile tools build promptfoo
-        build:
-            context: .
-            dockerfile: infrastructure/docker/services/promptfoo/Dockerfile
-        image: nuniesmith/fks:promptfoo
-        container_name: fks_promptfoo
-        profiles:
-            - tools
-        ports:
-            - "${TAILSCALE_IP:-127.0.0.1}:4000:3000"
-        volumes:
-            - promptfoo-data:/home/promptfoo/.promptfoo
-            - ./infrastructure/promptfoo:/home/promptfoo/evals:ro
-        environment:
-            OPENAI_API_BASE_URL: http://fks_rustcode:3500/v1
-            OPENAI_API_KEY: ${RUSTCODE_PROXY_API_KEYS:-dev-key}
-            PROMPTFOO_REMOTE_API_BASE_URL: http://localhost:4000
-            PROMPTFOO_REMOTE_APP_BASE_URL: http://localhost:4000
-            XAI_API_KEY: ${XAI_API_KEY:-}
-            TZ: ${TZ:-America/Toronto}
-        networks:
-            - fks-network
-        restart: unless-stopped
-        deploy:
-            resources:
-                limits:
-                    cpus: "1"
-                    memory: 1G
-
     # ===========================================================================
     # BOT SPAWNER
     # ===========================================================================
@@ -1577,7 +1325,7 @@ volumes:
         driver: local
     questdb_data:
         driver: local
-    fks_qdrant_data:
+    qdrant_data:
         driver: local
     optimizer_data:
         driver: local
@@ -1590,20 +1338,6 @@ volumes:
     loki_data:
         driver: local
     promtail_positions:
-        driver: local
-    rustcode-ollama-data:
-        driver: local
-    rustcode-data:
-        driver: local
-    rustcode-docs:
-        driver: local
-    rustcode-workspace:
-        driver: local
-    openclaw-config:
-        driver: local
-    openclaw-workspace:
-        driver: local
-    promptfoo-data:
         driver: local
     alertmanager_data:
         external: true

@@ -145,12 +145,57 @@
         return withAction(id, "remove", () => spawner.remove(id));
     };
 
-    // ─── Log viewer (SSE) ─────────────────────────────────────────────────
+    // ─── Log viewer (SSE) ──────────────────────────────────────────
 
     let viewingId = $state<string | null>(null);
     let logLines = $state<string[]>([]);
     let logsConnected = $state(false);
     let sse: EventSource | null = null;
+
+    // Auto-scroll-to-bottom ("follow tail") behaviour:
+    //   - Pinned to the latest line by default.
+    //   - If the user scrolls up, `followTail` flips to false and the
+    //     viewer freezes wherever the user left it.
+    //   - When the user scrolls back to within `SCROLL_THRESHOLD_PX` of
+    //     the bottom, `followTail` flips back to true automatically.
+    //   - A floating "Follow tail" button on the log pane lets the user
+    //     re-pin without manually scrolling.
+    const SCROLL_THRESHOLD_PX = 30;
+    let logPaneEl = $state<HTMLDivElement | null>(null);
+    let followTail = $state(true);
+
+    /// Scroll the log pane to the bottom on the next animation frame so
+    /// the new line has actually been laid out before we measure.
+    function scrollToTail() {
+        const el = logPaneEl;
+        if (!el) return;
+        requestAnimationFrame(() => {
+            // Re-check inside the RAF; the element may have unmounted.
+            const e = logPaneEl;
+            if (e) e.scrollTop = e.scrollHeight;
+        });
+    }
+
+    // Whenever a new log line arrives AND the user is following, snap
+    // back to the bottom. Reading `logLines.length` registers the effect
+    // as dependent on the array, so it re-runs on every push.
+    $effect(() => {
+        const _len = logLines.length;
+        void _len;
+        if (followTail) scrollToTail();
+    });
+
+    function onLogScroll(e: Event) {
+        const el = e.currentTarget as HTMLDivElement;
+        const distanceFromBottom =
+            el.scrollHeight - el.scrollTop - el.clientHeight;
+        followTail = distanceFromBottom < SCROLL_THRESHOLD_PX;
+    }
+
+    function jumpToTail() {
+        followTail = true;
+        scrollToTail();
+    }
 
     function viewLogs(id: string) {
         if (sse) {
@@ -160,6 +205,8 @@
         viewingId = id;
         logLines = [];
         logsConnected = false;
+        // Reset to follow mode whenever a new log stream is opened.
+        followTail = true;
 
         const ev = spawner.openLogStream(id, 200);
         sse = ev;
@@ -484,6 +531,19 @@
                     <span class="conn-pill" class:live={logsConnected}>
                         {logsConnected ? "● live" : "○ idle"}
                     </span>
+                    <span
+                        class="follow-pill"
+                        class:active={followTail}
+                        title={followTail
+                            ? "Following the latest line. Scroll up to pause."
+                            : "Paused. Click to resume following."}
+                        role="button"
+                        tabindex="0"
+                        onclick={jumpToTail}
+                        onkeydown={(e) => e.key === "Enter" && jumpToTail()}
+                    >
+                        {followTail ? "↓ follow" : "∥ paused"}
+                    </span>
                     <button class="btn small" onclick={closeLogs}>Close</button>
                 {/if}
             {/snippet}
@@ -496,11 +556,24 @@
                     <ProgressBar value={100} color="cyan" height="2px" />
                     <p class="empty dim">Waiting for output…</p>
                 {/if}
-                <div class="log-pane">
+                <div
+                    class="log-pane"
+                    bind:this={logPaneEl}
+                    onscroll={onLogScroll}
+                >
                     {#each logLines as line, i (i + ":" + line.slice(0, 16))}
                         <div class="log-line">{line}</div>
                     {/each}
                 </div>
+                {#if !followTail && logLines.length > 0}
+                    <button
+                        class="jump-tail-btn"
+                        onclick={jumpToTail}
+                        title="Resume following the latest line"
+                    >
+                        ↓ Jump to latest
+                    </button>
+                {/if}
                 {#if logLines.length > 0}
                     <p class="log-info dim">
                         {fmtInt(logLines.length)} line{logLines.length === 1
@@ -783,7 +856,61 @@
         background: var(--green-dim);
     }
 
-    /* ─── Misc ─────────────────────────────────────────────────────────── */
+    /* Follow-tail toggle pill in the log panel header. */
+    .follow-pill {
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: var(--r);
+        background: var(--bg3);
+        color: var(--t3);
+        margin-right: 4px;
+        cursor: pointer;
+        user-select: none;
+        border: 1px solid transparent;
+        transition:
+            background 0.1s,
+            color 0.1s,
+            border-color 0.1s;
+    }
+    .follow-pill:hover {
+        color: var(--t1);
+        border-color: var(--b3);
+    }
+    .follow-pill.active {
+        color: var(--cyan);
+        background: var(--cyan-dim);
+        border-color: var(--cyan-brd);
+    }
+
+    /* Floating "jump to latest" button shown when the user has scrolled
+       up. Anchored bottom-right of the log panel, fades in via opacity. */
+    .jump-tail-btn {
+        position: absolute;
+        right: 18px;
+        bottom: 32px;
+        padding: 4px 12px;
+        font-size: 10px;
+        font-weight: 600;
+        font-family: inherit;
+        color: var(--cyan);
+        background: var(--cyan-dim);
+        border: 1px solid var(--cyan-brd);
+        border-radius: 9999px;
+        cursor: pointer;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        transition:
+            background 0.15s,
+            transform 0.1s;
+    }
+    .jump-tail-btn:hover {
+        background: var(--cyan);
+        color: var(--bg1);
+    }
+    .jump-tail-btn:active {
+        transform: translateY(1px);
+    }
+
+    /* ─── Misc ────────────────────────────────────────────────────────────────────────── */
     .skel-col {
         display: flex;
         flex-direction: column;

@@ -53,7 +53,7 @@
   async function fetchPerformance() {
     perfError = '';
     try {
-      perf = await api<Performance>('/api/performance');
+      perf = await api.get<Performance>('/api/performance');
     } catch (e: any) {
       perfError = e.message ?? 'Failed';
     } finally {
@@ -64,7 +64,7 @@
   async function fetchTrades() {
     tradesError = '';
     try {
-      const data = await api<TradesResponse>('/api/trades');
+      const data = await api.get<TradesResponse>('/api/trades');
       trades = data.trades ?? [];
     } catch (e: any) {
       tradesError = e.message ?? 'Failed';

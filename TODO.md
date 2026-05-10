@@ -1,153 +1,106 @@
-# fks — TODO (Infrastructure & Runtime)
+# fks-full — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks-full`
-> **Last synced:** 2026-05-09
+> **Last synced:** 2026-05-10
 >
-> This file tracks work that belongs to the infrastructure layer: Docker,
-> compose, Dockerfiles, nginx, CI/CD, Postgres schemas, observability config,
-> the bot spawner service, and cross-cutting deployment tasks.
+> This file covers **cross-cutting** work — docker-compose, Dockerfiles,
+> nginx, CI/CD, Postgres bootstrap, observability, deployment. Anything
+> specific to a sub-codebase lives in that sub-codebase's `TODO.md`:
+>
+> - `crates/rustrade/TODO.md` — framework crates
+> - `crates/janus/TODO.md` — ML engine
+> - `crates/indicators-ta/TODO.md`
+> - `crates/exchange-apiws/TODO.md`
+> - `crates/spawner/TODO.md`
+> - `src/ruby/TODO.md`
+> - `src/web/TODO.md`
+>
+> The repo-split blueprint is in `SPLIT_PLAN.md`.
 
 ---
 
-## ✅ Recently shipped (PRs #1–#15)
+## P0 — Split prep & cleanup
 
-The framework + spawner story arc that ran from #1 through #15:
+### Finish the in-flight reorganisation
 
-- **`rustrade` open-source trading framework** (PRs #1–#10) — supervisor,
-  facade `Bot` builder, risk primitives, backtest replay engine, KuCoin
-  adapter, Discord notifier, kucoin-v2 production-shaped example,
-  `JANUS_EXTRACTION_PLAN.md`, doc-coverage pass, `CONTRIBUTING.md`.
-- **Build rot cleanup** (#11) — root workspace + janus workspace +
-  spawner crate compile cleanly again.
-- **Spawner DB persistence + tests + README** (#12) — `BotRunStore`
-  writes spawn/stop/remove to `bot_runs`, 10 unit tests, gracefully
-  degrades to stateless mode when Postgres is unreachable.
-- **`/bots` WebUI route** (#13) — spawn form, container list with
-  Stop/Restart/Remove, SSE log viewer, run history, Bots tab in TabBar.
-- **WebUI build fixes** (#14) — repaired four files that prevented
-  `npm run build` (dual `<script>` blocks, abandoned `$props<{...}>()`).
-- **Spawner stack landed on main** (#15) — fast-forward merge that
-  brought #12 + #13 onto `main` after the stacked merges left them
-  on parent branches only.
+> Right now the working tree has uncommitted moves
+> (`src/spawner/` → `crates/spawner/`, `src/kucoin/` → `crates/kucoin/`,
+> sql tree co-located with each owner, `JANUS_EXTRACTION_PLAN.md` →
+> `crates/janus/`). Land them.
 
-> ⚠️  PRs #12 and #13 were merged into their stacked-PR base branches
-> rather than `main`. **Always merge stacked PRs into `main` directly,
-> or remember to fast-forward main after the parent merges.** Lesson
-> for next time.
+- [ ] Commit the working-tree moves on a single focused branch
+      ("Co-locate sub-codebase assets before the split"). One commit is
+      fine since `git mv` history will trace it.
+- [ ] Update the root `Cargo.toml` workspace members:
+      `members = ["src/proto", "crates/spawner"]` (or remove
+      `crates/spawner` if it becomes its own nested workspace; see
+      `crates/spawner/TODO.md`).
+- [ ] Verify `cargo check --workspace` from the repo root passes after
+      the move. Currently fails because `src/spawner/Cargo.toml` no
+      longer exists.
+
+### Remove rustcode + openclaw + promptfoo + ollama
+
+- [ ] Delete `crates/rustcode/`.
+- [ ] Delete `infrastructure/docker/services/{rustcode,openclaw,openclaw-base,openclaw_cli,promptfoo,ollama}/`.
+- [ ] Delete `infrastructure/config/{openclaw,rustcode,promptfoo}/`.
+- [ ] Delete `infrastructure/promptfoo/`.
+- [ ] Strip the `/api/code/*`, `/api/openclaw/*`, `/api/rc/*` nginx location blocks from `infrastructure/config/nginx/conf.d/*.conf`.
+- [ ] Strip `RC_*`, `OPENCLAW_*`, `XAI_API_KEY` (if only used by RC) entries from `.env.example`.
+- [ ] Strip the `rustcode`, `fks_ollama`, `fks_ollama_init`, `openclaw`, `openclaw_cli`, `promptfoo` service blocks from `docker-compose.yml`. *(already done in the working tree as of 2026-05-10 — confirm + commit.)*
+- [ ] Remove the corresponding `./run.sh rc` subcommand and any other run-script entries.
+
+### Remove `crates/kucoin/` (legacy bot)
+
+- [ ] Delete `crates/kucoin/` after confirming `rustrade-kucoin` +
+      `crates/rustrade/examples/kucoin-v2/` cover the use case.
+- [ ] No docker-compose / nginx changes needed — `crates/kucoin/` isn't
+      wired into the runtime.
+
+### Per-sub-codebase doc readiness
+
+- [x] `SPLIT_PLAN.md` written.
+- [x] `CLAUDE.md` + `TODO.md` added to each future-external sub-codebase.
+- [x] Root `README.md` / `CLAUDE.md` / `TODO.md` updated to point at the
+      split direction.
+- [ ] Audit each sub-README for `fks-full` path references. Replace
+      with public-repo-shaped equivalents before split.
 
 ---
 
-## P0 — Active Infra
+## P0 — Dockerfile: build from source
 
-### Spawner: real `fks-bot-*` example image
-- [ ] Create `crates/example-bot/` (or similar) — minimal Rust crate
-      using `rustrade::Bot` with a stub brain that prints heartbeat lines.
-- [ ] Expose `fks_bot_pnl_dollars`, `fks_bot_signals_total`,
-      `fks_bot_trades_total`, `fks_bot_win_rate`, `fks_bot_uptime_seconds`
-      on `:9091/metrics` (the contract documented in
-      `infrastructure/config/prometheus/prometheus.yml` for the
-      `fks-bots` file_sd job).
-- [ ] Build image as `fks-bot-example:latest`. Confirm a spawn from
-      `/bots` brings it up, the SSE log stream shows output, and
-      Prometheus picks it up via the SD file.
+> When each sub-codebase becomes its own repo, the Dockerfiles need to
+> `git clone --branch ${*_REF:-main} https://github.com/nuniesmith/<repo>`
+> instead of `COPY` from the local tree. Today they `COPY`.
 
-### Spawner: WebUI polish
-- [ ] Auto-scroll-to-bottom on `/bots` log viewer when new lines
-      arrive AND the user hasn't scrolled up. Pause auto-scroll when
-      the user scrolls up; resume when they hit the bottom.
-- [ ] Fix `signals/+page.svelte` (and any others) calling `api(url, opts)`
-      like a fetch wrapper — it's an object now (`api.get/post/put/delete`).
+- [ ] `infrastructure/docker/services/data/Dockerfile` — clone `ruby`.
+- [ ] `infrastructure/docker/services/web/Dockerfile` (or
+      `infrastructure/docker/base/nodejs/Dockerfile`) — clone `fks-web`.
+- [ ] `infrastructure/docker/base/rust/Dockerfile` for `janus` — clone `janus`.
+- [ ] `infrastructure/docker/services/spawner/Dockerfile` — clone `spawner`.
+- [ ] Add `RUBY_REF`, `JANUS_REF`, `WEB_REF`, `SPAWNER_REF` build args
+      to `docker-compose.yml` (default `main`).
+- [ ] Document the build args in `.env.example`.
 
-### Spawner: hardening
-- [ ] Add an Axum middleware in `src/spawner/src/api.rs` that validates
-      `X-Internal-Token` (set by nginx) and rejects requests without
-      it. Skip the check if the env var is empty (dev-mode escape hatch).
-- [ ] Introduce a `DockerOps` trait in `src/spawner/src/docker_client.rs`
-      so handlers depend on a trait, not the concrete `DockerClient`.
-      Unblocks HTTP-level integration tests.
+> Reminder: `infrastructure/docker/services/*` is for **external apps**
+> (postgres, redis, prometheus, grafana, etc.). Our own services should
+> use the shared base images under
+> `infrastructure/docker/base/{rust,python,nodejs,python-gpu}`.
 
-### OpenClaw OOM Fix
-- [ ] Debug Node.js OOM in `openclaw-gateway` — needs ~760MB V8 heap;
-      investigate dependency bloat or memory leak in Discord client init.
-- [ ] Rebuild or replace OpenClaw image when fix is found — current
-      workaround: `NODE_OPTIONS=--max-old-space-size=768` + 1.5g limit.
+---
 
-### Tailscale verification
-- [ ] Test access from another tailnet device (manual check, needs second device).
+## P0 — Tailscale verification
+
+- [ ] Test access from a second tailnet device (needs physical second device).
 - [ ] Verify trainer container GPU passthrough:
       `./run.sh all --profile training` + nvidia-container-toolkit.
 
 ---
 
-## P0 — Dockerfile: Build from Source
+## P1 — Multi-account: Postgres schema (ACCT-A)
 
-> Dockerfiles still mostly COPY source code. Migrate them to `git clone`
-> at build time so each service can pin a `*_REF` independently.
-
-- [ ] `infrastructure/docker/services/data/Dockerfile` — replace COPY
-      with `git clone ${RUBY_REPO:-https://github.com/nuniesmith/ruby} \
-      --branch ${RUBY_REF:-main}`.
-- [ ] `infrastructure/docker/services/web/Dockerfile` — clone `fks-web`,
-      `npm ci && npm run build`.
-- [ ] `infrastructure/docker/services/rustcode/Dockerfile` — clone rustcode.
-- [ ] `infrastructure/docker/base/rust/Dockerfile` for janus — clone fks-janus.
-- [ ] Add `RUBY_REF`, `JANUS_REF`, `WEB_REF`, `RUSTCODE_REF` build args
-      to `docker-compose.yml` (default `main`).
-- [ ] Document the build args in `.env.example`.
-
-> Reminder: `infrastructure/docker/services/*` is for **external apps**
-> (postgres, redis, prometheus, grafana, etc.). Our own services
-> (janus, ruby, rustcode, spawner) should use the shared base images
-> under `infrastructure/docker/base/{rust,python,nodejs,python-gpu}`.
-
----
-
-## P1 — RustCode workspace is broken
-
-- [ ] **32 errors** in `crates/rustcode` from incomplete `TaskExecutor` +
-      `TaskWatcherConfig` work (the TASK-A through TASK-F items in
-      `crates/rustcode/TODO.md`). Decision needed: **finish forward**
-      (wire `TaskExecutor` properly into `Config` and `server.rs`) or
-      **revert** the half-done scaffold and restart from a clean baseline.
-- [ ] Until that resolves, `cd crates/rustcode && cargo check --workspace`
-      will not pass. Skipped in CI today.
-
----
-
-## P1 — Janus extraction (Phase 1 sub-tasks)
-
-> Cheap, decision-free sub-tasks from `JANUS_EXTRACTION_PLAN.md` that
-> can land in `fks-full` without needing the still-pending decisions
-> on crate naming, regime fate, etc.
-
-- [ ] **1a:** Decouple `crates/janus/crates/data-quality` from
-      `janus-core` / `janus-cns` (drop the deps or feature-gate them).
-      ~half day. No blockers.
-- [ ] **1d:** Port `crates/janus/bin/janus/src/main.rs` from
-      `JanusSupervisor` to `rustrade::Bot`, mirroring the kucoin-v2 port.
-      ~1 day. Once landed, delete `crates/janus/lib/janus-core/src/supervisor/`
-      to prevent drift from `rustrade-supervisor`.
-
----
-
-## P1 — FUTURES-MERGE: Nginx Routing Update (FMERGE-B)
-
-- [ ] Add futures API proxy to `infrastructure/config/nginx/conf.d/dev.conf`:
-      ```
-      location /futures-api/ {
-          proxy_pass http://fks_ruby:8080/api/;
-      }
-      ```
-- [ ] `infrastructure/docker/services/futures/Dockerfile` — remove
-      Jinja2 + template COPY steps (after ruby FMERGE-A is done).
-- [ ] Verify `ruby` starts clean in API-only mode:
-      `docker compose restart ruby && curl localhost:8080/api/health`.
-
----
-
-## P1 — Multi-Account: Postgres Schema (ACCT-A)
-
-- [ ] Create and apply `src/sql/ruby/008_accounts.sql`:
+- [ ] Create and apply `src/ruby/sql/008_accounts.sql`:
   - `exchange_accounts` (id, name, exchange_type, mode, is_active,
     credentials_ref, api_key_hint, timestamps, last_test status)
   - `asset_routing_rules` (id, symbol, account_id, size_pct, priority, is_active)
@@ -156,7 +109,7 @@ The framework + spawner story arc that ran from #1 through #15:
   - `profit_sweep_targets` (id, sweep_config_id, account_id, allocation_pct)
 - [ ] Apply via `./run.sh fix-db`.
 
-## P1 — Multi-Account: Janus Execution Router (ACCT-E)
+## P1 — Multi-account: Janus execution router (ACCT-E)
 
 - [ ] Update `crates/janus/services/execution/` — add `RoutingClient`
       in `execution/src/routing.rs`: HTTP client calling
@@ -170,86 +123,44 @@ The framework + spawner story arc that ran from #1 through #15:
 
 ## P1 — Observability
 
-- [ ] **PROM:** Sync Grafana config and restart — ensure all alert
-      rules are loaded.
-- [ ] Add GPU metrics to Prometheus when trainer is running
-      (nvidia-container-toolkit exporter).
-- [ ] Alertmanager Discord bridge — container not running, causing
-      noise in Alertmanager logs; either fix or remove bridge config.
-- [ ] Add `BotStopped`, `BotHighDrawdown`, `BotNoSignals` alert rules
-      under `infrastructure/config/prometheus/alerts/bot-alerts.yml`
-      once we have at least one real `fks-bot-*` image producing the
-      metrics they reference.
+- [ ] **PROM:** Sync Grafana config and restart — ensure all alert rules load.
+- [ ] **GPU metrics** — Prometheus when trainer is running (nvidia-container-toolkit exporter).
+- [ ] **Alertmanager Discord bridge** — container occasionally not running, causes noise in Alertmanager logs. Either fix or remove.
+- [ ] **`bot-alerts.yml`** under `infrastructure/config/prometheus/alerts/` — `BotStopped`, `BotHighDrawdown`, `BotNoSignals`. Add once we have at least one real `fks-bot-*` image producing the metrics.
 
 ---
 
-## P1 — RustCode Deployment
+## P1 — Proto
 
-### LLM-D: Wire futures app to RC proxy
-- [ ] Add `RC_BASE_URL`, `RC_API_KEY`, `RC_TIMEOUT_SECS`, `RC_MODEL`,
-      `RC_REPO_ID` env vars to futures service in `docker-compose.yml`.
-
-### RC-INFRA
-- [ ] Set required secrets in `.env`: `DISCORD_BOT_TOKEN`,
-      `OPENCLAW_GATEWAY_TOKEN`, `RC_PROXY_API_KEYS`, `TAILSCALE_IP`.
-- [ ] Re-enable CI/CD — move `.github/disabled/ci-cd.yml` back to
-      `.github/workflows/` after OpenClaw OOM fix + Tailscale
-      second-device check.
-- [ ] Fix GPU / restore Ollama CUDA passthrough (optional — only if
-      using Ollama): `sudo dmesg | grep -i nvidia`, reinstall
-      `nvidia-container-toolkit`, re-run `nvidia-smi`.
+- [ ] Centralise stray `forward/proto/janus/v1/janus.proto` →
+      `proto/fks/janus/v1/signal_service.proto` — deferred until the
+      gRPC endpoint is actually used (dead code today).
 
 ---
 
-## P1 — Spawner follow-ups (lower priority)
-
-- [ ] Bot config templates UI — the `bot_configs` table is sitting
-      unused. Add a preset library in `/bots` that fills the spawn
-      form from a saved row.
-- [ ] **bollard 0.19 deprecation migration** — `bollard::container::*Options`
-      are deprecated in favour of `bollard::query_parameters::*Options`
-      builders. The current code uses `#![allow(deprecated)]` in
-      `src/spawner/src/docker_client.rs`. ~half day of mechanical work.
-- [ ] Mobile / narrow-screen layout polish for `/bots` (current grid
-      assumes desktop terminal usage, matching the rest of the WebUI).
-- [ ] Persistent log capture — when a container is pruned, its logs
-      vanish. Decide if Loki/Promtail (already running) is enough or
-      if we need spawner-side capture.
-
----
-
-## P1 — Proto (fks-proto shared crate)
-
-- [ ] Centralize stray `forward/proto/janus/v1/janus.proto` →
-      `proto/fks/janus/v1/signal_service.proto` — deferred until gRPC
-      endpoint is actually needed.
-
----
-
-## P2 — CI/CD & Image Persistence
+## P2 — CI/CD & image persistence
 
 - [ ] Re-enable ARM64 / multi-arch builds in CI (disabled in batch-013).
-- [ ] `docker push nuniesmith/fks:janus` — publish Janus image for
-      faster deploys.
+- [ ] `docker push nuniesmith/fks:janus` — publish Janus image for faster deploys.
 - [ ] `docker push nuniesmith/fks:spawner` — same.
 - [ ] Postgres data migration (optional): use `pgloader` if dev data
       worth preserving across rebuilds.
-- [ ] Add `npm run check` to CI as a non-blocking gate, then promote
-      to blocking once the existing 29 type errors are cleaned up
-      (so the dual-script bug from PR #14 doesn't recur).
+- [ ] **CI gates:**
+  - [ ] `cargo check --workspace` from every nested workspace.
+  - [ ] `npm run check` on `src/web` (non-blocking until the 29 type errors clear).
+  - [ ] `pytest tests/` on `src/ruby`.
 
 ---
 
-## P2 — Feature Work
+## P2 — Feature work (Ruby/strategies)
 
-### PAPER-TRADING: Live Validation
+### PAPER-TRADING: live validation
 - [ ] Test Redis state persistence: `sim:session:{id}:*` keys
       written/readable.
 - [ ] Verify SSE streaming: `/sse/paper-trading/{id}` streams to WebUI.
 
-### PINE-INT: Manual Verification
-- [ ] Paste generated `ruby.pine` into TradingView Pine editor,
-      confirm it compiles.
+### PINE-INT: manual verification
+- [ ] Paste generated `ruby.pine` into TradingView Pine editor, confirm it compiles.
 
 ### CRITICAL-FIX-A: Rithmic (remaining)
 - [ ] Live test — verify positions, L1/L2, PnL match dashboard against
@@ -258,7 +169,7 @@ The framework + spawner story arc that ran from #1 through #15:
 
 ---
 
-## P3 — Future (Post-Funding)
+## P3 — Future (post-funding)
 
 - [ ] Retrain: run bracket sweep (`scripts/bracket_sweep.py`), apply
       optimal brackets, retrain vs 93.5% baseline.
@@ -272,10 +183,24 @@ The framework + spawner story arc that ran from #1 through #15:
       monitoring.
 - [ ] K8s manifests — `infrastructure/k8s/` for cloud scaling
       (post prop-firm funded).
-- [ ] **Phase 2 of janus extraction** — publish public sibling crates
-      from `JANUS_EXTRACTION_PLAN.md` (rate-limiter-ta, gap-detection-ta,
-      dsp-ta, lob-sim, etc.). Needs decisions on crate naming + repo
-      strategy first.
-- [ ] **Phase 3 of janus extraction** — move private brain IP
-      (strategies, compliance, neuromorphic) to a private repo that
-      depends on the published siblings.
+- [ ] **`strategies/`** — once `fks-full` flips private, this is where
+      the actual trading IP lives. Currently empty. Bots get wired up
+      to consume the published rustrade + indicators-ta + exchange-apiws
+      crates from crates.io.
+
+---
+
+## ✅ Recently shipped (PRs #1–#19 in this repo)
+
+The 19-PR arc that built the rustrade framework + the spawner + the
+`/bots` WebUI route:
+
+- **Framework (PRs #1–#10)** — `rustrade-{core,supervisor,risk,backtest,kucoin,notify}` + facade + 4 examples + design invariants documented in `CONTRIBUTING.md`.
+- **Build rot cleanup (#11)** — root + janus + spawner workspaces compile cleanly.
+- **Spawner: DB persistence + 21 tests + README (#12, #18)** — `BotRunStore` writes spawn/stop/remove to `bot_runs`; `DockerOps` trait + `MockDockerClient` + 10 HTTP integration tests; `X-Internal-Token` auth middleware.
+- **Spawner: WebUI (#13, #19)** — `/bots` route with spawn form, container list, SSE log viewer with follow-tail, run history. `api.*` callsite fixes across signals/backup/performance.
+- **WebUI build fixes (#14)** — dual-script bug, abandoned `$props<{...}>()`, `const err;` syntax error.
+- **Spawner stack lands on main (#15)** — corrected the stacked-PR merges.
+- **Docs sync (#16)** — root `CLAUDE.md` + `TODO.md` updated.
+- **`fks-bot-example` reference image (#17)** — produces the documented `fks_bot_*` metrics for the spawner's `file_sd_configs` job.
+- **Janus port to rustrade-supervisor (PR #19 / "Janus port" commit)** — `crates/janus/bin/janus/` uses `rustrade-supervisor` directly; `rustrade-supervisor`'s deps pinned explicitly so the cross-workspace path dep works. Caught a real axum 0.8 path-syntax bug in the spawner along the way.

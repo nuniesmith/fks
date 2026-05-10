@@ -65,7 +65,7 @@
             const url = statusFilter
                 ? `/api/signals?status=${statusFilter}`
                 : "/api/signals";
-            const data = await api<SignalsResponse>(url);
+            const data = await api.get<SignalsResponse>(url);
             signals = data.signals ?? [];
         } catch (e: any) {
             signalsError = e.message ?? "Failed to load signals";
@@ -77,7 +77,7 @@
     async function fetchAlerts() {
         alertsError = "";
         try {
-            const data = await api<AlertsResponse>("/api/alerts");
+            const data = await api.get<AlertsResponse>("/api/alerts");
             alerts = data.alerts ?? [];
         } catch (e: any) {
             alertsError = e.message ?? "Failed to load alerts";
@@ -95,7 +95,7 @@
     async function approveSignal(id: string) {
         actionBusy = { ...actionBusy, [id]: true };
         try {
-            await api(`/api/signals/${id}/approve`, { method: "POST" });
+            await api.post(`/api/signals/${id}/approve`);
             await fetchSignals();
         } catch (e: unknown) {
             const err = e instanceof Error ? e : new Error(String(e));
@@ -111,7 +111,7 @@
         if (!confirm("Reject this signal?")) return;
         actionBusy = { ...actionBusy, [id]: true };
         try {
-            await api(`/api/signals/${id}/reject`, { method: "POST" });
+            await api.post(`/api/signals/${id}/reject`);
             await fetchSignals();
         } catch (e: unknown) {
             const err = e instanceof Error ? e : new Error(String(e));

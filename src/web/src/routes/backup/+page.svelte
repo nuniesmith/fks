@@ -54,7 +54,7 @@
     statusLoading = true;
     statusError   = '';
     try {
-      status = await api<BackupStatus>('/api/backup/status');
+      status = await api.get<BackupStatus>('/api/backup/status');
     } catch (e: any) {
       statusError = e.message ?? 'Failed to load status';
     } finally {

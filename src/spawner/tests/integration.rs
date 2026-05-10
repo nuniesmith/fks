@@ -1,0 +1,440 @@
+//! HTTP integration tests for the spawner.
+//!
+//! Drives the real `axum::Router` from `spawner::api::build_router` with a
+//! `MockDockerClient` that maintains in-memory container state. No real
+//! Docker daemon required; tests run on every `cargo test` invocation.
+//!
+//! Coverage:
+//!   - Health + metrics endpoints are reachable without auth.
+//!   - Spawn rejects images that don't match the allowed prefix (400).
+//!   - Spawn → list → inspect → stop → remove lifecycle round-trips.
+//!   - The auth middleware:
+//!       * dev mode (empty token) lets unauthenticated requests through
+//!       * configured token rejects missing header (401)
+//!       * configured token rejects mismatched header (403)
+//!       * configured token allows correct header (2xx)
+//!
+//! These are *integration* tests in the cargo sense (they live in
+//! `tests/`) but they don't talk to anything external — the entire stack
+//! runs in-process via `tower::ServiceExt::oneshot`.
+
+use std::collections::HashMap;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+
+use async_trait::async_trait;
+use axum::{
+    body::Body,
+    http::{header, Request, StatusCode},
+    Router,
+};
+use chrono::Utc;
+use tokio_stream::Stream;
+use tower::util::ServiceExt;
+
+use spawner::api::{build_router, AppState};
+use spawner::config::Config;
+use spawner::docker_client::{DockerOps, LogStream};
+use spawner::error::{SpawnerError, SpawnerResult};
+use spawner::models::{ContainerInfo, SpawnRequest, SpawnResponse};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MockDockerClient — in-memory implementation of DockerOps
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Clone, Default)]
+struct MockDockerClient {
+    state: Arc<Mutex<MockState>>,
+    /// Optional override of `allowed_image_prefix` so the mock can fail on
+    /// bad images the same way the real client does.
+    allowed_prefix: String,
+    /// Hard cap on concurrent containers, mirrored from `Config`.
+    max_concurrent: usize,
+}
+
+#[derive(Default)]
+struct MockState {
+    containers: HashMap<String, ContainerInfo>,
+}
+
+impl MockDockerClient {
+    fn from_config(cfg: &Config) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(MockState::default())),
+            allowed_prefix: cfg.allowed_image_prefix.clone(),
+            max_concurrent: cfg.max_concurrent_bots,
+        }
+    }
+}
+
+#[async_trait]
+impl DockerOps for MockDockerClient {
+    async fn spawn(&self, req: SpawnRequest) -> SpawnerResult<SpawnResponse> {
+        if !req.image.starts_with(&self.allowed_prefix) {
+            return Err(SpawnerError::InvalidImage(req.image));
+        }
+
+        let mut state = self.state.lock().expect("MockState mutex poisoned");
+        if state.containers.len() >= self.max_concurrent {
+            return Err(SpawnerError::TooManyBots(state.containers.len()));
+        }
+
+        let bot_id = req.bot_id.unwrap_or_else(|| "test-id".to_string());
+        let container_id: String = format!("{:0>12}", &bot_id.chars().take(12).collect::<String>());
+        let container_name = format!("fks-bot-{}", bot_id);
+
+        let mut labels: HashMap<String, String> = req.labels.clone();
+        labels.insert("fks.bot".into(), "true".into());
+        labels.insert("fks.bot_id".into(), bot_id.clone());
+        labels.insert("fks.mode".into(), req.mode.clone());
+
+        let now = Utc::now();
+        let info = ContainerInfo {
+            id: container_id.clone(),
+            id_full: container_id.clone(),
+            name: container_name.clone(),
+            image: req.image.clone(),
+            status: "Up 0 seconds".to_string(),
+            state: "running".to_string(),
+            bot_id: bot_id.clone(),
+            mode: req.mode.clone(),
+            created_at: Some(now),
+            started_at: Some(now),
+            finished_at: None,
+            labels,
+            cpu_percent: None,
+            memory_bytes: None,
+        };
+        state.containers.insert(container_id.clone(), info);
+
+        Ok(SpawnResponse {
+            container_id: container_id.clone(),
+            container_name,
+            bot_id,
+            image: req.image,
+            mode: req.mode,
+            started_at: now,
+        })
+    }
+
+    async fn stop(&self, id: &str) -> SpawnerResult<()> {
+        let mut state = self.state.lock().expect("MockState mutex poisoned");
+        match state.containers.get_mut(id) {
+            Some(c) => {
+                c.state = "exited".to_string();
+                c.finished_at = Some(Utc::now());
+                Ok(())
+            }
+            None => Err(SpawnerError::NotFound(id.to_string())),
+        }
+    }
+
+    async fn restart(&self, id: &str) -> SpawnerResult<()> {
+        let mut state = self.state.lock().expect("MockState mutex poisoned");
+        match state.containers.get_mut(id) {
+            Some(c) => {
+                c.state = "running".to_string();
+                c.finished_at = None;
+                Ok(())
+            }
+            None => Err(SpawnerError::NotFound(id.to_string())),
+        }
+    }
+
+    async fn remove(&self, id: &str) -> SpawnerResult<()> {
+        let mut state = self.state.lock().expect("MockState mutex poisoned");
+        if state.containers.remove(id).is_some() {
+            Ok(())
+        } else {
+            Err(SpawnerError::NotFound(id.to_string()))
+        }
+    }
+
+    async fn inspect(&self, id: &str) -> SpawnerResult<ContainerInfo> {
+        let state = self.state.lock().expect("MockState mutex poisoned");
+        state
+            .containers
+            .get(id)
+            .cloned()
+            .ok_or_else(|| SpawnerError::NotFound(id.to_string()))
+    }
+
+    async fn list_bots(&self) -> SpawnerResult<Vec<ContainerInfo>> {
+        let state = self.state.lock().expect("MockState mutex poisoned");
+        Ok(state.containers.values().cloned().collect())
+    }
+
+    fn stream_logs(&self, _id: &str, _tail: Option<String>) -> LogStream {
+        // Empty stream — log streaming isn't exercised by the lifecycle tests.
+        let stream: Pin<Box<dyn Stream<Item = String> + Send>> = Box::pin(tokio_stream::empty());
+        stream
+    }
+
+    async fn auto_prune(&self) -> SpawnerResult<usize> {
+        Ok(0)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test scaffolding
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn test_config(internal_token: &str) -> Config {
+    Config {
+        host: "127.0.0.1".to_string(),
+        port: 8090,
+        allowed_image_prefix: "fks-bot-".to_string(),
+        max_concurrent_bots: 20,
+        allowed_network: "fks_network".to_string(),
+        default_cpu_limit: 1.0,
+        default_memory_bytes: 256 * 1024 * 1024,
+        default_cpu_shares: 1024,
+        prometheus_sd_path: "/tmp/spawner-test-sd.json".to_string(),
+        bot_metrics_port: 9091,
+        prune_after_secs: 300,
+        prune_interval_secs: 60,
+        database_url: String::new(),
+        internal_token: internal_token.to_string(),
+    }
+}
+
+fn build_app(config: Config) -> (Router, Arc<MockDockerClient>) {
+    let mock = Arc::new(MockDockerClient::from_config(&config));
+    let docker: Arc<dyn DockerOps> = mock.clone();
+    let state = AppState {
+        docker,
+        config: Arc::new(config),
+        #[cfg(feature = "db")]
+        store: None,
+    };
+    (build_router(state), mock)
+}
+
+async fn body_string(resp: axum::response::Response) -> String {
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .expect("read body");
+    String::from_utf8(bytes.to_vec()).expect("body is utf-8")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public endpoints (no auth)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn health_returns_ok_without_auth() {
+    let (app, _) = build_app(test_config("any-token-set-here"));
+    let resp = app
+        .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_string(resp).await;
+    assert!(body.contains("\"status\":\"ok\""), "body was: {body}");
+}
+
+#[tokio::test]
+async fn metrics_returns_text_without_auth() {
+    let (app, _) = build_app(test_config("any-token-set-here"));
+    let resp = app
+        .oneshot(Request::get("/metrics").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Spawn validation
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn spawn_rejects_image_outside_allowed_prefix() {
+    let (app, _) = build_app(test_config(""));
+    let body = serde_json::json!({ "image": "evil-image:latest" }).to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/spawn")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("not allowed"), "body was: {payload}");
+}
+
+#[tokio::test]
+async fn spawn_then_list_then_remove_round_trips() {
+    let (app, mock) = build_app(test_config(""));
+
+    // Initial list is empty.
+    let resp = app
+        .clone()
+        .oneshot(Request::get("/containers").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(body_string(resp).await.contains("\"total\":0"));
+
+    // Spawn a container.
+    let body = serde_json::json!({
+        "image": "fks-bot-example:latest",
+        "bot_id": "round-trip-id",
+        "mode": "paper"
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/spawn")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let payload = body_string(resp).await;
+    let resp_json: SpawnResponse = serde_json::from_str(&payload).unwrap();
+    assert_eq!(resp_json.bot_id, "round-trip-id");
+    assert_eq!(resp_json.mode, "paper");
+
+    // Mock state has 1 container.
+    {
+        let state = mock.state.lock().unwrap();
+        assert_eq!(state.containers.len(), 1);
+    }
+
+    // /containers now returns it.
+    let resp = app
+        .clone()
+        .oneshot(Request::get("/containers").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"total\":1"), "body: {payload}");
+    assert!(payload.contains("round-trip-id"), "body: {payload}");
+
+    // DELETE /container/:id removes it.
+    let id = &resp_json.container_id;
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::delete(format!("/container/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Mock state empty again.
+    {
+        let state = mock.state.lock().unwrap();
+        assert!(
+            state.containers.is_empty(),
+            "state: {:?}",
+            state.containers.keys()
+        );
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth middleware
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn auth_disabled_when_token_empty() {
+    let (app, _) = build_app(test_config("")); // empty = dev mode
+    let body = serde_json::json!({ "image": "fks-bot-x:latest" }).to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/spawn")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // No auth required, so the request succeeds.
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn auth_rejects_missing_token_header() {
+    let (app, _) = build_app(test_config("super-secret"));
+
+    let resp = app
+        .oneshot(Request::get("/containers").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("missing"), "body: {payload}");
+}
+
+#[tokio::test]
+async fn auth_rejects_wrong_token_header() {
+    let (app, _) = build_app(test_config("super-secret"));
+
+    let resp = app
+        .oneshot(
+            Request::get("/containers")
+                .header("X-Internal-Token", "wrong")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn auth_accepts_correct_token_header() {
+    let (app, _) = build_app(test_config("super-secret"));
+
+    let resp = app
+        .oneshot(
+            Request::get("/containers")
+                .header("X-Internal-Token", "super-secret")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn auth_does_not_apply_to_health_even_when_enabled() {
+    let (app, _) = build_app(test_config("super-secret"));
+
+    let resp = app
+        .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn auth_does_not_apply_to_metrics_even_when_enabled() {
+    let (app, _) = build_app(test_config("super-secret"));
+
+    let resp = app
+        .oneshot(Request::get("/metrics").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+}

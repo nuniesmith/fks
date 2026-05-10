@@ -48,6 +48,13 @@ pub struct Config {
     /// Postgres connection string. Empty = stateless mode (no DB writes).
     /// Recognised env vars (in order): SPAWNER_DATABASE_URL, DATABASE_URL.
     pub database_url: String,
+
+    /// Shared secret nginx injects on internal traffic via
+    /// `proxy_set_header X-Internal-Token "${NGINX_INTERNAL_TOKEN}"`.
+    /// When this is non-empty, all routes except `/health` and `/metrics`
+    /// reject requests that don't carry the matching header value.
+    /// Empty = no auth (dev mode).
+    pub internal_token: String,
 }
 
 impl Config {
@@ -72,6 +79,7 @@ impl Config {
             database_url: env::var("SPAWNER_DATABASE_URL")
                 .or_else(|_| env::var("DATABASE_URL"))
                 .unwrap_or_default(),
+            internal_token: env::var("NGINX_INTERNAL_TOKEN").unwrap_or_default(),
         }
     }
 
@@ -119,6 +127,7 @@ mod tests {
             prune_after_secs: 300,
             prune_interval_secs: 60,
             database_url: String::new(),
+            internal_token: String::new(),
         };
         assert_eq!(cfg.bind_addr(), "0.0.0.0:8090");
         assert!(
@@ -144,6 +153,7 @@ mod tests {
             prune_after_secs: 0,
             prune_interval_secs: 0,
             database_url: String::new(),
+            internal_token: String::new(),
         };
         assert_eq!(cfg.bind_addr(), "127.0.0.1:12345");
     }

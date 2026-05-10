@@ -19,25 +19,18 @@
 //   RUST_LOG                  log level (default: info,spawner=debug)
 // =============================================================================
 
-mod api;
-mod config;
-#[cfg(feature = "db")]
-mod db;
-mod docker_client;
-mod error;
-mod metrics;
-mod models;
-mod prometheus_sd;
-
 use std::sync::Arc;
 use std::time::Duration;
 
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-use api::{build_router, AppState};
-use config::Config;
-use docker_client::DockerClient;
+use spawner::api::{build_router, AppState};
+use spawner::config::Config;
+#[cfg(feature = "db")]
+use spawner::db;
+use spawner::docker_client::{DockerClient, DockerOps};
+use spawner::{metrics, prometheus_sd};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -63,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // ── Docker client ─────────────────────────────────────────────────────────
-    let docker = DockerClient::new(config.clone())?;
+    let docker: Arc<dyn DockerOps> = Arc::new(DockerClient::new(config.clone())?);
     info!("connected to Docker daemon");
 
     // ── Postgres (optional) ───────────────────────────────────────────────────
@@ -77,12 +70,12 @@ async fn main() -> anyhow::Result<()> {
         s
     };
 
-    // ── Initial SD file write ─────────────────────────────────────────────────
-    prometheus_sd::update_sd_file(&docker, &config).await;
+    // ── Initial SD file write ──────────────────────────────────────────────────
+    prometheus_sd::update_sd_file(docker.as_ref(), &config).await;
 
-    // ── Background: auto-prune task ───────────────────────────────────────────
+    // ── Background: auto-prune task ────────────────────────────────────────────────
     {
-        let docker_prune = docker.clone();
+        let docker_prune: Arc<dyn DockerOps> = docker.clone();
         let config_prune = config.clone();
         tokio::spawn(async move {
             let interval = Duration::from_secs(config_prune.prune_interval_secs);
@@ -91,7 +84,7 @@ async fn main() -> anyhow::Result<()> {
                 match docker_prune.auto_prune().await {
                     Ok(n) if n > 0 => {
                         metrics::PRUNE_TOTAL.inc_by(n as f64);
-                        prometheus_sd::update_sd_file(&docker_prune, &config_prune).await;
+                        prometheus_sd::update_sd_file(docker_prune.as_ref(), &config_prune).await;
                     }
                     Ok(_) => {}
                     Err(e) => tracing::warn!(error = %e, "auto-prune error"),

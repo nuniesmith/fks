@@ -53,7 +53,7 @@ fn default_mode() -> String {
 // Spawn response
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SpawnResponse {
     pub container_id: String,
     pub container_name: String,
@@ -67,7 +67,7 @@ pub struct SpawnResponse {
 // Container info (returned by GET /containers and GET /container/:id)
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ContainerInfo {
     /// Short container ID (12 chars).
     pub id: String,
@@ -93,7 +93,7 @@ pub struct ContainerInfo {
 // Action responses
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ActionResponse {
     pub ok: bool,
     pub container_id: String,

@@ -22,17 +22,13 @@
 //   ]
 // =============================================================================
 
-use std::{path::Path, sync::Arc};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::{path::Path, sync::Arc};
 use tokio::fs;
 use tracing::{debug, info, warn};
 
-use crate::{
-    config::Config,
-    docker_client::DockerClient,
-    error::SpawnerResult,
-};
+use crate::{config::Config, docker_client::DockerOps, error::SpawnerResult};
 
 #[derive(Debug, Serialize)]
 struct SdTarget {
@@ -42,7 +38,7 @@ struct SdTarget {
 
 /// Rewrite the Prometheus SD JSON file from the live list of bot containers.
 /// Call this after any spawn/stop/remove operation.
-pub async fn update_sd_file(docker: &DockerClient, config: &Arc<Config>) {
+pub async fn update_sd_file(docker: &dyn DockerOps, config: &Arc<Config>) {
     match build_sd_targets(docker, config).await {
         Ok(targets) => {
             if let Err(e) = write_sd_file(&config.prometheus_sd_path, &targets).await {
@@ -59,14 +55,17 @@ pub async fn update_sd_file(docker: &DockerClient, config: &Arc<Config>) {
     }
 }
 
-async fn build_sd_targets(docker: &DockerClient, config: &Arc<Config>) -> SpawnerResult<Vec<SdTarget>> {
+async fn build_sd_targets(
+    docker: &dyn DockerOps,
+    config: &Arc<Config>,
+) -> SpawnerResult<Vec<SdTarget>> {
     let bots = docker.list_bots().await?;
-    let running: Vec<_> = bots
-        .into_iter()
-        .filter(|b| b.state == "running")
-        .collect();
+    let running: Vec<_> = bots.into_iter().filter(|b| b.state == "running").collect();
 
-    debug!(count = running.len(), "building SD targets for running bots");
+    debug!(
+        count = running.len(),
+        "building SD targets for running bots"
+    );
 
     let targets = running
         .into_iter()
@@ -78,7 +77,10 @@ async fn build_sd_targets(docker: &DockerClient, config: &Arc<Config>) -> Spawne
             labels.insert("mode".to_string(), bot.mode.clone());
             labels.insert("container_name".to_string(), bot.name.clone());
             labels.insert("__meta_fks_image".to_string(), bot.image.clone());
-            SdTarget { targets: vec![target], labels }
+            SdTarget {
+                targets: vec![target],
+                labels,
+            }
         })
         .collect();
 

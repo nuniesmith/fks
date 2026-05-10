@@ -5,12 +5,12 @@
 //   GET    /health                    → HealthResponse (JSON)
 //   GET    /metrics                   → Prometheus text
 //   GET    /containers                → Vec<ContainerInfo> (JSON)
-//   GET    /container/:id             → ContainerInfo (JSON)
+//   GET    /container/{id}             → ContainerInfo (JSON)
 //   POST   /spawn                     → SpawnResponse (JSON)
-//   DELETE /container/:id             → ActionResponse (JSON)
-//   POST   /container/:id/stop        → ActionResponse (JSON)
-//   POST   /container/:id/restart     → ActionResponse (JSON)
-//   GET    /container/:id/logs        → SSE stream (text/event-stream)
+//   DELETE /container/{id}             → ActionResponse (JSON)
+//   POST   /container/{id}/stop        → ActionResponse (JSON)
+//   POST   /container/{id}/restart     → ActionResponse (JSON)
+//   GET    /container/{id}/logs        → SSE stream (text/event-stream)
 // =============================================================================
 
 use std::{convert::Infallible, sync::Arc, time::Instant};
@@ -18,6 +18,7 @@ use std::{convert::Infallible, sync::Arc, time::Instant};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
+    middleware,
     response::{
         sse::{Event, KeepAlive, Sse},
         Json,
@@ -30,8 +31,9 @@ use serde::Deserialize;
 use tracing::{info, warn};
 
 use crate::{
+    auth::require_internal_token,
     config::Config,
-    docker_client::DockerClient,
+    docker_client::DockerOps,
     error::SpawnerError,
     metrics,
     models::{ActionResponse, HealthResponse, SpawnRequest, SpawnResponse},
@@ -47,7 +49,10 @@ use crate::db::{BotRunStore, RecordSpawn};
 
 #[derive(Clone)]
 pub struct AppState {
-    pub docker: DockerClient,
+    /// Backend driver — production uses `DockerClient` (talks to a real
+    /// Docker daemon); tests inject `MockDockerClient` for handler-level
+    /// integration tests without a daemon.
+    pub docker: Arc<dyn DockerOps>,
     pub config: Arc<Config>,
     /// Optional Postgres-backed bot_runs persistence. None = stateless mode.
     #[cfg(feature = "db")]
@@ -58,22 +63,44 @@ pub struct AppState {
 // Router
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Build the spawner's HTTP router.
+///
+/// Routes are split across two sub-routers:
+///
+/// - **Public** (`/health`, `/metrics`) — always reachable. Used by the
+///   Docker healthcheck and by Prometheus scraping over the
+///   `fks_network` Docker network.
+/// - **Protected** (everything else) — wrapped in the
+///   [`require_internal_token`] middleware. When
+///   `Config.internal_token` is non-empty, requests must carry
+///   `X-Internal-Token: <value>` (set by nginx). When empty, the
+///   middleware is a no-op so direct local-dev requests still work.
 pub fn build_router(state: AppState) -> Router {
-    let router = Router::new()
+    let public = Router::new()
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
+        .with_state(state.clone());
+
+    let protected = Router::new()
         .route("/spawn", post(spawn_handler))
         .route("/containers", get(list_containers_handler))
-        .route("/container/:id", get(inspect_handler))
-        .route("/container/:id", delete(remove_handler))
-        .route("/container/:id/stop", post(stop_handler))
-        .route("/container/:id/restart", post(restart_handler))
-        .route("/container/:id/logs", get(logs_sse_handler));
+        .route("/container/{id}", get(inspect_handler))
+        .route("/container/{id}", delete(remove_handler))
+        .route("/container/{id}/stop", post(stop_handler))
+        .route("/container/{id}/restart", post(restart_handler))
+        .route("/container/{id}/logs", get(logs_sse_handler));
 
     #[cfg(feature = "db")]
-    let router = router.route("/runs", get(runs_handler));
+    let protected = protected.route("/runs", get(runs_handler));
 
-    router.with_state(state)
+    let protected = protected
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_internal_token,
+        ))
+        .with_state(state);
+
+    Router::new().merge(public).merge(protected)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,7 +190,7 @@ async fn spawn_handler(
     let docker = state.docker.clone();
     let config = state.config.clone();
     tokio::spawn(async move {
-        prometheus_sd::update_sd_file(&docker, &config).await;
+        prometheus_sd::update_sd_file(docker.as_ref(), &config).await;
     });
 
     Ok((StatusCode::CREATED, Json(resp)))
@@ -211,7 +238,7 @@ async fn list_containers_handler(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /container/:id
+// GET /container/{id}
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn inspect_handler(
@@ -223,7 +250,7 @@ async fn inspect_handler(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DELETE /container/:id
+// DELETE /container/{id}
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn remove_handler(
@@ -246,14 +273,14 @@ async fn remove_handler(
     let docker = state.docker.clone();
     let config = state.config.clone();
     tokio::spawn(async move {
-        prometheus_sd::update_sd_file(&docker, &config).await;
+        prometheus_sd::update_sd_file(docker.as_ref(), &config).await;
     });
 
     Ok(Json(ActionResponse::ok(&id, "remove")))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /container/:id/stop
+// POST /container/{id}/stop
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn stop_handler(
@@ -276,14 +303,14 @@ async fn stop_handler(
     let docker = state.docker.clone();
     let config = state.config.clone();
     tokio::spawn(async move {
-        prometheus_sd::update_sd_file(&docker, &config).await;
+        prometheus_sd::update_sd_file(docker.as_ref(), &config).await;
     });
 
     Ok(Json(ActionResponse::ok(&id, "stop")))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /container/:id/restart
+// POST /container/{id}/restart
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn restart_handler(
@@ -295,7 +322,7 @@ async fn restart_handler(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /container/:id/logs  → SSE
+// GET /container/{id}/logs  → SSE
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]

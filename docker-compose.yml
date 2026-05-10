@@ -1537,6 +1537,9 @@ services:
             # Empty/unset = stateless mode (the spawner still runs).
             # Schema: src/sql/ruby/007_spawner.sql
             - SPAWNER_DATABASE_URL=postgres://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${RUBY_DB:-ruby_db}?sslmode=disable
+            # Shared secret nginx forwards on every proxied request.
+            # Empty = dev mode (auth disabled).
+            - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
             - prometheus_sd:/prometheus-sd

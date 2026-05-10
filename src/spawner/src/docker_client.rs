@@ -18,8 +18,9 @@
 //   auto_prune()   — remove exited bot containers older than threshold
 // =============================================================================
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, pin::Pin, sync::Arc};
 
+use async_trait::async_trait;
 use bollard::{
     container::{
         Config as ContainerConfig, CreateContainerOptions, InspectContainerOptions,
@@ -40,6 +41,54 @@ use crate::{
     error::{SpawnerError, SpawnerResult},
     models::{ContainerInfo, SpawnRequest, SpawnResponse},
 };
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DockerOps — abstraction over the Docker daemon for handler dispatch
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// Trait surface mirrors the public API of [`DockerClient`] so handlers can
+// depend on `Arc<dyn DockerOps>` instead of the concrete type. Tests inject
+// a `MockDockerClient` that maintains in-memory state without a real
+// daemon.
+//
+// `stream_logs` returns a boxed stream so the trait is object-safe; the
+// concrete `DockerClient` impl wraps its `async_stream` in `Box::pin`.
+
+/// Heap-allocated stream of log lines. Used by `stream_logs` so the trait
+/// stays object-safe.
+pub type LogStream = Pin<Box<dyn Stream<Item = String> + Send + 'static>>;
+
+/// Operations the spawner's HTTP handlers perform against the Docker
+/// daemon. Implemented by [`DockerClient`] for production and by a mock
+/// in `tests/integration.rs` for handler-level tests.
+#[async_trait]
+pub trait DockerOps: Send + Sync + 'static {
+    /// Create + start a new bot container.
+    async fn spawn(&self, req: SpawnRequest) -> SpawnerResult<SpawnResponse>;
+
+    /// Graceful stop with a 30s timeout.
+    async fn stop(&self, id: &str) -> SpawnerResult<()>;
+
+    /// Restart with a 10s graceful stop timeout.
+    async fn restart(&self, id: &str) -> SpawnerResult<()>;
+
+    /// Force remove (works on running containers too).
+    async fn remove(&self, id: &str) -> SpawnerResult<()>;
+
+    /// Inspect a container; `Err(SpawnerError::NotFound)` if missing.
+    async fn inspect(&self, id: &str) -> SpawnerResult<ContainerInfo>;
+
+    /// All containers carrying the `fks.bot=true` label.
+    async fn list_bots(&self) -> SpawnerResult<Vec<ContainerInfo>>;
+
+    /// Returns a stream of log lines for `id`, optionally tailing the
+    /// last `tail` lines first.
+    fn stream_logs(&self, id: &str, tail: Option<String>) -> LogStream;
+
+    /// Remove exited/dead bot containers older than the configured
+    /// `prune_after_secs`. Returns the number removed.
+    async fn auto_prune(&self) -> SpawnerResult<usize>;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DockerClient
@@ -401,9 +450,49 @@ impl DockerClient {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// DockerOps trait impl — thin delegating wrapper around the inherent
+// methods so handlers can dispatch via `Arc<dyn DockerOps>`.
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[async_trait]
+impl DockerOps for DockerClient {
+    async fn spawn(&self, req: SpawnRequest) -> SpawnerResult<SpawnResponse> {
+        DockerClient::spawn(self, req).await
+    }
+
+    async fn stop(&self, id: &str) -> SpawnerResult<()> {
+        DockerClient::stop(self, id).await
+    }
+
+    async fn restart(&self, id: &str) -> SpawnerResult<()> {
+        DockerClient::restart(self, id).await
+    }
+
+    async fn remove(&self, id: &str) -> SpawnerResult<()> {
+        DockerClient::remove(self, id).await
+    }
+
+    async fn inspect(&self, id: &str) -> SpawnerResult<ContainerInfo> {
+        DockerClient::inspect(self, id).await
+    }
+
+    async fn list_bots(&self) -> SpawnerResult<Vec<ContainerInfo>> {
+        DockerClient::list_bots(self).await
+    }
+
+    fn stream_logs(&self, id: &str, tail: Option<String>) -> LogStream {
+        Box::pin(DockerClient::stream_logs(self, id, tail))
+    }
+
+    async fn auto_prune(&self) -> SpawnerResult<usize> {
+        DockerClient::auto_prune(self).await
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Helpers — convert bollard types to ContainerInfo
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 
 fn container_info_from_summary(s: bollard::models::ContainerSummary) -> ContainerInfo {
     let id_full = s.id.clone().unwrap_or_default();

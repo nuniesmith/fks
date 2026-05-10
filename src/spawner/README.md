@@ -96,6 +96,7 @@ All settings come from environment variables; defaults are baked into the
 | `PRUNE_AFTER_SECS` | `300` | Stopped-container retention |
 | `PRUNE_INTERVAL_SECS` | `60` | Auto-prune sweep interval |
 | `SPAWNER_DATABASE_URL` / `DATABASE_URL` | *(empty)* | Postgres URL — empty = stateless mode |
+| `NGINX_INTERNAL_TOKEN` | *(empty)* | Shared secret validated on every protected route. Empty = dev mode (auth disabled). |
 | `RUST_LOG` | `info,spawner=debug` | tracing-subscriber filter |
 
 ---
@@ -157,11 +158,32 @@ curl http://localhost:8090/health
 
 ---
 
+## Authentication
+
+The spawner sits behind nginx, which forwards every proxied request with
+`X-Internal-Token: ${NGINX_INTERNAL_TOKEN}`. When `NGINX_INTERNAL_TOKEN`
+is non-empty the spawner validates that header on every **protected**
+route and returns:
+
+- `401` if the header is missing
+- `403` if the header doesn't match
+
+`/health` and `/metrics` are intentionally exempt so:
+
+- The Docker `HEALTHCHECK` in `infrastructure/docker/services/spawner/Dockerfile`
+  can hit the spawner directly inside the container.
+- Prometheus can scrape `/metrics` over the `fks_network` Docker network.
+
+Leave `NGINX_INTERNAL_TOKEN` empty for local dev to disable auth.
+
+Implementation: `src/auth.rs`. The token compare is constant-time so a
+byte-by-byte timing leak isn't possible.
+
 ## Testing
 
 ```bash
-# Unit tests (10 tests across config, models, db)
-cargo test -p spawner
+# Unit + HTTP integration tests
+cargo test -p spawner          # 11 unit + 10 integration = 21 tests
 
 # Stateless-mode build
 cargo check -p spawner --no-default-features
@@ -170,10 +192,21 @@ cargo check -p spawner --no-default-features
 cargo check -p spawner
 ```
 
-The current tests cover the data layer (config defaults, request/response
-serialisation, DB URL sanitisation). HTTP-level integration tests would
-require mocking bollard's `Docker` client behind a trait — left for a
-follow-up if needed.
+### `DockerOps` trait + `MockDockerClient`
+
+`src/docker_client.rs` now exposes a `DockerOps` trait. Production wires
+`Arc<DockerClient>` into `AppState.docker`; integration tests under
+`tests/integration.rs` wire an `Arc<MockDockerClient>` that maintains an
+in-memory `HashMap<id, ContainerInfo>` and runs the entire HTTP stack
+in-process via `tower::ServiceExt::oneshot`.
+
+The integration suite covers:
+
+- Health + metrics reachable without auth, even when auth is enabled.
+- Spawn rejects images outside the allowed prefix (400).
+- Full spawn → list → remove round-trip with state assertions.
+- Auth: missing token (401), wrong token (403), correct token (200),
+  empty config token (no-op).
 
 ---
 
@@ -184,8 +217,7 @@ follow-up if needed.
   The current code uses the legacy types and silences deprecation warnings
   in `docker_client.rs` — every method needs a small rewrite when we
   migrate. Not blocking; the deprecated types still work.
-- **No `DockerOps` trait yet**: handlers depend on the concrete
-  `DockerClient`, so HTTP integration tests can't mock the Docker daemon.
+
 - **`bot_configs` table is unused**: the schema models reusable bot
   configuration profiles (templates), but the spawner doesn't read or
   write them yet. The WebUI is expected to manage `bot_configs`

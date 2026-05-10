@@ -5645,6 +5645,7 @@ dependencies = [
  "janus-core",
  "janus-data",
  "janus-forward",
+ "rustrade-supervisor",
  "tokio",
  "tokio-util",
  "tracing",
@@ -10401,6 +10402,20 @@ dependencies = [
  "ring",
  "rustls-pki-types",
  "untrusted",
+]
+
+[[package]]
+name = "rustrade-supervisor"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "rand 0.10.0",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]

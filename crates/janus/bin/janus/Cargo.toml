@@ -18,6 +18,12 @@ janus-backward = { path = "../../services/backward" }
 janus-cns-service = { path = "../../services/cns" }
 janus-data = { path = "../../services/data" }
 
+# Supervisor — ported in PR #1, lives in the rustrade nested workspace.
+# This binary now uses it directly instead of janus-core's local supervisor
+# module, so the two stop drifting. Once every other consumer (none today)
+# moves over, `crates/janus/lib/janus-core/src/supervisor/` can be deleted.
+rustrade-supervisor = { path = "../../../rustrade/crates/rustrade-supervisor" }
+
 # Async runtime
 tokio.workspace = true
 tokio-util.workspace = true

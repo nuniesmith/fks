@@ -16,16 +16,28 @@ categories = ["asynchronous", "concurrency"]
 default = []
 prometheus = ["dep:prometheus"]
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Dependencies
+#
+# Pinned to explicit versions (rather than `workspace = true`) so this crate
+# can be consumed as a path dep from foreign workspaces (e.g.
+# `crates/janus/bin/janus`) without the consumer needing to mirror every
+# dep into its own `[workspace.dependencies]`. The chosen versions match
+# the rustrade workspace's pins as of 2026-05; bump in lockstep when the
+# rustrade workspace bumps.
+#
+# Same shape that crates.io will require when this is eventually published.
+# ──────────────────────────────────────────────────────────────────────────────
 [dependencies]
-async-trait = { workspace = true }
-tokio       = { workspace = true }
-tokio-util  = { workspace = true }
-tracing     = { workspace = true }
-prometheus  = { workspace = true, optional = true }
-thiserror   = { workspace = true }
-anyhow      = { workspace = true }
-serde       = { workspace = true }
-rand        = { workspace = true }
+async-trait = "0.1"
+tokio       = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
+tokio-util  = { version = "0.7", features = ["rt"] }
+tracing     = "0.1"
+prometheus  = { version = "0.14", optional = true }
+thiserror   = "2"
+anyhow      = "1"
+serde       = { version = "1", features = ["derive"] }
+rand        = "0.10"
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "test-util"] }

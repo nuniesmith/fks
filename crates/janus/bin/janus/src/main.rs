@@ -1,44 +1,57 @@
-//! JANUS - Unified FKS Service (Supervisor Architecture)
+//! JANUS — Unified FKS Service (rustrade-supervisor edition)
 //!
-//! This is the main entry point for the consolidated JANUS service.
-//! It replaces the old "fire and forget" `tokio::spawn` pattern with a
-//! structured **Janus Supervisor** that manages service lifecycles through:
+//! Main entry point for the consolidated JANUS service. Manages multiple
+//! sub-services (API, Forward, Backward, CNS, Data) under a single
+//! supervision tree.
 //!
-//! - [`TaskTracker`] for structured concurrency without memory leaks
-//! - [`CancellationToken`] for graceful shutdown signal propagation
-//! - [`ModuleAdapter`] to bridge existing `start_module()` services
-//! - Multi-layer tracing: operational stdout + HFT non-blocking file appender
-//! - Exponential backoff with jitter for automatic restart on failure
+//! # Port history
+//!
+//! The supervisor logic that used to live in
+//! `janus-core::supervisor::*` was extracted into the open-source
+//! `rustrade-supervisor` crate in PR #1. This binary now uses
+//! `rustrade-supervisor` directly so the two implementations stop
+//! drifting. The trait surface and behaviour are unchanged — names move:
+//!
+//! | Was                                         | Is                                           |
+//! |---------------------------------------------|----------------------------------------------|
+//! | `janus_core::supervisor::JanusSupervisor`   | `rustrade_supervisor::Supervisor`            |
+//! | `janus_core::supervisor::JanusService`      | `rustrade_supervisor::TradingService`        |
+//! | `janus_core::supervisor::ModuleAdapter`     | `crate::adapter::ModuleService` (local)      |
+//! | `janus_core::supervisor::ApiModuleAdapter`  | `ModuleService::always_restart(...)`         |
+//! | `janus_core::supervisor::SupervisorConfig`  | `rustrade_supervisor::SupervisorConfig`      |
+//! | `janus_core::supervisor::BackoffConfig`     | `rustrade_supervisor::BackoffConfig`         |
+//! | `janus_core::supervisor::SpawnOptions`      | `rustrade_supervisor::SpawnOptions`          |
+//!
+//! Once no other crate uses `janus-core::supervisor::*`, the entire
+//! `crates/janus/lib/janus-core/src/supervisor/` tree can be deleted.
 //!
 //! # Architecture
 //!
 //! ```text
 //! ┌─────────────────────────────────────────────────────────┐
-//! │                    JanusSupervisor                       │
+//! │             rustrade_supervisor::Supervisor             │
 //! │                                                         │
 //! │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌──────────────┐ │
 //! │  │   API   │ │ Forward │ │Backward │ │ CNS  │ Data  │ │
 //! │  │ Always  │ │OnFailure│ │OnFailure│ │OnFail│OnFail │ │
 //! │  └─────────┘ └─────────┘ └─────────┘ └──────────────┘ │
 //! │                                                         │
-//! │  TaskTracker  ◄── tracks all, reclaims on completion    │
-//! │  CancellationToken ◄── Ctrl+C / SIGTERM propagation     │
-//! │  BackoffState[] ◄── per-service restart with jitter     │
-//! │  ServiceLifecycle[] ◄── Starting→Running→BackingOff→... │
+//! │  TaskTracker        ◄── tracks all, no leaks            │
+//! │  CancellationToken  ◄── Ctrl+C / SIGTERM propagation    │
+//! │  BackoffConfig[]    ◄── per-service jitter + circuit    │
+//! │  ServiceLifecycle[] ◄── Starting→Running→BackingOff→… │
 //! └─────────────────────────────────────────────────────────┘
 //! ```
 
+mod adapter;
+
 use std::sync::Arc;
 
-use janus_core::{
-    Config, JanusState, init_logging,
-    logging::LoggingConfig,
-    supervisor::{
-        ApiModuleAdapter, BackoffConfig, JanusSupervisor, ModuleAdapter, SpawnOptions,
-        SupervisorConfig,
-    },
-};
+use janus_core::{init_logging, logging::LoggingConfig, Config, JanusState};
+use rustrade_supervisor::{BackoffConfig, SpawnOptions, Supervisor, SupervisorConfig};
 use tracing::{info, warn};
+
+use crate::adapter::ModuleService;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -53,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
     let logging_config = LoggingConfig::default();
     let logging_guard = init_logging(logging_config)?;
 
-    info!("Starting JANUS v1.0.0");
+    info!("Starting JANUS v1.0.0 (rustrade-supervisor)");
     info!("═══════════════════════════════════════════════════════════");
 
     // ── 2. Configuration ─────────────────────────────────────────────
@@ -72,17 +85,12 @@ async fn main() -> anyhow::Result<()> {
     info!("    - Data:     {}", config.modules.data);
 
     // Auto-start flag controls whether processing modules begin work
-    // immediately or wait for an explicit API command.
-    //
-    // This is INDEPENDENT of the supervisor's service spawning:
-    //   - The supervisor always spawns and manages all enabled modules
-    //     (lifecycle, restart, backoff, circuit breaker).
-    //   - `start_services()` flips the shared `ServiceState` from
-    //     `Standby` → `Running`, which unblocks modules that call
-    //     `state.wait_for_services_start()` inside their `start_module()`.
-    //
-    // In other words, the supervisor keeps modules alive; this flag
-    // controls whether they actively process data or idle in standby.
+    // immediately or wait for an explicit API command. This is
+    // INDEPENDENT of supervisor spawning — the supervisor always
+    // manages all enabled modules; this flag flips
+    // `state.service_state` from Standby → Running, which unblocks
+    // modules that call `state.wait_for_services_start()` inside their
+    // `start_module()`.
     let auto_start = std::env::var("JANUS_AUTO_START")
         .unwrap_or_else(|_| "false".to_string())
         .parse::<bool>()
@@ -92,11 +100,8 @@ async fn main() -> anyhow::Result<()> {
     let state = Arc::new(JanusState::new(config.clone()).await?);
     info!("Shared state initialized (service_state: standby)");
 
-    // ── 3a. Probe Redis ──────────────────────────────────────────────
-    // Set the janus_redis_connected metric immediately so Prometheus
-    // alert rules (RedisDisconnected) see the real state before the
-    // `for: 3m` window expires.  This is non-fatal — if Redis is
-    // temporarily down, Janus continues and modules retry later.
+    // Probe Redis once at startup so the `janus_redis_connected` metric
+    // reflects reality before Prometheus' `for: 3m` alert window opens.
     state.probe_redis().await;
 
     // Install runtime log-level controller so `POST /api/log-level` works.
@@ -108,16 +113,6 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ── 4. Build Supervisor ──────────────────────────────────────────
-    //
-    // The supervisor replaces the old Vec<JoinHandle> + manual shutdown
-    // loop with structured concurrency:
-    //
-    //  - TaskTracker: tracks all spawned tasks, reclaims memory on
-    //    completion (no result accumulation like JoinSet)
-    //  - CancellationToken: propagates shutdown to all child tokens
-    //  - BackoffConfig: exponential backoff with jitter per service
-    //  - Circuit breaker: stops restarting after N failures in window T
-
     let supervisor_config = SupervisorConfig::default()
         .with_shutdown_timeout(std::time::Duration::from_secs(30))
         .with_default_backoff(
@@ -129,60 +124,57 @@ async fn main() -> anyhow::Result<()> {
             .with_circuit_breaker(10, std::time::Duration::from_secs(600)), // trip after 10 failures in 10 min
         );
 
-    let supervisor = JanusSupervisor::new(supervisor_config);
+    let supervisor = Supervisor::new(supervisor_config);
 
-    // ── 5. Spawn Services via ModuleAdapter ──────────────────────────
+    // ── 5. Spawn Services ────────────────────────────────────────────
     //
-    // Each existing service's `start_module(Arc<JanusState>)` function
-    // is wrapped in a ModuleAdapter that bridges:
-    //   CancellationToken → state.request_shutdown()
-    //
-    // The supervisor handles:
-    //   - Lifecycle tracking (Starting → Running → BackingOff → ...)
-    //   - Automatic restart on failure with exponential backoff
-    //   - Circuit breaker for persistent failures
-    //   - Graceful shutdown propagation
+    // Each existing service's `start_module(Arc<JanusState>)` is wrapped
+    // in `ModuleService` (local — see adapter.rs) which bridges the
+    // supervisor's `CancellationToken` into `state.request_shutdown()`.
 
-    // API module: always-on, always restarts (even on clean exit)
+    // API: always-on, always restarts (even on clean exit).
     if config.modules.api {
-        info!("Spawning API module (always-on, policy: always)...");
-        let api_adapter =
-            ApiModuleAdapter::new(state.clone(), |s| Box::pin(janus_api::start_module(s)));
-        supervisor.spawn_service(Box::new(api_adapter));
+        info!("Spawning API module (policy: always)…");
+        let svc = ModuleService::always_restart(
+            "api",
+            state.clone(),
+            |s| Box::pin(janus_api::start_module(s)),
+        );
+        supervisor.spawn_service(Box::new(svc));
     }
 
-    // Forward module: restarts on failure only
+    // Forward: restarts on failure only.
     if config.modules.forward {
-        info!("Spawning Forward module (policy: on_failure)...");
-        let adapter = ModuleAdapter::on_failure("forward", state.clone(), |s| {
+        info!("Spawning Forward module (policy: on_failure)…");
+        let svc = ModuleService::on_failure("forward", state.clone(), |s| {
             Box::pin(janus_forward::start_module(s))
         });
-        supervisor.spawn_service(Box::new(adapter));
+        supervisor.spawn_service(Box::new(svc));
     }
 
-    // Backward module: restarts on failure only
+    // Backward: restarts on failure only.
     if config.modules.backward {
-        info!("Spawning Backward module (policy: on_failure)...");
-        let adapter = ModuleAdapter::on_failure("backward", state.clone(), |s| {
+        info!("Spawning Backward module (policy: on_failure)…");
+        let svc = ModuleService::on_failure("backward", state.clone(), |s| {
             Box::pin(janus_backward::start_module(s))
         });
-        supervisor.spawn_service(Box::new(adapter));
+        supervisor.spawn_service(Box::new(svc));
     }
 
-    // CNS module: restarts on failure only
+    // CNS: restarts on failure only.
     if config.modules.cns {
-        info!("Spawning CNS module (policy: on_failure)...");
-        let adapter = ModuleAdapter::on_failure("cns", state.clone(), |s| {
+        info!("Spawning CNS module (policy: on_failure)…");
+        let svc = ModuleService::on_failure("cns", state.clone(), |s| {
             Box::pin(janus_cns_service::start_module(s))
         });
-        supervisor.spawn_service(Box::new(adapter));
+        supervisor.spawn_service(Box::new(svc));
     }
 
-    // Data module: restarts on failure, with tighter circuit breaker
-    // (data integrity is critical — stop faster on persistent failures)
+    // Data: restarts on failure with a tighter circuit breaker. Data
+    // integrity is critical — stop faster on persistent failures.
     if config.modules.data {
-        info!("Spawning Data module (policy: on_failure, tight circuit breaker)...");
-        let adapter = ModuleAdapter::on_failure("data", state.clone(), |s| {
+        info!("Spawning Data module (policy: on_failure, tight circuit breaker)…");
+        let svc = ModuleService::on_failure("data", state.clone(), |s| {
             Box::pin(janus_data::start_module(s))
         });
         let data_backoff = BackoffConfig::new(
@@ -192,13 +184,12 @@ async fn main() -> anyhow::Result<()> {
         .with_circuit_breaker(5, std::time::Duration::from_secs(300));
 
         supervisor.spawn_service_with_options(
-            Box::new(adapter),
+            Box::new(svc),
             SpawnOptions::with_backoff(data_backoff),
         );
     }
 
     // ── 6. Service State Management ──────────────────────────────────
-
     info!("═══════════════════════════════════════════════════════════");
     info!(
         "Supervisor active: {} services spawned",
@@ -225,17 +216,15 @@ async fn main() -> anyhow::Result<()> {
 
     // ── 7. Run Until Shutdown ────────────────────────────────────────
     //
-    // This blocks until Ctrl+C / SIGTERM is received, then:
+    // Blocks until Ctrl+C / SIGTERM is received, then:
     //   1. Cancels the root CancellationToken (propagates to all services)
     //   2. Closes the TaskTracker (prevents new task spawning)
-    //   3. Waits for all tasks to drain (with configurable timeout)
+    //   3. Waits for all tasks to drain (with the shutdown_timeout)
     //   4. Logs final supervisor metrics
 
     supervisor.run_until_shutdown().await?;
 
     // ── 8. Post-Shutdown Cleanup ─────────────────────────────────────
-
-    // Log final supervisor metrics
     let metrics = supervisor.metrics().snapshot();
     info!("═══════════════════════════════════════════════════════════");
     info!("Supervisor Metrics (final):");
@@ -244,7 +233,7 @@ async fn main() -> anyhow::Result<()> {
     info!("  Total restarts:        {}", metrics.restarts_total);
     info!("  Circuit breaker trips: {}", metrics.circuit_breaker_trips);
 
-    // Log final lifecycle snapshots for each service
+    // Per-service lifecycle summary.
     let snapshots = supervisor.lifecycle_snapshots().await;
     if !snapshots.is_empty() {
         info!("Service Lifecycle Summary:");
@@ -266,14 +255,14 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Perform final state cleanup (close Redis, flush WAL, etc.)
+    // Final state cleanup (close Redis, flush WAL, etc.)
     state.shutdown().await?;
 
     info!("═══════════════════════════════════════════════════════════");
     info!("JANUS shutdown complete — all services drained cleanly");
     info!("═══════════════════════════════════════════════════════════");
 
-    // logging_guard drops here — HFT non-blocking buffer is flushed
+    // logging_guard drops here — HFT non-blocking buffer is flushed.
     drop(logging_guard);
 
     Ok(())

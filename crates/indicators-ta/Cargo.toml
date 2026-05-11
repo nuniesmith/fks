@@ -1,3 +1,7 @@
+# Standalone publishable crate — own its own workspace so cargo doesn't
+# look up the tree and try to attach to fks-full's root workspace.
+[workspace]
+
 [package]
 name          = "indicators-ta"
 version       = "0.1.3"

@@ -1,7 +1,7 @@
 # fks-full — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks-full`
-> **Last synced:** 2026-05-10
+> **Last synced:** 2026-05-11
 >
 > This file covers **cross-cutting** work — docker-compose, Dockerfiles,
 > nginx, CI/CD, Postgres bootstrap, observability, deployment. Anything
@@ -19,52 +19,48 @@
 
 ---
 
-## P0 — Split prep & cleanup
-
-### Finish the in-flight reorganisation
-
-> Right now the working tree has uncommitted moves
-> (`src/spawner/` → `crates/spawner/`, `src/kucoin/` → `crates/kucoin/`,
-> sql tree co-located with each owner, `JANUS_EXTRACTION_PLAN.md` →
-> `crates/janus/`). Land them.
-
-- [ ] Commit the working-tree moves on a single focused branch
-      ("Co-locate sub-codebase assets before the split"). One commit is
-      fine since `git mv` history will trace it.
-- [ ] Update the root `Cargo.toml` workspace members:
-      `members = ["src/proto", "crates/spawner"]` (or remove
-      `crates/spawner` if it becomes its own nested workspace; see
-      `crates/spawner/TODO.md`).
-- [ ] Verify `cargo check --workspace` from the repo root passes after
-      the move. Currently fails because `src/spawner/Cargo.toml` no
-      longer exists.
-
-### Remove rustcode + openclaw + promptfoo + ollama
-
-- [ ] Delete `crates/rustcode/`.
-- [ ] Delete `infrastructure/docker/services/{rustcode,openclaw,openclaw-base,openclaw_cli,promptfoo,ollama}/`.
-- [ ] Delete `infrastructure/config/{openclaw,rustcode,promptfoo}/`.
-- [ ] Delete `infrastructure/promptfoo/`.
-- [ ] Strip the `/api/code/*`, `/api/openclaw/*`, `/api/rc/*` nginx location blocks from `infrastructure/config/nginx/conf.d/*.conf`.
-- [ ] Strip `RC_*`, `OPENCLAW_*`, `XAI_API_KEY` (if only used by RC) entries from `.env.example`.
-- [ ] Strip the `rustcode`, `fks_ollama`, `fks_ollama_init`, `openclaw`, `openclaw_cli`, `promptfoo` service blocks from `docker-compose.yml`. *(already done in the working tree as of 2026-05-10 — confirm + commit.)*
-- [ ] Remove the corresponding `./run.sh rc` subcommand and any other run-script entries.
-
-### Remove `crates/kucoin/` (legacy bot)
-
-- [ ] Delete `crates/kucoin/` after confirming `rustrade-kucoin` +
-      `crates/rustrade/examples/kucoin-v2/` cover the use case.
-- [ ] No docker-compose / nginx changes needed — `crates/kucoin/` isn't
-      wired into the runtime.
+## P0 — Split prep & CI
 
 ### Per-sub-codebase doc readiness
 
 - [x] `SPLIT_PLAN.md` written.
 - [x] `CLAUDE.md` + `TODO.md` added to each future-external sub-codebase.
-- [x] Root `README.md` / `CLAUDE.md` / `TODO.md` updated to point at the
-      split direction.
+- [x] Root `README.md` / `CLAUDE.md` / `TODO.md` point at the split direction.
 - [ ] Audit each sub-README for `fks-full` path references. Replace
       with public-repo-shaped equivalents before split.
+
+### CI gates (blocking Phase 2 of `SPLIT_PLAN.md`)
+
+> No Rust CI is configured yet. `.github/workflows/` only has the
+> auto-labeler and the paper-trading soak workflow. Without a CI
+> workflow that runs `cargo check + test` per nested workspace, a bad
+> merge can silently red the build of any sub-codebase that's about
+> to be extracted.
+
+- [ ] **`.github/workflows/rust.yml`** — one matrix job per nested
+      workspace (`crates/rustrade/`, `crates/janus/`, `crates/spawner/`,
+      `crates/indicators-ta/`, `crates/exchange-apiws/`, repo root). Each
+      runs `cargo check --workspace`, `cargo test --workspace`,
+      `cargo clippy --workspace -- -D warnings`.
+- [ ] **`.github/workflows/web.yml`** — `npm run check` on `src/web/`
+      (non-blocking until the existing type errors clear).
+- [ ] **`.github/workflows/python.yml`** — `pytest tests/` on `src/ruby/`
+      (or scoped to whatever subset is green today).
+
+### Pre-publish audit per crate (`SPLIT_PLAN.md` Phase 2)
+
+For every crate slated for crates.io: `indicators-ta`,
+`exchange-apiws`, `spawner`, `rustrade-{core,supervisor,risk,backtest,notify}`,
+`rustrade-kucoin`, `rustrade` (facade).
+
+- [ ] Walk each `Cargo.toml`: `description`, `license`, `repository`,
+      `keywords`, `categories`, `readme` populated.
+- [ ] `publish = true` (or absent) on the crates that should publish.
+- [ ] `cargo publish --dry-run` from each crate's directory. Produce
+      a per-crate blocker list.
+- [ ] Decide crate-name convention for the eventual janus public
+      siblings — `-ta` suffix vs `trading-` prefix vs `rustrade-`
+      prefix (called out in `crates/janus/JANUS_EXTRACTION_PLAN.md`).
 
 ---
 
@@ -138,17 +134,13 @@
 
 ---
 
-## P2 — CI/CD & image persistence
+## P2 — Image push & CI hardening
 
 - [ ] Re-enable ARM64 / multi-arch builds in CI (disabled in batch-013).
 - [ ] `docker push nuniesmith/fks:janus` — publish Janus image for faster deploys.
 - [ ] `docker push nuniesmith/fks:spawner` — same.
 - [ ] Postgres data migration (optional): use `pgloader` if dev data
       worth preserving across rebuilds.
-- [ ] **CI gates:**
-  - [ ] `cargo check --workspace` from every nested workspace.
-  - [ ] `npm run check` on `src/web` (non-blocking until the 29 type errors clear).
-  - [ ] `pytest tests/` on `src/ruby`.
 
 ---
 
@@ -190,12 +182,11 @@
 
 ---
 
-## ✅ Recently shipped (PRs #1–#19 in this repo)
+## ✅ Recently shipped (PRs #1–#21)
 
-The 19-PR arc that built the rustrade framework + the spawner + the
-`/bots` WebUI route:
+The 21-PR arc that took fks-full from "broken monolith" to "feature-complete framework + spawner + repo-split-ready":
 
-- **Framework (PRs #1–#10)** — `rustrade-{core,supervisor,risk,backtest,kucoin,notify}` + facade + 4 examples + design invariants documented in `CONTRIBUTING.md`.
+- **Framework (PRs #1–#10)** — `rustrade-{core,supervisor,risk,backtest,kucoin,notify}` + facade + 4 examples + design invariants documented in `crates/rustrade/CONTRIBUTING.md`. Plus `JANUS_EXTRACTION_PLAN.md` and a doc-coverage pass.
 - **Build rot cleanup (#11)** — root + janus + spawner workspaces compile cleanly.
 - **Spawner: DB persistence + 21 tests + README (#12, #18)** — `BotRunStore` writes spawn/stop/remove to `bot_runs`; `DockerOps` trait + `MockDockerClient` + 10 HTTP integration tests; `X-Internal-Token` auth middleware.
 - **Spawner: WebUI (#13, #19)** — `/bots` route with spawn form, container list, SSE log viewer with follow-tail, run history. `api.*` callsite fixes across signals/backup/performance.
@@ -203,4 +194,9 @@ The 19-PR arc that built the rustrade framework + the spawner + the
 - **Spawner stack lands on main (#15)** — corrected the stacked-PR merges.
 - **Docs sync (#16)** — root `CLAUDE.md` + `TODO.md` updated.
 - **`fks-bot-example` reference image (#17)** — produces the documented `fks_bot_*` metrics for the spawner's `file_sd_configs` job.
-- **Janus port to rustrade-supervisor (PR #19 / "Janus port" commit)** — `crates/janus/bin/janus/` uses `rustrade-supervisor` directly; `rustrade-supervisor`'s deps pinned explicitly so the cross-workspace path dep works. Caught a real axum 0.8 path-syntax bug in the spawner along the way.
+- **Repo-split prep (#20)** — `SPLIT_PLAN.md`, per-sub-codebase `CLAUDE.md` + `TODO.md`, root docs updated.
+- **Cleanup (#21)** — `crates/rustcode/`, `crates/kucoin/` (legacy), `infrastructure/docker/services/{rustcode,openclaw,openclaw_cli,promptfoo,ollama}/`, the matching nginx + env-var entries, and `RC_*` / `OPENCLAW_*` env vars all removed. Sub-codebase SQL co-located with owners. `JANUS_EXTRACTION_PLAN.md` moved to `crates/janus/`. Root `Cargo.toml` slimmed to `members = ["src/proto"]`.
+
+### Structural change worth calling out
+
+**`rustrade-supervisor` deps are now pinned explicitly** (not `workspace = true`). This was the gating change for cross-workspace path deps — `crates/janus/bin/janus/` can now path-dep `rustrade-supervisor` without mirroring its transitive deps into `janus`'s `[workspace.dependencies]`. Same pattern will apply when more rustrade crates need to be consumed by foreign workspaces, including post-publish from crates.io.

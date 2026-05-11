@@ -1,0 +1,126 @@
+# =============================================================================
+# Rust CI — per-workspace check / test / clippy / fmt
+# =============================================================================
+# The repo is intentionally split into multiple nested Cargo workspaces (see
+# SPLIT_PLAN.md). This workflow runs each workspace's compile + test gate
+# independently so a green main means "every sub-codebase about to be
+# extracted to its own repo is in a publishable state."
+#
+# Trigger: PRs against main, plus pushes to main.
+# Concurrency: in-flight runs on the same ref are cancelled when a new
+# commit lands.
+# =============================================================================
+
+name: 🦀 Rust
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+concurrency:
+    group: rust-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    CARGO_TERM_COLOR: always
+    RUST_BACKTRACE: 1
+    # sqlx in spawner uses runtime (string) queries, not compile-time macros,
+    # so DATABASE_URL is not required at build time. Set SQLX_OFFLINE just
+    # in case a future query! macro is added — it'll fall back to the cached
+    # metadata instead of trying to reach a live database.
+    SQLX_OFFLINE: "true"
+
+jobs:
+    # -------------------------------------------------------------------------
+    # Per-workspace check / test / clippy
+    # -------------------------------------------------------------------------
+    check:
+        name: ${{ matrix.workspace }}
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - workspace: "root · src/proto"
+                      path: "."
+                      needs_protoc: true
+                    - workspace: "rustrade"
+                      path: "crates/rustrade"
+                      needs_protoc: false
+                    - workspace: "janus"
+                      path: "crates/janus"
+                      needs_protoc: true
+                    - workspace: "spawner"
+                      path: "crates/spawner"
+                      needs_protoc: false
+                    - workspace: "indicators-ta"
+                      path: "crates/indicators-ta"
+                      needs_protoc: false
+                    - workspace: "exchange-apiws"
+                      path: "crates/exchange-apiws"
+                      needs_protoc: false
+        steps:
+            - name: 📥 Checkout
+              uses: actions/checkout@v4
+
+            - name: 🦀 Install Rust toolchain (stable)
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  components: clippy
+
+            - name: 🔧 Install protoc
+              if: ${{ matrix.needs_protoc }}
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: 🗄️ Cargo cache
+              uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: ${{ matrix.path }}
+                  # Distinguish caches per workspace so a clean clippy run in
+                  # one doesn't poison another's incremental cache.
+                  prefix-key: ${{ matrix.workspace }}
+
+            - name: 🧪 cargo check
+              working-directory: ${{ matrix.path }}
+              run: cargo check --workspace --all-targets --locked
+
+            - name: 🧪 cargo test
+              working-directory: ${{ matrix.path }}
+              run: cargo test --workspace --locked
+
+            - name: 🔍 cargo clippy
+              working-directory: ${{ matrix.path }}
+              # `-D warnings` makes clippy lints fail the job. Drop to a
+              # warn-only mode by changing this to `-W clippy::all` if the
+              # initial run surfaces too many findings — the per-sub-codebase
+              # TODO is the right place to track the cleanup.
+              run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+    # -------------------------------------------------------------------------
+    # cargo fmt across every workspace (fast, no protoc needed)
+    # -------------------------------------------------------------------------
+    fmt:
+        name: rustfmt
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - name: 📥 Checkout
+              uses: actions/checkout@v4
+
+            - name: 🦀 Install Rust toolchain (stable)
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  components: rustfmt
+
+            - name: 🎨 cargo fmt --check
+              shell: bash
+              run: |
+                  set -e
+                  for ws in . crates/rustrade crates/janus crates/spawner crates/indicators-ta crates/exchange-apiws; do
+                      printf "\n===> %s\n" "$ws"
+                      (cd "$ws" && cargo fmt --all -- --check)
+                  done

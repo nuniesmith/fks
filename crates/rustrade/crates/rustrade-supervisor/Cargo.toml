@@ -1,6 +1,7 @@
 [package]
 name         = "rustrade-supervisor"
 description  = "Service lifecycle supervisor with backoff and circuit breakers for rustrade"
+readme       = "README.md"
 version.workspace      = true
 edition.workspace      = true
 authors.workspace      = true

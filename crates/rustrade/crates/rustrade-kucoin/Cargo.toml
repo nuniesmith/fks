@@ -1,6 +1,7 @@
 [package]
 name         = "rustrade-kucoin"
 description  = "rustrade ExchangeClient adapter for KuCoin Futures (built on exchange-apiws)"
+readme       = "README.md"
 version.workspace      = true
 edition.workspace      = true
 authors.workspace      = true

@@ -19,14 +19,12 @@
 use std::sync::Arc;
 
 use rustrade_core::{
-    Brain, Candle, Decision, ExchangeClient, Exchange as ExchangeId, MarketDataEvent, Order,
+    Brain, Candle, Decision, Exchange as ExchangeId, ExchangeClient, MarketDataEvent, Order,
     Position, Side, SignalType, SizeHint, Symbol, Volume,
 };
 use thiserror::Error;
 
-use crate::metrics::{
-    BacktestMetrics, EquityPoint, MetricsConfig, TradeRecord, build_trade_log,
-};
+use crate::metrics::{BacktestMetrics, EquityPoint, MetricsConfig, TradeRecord, build_trade_log};
 use crate::sim_exchange::SimExchange;
 
 /// Configuration for a [`BacktestEngine`].
@@ -189,7 +187,9 @@ impl BacktestEngine {
             }
 
             SignalType::Buy | SignalType::Sell => {
-                let size = self.resolve_size(decision.size_hint, last_price, symbol).await?;
+                let size = self
+                    .resolve_size(decision.size_hint, last_price, symbol)
+                    .await?;
                 if size.value() <= 0.0 {
                     return None;
                 }
@@ -203,12 +203,7 @@ impl BacktestEngine {
         }
     }
 
-    async fn resolve_size(
-        &self,
-        hint: SizeHint,
-        last_price: f64,
-        symbol: &str,
-    ) -> Option<Volume> {
+    async fn resolve_size(&self, hint: SizeHint, last_price: f64, symbol: &str) -> Option<Volume> {
         let v = match hint {
             SizeHint::Quantity(v) => v.value(),
             SizeHint::NotionalUsd(usd) if last_price > 0.0 => {

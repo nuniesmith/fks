@@ -97,8 +97,16 @@ fn percent_encode(s: &str) -> String {
             }
             b => {
                 out.push('%');
-                out.push(char::from_digit(u32::from(b) >> 4, 16).unwrap().to_ascii_uppercase());
-                out.push(char::from_digit(u32::from(b) & 0xF, 16).unwrap().to_ascii_uppercase());
+                out.push(
+                    char::from_digit(u32::from(b) >> 4, 16)
+                        .unwrap()
+                        .to_ascii_uppercase(),
+                );
+                out.push(
+                    char::from_digit(u32::from(b) & 0xF, 16)
+                        .unwrap()
+                        .to_ascii_uppercase(),
+                );
             }
         }
     }
@@ -188,8 +196,15 @@ impl KuCoinClient {
         let qs = build_query_string(params);
         let endpoint = format!("{path}{qs}");
         let url = format!("{}{endpoint}", self.base_url);
-        self.execute_with_retries("GET", &endpoint, &url, None, DEFAULT_RETRIES, DEFAULT_BACKOFF)
-            .await
+        self.execute_with_retries(
+            "GET",
+            &endpoint,
+            &url,
+            None,
+            DEFAULT_RETRIES,
+            DEFAULT_BACKOFF,
+        )
+        .await
     }
 
     /// Authenticated POST with jittered exponential-backoff retry.
@@ -284,7 +299,7 @@ impl KuCoinClient {
                 other => {
                     return Err(ExchangeError::Config(format!(
                         "unsupported HTTP verb: {other}"
-                    )))
+                    )));
                 }
             };
             req = req.headers(headers);
@@ -419,7 +434,10 @@ mod tests {
         let base = 4.0_f64;
         for _ in 0..100 {
             let j = jitter_secs(base);
-            assert!(j.abs() <= base * 0.25 + 1e-9, "jitter {j} exceeded ±25% of {base}");
+            assert!(
+                j.abs() <= base * 0.25 + 1e-9,
+                "jitter {j} exceeded ±25% of {base}"
+            );
         }
     }
 }

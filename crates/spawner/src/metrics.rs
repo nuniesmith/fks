@@ -6,11 +6,11 @@
 // (Bot-level metrics are scraped by Prometheus directly from each bot's :9091.)
 // =============================================================================
 
-use prometheus::{
-    register_counter, register_gauge, register_histogram_vec,
-    Counter, Gauge, HistogramVec, TextEncoder, Encoder,
-};
 use once_cell::sync::Lazy;
+use prometheus::{
+    register_counter, register_gauge, register_histogram_vec, Counter, Encoder, Gauge,
+    HistogramVec, TextEncoder,
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Counters

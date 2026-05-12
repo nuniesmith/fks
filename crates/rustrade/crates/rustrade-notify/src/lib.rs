@@ -51,7 +51,7 @@ mod notifier;
 mod discord;
 
 pub use heartbeat::WebhookHeartbeatService;
-pub use notifier::{InMemoryNotifier, NotifyError, Notifier};
+pub use notifier::{InMemoryNotifier, Notifier, NotifyError};
 
 #[cfg(feature = "discord")]
 pub use discord::DiscordNotifier;

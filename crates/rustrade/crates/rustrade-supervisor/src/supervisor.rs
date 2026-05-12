@@ -425,8 +425,7 @@ impl Supervisor {
                                         "scheduling restart after backoff"
                                     );
 
-                                    let _ =
-                                        lifecycle.transition_to_backing_off(&error_msg, delay);
+                                    let _ = lifecycle.transition_to_backing_off(&error_msg, delay);
                                     Self::update_lifecycle(&lifecycles, &service_name, &lifecycle)
                                         .await;
 
@@ -824,7 +823,10 @@ mod tests {
         sup.wait_for_drain().await;
         let elapsed = start.elapsed();
 
-        assert!(elapsed < Duration::from_secs(1), "drain took too long: {elapsed:?}");
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "drain took too long: {elapsed:?}"
+        );
     }
 
     #[tokio::test]

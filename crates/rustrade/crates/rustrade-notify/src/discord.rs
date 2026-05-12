@@ -5,7 +5,7 @@ use reqwest::Client;
 use serde::Serialize;
 use std::time::Duration;
 
-use crate::notifier::{NotifyError, Notifier};
+use crate::notifier::{Notifier, NotifyError};
 
 /// Posts plain `content` strings to a Discord webhook.
 ///
@@ -58,9 +58,8 @@ impl DiscordNotifier {
     /// Build a notifier from a webhook URL or `Err` if the URL is empty.
     /// Convenience wrapper around [`Self::new`].
     pub fn from_env(env_var: &str) -> Result<Self, NotifyError> {
-        let url = std::env::var(env_var).map_err(|_| {
-            NotifyError::Config(format!("environment variable {env_var} not set"))
-        })?;
+        let url = std::env::var(env_var)
+            .map_err(|_| NotifyError::Config(format!("environment variable {env_var} not set")))?;
         Self::new(url)
     }
 

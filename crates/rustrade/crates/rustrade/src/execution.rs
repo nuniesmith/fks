@@ -88,12 +88,7 @@ impl ExecutionService {
     /// Resolve the brain's [`SizeHint`] into a concrete [`Volume`].
     ///
     /// Async because `NotionalUsd` requires the exchange's contract multiplier.
-    async fn resolve_size(
-        &self,
-        hint: SizeHint,
-        last_price: f64,
-        symbol: &str,
-    ) -> Option<Volume> {
+    async fn resolve_size(&self, hint: SizeHint, last_price: f64, symbol: &str) -> Option<Volume> {
         let v = match hint {
             SizeHint::Quantity(v) => v.value(),
             SizeHint::NotionalUsd(usd) if last_price > 0.0 => {
@@ -116,11 +111,7 @@ impl ExecutionService {
             }
         };
 
-        if v > 0.0 {
-            Some(Volume(v))
-        } else {
-            None
-        }
+        if v > 0.0 { Some(Volume(v)) } else { None }
     }
 
     /// Translate a [`Decision`] + current [`Position`] into an [`Order`].
@@ -143,7 +134,9 @@ impl ExecutionService {
             }
 
             SignalType::Buy | SignalType::Sell => {
-                let size = self.resolve_size(decision.size_hint, last_price, symbol).await?;
+                let size = self
+                    .resolve_size(decision.size_hint, last_price, symbol)
+                    .await?;
                 if size.value() <= 0.0 {
                     return None;
                 }
@@ -198,7 +191,9 @@ impl ExecutionService {
             MarketDataEvent::Trade { price, .. } => *price,
         };
 
-        let Some(order) = self.build_order(&symbol, &decision, &position, last_price).await
+        let Some(order) = self
+            .build_order(&symbol, &decision, &position, last_price)
+            .await
         else {
             return Ok(());
         };

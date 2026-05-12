@@ -76,11 +76,7 @@ impl PositionSizer {
     /// per-trade margin (used by brains that want to scale up/down based
     /// on confidence or by the framework when honouring `SizeHint::NotionalUsd`).
     pub fn contracts_with_margin(&self, margin_usd: f64, price: f64, contract_value: f64) -> u32 {
-        if price <= 0.0
-            || contract_value <= 0.0
-            || margin_usd <= 0.0
-            || self.config.leverage == 0
-        {
+        if price <= 0.0 || contract_value <= 0.0 || margin_usd <= 0.0 || self.config.leverage == 0 {
             return 0;
         }
         let notional = margin_usd * f64::from(self.config.leverage);

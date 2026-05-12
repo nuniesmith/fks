@@ -39,7 +39,10 @@ use crate::poller::KucoinCandlePoller;
 use crate::settings::BotSettings;
 
 #[derive(Parser, Debug)]
-#[command(name = "kucoin-v2", about = "KuCoin Futures SAR trading bot (rustrade v2)")]
+#[command(
+    name = "kucoin-v2",
+    about = "KuCoin Futures SAR trading bot (rustrade v2)"
+)]
 struct Args {
     #[arg(long, conflicts_with = "live")]
     sim: bool,
@@ -59,7 +62,11 @@ async fn main() -> anyhow::Result<()> {
 
     rustrade::logging::init();
 
-    let sim_mode = if args.live { false } else { args.sim || !args.live };
+    let sim_mode = if args.live {
+        false
+    } else {
+        args.sim || !args.live
+    };
 
     info!(
         mode = if sim_mode { "SIM" } else { "LIVE" },
@@ -82,7 +89,10 @@ async fn main() -> anyhow::Result<()> {
     // Pull from the first symbol's settings for now; if you trade multiple
     // symbols with different leverages, build separate adapters + bots.
     let leverage = BotSettings::by_symbol(&args.symbols[0]).leverage;
-    let adapter = Arc::new(KucoinExchangeAdapter::new(Arc::clone(&kucoin_rest), leverage));
+    let adapter = Arc::new(KucoinExchangeAdapter::new(
+        Arc::clone(&kucoin_rest),
+        leverage,
+    ));
     let exchange: Arc<dyn ExchangeClient> = adapter;
 
     // ── Build one brain per symbol ──────────────────────────────────────────
@@ -99,9 +109,7 @@ async fn main() -> anyhow::Result<()> {
         .session_symbol(args.symbols[0].clone())
         .close_positions_on_shutdown(!sim_mode)
         .flatten_symbols(args.symbols.clone())
-        .supervisor(
-            SupervisorConfig::default().with_shutdown_timeout(Duration::from_secs(15)),
-        )
+        .supervisor(SupervisorConfig::default().with_shutdown_timeout(Duration::from_secs(15)))
         .build();
 
     let bot = Bot::new(config, Arc::clone(&exchange), brains);

@@ -2,9 +2,9 @@ mod common;
 use common::*;
 
 use indicators::indicator::Indicator;
-use indicators::volume::vwap::Vwap;
 use indicators::volume::adl::Adl;
 use indicators::volume::chaikin_money_flow::ChaikinMoneyFlow;
+use indicators::volume::vwap::Vwap;
 
 const EPS: f64 = 1e-7;
 
@@ -173,7 +173,9 @@ fn adl_no_leading_nans() {
 #[test]
 fn cmf_14_first_valid() {
     // Python: cmf.iloc[13] = 0.010866...
-    let out = ChaikinMoneyFlow::with_period(14).calculate(&ref_candles()).unwrap();
+    let out = ChaikinMoneyFlow::with_period(14)
+        .calculate(&ref_candles())
+        .unwrap();
     let vals = out.get("CMF_14").unwrap();
     assert_close(vals[13], 0.010_866_091_4, 1e-8, "CMF(14)[13]");
 }
@@ -181,43 +183,61 @@ fn cmf_14_first_valid() {
 #[test]
 fn cmf_14_last_value() {
     // Python: cmf.iloc[29] = -0.024262...
-    let out = ChaikinMoneyFlow::with_period(14).calculate(&ref_candles()).unwrap();
+    let out = ChaikinMoneyFlow::with_period(14)
+        .calculate(&ref_candles())
+        .unwrap();
     let vals = out.get("CMF_14").unwrap();
     assert_close(vals[29], -0.024_262_295_1, 1e-8, "CMF(14)[29]");
 }
 
 #[test]
 fn cmf_always_in_neg1_to_pos1() {
-    let out = ChaikinMoneyFlow::with_period(14).calculate(&ref_candles()).unwrap();
-    assert_all_non_nan(out.get("CMF_14").unwrap(), |v| (-1.0..=1.0).contains(&v), "CMF range");
+    let out = ChaikinMoneyFlow::with_period(14)
+        .calculate(&ref_candles())
+        .unwrap();
+    assert_all_non_nan(
+        out.get("CMF_14").unwrap(),
+        |v| (-1.0..=1.0).contains(&v),
+        "CMF range",
+    );
 }
 
 #[test]
 fn cmf_leading_nans() {
-    let out = ChaikinMoneyFlow::with_period(14).calculate(&ref_candles()).unwrap();
+    let out = ChaikinMoneyFlow::with_period(14)
+        .calculate(&ref_candles())
+        .unwrap();
     assert_leading_nans(out.get("CMF_14").unwrap(), 13, "CMF(14)");
 }
 
 #[test]
 fn cmf_all_up_bars_is_positive() {
     // close == high every bar → mfm = 1 for all bars → CMF = 1
-    let bars: Vec<(f64, f64, f64, f64)> =
-        (0..20).map(|i| (10.0 + i as f64, 8.0 + i as f64, 10.0 + i as f64, 100.0)).collect();
-    let out = ChaikinMoneyFlow::with_period(5).calculate(&make_candles(&bars)).unwrap();
+    let bars: Vec<(f64, f64, f64, f64)> = (0..20)
+        .map(|i| (10.0 + i as f64, 8.0 + i as f64, 10.0 + i as f64, 100.0))
+        .collect();
+    let out = ChaikinMoneyFlow::with_period(5)
+        .calculate(&make_candles(&bars))
+        .unwrap();
     assert_all_non_nan(out.get("CMF_5").unwrap(), |v| v > 0.0, "CMF all up");
 }
 
 #[test]
 fn cmf_all_down_bars_is_negative() {
     // close == low every bar → mfm = -1 for all bars → CMF = -1
-    let bars: Vec<(f64, f64, f64, f64)> =
-        (0..20).map(|i| (10.0 + i as f64, 8.0 + i as f64, 8.0 + i as f64, 100.0)).collect();
-    let out = ChaikinMoneyFlow::with_period(5).calculate(&make_candles(&bars)).unwrap();
+    let bars: Vec<(f64, f64, f64, f64)> = (0..20)
+        .map(|i| (10.0 + i as f64, 8.0 + i as f64, 8.0 + i as f64, 100.0))
+        .collect();
+    let out = ChaikinMoneyFlow::with_period(5)
+        .calculate(&make_candles(&bars))
+        .unwrap();
     assert_all_non_nan(out.get("CMF_5").unwrap(), |v| v < 0.0, "CMF all down");
 }
 
 #[test]
 fn cmf_output_key_includes_period() {
-    let out = ChaikinMoneyFlow::with_period(20).calculate(&ref_candles()).unwrap();
+    let out = ChaikinMoneyFlow::with_period(20)
+        .calculate(&ref_candles())
+        .unwrap();
     assert!(out.get("CMF_20").is_some());
 }

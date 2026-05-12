@@ -60,12 +60,7 @@ pub struct ModuleService {
 
 impl ModuleService {
     /// Build a new module service with an explicit restart policy.
-    pub fn new<F>(
-        name: &str,
-        state: Arc<JanusState>,
-        start_fn: F,
-        policy: RestartPolicy,
-    ) -> Self
+    pub fn new<F>(name: &str, state: Arc<JanusState>, start_fn: F, policy: RestartPolicy) -> Self
     where
         F: Fn(Arc<JanusState>) -> Pin<Box<dyn Future<Output = janus_core::Result<()>> + Send>>
             + Send
@@ -138,7 +133,9 @@ impl TradingService for ModuleService {
         let bridge_cancel = cancel.clone();
         let bridge_handle = tokio::spawn(async move {
             bridge_cancel.cancelled().await;
-            info!("ModuleService shutdown bridge: cancellation received, requesting state shutdown");
+            info!(
+                "ModuleService shutdown bridge: cancellation received, requesting state shutdown"
+            );
             bridge_state.request_shutdown();
         });
 

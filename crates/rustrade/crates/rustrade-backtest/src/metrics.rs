@@ -88,11 +88,7 @@ pub struct BacktestMetrics {
 
 impl BacktestMetrics {
     /// Compute metrics from an equity curve and a list of completed trades.
-    pub fn compute(
-        equity: &[EquityPoint],
-        trades: &[TradeRecord],
-        cfg: MetricsConfig,
-    ) -> Self {
+    pub fn compute(equity: &[EquityPoint], trades: &[TradeRecord], cfg: MetricsConfig) -> Self {
         if equity.is_empty() {
             return Self::default();
         }
@@ -305,10 +301,22 @@ mod tests {
     #[test]
     fn drawdown_captured_on_dip_then_recovery() {
         let curve = vec![
-            EquityPoint { timestamp_ms: 0, equity: 100.0 },
-            EquityPoint { timestamp_ms: 1, equity: 120.0 },
-            EquityPoint { timestamp_ms: 2, equity: 90.0 },
-            EquityPoint { timestamp_ms: 3, equity: 110.0 },
+            EquityPoint {
+                timestamp_ms: 0,
+                equity: 100.0,
+            },
+            EquityPoint {
+                timestamp_ms: 1,
+                equity: 120.0,
+            },
+            EquityPoint {
+                timestamp_ms: 2,
+                equity: 90.0,
+            },
+            EquityPoint {
+                timestamp_ms: 3,
+                equity: 110.0,
+            },
         ];
         let m = BacktestMetrics::compute(&curve, &[], MetricsConfig::default());
         // peak = 120, trough = 90 → max drawdown = 30

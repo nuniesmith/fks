@@ -53,12 +53,11 @@ pub use rustrade_core::{
     MarketDataEvent, MarketSource, Order, OrderKind, OrderStatus, Position, Price, Result, Side,
     Signal, SignalBus, SignalType, SizeHint, Symbol, Tick, Volume,
 };
+pub use rustrade_risk::{
+    CircuitBreaker, CircuitBreakerConfig, PositionSizer, SessionPnl, SessionPnlConfig, SizingConfig,
+};
 pub use rustrade_supervisor::{
     BackoffAction, BackoffConfig, BackoffState, MetricsSnapshot, RestartPolicy, ServiceLifecycle,
     ServiceLifecycleSnapshot, ServicePhase, SpawnOptions, Supervisor, SupervisorConfig,
     SupervisorMetrics, TerminationReason, TradingService, TransitionError,
-};
-pub use rustrade_risk::{
-    CircuitBreaker, CircuitBreakerConfig, PositionSizer, SessionPnl, SessionPnlConfig,
-    SizingConfig,
 };

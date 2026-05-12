@@ -18,7 +18,9 @@ use tracing_subscriber::EnvFilter;
 /// `info`). Idempotent — safe to call multiple times.
 pub fn init() {
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .with_target(true)
         .compact()
         .try_init();
@@ -30,7 +32,9 @@ pub fn init() {
 /// `info`). Idempotent — safe to call multiple times.
 pub fn init_json() {
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .with_target(true)
         .json()
         .try_init();

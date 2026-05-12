@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use axum::{response::IntoResponse, routing::get, Router};
+use axum::{Router, response::IntoResponse, routing::get};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 

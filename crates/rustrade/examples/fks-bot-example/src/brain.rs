@@ -82,11 +82,7 @@ impl HeartbeatBrain {
 
         metrics::record_trade(pnl);
 
-        tracing::info!(
-            event_count = n,
-            pnl = pnl,
-            "synthetic trade recorded"
-        );
+        tracing::info!(event_count = n, pnl = pnl, "synthetic trade recorded");
     }
 }
 

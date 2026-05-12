@@ -160,8 +160,14 @@ async fn main() -> anyhow::Result<()> {
     println!();
     println!("initial equity : {:>10.2}", m.initial_equity);
     println!("final equity   : {:>10.2}", m.final_equity);
-    println!("total return   : {:>10.2} ({:+.2}%)", m.total_return, m.total_return_pct);
-    println!("max drawdown   : {:>10.2} ({:+.2}%)", m.max_drawdown, m.max_drawdown_pct);
+    println!(
+        "total return   : {:>10.2} ({:+.2}%)",
+        m.total_return, m.total_return_pct
+    );
+    println!(
+        "max drawdown   : {:>10.2} ({:+.2}%)",
+        m.max_drawdown, m.max_drawdown_pct
+    );
     println!("sharpe         : {:>10.2}", m.sharpe);
     println!("sortino        : {:>10.2}", m.sortino);
     println!();

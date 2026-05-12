@@ -22,40 +22,53 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use once_cell::sync::Lazy;
-use prometheus::{
-    register_counter, register_gauge, Counter, Encoder, Gauge, TextEncoder,
-};
+use prometheus::{Counter, Encoder, Gauge, TextEncoder, register_counter, register_gauge};
 
 /// Cumulative P&L in account currency, signed.
 pub static PNL_DOLLARS: Lazy<Gauge> = Lazy::new(|| {
-    register_gauge!("fks_bot_pnl_dollars", "Current cumulative P&L in account currency")
-        .expect("metric registration failed")
+    register_gauge!(
+        "fks_bot_pnl_dollars",
+        "Current cumulative P&L in account currency"
+    )
+    .expect("metric registration failed")
 });
 
 /// Total signals (non-Hold decisions) emitted since startup.
 pub static SIGNALS_TOTAL: Lazy<Counter> = Lazy::new(|| {
-    register_counter!("fks_bot_signals_total", "Total signals emitted since startup")
-        .expect("metric registration failed")
+    register_counter!(
+        "fks_bot_signals_total",
+        "Total signals emitted since startup"
+    )
+    .expect("metric registration failed")
 });
 
 /// Total trades executed since startup.
 pub static TRADES_TOTAL: Lazy<Counter> = Lazy::new(|| {
-    register_counter!("fks_bot_trades_total", "Total trades executed since startup")
-        .expect("metric registration failed")
+    register_counter!(
+        "fks_bot_trades_total",
+        "Total trades executed since startup"
+    )
+    .expect("metric registration failed")
 });
 
 /// Win rate (wins / total trades) in [0.0, 1.0]. Set explicitly by the bot
 /// after each trade settles; default 0.0 before any trades.
 pub static WIN_RATE: Lazy<Gauge> = Lazy::new(|| {
-    register_gauge!("fks_bot_win_rate", "Cumulative win rate (wins / total trades)")
-        .expect("metric registration failed")
+    register_gauge!(
+        "fks_bot_win_rate",
+        "Cumulative win rate (wins / total trades)"
+    )
+    .expect("metric registration failed")
 });
 
 /// Seconds since process start. Updated by a background task so it stays
 /// accurate even when the bot isn't actively trading.
 pub static UPTIME_SECONDS: Lazy<Gauge> = Lazy::new(|| {
-    register_gauge!("fks_bot_uptime_seconds", "Seconds since the bot process started")
-        .expect("metric registration failed")
+    register_gauge!(
+        "fks_bot_uptime_seconds",
+        "Seconds since the bot process started"
+    )
+    .expect("metric registration failed")
 });
 
 /// Tracks `wins` / `total_trades` so [`record_trade`] can keep

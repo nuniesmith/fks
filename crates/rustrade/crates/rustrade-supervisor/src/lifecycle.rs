@@ -84,7 +84,10 @@ impl fmt::Display for TerminationReason {
             Self::CircuitBreakerOpen {
                 failures,
                 max_retries,
-            } => write!(f, "circuit breaker open ({failures}/{max_retries} failures)"),
+            } => write!(
+                f,
+                "circuit breaker open ({failures}/{max_retries} failures)"
+            ),
             Self::Unrecoverable(msg) => write!(f, "unrecoverable: {msg}"),
         }
     }

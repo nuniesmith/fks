@@ -80,9 +80,7 @@ async fn main() -> anyhow::Result<()> {
     let config = BotConfig::builder()
         .name(format!("fks-bot-example-{bot_id}"))
         .session_symbol(symbol.clone())
-        .supervisor(
-            SupervisorConfig::default().with_shutdown_timeout(Duration::from_secs(10)),
-        )
+        .supervisor(SupervisorConfig::default().with_shutdown_timeout(Duration::from_secs(10)))
         .build();
 
     let bot = Bot::new(config, exchange, brains);

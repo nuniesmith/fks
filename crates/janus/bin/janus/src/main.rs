@@ -47,7 +47,7 @@ mod adapter;
 
 use std::sync::Arc;
 
-use janus_core::{init_logging, logging::LoggingConfig, Config, JanusState};
+use janus_core::{Config, JanusState, init_logging, logging::LoggingConfig};
 use rustrade_supervisor::{BackoffConfig, SpawnOptions, Supervisor, SupervisorConfig};
 use tracing::{info, warn};
 
@@ -135,11 +135,9 @@ async fn main() -> anyhow::Result<()> {
     // API: always-on, always restarts (even on clean exit).
     if config.modules.api {
         info!("Spawning API module (policy: always)…");
-        let svc = ModuleService::always_restart(
-            "api",
-            state.clone(),
-            |s| Box::pin(janus_api::start_module(s)),
-        );
+        let svc = ModuleService::always_restart("api", state.clone(), |s| {
+            Box::pin(janus_api::start_module(s))
+        });
         supervisor.spawn_service(Box::new(svc));
     }
 
@@ -183,10 +181,8 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_circuit_breaker(5, std::time::Duration::from_secs(300));
 
-        supervisor.spawn_service_with_options(
-            Box::new(svc),
-            SpawnOptions::with_backoff(data_backoff),
-        );
+        supervisor
+            .spawn_service_with_options(Box::new(svc), SpawnOptions::with_backoff(data_backoff));
     }
 
     // ── 6. Service State Management ──────────────────────────────────

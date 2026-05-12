@@ -89,7 +89,9 @@ impl SimExchangeConfig {
 #[allow(missing_docs)] // single self-evident variant
 #[derive(Debug, Error)]
 pub enum SimExchangeError {
-    #[error("no current price set for {0} — engine must call set_last_price before processing orders")]
+    #[error(
+        "no current price set for {0} — engine must call set_last_price before processing orders"
+    )]
     NoCurrentPrice(String),
 }
 
@@ -154,7 +156,10 @@ impl SimExchange {
     /// close of the candle just dispatched to the brain). The price is used
     /// for mark-to-market on `get_position().unrealised_pnl` queries.
     pub fn set_last_price(&self, symbol: &str, price: f64) {
-        self.state.lock().last_prices.insert(symbol.to_string(), price);
+        self.state
+            .lock()
+            .last_prices
+            .insert(symbol.to_string(), price);
     }
 
     /// Engine hook: settle all pending orders against the given fill price
@@ -195,16 +200,15 @@ impl SimExchange {
             };
             let new_qty = cur_pos.qty + signed_delta;
 
-            let realised_delta = if cur_pos.qty.signum() != 0.0
-                && cur_pos.qty.signum() != signed_delta.signum()
-            {
-                let closed = signed_delta.abs().min(cur_pos.qty.abs());
-                let entry = cur_pos.entry_price.unwrap_or(adjusted_price);
-                let direction = cur_pos.qty.signum();
-                direction * (adjusted_price - entry) * closed * contract_value
-            } else {
-                0.0
-            };
+            let realised_delta =
+                if cur_pos.qty.signum() != 0.0 && cur_pos.qty.signum() != signed_delta.signum() {
+                    let closed = signed_delta.abs().min(cur_pos.qty.abs());
+                    let entry = cur_pos.entry_price.unwrap_or(adjusted_price);
+                    let direction = cur_pos.qty.signum();
+                    direction * (adjusted_price - entry) * closed * contract_value
+                } else {
+                    0.0
+                };
 
             let new_entry = if new_qty == 0.0 {
                 None
@@ -281,12 +285,7 @@ impl SimExchange {
             if pos.is_flat() {
                 continue;
             }
-            let cv = self
-                .config
-                .contract_values
-                .get(sym)
-                .copied()
-                .unwrap_or(1.0);
+            let cv = self.config.contract_values.get(sym).copied().unwrap_or(1.0);
             let last = s.last_prices.get(sym).copied().unwrap_or(0.0);
             let entry = pos.entry_price.unwrap_or(last);
             equity += (last - entry) * pos.qty * cv;
@@ -419,14 +418,22 @@ mod tests {
         sim.set_last_price("BTCUSDT", 100.0);
 
         // Buy 1 contract at 100, then sell at 110 → +10.
-        sim.place_order(&Order::market("BTCUSDT", Side::Buy, rustrade_core::Volume(1.0)))
-            .await
-            .unwrap();
+        sim.place_order(&Order::market(
+            "BTCUSDT",
+            Side::Buy,
+            rustrade_core::Volume(1.0),
+        ))
+        .await
+        .unwrap();
         sim.settle_pending_at("BTCUSDT", 100.0);
 
-        sim.place_order(&Order::market("BTCUSDT", Side::Sell, rustrade_core::Volume(1.0)))
-            .await
-            .unwrap();
+        sim.place_order(&Order::market(
+            "BTCUSDT",
+            Side::Sell,
+            rustrade_core::Volume(1.0),
+        ))
+        .await
+        .unwrap();
         sim.settle_pending_at("BTCUSDT", 110.0);
 
         assert!((sim.realised_pnl() - 10.0).abs() < 1e-9);

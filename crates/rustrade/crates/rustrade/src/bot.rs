@@ -191,7 +191,9 @@ impl BotConfigBuilder {
             execution: self.execution.unwrap_or_default(),
             circuit_breaker: self.circuit_breaker.unwrap_or_default(),
             session_pnl: self.session_pnl.unwrap_or_default(),
-            session_symbol: self.session_symbol.unwrap_or_else(|| "portfolio".to_string()),
+            session_symbol: self
+                .session_symbol
+                .unwrap_or_else(|| "portfolio".to_string()),
             close_positions_on_shutdown: self.close_positions_on_shutdown,
             flatten_symbols: self.flatten_symbols,
         }
@@ -219,7 +221,9 @@ impl Bot {
         brains: Vec<Arc<dyn Brain>>,
     ) -> Self {
         let bus = MarketDataBus::new();
-        let breaker = Arc::new(Mutex::new(CircuitBreaker::new(config.circuit_breaker.clone())));
+        let breaker = Arc::new(Mutex::new(CircuitBreaker::new(
+            config.circuit_breaker.clone(),
+        )));
         let session_pnl = Arc::new(Mutex::new(SessionPnl::new(
             config.session_symbol.clone(),
             config.session_pnl.clone(),

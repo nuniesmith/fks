@@ -255,9 +255,18 @@ mod tests {
 
     #[test]
     fn test_order_type_conversion() {
-        assert!(matches!(to_kc_order_type(OrderKind::Market), OrderType::Market));
-        assert!(matches!(to_kc_order_type(OrderKind::Limit), OrderType::Limit));
-        assert!(matches!(to_kc_order_type(OrderKind::PostOnly), OrderType::Limit));
+        assert!(matches!(
+            to_kc_order_type(OrderKind::Market),
+            OrderType::Market
+        ));
+        assert!(matches!(
+            to_kc_order_type(OrderKind::Limit),
+            OrderType::Limit
+        ));
+        assert!(matches!(
+            to_kc_order_type(OrderKind::PostOnly),
+            OrderType::Limit
+        ));
         assert!(matches!(to_kc_order_type(OrderKind::Ioc), OrderType::Limit));
         assert!(matches!(to_kc_order_type(OrderKind::Fok), OrderType::Limit));
     }

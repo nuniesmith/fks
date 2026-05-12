@@ -118,11 +118,7 @@ impl Brain for SarBrain {
         &self.name
     }
 
-    async fn on_event(
-        &self,
-        event: &MarketDataEvent,
-        position: &Position,
-    ) -> Result<Decision> {
+    async fn on_event(&self, event: &MarketDataEvent, position: &Position) -> Result<Decision> {
         // Brain only acts on closed candles. Tickers and trades are ignored
         // (they're useful for other brains — VWAP scalpers, microstructure
         // strategies — so the framework still pushes them all through).
@@ -252,7 +248,11 @@ impl Brain for SarBrain {
         stack.bars_since_entry = 0;
         drop(stack);
 
-        let signal = if confirmed == 1 { SignalType::Buy } else { SignalType::Sell };
+        let signal = if confirmed == 1 {
+            SignalType::Buy
+        } else {
+            SignalType::Sell
+        };
         self.non_hold_decisions.fetch_add(1, Ordering::Relaxed);
 
         Ok(Decision {

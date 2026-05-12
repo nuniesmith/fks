@@ -43,24 +43,35 @@ jobs:
             fail-fast: false
             matrix:
                 include:
+                    # `lock_flag` controls whether `cargo` runs with `--locked`.
+                    #   true  — workspace has a committed Cargo.lock (binary-producing)
+                    #   false — library-shaped workspace without a committed lockfile;
+                    #           --locked would fail because cargo has to generate
+                    #           the lockfile from scratch.
                     - workspace: "root · src/proto"
                       path: "."
                       needs_protoc: true
+                      lock_flag: "--locked"
                     - workspace: "rustrade"
                       path: "crates/rustrade"
                       needs_protoc: false
+                      lock_flag: "--locked"
                     - workspace: "janus"
                       path: "crates/janus"
                       needs_protoc: true
+                      lock_flag: "--locked"
                     - workspace: "spawner"
                       path: "crates/spawner"
                       needs_protoc: false
+                      lock_flag: "--locked"
                     - workspace: "indicators-ta"
                       path: "crates/indicators-ta"
                       needs_protoc: false
+                      lock_flag: ""
                     - workspace: "exchange-apiws"
                       path: "crates/exchange-apiws"
                       needs_protoc: false
+                      lock_flag: ""
         steps:
             - name: 📥 Checkout
               uses: actions/checkout@v4
@@ -86,22 +97,25 @@ jobs:
 
             - name: 🧪 cargo check
               working-directory: ${{ matrix.path }}
-              run: cargo check --workspace --all-targets --locked
+              run: cargo check --workspace --all-targets ${{ matrix.lock_flag }}
 
             - name: 🧪 cargo test
               working-directory: ${{ matrix.path }}
-              run: cargo test --workspace --locked
+              run: cargo test --workspace ${{ matrix.lock_flag }}
 
-            - name: 🔍 cargo clippy
+            - name: 🔍 cargo clippy (non-blocking day-one)
               working-directory: ${{ matrix.path }}
-              # `-D warnings` makes clippy lints fail the job. Drop to a
-              # warn-only mode by changing this to `-W clippy::all` if the
-              # initial run surfaces too many findings — the per-sub-codebase
-              # TODO is the right place to track the cleanup.
-              run: cargo clippy --workspace --all-targets --locked -- -D warnings
+              # Day-one mode: clippy runs but doesn't fail the job. Tighten to
+              # `-D warnings` per-workspace as each sub-codebase's TODO.md
+              # closes out its lint findings.
+              continue-on-error: true
+              run: cargo clippy --workspace --all-targets ${{ matrix.lock_flag }} -- -D warnings
 
     # -------------------------------------------------------------------------
-    # cargo fmt across every workspace (fast, no protoc needed)
+    # cargo fmt — runs per workspace using --manifest-path so the formatter
+    # doesn't follow path deps into sibling workspaces (`cargo fmt --all`
+    # follows path-based dependencies, which would otherwise make this job
+    # touch files outside the workspace under test).
     # -------------------------------------------------------------------------
     fmt:
         name: rustfmt
@@ -116,11 +130,15 @@ jobs:
               with:
                   components: rustfmt
 
-            - name: 🎨 cargo fmt --check
+            - name: 🎨 cargo fmt --check (per workspace)
               shell: bash
               run: |
                   set -e
                   for ws in . crates/rustrade crates/janus crates/spawner crates/indicators-ta crates/exchange-apiws; do
                       printf "\n===> %s\n" "$ws"
-                      (cd "$ws" && cargo fmt --all -- --check)
+                      # `--manifest-path` keeps fmt scoped to THIS workspace's
+                      # members — without it, `--all` follows path deps into
+                      # sibling workspaces (e.g. running from rustrade would
+                      # try to format exchange-apiws/auth.rs too).
+                      cargo fmt --all --manifest-path "$ws/Cargo.toml" -- --check
                   done

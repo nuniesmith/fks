@@ -1,6 +1,7 @@
 [package]
 name         = "rustrade-backtest"
 description  = "Replay engine + simulated exchange for the rustrade trading framework — any Brain that runs live runs in a backtest with zero changes"
+readme       = "README.md"
 version.workspace      = true
 edition.workspace      = true
 authors.workspace      = true

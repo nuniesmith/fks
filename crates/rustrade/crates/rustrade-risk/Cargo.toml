@@ -1,6 +1,7 @@
 [package]
 name         = "rustrade-risk"
 description  = "Generic risk primitives (position sizing, circuit breakers, session PnL) for rustrade"
+readme       = "README.md"
 version.workspace      = true
 edition.workspace      = true
 authors.workspace      = true

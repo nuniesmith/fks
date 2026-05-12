@@ -1,6 +1,7 @@
 [package]
 name         = "rustrade-notify"
 description  = "Webhook notifications (Discord, Slack, generic HTTP) as supervised TradingServices for the rustrade framework"
+readme       = "README.md"
 version.workspace      = true
 edition.workspace      = true
 authors.workspace      = true

@@ -1,6 +1,7 @@
 [package]
 name         = "rustrade"
 description  = "Open-source trading bot framework — facade crate that wires core types, supervisor, and risk into a runnable Bot"
+readme       = "README.md"
 version.workspace      = true
 edition.workspace      = true
 authors.workspace      = true

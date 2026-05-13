@@ -16,6 +16,18 @@ readme        = "README.md"
 keywords      = ["kucoin", "crypto", "trading", "websocket", "futures"]
 categories    = ["api-bindings", "network-programming", "asynchronous"]
 
+# Trim files that don't help downstream crates.io consumers. The repo's
+# CI/labeler workflows, editor preferences, assistant notes, and helper
+# scripts all live alongside the crate in fks-full but add no value to a
+# `cargo add exchange-apiws` user.
+exclude = [
+    ".github/",
+    ".zed/",
+    "CLAUDE.md",
+    "TODO.md",
+    "scripts/",
+]
+
 [features]
 # Expose development-only helpers (e.g. `Credentials::sim()`) in non-test
 # binaries. Never enable this in production builds.

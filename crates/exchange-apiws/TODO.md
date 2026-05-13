@@ -1,14 +1,13 @@
 # exchange-apiws — TODO
 
 > **Repo (future):** `github.com/nuniesmith/exchange-apiws`
-> **Last synced:** 2026-05-10
+> **Last synced:** 2026-05-13
 
 ## P0 — Pre-publish
 
-- [ ] **`cargo publish --dry-run`** — fix anything it complains about.
-- [ ] **README split** — `README.md` is ~655 lines. Trim the headline to overview + quickstart, move full KuCoin REST reference to `docs/KUCOIN.md`.
-- [ ] **License file** — add `LICENSE` (MIT) at the directory root before the repo carve-out.
-- [ ] **CI** — `cargo check / test / clippy / fmt` workflow.
+- [ ] **`cargo publish --dry-run`** — runs cleanly today per the `cargo package` smoke in `PRE_PUBLISH_AUDIT.md` (26 files, 73 KiB compressed after PR #29's `[package].exclude`). Actual `cargo publish` is the next step — needs the crates.io token.
+- [ ] **Verify version `0.1.10` is still claimable** (or the next one is) — `cargo search exchange-apiws` before publish. If a previous upload exists, bump to `0.1.11`.
+- [ ] **README split** — `README.md` is ~655 lines. Trim the headline to overview + quickstart, move full KuCoin REST reference to `docs/KUCOIN.md`. Not strictly a blocker, but the long README will be the first impression on crates.io.
 
 ## P1 — Coverage gaps
 
@@ -27,3 +26,14 @@
 ## P3 — Future
 
 - [ ] **Trait-ify** — abstract `RestClient` + `WsClient` traits so consumers can be venue-agnostic. Today the consumer picks a concrete `KuCoin` and works with it directly.
+
+---
+
+## ✅ Recently shipped
+
+- `LICENSE` and `README.md` already present at crate root.
+- `[workspace]` block added in PR #22 so this crate is its own workspace root (cargo no longer hunts the parent tree).
+- Per-workspace CI job in `.github/workflows/rust.yml` (PR #23) — passing.
+- Auto-formatted by `cargo fmt` in PR #24's CI green-up (the `HeaderValue::from_str` `From` impl rewrite).
+- `[package].exclude` added in PR #29 to slim the published tarball (31 → 26 files).
+- README references verified `fks-full`-free in PR #29 prep.

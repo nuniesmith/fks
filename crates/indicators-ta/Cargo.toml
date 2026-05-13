@@ -16,6 +16,18 @@ readme        = "README.md"
 keywords      = ["trading", "technical-analysis", "indicators", "finance", "regime"]
 categories    = ["algorithms", "mathematics", "science"]
 
+# Trim files that don't help downstream crates.io consumers. The repo's
+# CI/labeler workflows, editor preferences, assistant notes, and helper
+# scripts all live alongside the crate in fks-full but add no value to a
+# `cargo add indicators-ta` user.
+exclude = [
+    ".github/",
+    ".zed/",
+    "CLAUDE.md",
+    "TODO.md",
+    "scripts/",
+]
+
 [dependencies]
 anyhow     = "1.0.102"
 indexmap   = "2"

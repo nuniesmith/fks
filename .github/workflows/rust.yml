@@ -15,8 +15,32 @@ name: 🦀 Rust
 
 on:
     pull_request:
+        # Skip the matrix when the diff is doc/config only — saves ~10 minutes
+        # of CI per doc PR (janus alone takes ~8 minutes to build).
+        paths-ignore:
+            - "**.md"
+            - "LICENSE"
+            - "**/LICENSE"
+            - ".gitignore"
+            - "docs/**"
+            - "mkdocs.yml"
+            - ".github/labeler.yml"
+            - ".github/workflows/labeler.yml"
+            - ".github/workflows/paper-trading-test.yml"
     push:
         branches: [main]
+        # Same skip on push so a doc-only merge to main doesn't re-trigger
+        # the full matrix.
+        paths-ignore:
+            - "**.md"
+            - "LICENSE"
+            - "**/LICENSE"
+            - ".gitignore"
+            - "docs/**"
+            - "mkdocs.yml"
+            - ".github/labeler.yml"
+            - ".github/workflows/labeler.yml"
+            - ".github/workflows/paper-trading-test.yml"
 
 concurrency:
     group: rust-${{ github.workflow }}-${{ github.ref }}

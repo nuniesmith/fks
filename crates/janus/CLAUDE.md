@@ -132,7 +132,6 @@ Edit the SQL, then `cargo sqlx prepare --workspace`. Check in the resulting `.sq
 ## Pre-split gotchas
 
 - **`bin/janus/` uses `rustrade-supervisor` via a cross-workspace path dep**: `path = "../../../rustrade/crates/rustrade-supervisor"`. After the split, replace with `rustrade-supervisor = "x.y"` from crates.io.
-- **`crates/janus/lib/janus-core/src/supervisor/`** is the *old* supervisor module. After PR #19 / the "Janus port", nothing inside `bin/janus/` depends on it anymore. Schedule for deletion (see `TODO.md`).
 - **Tonic version split**: workspace pins `0.14.2` but `apalis` (vendored under `crates/apalis-redis/`) drags in `0.10.2` transitively. Track and resolve when `apalis` ships 1.0.
 - **318 `#[allow(dead_code)]` annotations** across the workspace — most are benign serde deserialization fields, but a clean-up pass is in `TODO.md`.
 - **`fks-proto` dep**: today via the root `fks-full` workspace (path). After split, becomes a crates.io dep on `fks-proto = "x.y"`.

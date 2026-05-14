@@ -1,7 +1,14 @@
 # fks-web — TODO
 
-> **Repo:** `github.com/nuniesmith/fks-web`
-> **Last synced from master todo:** 2026-04-03
+> **Repo (future):** `github.com/nuniesmith/fks-web`
+> **Today's path:** `fks-full/src/web/`
+> **Last synced:** 2026-05-14
+
+---
+
+## P0 — Codebase health
+
+- [ ] **29 pre-existing `npm run check` type errors** across `analysis/`, `chains/`, `news/`, `cnn/`, `pnl/`, `+layout.ts`. Small `any` / `unknown` gaps, unrelated to the dual-script bug already fixed in PR #14. Down from 59 after the SVK-1..17 arc; the remaining ones are surgical fixes per file.
 
 ---
 

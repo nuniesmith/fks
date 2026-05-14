@@ -7,18 +7,6 @@
 
 ---
 
-## P0 — CI health
-
-- [ ] **`janus` job in `.github/workflows/rust.yml` has been red since PR #23.** Locally `cargo check --workspace` passes (1m 52s with protoc), `cargo test -p janus --no-run` compiles clean, but `cargo test --workspace` against the full workspace fails in CI within ~8 minutes. Without log access I can't pinpoint the offending test or sub-crate. Most likely candidates:
-  - A test in one of the service crates that needs network or a live database
-  - A flaky test that times out under CI's resource limits
-  - Out-of-disk on the runner (janus's `target/` is multi-gigabyte)
-  - Test-only code with a compile error that `cargo check` doesn't exercise
-
-  **Fix path:** click into the latest janus job on Actions, copy the first `error:` or test-failure line, paste it back so the fix can be written surgically.
-
----
-
 ## P0 — Codebase health
 
 - [ ] **318 `#[allow(dead_code)]` annotations** across the workspace. Most are benign serde-deserialization fields, but a pass to audit and remove the genuine dead code is overdue. Worst offenders: `services/api/src/grpc.rs` (11 annotations) and `services/optimizer/src/collector.rs` (10 annotations).
@@ -34,7 +22,6 @@
 The extraction plan in `JANUS_EXTRACTION_PLAN.md` lists per-sub-crate destinations (public sibling / private brain repo / stay in fks-full). Phase 1 sub-tasks that are tractable today:
 
 - [ ] **1a — Decouple `janus-data-quality` + `janus-ml`** from `janus-core` / `janus-cns`. Most of the coupling is shared event types (`TradeEvent`, `KlineEvent`, `OrderBookEvent`); a real decoupling needs a smaller shared types crate, not just dropping deps.
-- [ ] **1d — Port `bin/janus/` to `rustrade::Bot`.** Already done by the PR-#19 era "Janus port" commit — `bin/janus/main.rs` uses `rustrade_supervisor::Supervisor` and a local `ModuleService` adapter. The `janus-core::supervisor::*` module is now dead from janus's perspective; it can be deleted once nothing else inside janus-core references it. Verify with `grep -r "supervisor::" lib/janus-core/src/lib.rs` — anything left?
 
 ---
 
@@ -63,7 +50,6 @@ The extraction plan in `JANUS_EXTRACTION_PLAN.md` lists per-sub-crate destinatio
 ## P2 — Housekeeping
 
 - [ ] **Proto: consolidate dual `ForwardService`** — `fks.janus.v1.ForwardService` (4 RPCs) vs `fks.forward.v1.ForwardService` (7 RPCs). **Deferred**: `janus.v1.JanusService` in `forward/proto/` is confirmed dead code (`GrpcServer` compiled but not wired into the main binary).
-- [ ] **Delete dead janus-core supervisor module** once verified no remaining references — `lib/janus-core/src/supervisor/`.
 
 ---
 
@@ -76,9 +62,10 @@ The extraction plan in `JANUS_EXTRACTION_PLAN.md` lists per-sub-crate destinatio
 
 ## ✅ Recently shipped (cross-cutting with `fks-full` PR arc)
 
-- **rustrade-supervisor port** — `bin/janus/main.rs` was rewritten on top of `rustrade_supervisor::Supervisor` + local `ModuleService` adapter so the two supervisor implementations stop drifting. The old `janus-core::supervisor::*` module is now dead from janus's perspective and scheduled for deletion.
+- **rustrade-supervisor port** — `bin/janus/main.rs` was rewritten on top of `rustrade_supervisor::Supervisor` + local `ModuleService` adapter so the two supervisor implementations stop drifting.
+- **Dead `janus-core::supervisor::*` deletion** — 3,812 lines across 5 files (`mod.rs`, `lifecycle.rs`, `backoff.rs`, `service.rs`, `adapters/mod.rs`) removed once `grep -r "janus_core::supervisor\|use janus_core::\(JanusSupervisor\|JanusService\|ModuleAdapter\|…\)"` came back clean.
 - **`rustrade-supervisor` dep pinning** — done in the same arc so the cross-workspace path dep from `bin/janus/Cargo.toml` to `crates/rustrade/crates/rustrade-supervisor` works cleanly without mirroring transitive deps.
-- **CI matrix** — janus is one of the matrix jobs in `.github/workflows/rust.yml` (PR #23). Currently red; see P0.
+- **CI matrix** — janus is one of the matrix jobs in `.github/workflows/rust.yml` (PR #23). Now green after PR #33 fixed the vision diffgaf bench drift.
 - **`JANUS_EXTRACTION_PLAN.md`** — refreshed with the phase-1-attempted-execution findings (`fks-full` PR #9 / #27). It's now an honest blueprint for the public-vs-private carve-up rather than the optimistic original.
 
 ## What was here before that's now obsolete

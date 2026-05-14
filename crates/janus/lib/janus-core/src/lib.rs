@@ -16,7 +16,6 @@ pub mod metrics;
 pub mod optimized_params;
 pub mod signal;
 pub mod state;
-pub mod supervisor;
 
 // Re-exports for convenience
 pub use checkpoint_notify::{
@@ -32,10 +31,6 @@ pub use market::{
 pub use optimized_params::{OptimizedParams, ParamManager, ParamNotification};
 pub use signal::{Signal, SignalBus, SignalType};
 pub use state::{JanusState, LogLevelController, ServiceState};
-pub use supervisor::{
-    BackoffConfig, JanusService, JanusSupervisor, RestartPolicy, ServicePhase, SupervisorConfig,
-    SupervisorMetrics,
-};
 
 /// Module interface trait - all modules must implement this
 #[async_trait::async_trait]

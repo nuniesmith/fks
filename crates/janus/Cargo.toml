@@ -62,6 +62,7 @@ members = [
     "crates/ml",
     "crates/lob",
     "crates/registry",
+    "crates/market-types",
 ]
 exclude = [
     "tests/integration",
@@ -89,6 +90,7 @@ fks-proto = { path = "../../src/proto" }
 # ===========================================================================
 janus-core = { path = "lib/janus-core" }
 janus-api = { path = "lib/janus-api" }
+janus-market-types = { path = "crates/market-types" }
 janus-dsp = { path = "crates/dsp" }
 janus-exchanges = { path = "crates/exchanges" }
 janus-ltn = { path = "crates/ltn" }

@@ -44,7 +44,7 @@ use parquet::file::properties::WriterProperties;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
-use janus_core::{MarketDataEvent, OrderBookEvent, TradeEvent};
+use janus_market_types::{MarketDataEvent, OrderBookEvent, TradeEvent};
 
 use crate::ValidationResult;
 use crate::error::{DataQualityError, Result};
@@ -890,7 +890,7 @@ impl BufferStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Exchange, Side, Symbol};
+    use janus_market_types::{Exchange, Side, Symbol};
     use rust_decimal::Decimal;
 
     fn create_test_trade() -> TradeEvent {

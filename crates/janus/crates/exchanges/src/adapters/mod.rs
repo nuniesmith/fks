@@ -24,7 +24,7 @@
 //! ## Example:
 //! ```rust,ignore
 //! use janus_exchanges::adapters::coinbase::CoinbaseAdapter;
-//! use janus_core::Symbol;
+//! use janus_market_types::Symbol;
 //!
 //! let adapter = CoinbaseAdapter::new();
 //! let symbol = Symbol::new("BTC", "USD");

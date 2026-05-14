@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use janus_core::MarketDataEvent;
+use janus_market_types::MarketDataEvent;
 
 use crate::{
     Config, SharedState, ValidationResult,
@@ -368,7 +368,7 @@ pub struct PipelineStats {
 mod tests {
     use super::*;
     use crate::{MarketDataState, anomaly::AnomalySeverity};
-    use janus_core::{Exchange, Side, Symbol, TradeEvent};
+    use janus_market_types::{Exchange, Side, Symbol, TradeEvent};
     use rust_decimal::Decimal;
 
     fn create_test_state() -> SharedState {

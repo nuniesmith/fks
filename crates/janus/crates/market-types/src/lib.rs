@@ -558,7 +558,7 @@ impl std::str::FromStr for Side {
 /// # Example
 ///
 /// ```rust,no_run
-/// use janus_core::market::{MarketDataBus, MarketDataEvent};
+/// use janus_market_types::{MarketDataBus, MarketDataEvent};
 ///
 /// let bus = MarketDataBus::new(5000);
 /// let mut rx = bus.subscribe();
@@ -587,10 +587,13 @@ impl MarketDataBus {
 
     /// Publish a market data event to all subscribers.
     ///
-    /// Returns the number of active receivers that will see the event.
-    pub fn publish(&self, event: MarketDataEvent) -> crate::Result<usize> {
-        let receivers = self.tx.send(event)?;
-        Ok(receivers)
+    /// Returns the number of active receivers that will see the event,
+    /// or a `SendError` if every subscriber has dropped their receiver.
+    pub fn publish(
+        &self,
+        event: MarketDataEvent,
+    ) -> Result<usize, broadcast::error::SendError<MarketDataEvent>> {
+        self.tx.send(event)
     }
 
     /// Subscribe to the market data stream.

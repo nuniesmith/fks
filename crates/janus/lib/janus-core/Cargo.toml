@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+janus-market-types = { workspace = true }
 tokio.workspace = true
 tokio-util = { workspace = true }
 serde.workspace = true

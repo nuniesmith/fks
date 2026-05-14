@@ -7,7 +7,7 @@ license.workspace = true
 
 [dependencies]
 # Janus internal
-janus-core = { path = "../../lib/janus-core" }
+janus-market-types = { path = "../market-types" }
 janus-cns = { path = "../cns", optional = true }
 
 # Async runtime

@@ -210,7 +210,10 @@ pub trait Validator: Send + Sync {
     }
 
     /// Validate a ticker event
-    async fn validate_ticker(&self, _ticker: &janus_market_types::TickerEvent) -> Result<ValidationResult> {
+    async fn validate_ticker(
+        &self,
+        _ticker: &janus_market_types::TickerEvent,
+    ) -> Result<ValidationResult> {
         Ok(ValidationResult::success(self.name()))
     }
 

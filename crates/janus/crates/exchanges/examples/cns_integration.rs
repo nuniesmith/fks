@@ -8,12 +8,12 @@
 //! cargo run --example cns_integration --features cns-metrics
 //! ```
 
-use janus_market_types::MarketDataEvent;
 use janus_exchanges::{
     CNSReporter,
     adapters::coinbase::CoinbaseAdapter,
     health::{ExchangeHealthStatus, HealthChecker},
 };
+use janus_market_types::MarketDataEvent;
 use std::time::{Duration, Instant};
 
 #[tokio::main]

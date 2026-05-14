@@ -35,22 +35,6 @@
 //! // Train or load a model
 //! // let model = LstmConfig::default().build(&backend.device());
 //! ```
-//!
-//! # Integration with Data Quality
-//!
-//! The ML crate integrates seamlessly with the data quality pipeline:
-//!
-//! ```rust,ignore
-//! use janus_ml::pipeline::MLPipeline;
-//! use janus_data_quality::DataQualityPipeline;
-//!
-//! // Create integrated pipeline
-//! // let dq_pipeline = DataQualityPipeline::from_config(config, state);
-//! // let ml_pipeline = MLPipeline::new(predictor, dq_pipeline);
-//!
-//! // Process events with quality checks + ML inference
-//! // let result = ml_pipeline.process(events).await?;
-//! ```
 
 pub mod backend;
 pub mod config;

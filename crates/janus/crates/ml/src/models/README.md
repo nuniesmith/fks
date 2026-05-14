@@ -291,14 +291,17 @@ See `WEEK4_DAY3_COMPLETE.md` for detailed status and roadmap.
 
 Models are designed to work with:
 - **Feature Extraction**: `janus_ml::features`
-- **Data Quality**: `janus_data_quality` pipeline
 - **Training Loop**: (upcoming) `janus_ml::training`
 - **Inference Engine**: (upcoming) `janus_ml::inference`
 
 Complete pipeline:
 ```
-Market Data → Data Quality → Feature Extraction → Model → Prediction
+Market Data → Feature Extraction → Model → Prediction
 ```
+
+If a pipeline upstream of `janus_ml` wants quality filtering, depend on
+`janus-data-quality` from the orchestrating crate; `janus-ml` itself
+does not link it.
 
 ## Contributing
 

@@ -10,7 +10,6 @@ repository.workspace = true
 # Workspace dependencies
 janus-core = { workspace = true }
 janus-gap-detection = { path = "../gap-detection" }
-janus-cns = { path = "../cns", optional = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
@@ -33,9 +32,6 @@ tracing = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 
-# Metrics
-prometheus = { workspace = true, optional = true }
-
 # Parquet export
 arrow = { workspace = true }
 parquet = { workspace = true }
@@ -49,10 +45,6 @@ uuid = { workspace = true }
 [dev-dependencies]
 tokio-test = "0.4.4"
 criterion = "0.5.1"
-
-[features]
-default = ["cns-metrics"]
-cns-metrics = ["janus-cns", "prometheus"]
 
 # [[bench]]
 # name = "validators"

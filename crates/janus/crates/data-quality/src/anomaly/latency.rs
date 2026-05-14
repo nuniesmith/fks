@@ -1,6 +1,6 @@
 //! Latency anomaly detector for detecting excessive ingestion delays
 
-use janus_core::MarketDataEvent;
+use janus_market_types::MarketDataEvent;
 
 use super::{AnomalyDetector, AnomalyResult, AnomalySeverity};
 use crate::Result;
@@ -69,7 +69,7 @@ impl AnomalyDetector for LatencyAnomalyDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Exchange, Side, Symbol, TradeEvent};
+    use janus_market_types::{Exchange, Side, Symbol, TradeEvent};
     use rust_decimal::Decimal;
 
     #[test]

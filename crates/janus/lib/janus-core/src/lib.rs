@@ -11,11 +11,17 @@ pub mod checkpoint_notify;
 pub mod config;
 pub mod error;
 pub mod logging;
-pub mod market;
 pub mod metrics;
 pub mod optimized_params;
 pub mod signal;
 pub mod state;
+
+/// Re-export of the shared market-data types crate.
+///
+/// Kept as `pub use … as market` so existing `janus_core::market::*` paths
+/// continue to resolve; new code should depend on `janus-market-types`
+/// directly.
+pub use janus_market_types as market;
 
 // Re-exports for convenience
 pub use checkpoint_notify::{
@@ -23,11 +29,11 @@ pub use checkpoint_notify::{
 };
 pub use config::Config;
 pub use error::{Error, Result};
-pub use logging::{LoggingConfig, LoggingGuard, init_logging};
-pub use market::{
+pub use janus_market_types::{
     Exchange, FundingRateEvent, KlineEvent, LiquidationEvent, MarketDataBus, MarketDataEvent,
     MarketType, OrderBookEvent, PriceLevel, Side, Symbol, TickerEvent, TradeEvent,
 };
+pub use logging::{LoggingConfig, LoggingGuard, init_logging};
 pub use optimized_params::{OptimizedParams, ParamManager, ParamNotification};
 pub use signal::{Signal, SignalBus, SignalType};
 pub use state::{JanusState, LogLevelController, ServiceState};

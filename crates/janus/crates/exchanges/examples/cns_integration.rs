@@ -8,7 +8,7 @@
 //! cargo run --example cns_integration --features cns-metrics
 //! ```
 
-use janus_core::MarketDataEvent;
+use janus_market_types::MarketDataEvent;
 use janus_exchanges::{
     CNSReporter,
     adapters::coinbase::CoinbaseAdapter,

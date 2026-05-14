@@ -1,7 +1,7 @@
 //! Price validator for market data
 
 use async_trait::async_trait;
-use janus_core::{KlineEvent, MarketDataEvent, TickerEvent, TradeEvent};
+use janus_market_types::{KlineEvent, MarketDataEvent, TickerEvent, TradeEvent};
 use rust_decimal::Decimal;
 
 use super::{PriceValidatorConfig, Validator};
@@ -218,7 +218,7 @@ impl Validator for PriceValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Exchange, Side, Symbol};
+    use janus_market_types::{Exchange, Side, Symbol};
     use std::sync::Arc;
     use tokio::sync::RwLock;
 

@@ -67,7 +67,7 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use janus_core::{Exchange, MarketDataEvent, Side, Symbol, TradeEvent};
+use janus_market_types::{Exchange, MarketDataEvent, Side, Symbol, TradeEvent};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -237,7 +237,7 @@ impl CoinbaseAdapter {
                     .as_ref()
                     .and_then(|p| Decimal::from_str(p).ok());
 
-                let ticker_event = janus_core::TickerEvent {
+                let ticker_event = janus_market_types::TickerEvent {
                     exchange: Exchange::Coinbase,
                     symbol,
                     timestamp: timestamp_dt.timestamp_micros(),
@@ -285,7 +285,7 @@ impl CoinbaseAdapter {
 
                     // Only include non-zero quantities
                     if quantity > Decimal::ZERO {
-                        bids.push(janus_core::PriceLevel::new(price, quantity));
+                        bids.push(janus_market_types::PriceLevel::new(price, quantity));
                     }
                 }
             }
@@ -301,7 +301,7 @@ impl CoinbaseAdapter {
 
                     // Only include non-zero quantities
                     if quantity > Decimal::ZERO {
-                        asks.push(janus_core::PriceLevel::new(price, quantity));
+                        asks.push(janus_market_types::PriceLevel::new(price, quantity));
                     }
                 }
             }
@@ -312,7 +312,7 @@ impl CoinbaseAdapter {
 
             let is_snapshot = event.event_type == "snapshot";
 
-            let orderbook_event = janus_core::OrderBookEvent {
+            let orderbook_event = janus_market_types::OrderBookEvent {
                 exchange: Exchange::Coinbase,
                 symbol,
                 timestamp: timestamp_dt.timestamp_micros(),

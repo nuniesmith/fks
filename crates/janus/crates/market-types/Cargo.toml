@@ -1,0 +1,14 @@
+[package]
+name = "janus-market-types"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Normalized market-data event types shared across JANUS crates"
+
+[dependencies]
+tokio = { workspace = true, features = ["sync"] }
+serde.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true

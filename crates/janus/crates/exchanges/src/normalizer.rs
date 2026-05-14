@@ -3,7 +3,7 @@
 //! This module provides utilities for normalizing price and volume data
 //! across exchanges with different precision levels and quote currencies.
 
-use janus_core::{Exchange, Symbol};
+use janus_market_types::{Exchange, Symbol};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 

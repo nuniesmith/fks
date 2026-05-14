@@ -1,6 +1,6 @@
 //! Statistical anomaly detector using z-score analysis
 
-use janus_core::{MarketDataEvent, Symbol};
+use janus_market_types::{MarketDataEvent, Symbol};
 use std::collections::HashMap;
 
 use super::{AnomalyDetector, AnomalyResult, AnomalySeverity};
@@ -178,7 +178,7 @@ impl AnomalyDetector for StatisticalAnomalyDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Exchange, Side, TradeEvent};
+    use janus_market_types::{Exchange, Side, TradeEvent};
     use rust_decimal::Decimal;
 
     #[test]

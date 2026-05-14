@@ -21,7 +21,7 @@
 
 The extraction plan in `JANUS_EXTRACTION_PLAN.md` lists per-sub-crate destinations (public sibling / private brain repo / stay in fks-full). Phase 1 sub-tasks that are tractable today:
 
-- [ ] **1a (remaining) — Extract `janus-core::market` into `janus-market-types`.** The dead-dep cleanup pass shipped first (drop `janus-cns` from data-quality, drop `janus-data-quality` from ml — both were vestigial). The actual decoupling that remains is the small shared types crate the plan calls for: lift `MarketDataEvent`, `TradeEvent`, `KlineEvent`, `OrderBookEvent`, `TickerEvent`, `Symbol`, `Exchange`, `Side`, `PriceLevel`, `MarketType`, `FundingRateEvent`, `LiquidationEvent`, `MarketDataBus` into a leaf crate. `janus-core` re-exports for back-compat. Affected consumers: `data-quality`, `ml`, `exchanges`, `janus-core` itself.
+- [ ] **1c — Lift `IncrementalEma` (+ `IncrementalAtr` if missing)** from `crates/janus/crates/indicators/` into `crates/indicators-ta`. ~30 LOC per indicator. Plan calls it the smallest follow-up after the regime decision in 1b.
 
 ---
 
@@ -64,7 +64,8 @@ The extraction plan in `JANUS_EXTRACTION_PLAN.md` lists per-sub-crate destinatio
 
 - **rustrade-supervisor port** — `bin/janus/main.rs` was rewritten on top of `rustrade_supervisor::Supervisor` + local `ModuleService` adapter so the two supervisor implementations stop drifting.
 - **Dead `janus-core::supervisor::*` deletion** — 3,812 lines across 5 files (`mod.rs`, `lifecycle.rs`, `backoff.rs`, `service.rs`, `adapters/mod.rs`) removed once `grep -r "janus_core::supervisor\|use janus_core::\(JanusSupervisor\|JanusService\|ModuleAdapter\|…\)"` came back clean.
-- **Phase 1a — dead-dep cleanup** — `janus-cns` dropped from `janus-data-quality` (the `cns-metrics` feature only gated an unused `MetricsError` variant), `janus-data-quality` dropped from `janus-ml` (referenced only in doc-comments and the model README). The bigger market-types extraction remains; see P0 above.
+- **Phase 1a — dead-dep cleanup** — `janus-cns` dropped from `janus-data-quality` (the `cns-metrics` feature only gated an unused `MetricsError` variant), `janus-data-quality` dropped from `janus-ml` (referenced only in doc-comments and the model README).
+- **Phase 1a — `janus-market-types` extraction** — `janus_core::market` (715 LOC, leaf-deps-only) lifted into its own `crates/market-types/` crate. `janus-core` re-exports for back-compat (`pub use janus_market_types as market;` + per-type `pub use`). `data-quality`, `ml`, and `exchanges` switched to depend on `janus-market-types` directly — their `janus-core` deps are now gone entirely, completing the 1a decoupling.
 - **`rustrade-supervisor` dep pinning** — done in the same arc so the cross-workspace path dep from `bin/janus/Cargo.toml` to `crates/rustrade/crates/rustrade-supervisor` works cleanly without mirroring transitive deps.
 - **CI matrix** — janus is one of the matrix jobs in `.github/workflows/rust.yml` (PR #23). Now green after PR #33 fixed the vision diffgaf bench drift.
 - **`JANUS_EXTRACTION_PLAN.md`** — refreshed with the phase-1-attempted-execution findings (`fks-full` PR #9 / #27). It's now an honest blueprint for the public-vs-private carve-up rather than the optimistic original.

@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 # Workspace dependencies
-janus-core = { workspace = true }
+janus-market-types = { workspace = true }
 janus-gap-detection = { path = "../gap-detection" }
 
 # Async runtime

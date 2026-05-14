@@ -15,7 +15,7 @@
 //!
 //! ```rust,no_run
 //! use janus_data_quality::{DataQualityPipeline, Config, MarketDataState};
-//! use janus_core::{MarketDataEvent, TradeEvent, Exchange, Symbol, Side};
+//! use janus_market_types::{MarketDataEvent, TradeEvent, Exchange, Symbol, Side};
 //! use std::sync::Arc;
 //! use tokio::sync::RwLock;
 //! use rust_decimal::Decimal;
@@ -69,7 +69,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use janus_core::{Exchange, Symbol};
+use janus_market_types::{Exchange, Symbol};
 use serde::{Deserialize, Serialize};
 
 pub use anomaly::{

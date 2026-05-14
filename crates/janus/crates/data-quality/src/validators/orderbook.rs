@@ -1,7 +1,7 @@
 //! Order book validator for market data
 
 use async_trait::async_trait;
-use janus_core::{MarketDataEvent, OrderBookEvent};
+use janus_market_types::{MarketDataEvent, OrderBookEvent};
 use rust_decimal::Decimal;
 
 use super::{OrderBookValidatorConfig, Validator};
@@ -147,7 +147,7 @@ impl Validator for OrderBookValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Exchange, Symbol};
+    use janus_market_types::{Exchange, Symbol};
     use std::sync::Arc;
     use tokio::sync::RwLock;
 
@@ -159,7 +159,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_valid_orderbook() {
-        use janus_core::PriceLevel;
+        use janus_market_types::PriceLevel;
         let validator = create_validator();
         let orderbook = OrderBookEvent {
             symbol: Symbol::new("BTC", "USD"),
@@ -183,7 +183,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_crossed_book() {
-        use janus_core::PriceLevel;
+        use janus_market_types::PriceLevel;
         let validator = create_validator();
         let orderbook = OrderBookEvent {
             symbol: Symbol::new("BTC", "USD"),
@@ -208,7 +208,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_unsorted_bids() {
-        use janus_core::PriceLevel;
+        use janus_market_types::PriceLevel;
         let validator = create_validator();
         let orderbook = OrderBookEvent {
             symbol: Symbol::new("BTC", "USD"),

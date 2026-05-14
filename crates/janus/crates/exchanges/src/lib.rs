@@ -28,7 +28,7 @@
 //!
 //! ```rust,no_run
 //! use janus_exchanges::adapters::coinbase::CoinbaseAdapter;
-//! use janus_core::{Symbol, MarketDataEvent};
+//! use janus_market_types::{Symbol, MarketDataEvent};
 //!
 //! # async fn example() -> anyhow::Result<()> {
 //! // Create adapter

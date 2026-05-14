@@ -56,7 +56,7 @@ anyhow = "1.0"
 tracing = "0.1"
 
 # JANUS dependencies
-janus-core = { path = "../../lib/janus-core" }
+janus-market-types = { path = "../market-types" }
 
 [dev-dependencies]
 criterion = "0.5"

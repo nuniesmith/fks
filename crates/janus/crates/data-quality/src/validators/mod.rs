@@ -7,7 +7,7 @@
 //! - Order book validation (bid < ask, valid levels)
 
 use async_trait::async_trait;
-use janus_core::{KlineEvent, MarketDataEvent, OrderBookEvent, TradeEvent};
+use janus_market_types::{KlineEvent, MarketDataEvent, OrderBookEvent, TradeEvent};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -210,7 +210,7 @@ pub trait Validator: Send + Sync {
     }
 
     /// Validate a ticker event
-    async fn validate_ticker(&self, _ticker: &janus_core::TickerEvent) -> Result<ValidationResult> {
+    async fn validate_ticker(&self, _ticker: &janus_market_types::TickerEvent) -> Result<ValidationResult> {
         Ok(ValidationResult::success(self.name()))
     }
 

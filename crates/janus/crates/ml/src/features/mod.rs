@@ -20,7 +20,7 @@
 //!
 //! ```rust,ignore
 //! use janus_ml::features::{FeatureExtractor, TechnicalIndicators};
-//! use janus_core::MarketDataEvent;
+//! use janus_market_types::MarketDataEvent;
 //!
 //! let extractor = TechnicalIndicators::new()
 //!     .with_sma_periods(&[5, 10, 20])
@@ -39,7 +39,7 @@ pub mod volume;
 
 use crate::error::Result;
 use burn_core::tensor::{Tensor, backend::Backend};
-use janus_core::MarketDataEvent;
+use janus_market_types::MarketDataEvent;
 
 /// Trait for extracting features from market data
 pub trait FeatureExtractor: Send + Sync {

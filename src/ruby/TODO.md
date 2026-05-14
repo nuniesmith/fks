@@ -1,14 +1,14 @@
-# fks-ruby — TODO
+# ruby — TODO
 
-> **Repo:** `github.com/nuniesmith/fks-ruby`
-> **Last synced from master todo:** 2026-04-03
+> **Repo (future):** `github.com/nuniesmith/ruby`
+> **Today's path:** `fks-full/src/ruby/`
+> **Last synced:** 2026-05-14
 
 ---
 
 ## P0 — Codebase Health
 
 - [ ] `pyproject.toml` — Consider removing `psycopg2-binary` if fully migrated to psycopg3
-- [ ] **318 `#[allow(dead_code)]` annotations** — n/a (Ruby/Python), but audit any stale service files
 - [ ] Audit `data/api/` for any remaining endpoints without JSON variants (SVK-17 remaining items)
 
 ---

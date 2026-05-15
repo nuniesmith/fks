@@ -20,7 +20,7 @@
 //!
 //! let config = TWAPConfig {
 //!     total_quantity: 10000.0,
-//!     duration: Duration::from_secs(300),
+//!     duration: Duration::from_millis(300), // short duration for doc-test
 //!     num_slices: 10,
 //!     ..Default::default()
 //! };
@@ -51,7 +51,7 @@
 //!
 //! let config = VWAPConfig {
 //!     total_quantity: 10000.0,
-//!     duration: Duration::from_secs(3600),
+//!     duration: Duration::from_millis(800), // short duration for doc-test
 //!     volume_profile: profile,
 //!     participation_rate: 0.2,
 //!     ..Default::default()
@@ -111,7 +111,7 @@
 //!     quantity: 10000.0,
 //!     side: Side::Buy,
 //!     strategy: ExecutionStrategy::TWAP {
-//!         duration: Duration::from_secs(300),
+//!         duration: Duration::from_millis(300), // short duration for doc-test
 //!         num_slices: 10,
 //!     },
 //!     limit_price: Some(150.0),
@@ -131,7 +131,7 @@
 //!         }
 //!     }
 //!
-//!     std::thread::sleep(Duration::from_millis(100));
+//!     std::thread::sleep(Duration::from_millis(1));
 //! }
 //!
 //! // Get execution analytics

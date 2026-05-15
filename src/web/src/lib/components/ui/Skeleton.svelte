@@ -1,7 +1,8 @@
 <script lang="ts">
-  let { lines = 3, height = '14px' } = $props<{
+  let { lines = 3, height = '14px', width } = $props<{
     lines?: number;
     height?: string;
+    width?: string;
   }>();
 
   const widths = ['100%', '90%', '75%', '60%', '50%', '45%', '40%', '55%'];
@@ -11,7 +12,7 @@
   }
 </script>
 
-<div class="skeleton-group" role="status" aria-label="Loading">
+<div class="skeleton-group" role="status" aria-label="Loading" style:width={width}>
   {#each Array(lines) as _, i}
     <div
       class="skeleton-line"

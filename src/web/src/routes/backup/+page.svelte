@@ -324,7 +324,7 @@
 
   interface PreviewRow { section: string; subsection: string; content: string; status: 'ok' | 'warn' | 'err' | 'info' }
 
-  let previewRows = $derived<PreviewRow[]>(() => {
+  let previewRows = $derived.by<PreviewRow[]>(() => {
     if (!preview) return [];
     const rows: PreviewRow[] = [];
     const pg = preview.sections?.postgres ?? {};
@@ -407,7 +407,7 @@
     </div>
 
     {#if exportRunning || exportProgress > 0}
-      <ProgressBar value={exportProgress} max={100} color="var(--cyan)" />
+      <ProgressBar value={exportProgress} color="cyan" />
     {/if}
 
     {#if exportLog.length}
@@ -444,7 +444,7 @@
     </div>
 
     {#if importRunning || importProgress > 0}
-      <ProgressBar value={importProgress} max={100} color="var(--green)" />
+      <ProgressBar value={importProgress} color="green" />
     {/if}
 
     {#if importLog.length}

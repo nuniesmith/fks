@@ -6,6 +6,7 @@
     color = 'default',
     warn,
     crit,
+    valueColor,
   } = $props<{
     label: string;
     value: string | number;
@@ -13,6 +14,7 @@
     color?: 'green' | 'red' | 'amber' | 'cyan' | 'default';
     warn?: number;
     crit?: number;
+    valueColor?: string;
   }>();
 
   let resolvedColor = $derived.by(() => {
@@ -27,7 +29,7 @@
 
 <div class="stat-card">
   <span class="stat-label">{label}</span>
-  <span class="stat-value {resolvedColor}">
+  <span class="stat-value {valueColor ? '' : resolvedColor}" style:color={valueColor}>
     {value}{#if unit}<span class="stat-unit">{unit}</span>{/if}
   </span>
 </div>

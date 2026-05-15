@@ -21,6 +21,7 @@
 //!     volume_profile: profile,
 //!     min_slice_size: 50.0,
 //!     participation_rate: 0.2, // 20% of market volume
+//!     adaptive: false,
 //! };
 //!
 //! let mut executor = VWAPExecutor::new(config);

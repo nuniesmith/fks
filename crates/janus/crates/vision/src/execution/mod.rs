@@ -30,9 +30,9 @@
 //!
 //! // Execute slices
 //! while !executor.is_complete() {
-//!     if let Some(slice) = executor.next_slice() {
-//!         println!("Execute {} units", slice.quantity);
-//!         executor.mark_executed(slice.quantity, 100.5);
+//!     if let Some(quantity) = executor.next_slice().map(|s| s.quantity) {
+//!         println!("Execute {} units", quantity);
+//!         executor.mark_executed(quantity, 100.5);
 //!     }
 //! }
 //!
@@ -61,9 +61,8 @@
 //! executor.start();
 //!
 //! while !executor.is_complete() {
-//!     if let Some(slice) = executor.next_slice() {
-//!         let market_volume = 5000.0; // Observed market volume
-//!         executor.mark_executed(slice.quantity, 100.5, Some(market_volume));
+//!     if let Some(quantity) = executor.next_slice().map(|s| s.quantity) {
+//!         executor.mark_executed(quantity, 100.5, Some(5000.0));
 //!     }
 //! }
 //!

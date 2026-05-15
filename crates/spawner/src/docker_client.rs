@@ -20,8 +20,7 @@ use bollard::{
     models::{ContainerCreateBody, EndpointSettings, HostConfig, NetworkingConfig},
     query_parameters::{
         CreateContainerOptionsBuilder, ListContainersOptionsBuilder, LogsOptionsBuilder,
-        RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder,
-        StopContainerOptionsBuilder,
+        RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder, StopContainerOptionsBuilder,
     },
     Docker,
 };
@@ -265,7 +264,10 @@ impl DockerClient {
     pub async fn restart(&self, id: &str) -> SpawnerResult<()> {
         debug!(container = %id, "restarting bot container");
         self.docker
-            .restart_container(id, Some(RestartContainerOptionsBuilder::new().t(10).build()))
+            .restart_container(
+                id,
+                Some(RestartContainerOptionsBuilder::new().t(10).build()),
+            )
             .await
             .map_err(SpawnerError::Docker)?;
         info!(container = %id, "bot container restarted");
@@ -296,7 +298,10 @@ impl DockerClient {
     pub async fn inspect(&self, id: &str) -> SpawnerResult<ContainerInfo> {
         let data = self
             .docker
-            .inspect_container(id, None::<bollard::query_parameters::InspectContainerOptions>)
+            .inspect_container(
+                id,
+                None::<bollard::query_parameters::InspectContainerOptions>,
+            )
             .await
             .map_err(|e| match e {
                 bollard::errors::Error::DockerResponseServerError {

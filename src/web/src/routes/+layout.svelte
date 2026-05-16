@@ -13,7 +13,7 @@
 -->
 <script lang="ts">
     import "../app.css";
-    import { setContext } from "svelte";
+    import { setContext, untrack } from "svelte";
     import Strip from "$components/shell/Strip.svelte";
     import TabBar from "$components/shell/TabBar.svelte";
     import StatusBar from "$components/shell/StatusBar.svelte";
@@ -23,8 +23,10 @@
     let { data, children } = $props();
 
     // Push the resolved config into context so every sub-page can read it
-    // without prop-drilling.
-    setContext<WorkspaceConfig>("workspace", data.workspace);
+    // without prop-drilling. SvelteKit re-runs the layout when the active
+    // route changes, so capturing the value at mount is the intended
+    // behavior — `untrack` makes that explicit and silences svelte-check.
+    setContext<WorkspaceConfig>("workspace", untrack(() => data.workspace));
 </script>
 
 <div class="terminal">

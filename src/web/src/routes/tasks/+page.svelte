@@ -238,10 +238,18 @@
         {:else}
           <div class="task-list">
             {#each tasks as t}
-              <button
+              <div
                 class="task-row"
                 class:viewing={viewingTaskId === t.task_id}
+                role="button"
+                tabindex="0"
                 onclick={() => viewTask(t.task_id)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    viewTask(t.task_id);
+                  }
+                }}
               >
                 <Badge variant={statusBadge(t.status)}>{t.status}</Badge>
                 <span class="task-type">{t.task_type}</span>
@@ -255,7 +263,7 @@
                     onclick={(e) => { e.stopPropagation(); cancelTask(t.task_id); }}
                   >✕</button>
                 {/if}
-              </button>
+              </div>
             {/each}
           </div>
         {/if}

@@ -1,285 +1,246 @@
 # Pre-publish audit (Phase 2 of `SPLIT_PLAN.md`)
 
-> Generated 2026-05-12 from the state of `main` after PR #24.
+> Last refreshed 2026-05-12 with `cargo package --no-verify --allow-dirty`
+> results.
 >
 > **What this is:** a per-crate inventory of what's blocking each
-> crates.io publish. Each crate is rated **READY**, **NEEDS WORK**, or
-> **DO NOT PUBLISH**. Action items are concrete and small.
+> crates.io publish, plus the recommended execution order and the
+> chicken-and-egg gotcha that defines that order.
 >
-> **What this is NOT:** an execution log. Nothing is published here —
-> this is the gating list for the actual publish PR.
+> **What this is NOT:** an execution log. Nothing is published here.
 
 ---
 
 ## TL;DR
 
-| Crate | Status | Blockers |
-|---|---|---|
-| `indicators-ta` | ✅ READY | none — verify version 0.1.3 isn't already on crates.io under different ownership |
-| `exchange-apiws` | ✅ READY | same caveat for version 0.1.10 |
-| `rustrade-core` | 🟡 NEEDS WORK | per-crate README + LICENSE |
-| `rustrade-supervisor` | 🟡 NEEDS WORK | per-crate README + LICENSE; also add `readme = "README.md"` to Cargo.toml |
-| `rustrade-risk` | 🟡 NEEDS WORK | per-crate README + LICENSE; also add `readme = ...` |
-| `rustrade-backtest` | 🟡 NEEDS WORK | per-crate README + LICENSE; also add `readme = ...` |
-| `rustrade-notify` | 🟡 NEEDS WORK | per-crate README + LICENSE; also add `readme = ...` |
-| `rustrade-kucoin` | 🟡 NEEDS WORK | per-crate README + LICENSE; drop `path = ` from exchange-apiws dep before publish |
-| `rustrade` (facade) | 🟡 NEEDS WORK | per-crate README + LICENSE; same workspace defaults |
-| `spawner` | 🟥 NOT READY | name almost certainly taken on crates.io (consider `fks-spawner`); no license/repository/keywords/categories metadata; edition still 2021 |
+| Crate | Cargo.toml metadata | `cargo package` | Blocker |
+|---|---|---|---|
+| `indicators-ta` | ✅ | ✅ packages cleanly (69 files) | none — publishable today |
+| `exchange-apiws` | ✅ | ✅ packages cleanly (31 files) | none — publishable today |
+| `rustrade-core` | ✅ | ✅ packages cleanly (14 files) | none — publishable today |
+| `rustrade-supervisor` | ✅ | ✅ packages cleanly (11 files) | none — publishable today |
+| `rustrade-risk` | ✅ | ⛔ can't dry-run | waits on `rustrade-core` being live |
+| `rustrade-backtest` | ✅ | ⛔ can't dry-run | waits on `rustrade-core` |
+| `rustrade-notify` | ✅ | ⛔ can't dry-run | waits on `rustrade-core` + `rustrade-supervisor` |
+| `rustrade-kucoin` | ✅ | ⛔ can't dry-run | waits on `rustrade-core` + `exchange-apiws` |
+| `rustrade` (facade) | ✅ | ⛔ can't dry-run | waits on every `rustrade-*` sibling |
+| `spawner` | ❌ | not attempted | rename, license, repository, keywords, categories, edition — see below |
 
-**Recommended publish order** (smallest blast radius first):
-
-1. `indicators-ta` (READY — publish first to validate the pipeline)
-2. `exchange-apiws` (READY)
-3. `rustrade-core` (after README/LICENSE)
-4. `rustrade-supervisor`
-5. `rustrade-risk`
-6. `rustrade-backtest`
-7. `rustrade-notify`
-8. `rustrade-kucoin` (last among rustrade-*, since it depends on `exchange-apiws` being published)
-9. `rustrade` facade (depends on all rustrade-* siblings being published)
-10. `spawner` — defer until rename + metadata cleanup
-
-The order matters because each crate's `version = ...` dep references its siblings; siblings must hit crates.io in dependency order.
+**Four crates are immediately publishable** (top half). The downstream
+rustrade crates cannot even `cargo package --no-verify` until their
+upstream siblings hit crates.io — this is the chicken-and-egg covered
+below.
 
 ---
 
-## Per-crate findings
+## The chicken-and-egg
 
-### `indicators-ta` — ✅ READY
+`cargo package --no-verify --allow-dirty` still fetches the crates.io
+index to resolve dependency declarations. Five of the rustrade crates
+fail this check:
 
 ```
-version       = "0.1.3"
-description   = "Technical analysis indicators and market regime detection for algorithmic trading"
-license       = "MIT"
-repository    = "https://github.com/nuniesmith/indicators-ta"
-documentation = "https://docs.rs/indicators-ta"
-readme        = "README.md"
-keywords      = ["trading", "technical-analysis", "indicators", "finance", "regime"]
-categories    = ["algorithms", "mathematics", "science"]
+rustrade-risk:     no matching package named `rustrade-core` found
+rustrade-backtest: no matching package named `rustrade-core` found
+rustrade-notify:   no matching package named `rustrade-core` found
+rustrade-kucoin:   no matching package named `rustrade-core` found
+rustrade (facade): no matching package named `rustrade-core` found
 ```
 
-- ✅ All metadata fields populated
-- ✅ `README.md` and `LICENSE` files present in the crate directory
-- ✅ Zero path deps — fully standalone
-- ✅ Standalone workspace (`[workspace]` at top of Cargo.toml — fixed in PR #22)
-- ⚠️  Version is `0.1.3` — verify it's not already claimed on crates.io by a previous unrelated upload. `cargo search indicators-ta` will tell.
+**There's no way around this short of a private registry.** Publishing
+is inherently a one-way trip past `rustrade-core` — once it goes live
+with version 0.1.0, downstream crates can finally dry-run and publish.
 
-**Action:** none — run `cargo publish --dry-run` from `crates/indicators-ta/` to confirm, then publish.
+**Implication for the execution PR:** if a metadata typo in
+`rustrade-core` 0.1.0 ships, the fix is to publish 0.1.1 — not to yank.
+Get the metadata right before the first publish.
 
 ---
 
-### `exchange-apiws` — ✅ READY
+## Recommended execution (dependency order)
 
+```bash
+# Step 1 — leaves with zero internal deps
+cd crates/indicators-ta
+cargo publish --dry-run && cargo publish
+
+cd crates/exchange-apiws
+cargo publish --dry-run && cargo publish
+
+# Step 2 — rustrade-core (root of the rustrade dep graph)
+cd crates/rustrade/crates/rustrade-core
+cargo publish --dry-run && cargo publish
+
+# Wait ~1 minute for the index to update, then continue with siblings:
+
+cd ../rustrade-supervisor    && cargo publish --dry-run && cargo publish
+cd ../rustrade-risk          && cargo publish --dry-run && cargo publish
+cd ../rustrade-backtest      && cargo publish --dry-run && cargo publish
+cd ../rustrade-notify        && cargo publish --dry-run && cargo publish
+
+# Step 3 — kucoin (after exchange-apiws is live)
+cd ../rustrade-kucoin        && cargo publish --dry-run && cargo publish
+
+# Step 4 — facade (after every sibling)
+cd ../rustrade               && cargo publish --dry-run && cargo publish
 ```
-version       = "0.1.10"
-description   = "Exchange REST and WebSocket clients — spot trading, futures, account management, and live data streams"
-license       = "MIT"
-repository    = "https://github.com/nuniesmith/exchange-apiws"
-documentation = "https://docs.rs/exchange-apiws"
-readme        = "README.md"
-keywords      = ["kucoin", "crypto", "trading", "websocket", "futures"]
-categories    = ["api-bindings", "network-programming", "asynchronous"]
-```
 
-- ✅ All metadata fields populated
-- ✅ `README.md` and `LICENSE` files present
-- ✅ Zero path deps — fully standalone
-- ✅ Standalone workspace (fixed in PR #22)
-- ⚠️  Version `0.1.10` — same crates.io ownership check as above
-
-**Action:** none — `cargo publish --dry-run` then publish.
+Each `cargo publish` call needs `CARGO_REGISTRY_TOKEN` (via
+`~/.cargo/credentials.toml` or env). One-time setup if not already done.
 
 ---
 
-### `rustrade-core` — 🟡 NEEDS WORK
+## Per-crate status
 
-Inherits from `crates/rustrade/Cargo.toml` `[workspace.package]`:
+### `indicators-ta` v0.1.3 — ✅ READY
 
-```
-version    = "0.1.0"
-license    = "MIT"
-repository = "https://github.com/nuniesmith/rustrade"
-authors    = ["nuniesmith"]
-edition    = "2024"
-```
+- All metadata fields populated (`description`, `license = "MIT"`,
+  `repository = "https://github.com/nuniesmith/indicators-ta"`,
+  `documentation = "https://docs.rs/indicators-ta"`, `readme`,
+  `keywords`, `categories`).
+- Standalone workspace (`[workspace]` at top of Cargo.toml, fixed in PR #22).
+- Zero path deps.
+- `LICENSE` + `README.md` files present at the crate root.
+- `cargo package --no-verify --allow-dirty` succeeds — 69 files, 136 KiB compressed.
 
-Crate-local metadata:
+**One caveat:** version `0.1.3` suggests prior uploads. Verify ownership
+on crates.io before publishing (`cargo search indicators-ta`).
 
-```
-description = "Core types and traits for the rustrade trading bot framework"
-readme      = "README.md"
-keywords    = ["trading", "crypto", "bot", "framework"]
-categories  = ["api-bindings", "asynchronous"]
-```
+### `exchange-apiws` v0.1.10 — ✅ READY
 
-- ✅ All Cargo.toml metadata fields populated
-- ❌ `README.md` file at `crates/rustrade/crates/rustrade-core/` is **MISSING**
-- ❌ `LICENSE` file at `crates/rustrade/crates/rustrade-core/` is **MISSING**
-- ✅ Zero path deps — fully standalone
+Same shape as indicators-ta. Standalone workspace, all metadata,
+LICENSE + README present, packages cleanly (31 files, 80 KiB). Version
+`0.1.10` similarly suggests prior uploads.
 
-**Action (4 lines of effort):**
+### `rustrade-core` v0.1.0 — ✅ READY
 
-1. Add `crates/rustrade/crates/rustrade-core/README.md` — can be 5 lines: one-paragraph description + `cargo add rustrade-core` + link back to the workspace `crates/rustrade/README.md` for the full architecture.
-2. Add `crates/rustrade/crates/rustrade-core/LICENSE` — symlink or copy of the root `LICENSE`.
+Inherits `version`, `license`, `repository`, `authors`, `edition`,
+`rust-version` from `crates/rustrade/Cargo.toml`'s `[workspace.package]`.
+Adds per-crate `description`, `readme`, `keywords`, `categories`.
 
-Same fix applies to **every other `rustrade-*` crate** below.
+After PR #26 added per-crate `LICENSE` and `README.md`:
+- `cargo package --no-verify --allow-dirty` succeeds — 14 files, 15 KiB.
 
----
+### `rustrade-supervisor` v0.1.0 — ✅ READY
 
-### `rustrade-supervisor` — 🟡 NEEDS WORK
+Same shape as rustrade-core. Crucially, this crate's `[dependencies]`
+use **explicit version pins** (not `workspace = true`) so external
+workspaces — including `crates/janus/bin/janus/` today and crates.io
+consumers tomorrow — can path-dep it without mirroring its transitive
+deps. `cargo package` succeeds — 11 files, 21 KiB.
 
-```
-description = "Service lifecycle supervisor with backoff and circuit breakers for rustrade"
-keywords    = ["supervisor", "tokio", "trading", "lifecycle"]
-categories  = ["asynchronous", "concurrency"]
-```
+### `rustrade-risk` v0.1.0 — 🟡 BLOCKED on upstream
 
-- ❌ **No `readme = ...` line in Cargo.toml.** Without it, crates.io won't render the README even if the file exists.
-- ❌ Missing per-crate `README.md`
-- ❌ Missing per-crate `LICENSE`
-- ✅ Deps pinned explicitly (not `workspace = true`) — already cross-workspace-publishable (this was the de-inheritance work earlier in this PR arc)
+Metadata complete after PR #26. Can't `cargo package --no-verify` yet
+because cargo can't resolve `rustrade-core = { path = "../rustrade-core",
+version = "0.1.0" }` — that `version` must exist on crates.io.
 
-**Action:** add `readme = "README.md"` to Cargo.toml + create the README + LICENSE files.
+**Will publish cleanly once `rustrade-core` is live.**
 
----
+### `rustrade-backtest` v0.1.0 — 🟡 BLOCKED on upstream
 
-### `rustrade-risk` — 🟡 NEEDS WORK
+Same as rustrade-risk. Blocked on `rustrade-core` being live.
 
-```
-description = "Generic risk primitives (position sizing, circuit breakers, session PnL) for rustrade trading bots"
-keywords    = ["trading", "risk", "bot", "position-sizing"]
-categories  = ["algorithms", "finance"]
-```
+### `rustrade-notify` v0.1.0 — 🟡 BLOCKED on upstream
 
-Same gaps as `rustrade-supervisor`: missing `readme` line, missing README + LICENSE files.
+Same. Also depends on `rustrade-supervisor`, so technically blocked on both.
 
----
+### `rustrade-kucoin` v0.1.0 — 🟡 BLOCKED on upstreams
 
-### `rustrade-backtest` — 🟡 NEEDS WORK
+Depends on `rustrade-core` AND `exchange-apiws`. Publishable after
+both are live.
 
-```
-description = "Replay engine + simulated exchange for the rustrade trading framework — any Brain that runs live runs in a backtest with zero changes"
-keywords    = ["trading", "backtest", "framework", "rustrade", "replay"]
-categories  = ["asynchronous", "finance", "science"]
-```
+### `rustrade` (facade) v0.1.0 — 🟡 BLOCKED on every sibling
 
-Same gaps.
+The facade re-exports `rustrade-core`, `rustrade-supervisor`,
+`rustrade-risk`, `rustrade-backtest`, `rustrade-notify`, `rustrade-kucoin`.
+Must be the LAST publish in the rustrade family.
 
----
+### `spawner` v0.1.0 — 🟥 NOT READY
 
-### `rustrade-notify` — 🟡 NEEDS WORK
+Missing nearly every field crates.io requires:
 
-```
-description = "Webhook notifications (Discord, Slack, generic HTTP) as supervised TradingServices for the rustrade framework"
-keywords    = ["trading", "rustrade", "discord", "webhook", "notifications"]
-categories  = ["asynchronous", "web-programming::http-client"]
-```
-
-Same gaps.
-
----
-
-### `rustrade-kucoin` — 🟡 NEEDS WORK
-
-```
-description = "rustrade ExchangeClient adapter for KuCoin Futures (built on exchange-apiws)"
-keywords    = ["kucoin", "trading", "exchange", "rustrade", "futures"]
-categories  = ["api-bindings", "asynchronous", "finance"]
-```
-
-Same per-crate README + LICENSE gaps. **Plus one additional blocker:**
-
-- ⚠️  Path-based dep on `exchange-apiws`:
-
-  ```toml
-  exchange-apiws = { path = "../../../exchange-apiws", version = "0.1.10" }
-  ```
-
-  This works for `cargo publish` (cargo uses `version` when publishing and ignores `path`), but only if `exchange-apiws` 0.1.10 is already on crates.io. **Publish exchange-apiws first.**
-
----
-
-### `rustrade` (facade) — 🟡 NEEDS WORK
-
-```
-description = "Open-source trading bot framework — facade crate that wires core types, supervisor, and risk into a runnable Bot"
-keywords    = ["trading", "framework", "bot", "tokio", "supervised"]
-categories  = ["asynchronous", "concurrency"]
-```
-
-Same per-crate README + LICENSE gaps. The facade depends on `rustrade-core`, `rustrade-supervisor`, `rustrade-risk`, `rustrade-backtest`, `rustrade-notify`, `rustrade-kucoin` — **publish all of those first** so the facade's `version = "0.1.0"` deps can resolve from crates.io.
-
-Note the workspace-level `crates/rustrade/README.md` IS present (the architecture overview added in PR #6). The facade crate's directory `crates/rustrade/crates/rustrade/` is the one that needs its own.
-
----
-
-### `spawner` — 🟥 NOT READY
-
-```
-name        = "spawner"
-version     = "0.1.0"
-edition     = "2021"
-description = "FKS Bot Spawner — Docker container lifecycle manager for isolated bot workloads"
-```
-
-Missing **every other** metadata field:
-
-- ❌ `license` — not set in Cargo.toml
-- ❌ `repository` — not set
-- ❌ `documentation` — not set
-- ❌ `readme` — not set in Cargo.toml (README.md file exists)
-- ❌ `keywords` — not set
-- ❌ `categories` — not set
-- ❌ `LICENSE` file at `crates/spawner/` is **missing**
+- ❌ `license` not set
+- ❌ `repository` not set
+- ❌ `documentation` not set
+- ❌ `readme` not set
+- ❌ `keywords` not set
+- ❌ `categories` not set
+- ❌ `LICENSE` file at `crates/spawner/` missing
 - ❌ `edition = "2021"` (other publishable crates are on `2024`)
-- ❌ **`name = "spawner"` is almost certainly taken on crates.io.** A search would confirm; if so, rename to one of:
-  - `fks-spawner` (matches the description's "FKS Bot Spawner")
-  - `bot-spawner`
-  - `docker-bot-spawner`
+- ❌ **`name = "spawner"` is almost certainly taken** on crates.io.
+  Rename candidates: `fks-spawner`, `bot-spawner`, `docker-bot-spawner`.
 
-**Action (substantial):** treat as a separate pre-publish PR. Set `license = "MIT"`, `repository = "https://github.com/nuniesmith/spawner"` (or whatever the eventual repo name is), add keywords + categories, add LICENSE, rename if `spawner` is taken.
-
-**Recommendation:** defer publishing `spawner` to crates.io entirely if it's primarily a Docker-image-shipped service. crates.io makes sense if downstream users want it as a library; less useful for a binary-only deployment.
-
----
-
-## Workspace-level cleanups
-
-Two cross-cutting cleanups that benefit multiple crates:
-
-### 1. Add `LICENSE` to the `crates/rustrade/` workspace root
-
-There's no `crates/rustrade/LICENSE` today. The root `fks-full/LICENSE` exists but each crate's directory needs its own (or a symlink). Easiest fix: copy `fks-full/LICENSE` into `crates/rustrade/LICENSE` once, then symlink it into each crate subdir (`ln -s ../../LICENSE crates/rustrade-core/LICENSE`, etc.).
-
-Cargo includes the file referenced in `[package].license-file` (or the standard `LICENSE` / `LICENSE.md` / `LICENSE-*` in the crate root) when packaging. Symlinks resolve at package time.
-
-### 2. Add the `readme` line to the `rustrade-*` Cargo.tomls
-
-Only `rustrade-core` has `readme = "README.md"`. The others rely on cargo's default behaviour of including `README.md` if it exists, but **only if the field is set or the workspace `[package]` defaults it**. Adding `readme = "README.md"` explicitly to each `rustrade-*` Cargo.toml is the safe move.
+**Recommendation:** defer publishing `spawner` to crates.io. It's
+primarily a Docker-image-shipped service; crates.io makes sense only
+if downstream users want it as a library. If keeping for library use,
+treat the cleanup as a separate PR.
 
 ---
 
-## Suggested execution PR
+## Tarball-content cleanup (optional, before publish)
 
-Single PR titled something like `Pre-publish polish: add per-crate README + LICENSE`:
+The 69-file `indicators-ta` and 31-file `exchange-apiws` tarballs
+include files that don't help downstream consumers:
 
-1. Create `crates/rustrade/LICENSE` (copy of root LICENSE).
-2. Symlink (or copy) `LICENSE` into each `crates/rustrade/crates/<crate>/` directory.
-3. Create a minimal `crates/rustrade/crates/<crate>/README.md` for each: 5–10 lines, one-paragraph blurb + `cargo add` snippet + link back to the workspace README.
-4. Add `readme = "README.md"` to each `rustrade-*/Cargo.toml` that's missing it.
-5. Run `cargo package --no-verify` per crate to confirm cargo includes the README.
-6. (Optional) Run `cargo publish --dry-run` per crate as the final smoke test.
+- `.github/workflows/*` — repo workflow files
+- `.zed/settings.json` — editor preferences
+- `CLAUDE.md`, `TODO.md` — assistant + dev workflow notes
+- `scripts/*` — dev helpers
 
-After that PR lands, the actual `cargo publish` execution is a separate PR — one per crate, in the dependency order listed in TL;DR above. Each publish is irreversible (version numbers can't be re-used), so I'd recommend doing it manually rather than scripted, especially for the first few.
+Nothing here breaks anything, but it bloats the download. Optional
+follow-up before first publish, per crate:
+
+```toml
+[package]
+exclude = [
+    ".zed",
+    ".github",
+    "CLAUDE.md",
+    "TODO.md",
+    "scripts/",
+]
+```
+
+The four rustrade-* crates that package today (rustrade-core,
+rustrade-supervisor, rustrade-risk, rustrade-backtest if it ever
+packages, etc.) are already lean — 11–14 files each — and don't need
+this.
 
 ---
 
 ## Open questions
 
-1. **Should `spawner` publish to crates.io at all?** It's a binary-style service primarily consumed as a Docker image. If yes, decide the renamed package name. If no, drop it from the publish checklist entirely.
+1. **Should `spawner` publish to crates.io at all?** It's a binary-only service
+   consumed as a Docker image. If yes, decide the renamed package name.
 
-2. **`indicators-ta` 0.1.3 and `exchange-apiws` 0.1.10** — were these previously published by you? If yes, just bump to the next patch version (`0.1.4` / `0.1.11`) and continue. If no, verify the names are available before claiming.
+2. **`indicators-ta` 0.1.3 and `exchange-apiws` 0.1.10** — were these previously
+   published by you? Run `cargo search` to confirm. If they're someone else's, the
+   crate name claim is gone and we need new names.
 
-3. **`rustrade-kucoin` publish position.** It depends on `exchange-apiws`. The current path dep makes it un-publishable until exchange-apiws is on crates.io. Confirm we publish exchange-apiws first (the TL;DR order has this).
+3. **`rustrade-kucoin` publish position.** Confirmed after `exchange-apiws`.
+   The path dep `exchange-apiws = { path = "../../../exchange-apiws",
+   version = "0.1.10" }` resolves via the published version at publish time.
 
-4. **Yank policy.** If a publish goes out with a metadata typo, the standard remedy is to publish a patched version, not yank. Get the metadata right before the first publish.
+4. **First publish PR scope.** Single PR that publishes everything sequentially,
+   or one PR per crate? Per-crate is safer (each PR is reversible-ish via
+   patch-bump if a typo gets through) but more PR noise. Single coordinated
+   PR is faster but a typo on crate 3 of 9 strands crates 1+2 already live.
+
+---
+
+## What lands in the actual publish PR
+
+This audit + the polish PR (#26) get the metadata right. The actual
+publish PR is:
+
+1. Run the dependency-ordered commands above with `cargo publish`
+2. Optionally add `[package].exclude` to slim tarballs for
+   indicators-ta + exchange-apiws first
+3. Open the docs.rs build for each crate (automatic on publish)
+4. Set up `docs.rs/badge.svg` and `crates.io/badge.svg` links in the
+   workspace README
+
+Nothing in the rustrade repo's code needs to change for this. The
+exception is `spawner` which needs the metadata cleanup before it
+becomes publishable.

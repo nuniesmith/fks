@@ -6,7 +6,10 @@ use burn::tensor::Tensor;
 type TestBackend = NdArray<f32>;
 
 use vision::diffgaf::combined::DiffGafLstmConfig;
-use vision::diffgaf::config::DiffGAFConfig;
+use vision::diffgaf::layers::DiffGAF;
+use vision::diffgaf::transforms::{
+    GramianLayerConfig, GramianMode, LearnableNormConfig, PolarEncoderConfig,
+};
 
 /// Benchmark the DiffGAF transform (time series → GAF image)
 fn bench_diffgaf_transform(c: &mut Criterion) {
@@ -23,12 +26,25 @@ fn bench_diffgaf_transform(c: &mut Criterion) {
         (4, 120, 5),
         (4, 60, 10),
     ] {
-        let config = DiffGAFConfig {
+        let norm = LearnableNormConfig {
             num_features: features,
-            time_steps,
-            ..Default::default()
-        };
-        let diffgaf = config.init::<TestBackend>(&device);
+            target_min: -1.0,
+            target_max: 1.0,
+            eps: 1e-7,
+        }
+        .init::<TestBackend>(&device);
+        let encoder = PolarEncoderConfig {
+            num_features: features,
+            use_smooth: true,
+            eps: 1e-7,
+        }
+        .init::<TestBackend>(&device);
+        let gramian = GramianLayerConfig {
+            use_efficient: true,
+            mode: GramianMode::Dual,
+        }
+        .init::<TestBackend>();
+        let diffgaf = DiffGAF::new(norm, encoder, gramian);
 
         let id = BenchmarkId::new(
             "transform",

@@ -2,7 +2,7 @@
 //!
 //! This module defines shared types used across all exchange adapters.
 
-use janus_core::{Exchange, Symbol};
+use janus_market_types::{Exchange, Symbol};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

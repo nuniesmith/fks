@@ -449,6 +449,12 @@ mod tests {
         let pipeline = PipelineBuilder::new()
             .model(model)
             .min_confidence(0.6)
+            // Enable Hold signals so randomly-initialized model always produces
+            // results regardless of which class it predicts.
+            .generator_config(GeneratorConfig {
+                generate_hold_signals: true,
+                ..GeneratorConfig::default()
+            })
             .build()
             .unwrap();
 

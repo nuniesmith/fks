@@ -5838,6 +5838,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "futures-util",
+ "janus-market-types",
  "prometheus",
  "rand 0.10.0",
  "redis",
@@ -5916,11 +5917,9 @@ dependencies = [
  "async-trait",
  "chrono",
  "criterion 0.5.1",
- "janus-cns",
- "janus-core",
  "janus-gap-detection",
+ "janus-market-types",
  "parquet 57.3.0",
- "prometheus",
  "rust_decimal",
  "serde",
  "serde_json",
@@ -5945,7 +5944,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "janus-cns",
- "janus-core",
+ "janus-market-types",
  "reqwest",
  "rust_decimal",
  "serde",
@@ -6184,6 +6183,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "janus-market-types"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rust_decimal",
+ "serde",
+ "tokio",
+]
+
+[[package]]
 name = "janus-ml"
 version = "2.0.0"
 dependencies = [
@@ -6199,8 +6208,7 @@ dependencies = [
  "burn-wgpu",
  "chrono",
  "criterion 0.5.1",
- "janus-core",
- "janus-data-quality",
+ "janus-market-types",
  "ndarray 0.15.6",
  "ndarray-stats",
  "parquet 54.3.1",

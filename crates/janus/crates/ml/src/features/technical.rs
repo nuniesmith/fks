@@ -24,7 +24,7 @@
 
 use super::{FeatureExtractor, calculate_ema, calculate_sma, calculate_std};
 use crate::error::{MLError, Result};
-use janus_core::MarketDataEvent;
+use janus_market_types::MarketDataEvent;
 use rust_decimal::prelude::ToPrimitive;
 use std::collections::VecDeque;
 
@@ -511,19 +511,19 @@ impl FeatureExtractor for TechnicalIndicators {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Symbol, TradeEvent};
+    use janus_market_types::{Symbol, TradeEvent};
     use rust_decimal::Decimal;
 
     fn create_test_trade(price: f64, quantity: f64) -> MarketDataEvent {
         MarketDataEvent::Trade(TradeEvent {
-            exchange: janus_core::Exchange::Bybit,
+            exchange: janus_market_types::Exchange::Bybit,
             symbol: Symbol::new("BTC", "USD"),
             price: Decimal::from_f64_retain(price).unwrap(),
             quantity: Decimal::from_f64_retain(quantity).unwrap(),
             timestamp: 1234567890,
             received_at: 1234567890,
             trade_id: "test".to_string(),
-            side: janus_core::Side::Buy,
+            side: janus_market_types::Side::Buy,
             buyer_is_maker: Some(false),
         })
     }

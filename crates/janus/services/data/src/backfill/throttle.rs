@@ -522,6 +522,7 @@ mod tests {
         let config = ThrottleConfig {
             max_concurrent: 2,
             questdb_data_dir: "/tmp".to_string(), // Use /tmp for tests
+            max_disk_usage: 1.0,                  // disable disk check; test is about concurrency
             ..Default::default()
         };
         let throttle = Arc::new(BackfillThrottle::new(config));
@@ -576,6 +577,7 @@ mod tests {
         let config = ThrottleConfig {
             max_ooo_rows: 1000,
             questdb_data_dir: "/tmp".to_string(), // Use /tmp for tests
+            max_disk_usage: 1.0,                  // disable disk check; test is about gap size
             ..Default::default()
         };
         let throttle = BackfillThrottle::new(config);

@@ -1,12 +1,6 @@
 // =============================================================================
 // docker_client.rs — Docker SDK wrapper for FKS Bot Spawner
 //
-// TODO(spawner): migrate from `bollard::container::*Options` (deprecated in
-// 0.19) to the OpenAPI-generated `bollard::query_parameters::*Options` +
-// `*OptionsBuilder` types. Not done here to keep the build-rot fix focused;
-// every method in this file would need updating.
-#![allow(deprecated)]
-//
 // Wraps bollard to provide:
 //   spawn()        — create + start a bot container with safety guards
 //   stop()         — graceful stop
@@ -22,12 +16,12 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bollard::{
-    container::{
-        Config as ContainerConfig, CreateContainerOptions, InspectContainerOptions,
-        ListContainersOptions, LogOutput, LogsOptions, NetworkingConfig, RemoveContainerOptions,
-        RestartContainerOptions, StartContainerOptions, StopContainerOptions,
+    container::LogOutput,
+    models::{ContainerCreateBody, EndpointSettings, HostConfig, NetworkingConfig},
+    query_parameters::{
+        CreateContainerOptionsBuilder, ListContainersOptionsBuilder, LogsOptionsBuilder,
+        RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder, StopContainerOptionsBuilder,
     },
-    models::{EndpointSettings, HostConfig},
     Docker,
 };
 use chrono::{DateTime, Datelike, Utc};
@@ -186,12 +180,12 @@ impl DockerClient {
             ..Default::default()
         };
 
-        let networking_config: NetworkingConfig<String> = NetworkingConfig {
-            endpoints_config: endpoints,
+        let networking_config = NetworkingConfig {
+            endpoints_config: Some(endpoints),
         };
 
         // ── Container config ──────────────────────────────────────────────────
-        let mut container_cfg: ContainerConfig<String> = ContainerConfig {
+        let mut container_cfg = ContainerCreateBody {
             image: Some(req.image.clone()),
             env: Some(env),
             labels: Some(labels.clone()),
@@ -216,10 +210,9 @@ impl DockerClient {
             "spawning bot container"
         );
 
-        let create_opts = CreateContainerOptions {
-            name: container_name.as_str(),
-            platform: None,
-        };
+        let create_opts = CreateContainerOptionsBuilder::new()
+            .name(&container_name)
+            .build();
 
         let created = self
             .docker
@@ -231,7 +224,7 @@ impl DockerClient {
 
         // ── Start ─────────────────────────────────────────────────────────────
         self.docker
-            .start_container(&container_id, None::<StartContainerOptions<String>>)
+            .start_container(&container_id, None::<bollard::query_parameters::StartContainerOptions>)
             .await
             .map_err(|e| {
                 warn!(container_id = %container_id, error = %e, "failed to start container — will try to remove");
@@ -257,7 +250,7 @@ impl DockerClient {
     pub async fn stop(&self, id: &str) -> SpawnerResult<()> {
         debug!(container = %id, "stopping bot container");
         self.docker
-            .stop_container(id, Some(StopContainerOptions { t: 30 }))
+            .stop_container(id, Some(StopContainerOptionsBuilder::new().t(30).build()))
             .await
             .map_err(SpawnerError::Docker)?;
         info!(container = %id, "bot container stopped");
@@ -271,7 +264,10 @@ impl DockerClient {
     pub async fn restart(&self, id: &str) -> SpawnerResult<()> {
         debug!(container = %id, "restarting bot container");
         self.docker
-            .restart_container(id, Some(RestartContainerOptions { t: 10 }))
+            .restart_container(
+                id,
+                Some(RestartContainerOptionsBuilder::new().t(10).build()),
+            )
             .await
             .map_err(SpawnerError::Docker)?;
         info!(container = %id, "bot container restarted");
@@ -287,11 +283,7 @@ impl DockerClient {
         self.docker
             .remove_container(
                 id,
-                Some(RemoveContainerOptions {
-                    force: true,
-                    v: false,
-                    link: false,
-                }),
+                Some(RemoveContainerOptionsBuilder::new().force(true).build()),
             )
             .await
             .map_err(SpawnerError::Docker)?;
@@ -306,7 +298,10 @@ impl DockerClient {
     pub async fn inspect(&self, id: &str) -> SpawnerResult<ContainerInfo> {
         let data = self
             .docker
-            .inspect_container(id, None::<InspectContainerOptions>)
+            .inspect_container(
+                id,
+                None::<bollard::query_parameters::InspectContainerOptions>,
+            )
             .await
             .map_err(|e| match e {
                 bollard::errors::Error::DockerResponseServerError {
@@ -323,14 +318,13 @@ impl DockerClient {
     // ─────────────────────────────────────────────────────────────────────────
 
     pub async fn list_bots(&self) -> SpawnerResult<Vec<ContainerInfo>> {
-        let mut filters: HashMap<String, Vec<String>> = HashMap::new();
-        filters.insert("label".to_string(), vec!["fks.bot=true".to_string()]);
+        let filters: HashMap<String, Vec<String>> =
+            HashMap::from([("label".to_string(), vec!["fks.bot=true".to_string()])]);
 
-        let opts = ListContainersOptions {
-            all: true,
-            filters,
-            ..Default::default()
-        };
+        let opts = ListContainersOptionsBuilder::new()
+            .all(true)
+            .filters(&filters)
+            .build();
 
         let summaries = self
             .docker
@@ -360,14 +354,13 @@ impl DockerClient {
         let tail_str = tail.unwrap_or_else(|| "100".to_string());
 
         async_stream::stream! {
-            let opts = LogsOptions::<String> {
-                follow:     true,
-                stdout:     true,
-                stderr:     true,
-                timestamps: true,
-                tail:       tail_str,
-                ..Default::default()
-            };
+            let opts = LogsOptionsBuilder::new()
+                .follow(true)
+                .stdout(true)
+                .stderr(true)
+                .timestamps(true)
+                .tail(&tail_str)
+                .build();
 
             let mut log_stream = docker.logs(&id, Some(opts));
 
@@ -397,18 +390,18 @@ impl DockerClient {
     // ─────────────────────────────────────────────────────────────────────────
 
     pub async fn auto_prune(&self) -> SpawnerResult<usize> {
-        let mut filters: HashMap<String, Vec<String>> = HashMap::new();
-        filters.insert("label".to_string(), vec!["fks.bot=true".to_string()]);
-        filters.insert(
-            "status".to_string(),
-            vec!["exited".to_string(), "dead".to_string()],
-        );
+        let filters: HashMap<String, Vec<String>> = HashMap::from([
+            ("label".to_string(), vec!["fks.bot=true".to_string()]),
+            (
+                "status".to_string(),
+                vec!["exited".to_string(), "dead".to_string()],
+            ),
+        ]);
 
-        let opts = ListContainersOptions {
-            all: true,
-            filters,
-            ..Default::default()
-        };
+        let opts = ListContainersOptionsBuilder::new()
+            .all(true)
+            .filters(&filters)
+            .build();
         let stopped = self
             .docker
             .list_containers(Some(opts))

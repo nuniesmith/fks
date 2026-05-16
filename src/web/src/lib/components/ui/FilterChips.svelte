@@ -7,26 +7,26 @@
      * selected id), and `onselect(id)` callback.
      */
     interface ChipOption {
-        id: string;
+        value: string;
         label: string;
     }
 
-    let { chips, active, onselect } = $props<{
-        chips: ChipOption[];
+    let { options, active, onchange } = $props<{
+        options: ChipOption[];
         active: string;
-        onselect: (id: string) => void;
+        onchange: (value: string) => void;
     }>();
 </script>
 
 <div class="chips" role="radiogroup" aria-label="Filter options">
-    {#each chips as opt (opt.id)}
+    {#each options as opt (opt.value)}
         <button
             type="button"
             class="chip"
-            class:active={active === opt.id}
+            class:active={active === opt.value}
             role="radio"
-            aria-checked={active === opt.id}
-            onclick={() => onselect(opt.id)}
+            aria-checked={active === opt.value}
+            onclick={() => onchange(opt.value)}
         >
             {opt.label}
         </button>

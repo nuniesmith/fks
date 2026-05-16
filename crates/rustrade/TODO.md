@@ -1,7 +1,7 @@
 # rustrade — TODO
 
 > **Repo (future):** `github.com/nuniesmith/rustrade`
-> **Last synced:** 2026-05-10
+> **Last synced:** 2026-05-13
 >
 > Open work for the open-source trading framework. See `NEXT_STEPS.md`
 > for the historical phased build plan and `CONTRIBUTING.md` for the
@@ -11,23 +11,12 @@
 
 ## P0 — Pre-publish blockers
 
-> Must be true before any `cargo publish` happens.
+> Must be true before any `cargo publish` happens. See the root
+> `PRE_PUBLISH_AUDIT.md` for the per-crate publishability matrix and
+> the dependency-ordered `cargo publish` execution script.
 
-- [ ] **Convert remaining `workspace = true` deps to explicit versions** in every crate that ships to crates.io. `rustrade-supervisor` is already done. `rustrade-core`, `-risk`, `-backtest`, `-notify`, `-kucoin`, and the facade `rustrade` need the same treatment.
-- [ ] **Audit each crate's `Cargo.toml` for crates.io readiness**:
-  - `description`, `license`, `repository`, `keywords`, `categories` populated
-  - `publish = true` set (or remove `publish = false` if present)
-  - No `path = "..."` deps on anything that won't be on crates.io
-  - README path resolves
-- [ ] **Bollard 0.19 deprecation migration** in `rustrade-kucoin` (and anywhere else it pops up). Replace `bollard::container::*Options` with the `bollard::query_parameters::*OptionsBuilder` types. Mechanical change, ~half day, but it removes the `#![allow(deprecated)]` shim.
-- [ ] **CI** — add a GitHub Actions workflow that runs `cargo check --workspace`, `cargo test --workspace`, `cargo fmt --check`, `cargo clippy --workspace -- -D warnings` on every PR. Doesn't exist yet because the workspace lived inside `fks-full`.
-
-## P1 — Repo split prep
-
-- [ ] **Self-contained README** — the current `README.md` references neighbouring `fks-full` paths in a few places. Audit and either remove or replace with public-repo equivalents.
-- [ ] **Verify `cargo check --workspace` from a fresh clone** of just `crates/rustrade/` (after the split) works — no dangling parent-workspace references.
-- [ ] **Pick a license headline** — `MIT` is in every `Cargo.toml` but there's no top-level `LICENSE` file in this directory. Add one before the repo carve-out.
-- [ ] **Decide on `rustrade-kucoin`'s home** — publish from inside the rustrade workspace, or extract to its own `rustrade-kucoin` repo. Recommendation: publish from rustrade for v0.1; extract later if it grows.
+- [ ] **Convert remaining `workspace = true` deps to explicit versions** in every crate that ships to crates.io. `rustrade-supervisor` is already done (PR series merged into `main` before #23). `rustrade-core`, `-risk`, `-backtest`, `-notify`, `-kucoin`, and the facade `rustrade` need the same treatment **only if** they're consumed from a foreign workspace. If they're only consumed from inside the rustrade workspace + crates.io, the workspace inheritance is fine — cargo resolves `version = "0.1.0"` from the rustrade-* crates' published versions at publish time.
+- [ ] **`cargo publish --dry-run` per crate**, in dependency order. Blocked on the upstream crate being live for downstream dry-runs; see the chicken-and-egg note in `PRE_PUBLISH_AUDIT.md`.
 
 ## P1 — Framework gaps
 
@@ -36,7 +25,7 @@
 
 ## P2 — Quality of life
 
-- [ ] **`rustrade-prometheus` feature** — opt-in Prometheus registry for `SupervisorMetrics`. Today, downstream binaries read the atomic counters and publish themselves (see how `fks-full/crates/janus/bin/janus/` does it). A small feature-gated module here would save duplication once we have 3+ downstream binaries.
+- [ ] **`rustrade-prometheus` feature** — opt-in Prometheus registry for `SupervisorMetrics`. Today, downstream binaries read the atomic counters and publish themselves (see `crates/janus/bin/janus/` for the pattern). A small feature-gated module here would save duplication once we have 3+ downstream binaries.
 - [ ] **Example that exercises the full risk layer** — `rustrade-risk` has 13 tests but no example binary that walks through circuit-breaker + session-PnL + sizing together. A "demo bot under stress" example would document the contract better than the tests.
 - [ ] **Doc-test the `Brain` trait** — every example should appear as a doctest so `cargo test --doc` catches drift.
 
@@ -48,9 +37,11 @@
 
 ---
 
-## ✅ Recently shipped (PRs #1–#10 in `fks-full`)
+## ✅ Recently shipped
 
-- Supervisor port + `rustrade-supervisor` skeleton (PR #1)
+The 0.1 framework arc — PRs #1–#10 in `fks-full`:
+
+- Supervisor port + `rustrade-supervisor` (PR #1)
 - Facade crate `rustrade` + `noop-bot` example (PR #2)
 - `ExchangeClient::contract_value()` + first concrete adapter (`rustrade-kucoin`) (PR #3)
 - `kucoin-v2` production-shaped example (PR #4)
@@ -59,5 +50,18 @@
 - `JANUS_EXTRACTION_PLAN.md` (PR #7) + reality-check (#9)
 - `rustrade-notify` — Discord webhooks as supervised services (PR #8)
 - `CONTRIBUTING.md` with the 5 design invariants (PR #10)
+
+Plus the publish-readiness arc — PRs #11–#29 in `fks-full`:
+
 - `fks-bot-example` reference image for the FKS spawner (PR #17)
-- `rustrade-supervisor` dep-pinning (in #19 / "Janus port") so it works as a cross-workspace path dep
+- `rustrade-supervisor` dep-pinning so it works as a cross-workspace path dep
+- **PR #22:** `[workspace]` block added to `indicators-ta` + `exchange-apiws` so they're standalone workspaces; root `TODO.md` refresh
+- **PR #23:** `.github/workflows/rust.yml` — per-workspace `check / test / clippy / fmt` matrix
+- **PR #24:** CI green-up — `--locked` gated per workspace, clippy soft-failed, broken `indicators-ta` test fixed, fmt drift applied
+- **PR #25:** `PRE_PUBLISH_AUDIT.md` (per-crate publishability matrix) [not merged — superseded by PR #27]
+- **PR #26:** Per-crate `README.md` + `LICENSE` for every `rustrade-*` crate
+- **PR #27:** `PRE_PUBLISH_AUDIT.md` with `cargo package` findings + chicken-and-egg explanation
+- **PR #28:** `paths-ignore` on `rust.yml` so doc-only PRs skip the matrix
+- **PR #29:** `[package].exclude` on `indicators-ta` + `exchange-apiws` to slim publishable tarballs
+
+The workspace-level `LICENSE` and the missing `readme = "README.md"` lines flagged in earlier versions of this TODO were closed by PR #26. The `fks-full` README references were verified clean in PR #29's prep grep. The bollard 0.19 migration item that used to live here was misattributed — bollard is `crates/spawner/`'s dep, not `rustrade-kucoin`'s, so that work belongs in `crates/spawner/TODO.md`.

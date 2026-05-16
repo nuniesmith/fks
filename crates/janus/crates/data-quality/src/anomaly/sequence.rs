@@ -1,6 +1,6 @@
 //! Sequence anomaly detector for detecting gaps and duplicates
 
-use janus_core::{Exchange, MarketDataEvent, Symbol};
+use janus_market_types::{Exchange, MarketDataEvent, Symbol};
 use std::collections::HashMap;
 
 use super::{AnomalyDetector, AnomalyResult, AnomalySeverity};

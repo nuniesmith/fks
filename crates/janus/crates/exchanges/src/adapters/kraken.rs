@@ -66,7 +66,7 @@
 //! - o = open [today, last 24 hours]
 
 use anyhow::{Context, Result};
-use janus_core::{Exchange, MarketDataEvent, Side, Symbol, TradeEvent};
+use janus_market_types::{Exchange, MarketDataEvent, Side, Symbol, TradeEvent};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -334,7 +334,7 @@ impl KrakenAdapter {
             None
         };
 
-        let ticker_event = janus_core::TickerEvent {
+        let ticker_event = janus_market_types::TickerEvent {
             exchange: Exchange::Kraken,
             symbol,
             timestamp: chrono::Utc::now().timestamp_micros(),
@@ -377,7 +377,7 @@ impl KrakenAdapter {
                         (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                     && volume > Decimal::ZERO
                 {
-                    asks.push(janus_core::PriceLevel::new(price, volume));
+                    asks.push(janus_market_types::PriceLevel::new(price, volume));
                 }
             }
         }
@@ -392,7 +392,7 @@ impl KrakenAdapter {
                         (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                     && volume > Decimal::ZERO
                 {
-                    bids.push(janus_core::PriceLevel::new(price, volume));
+                    bids.push(janus_market_types::PriceLevel::new(price, volume));
                 }
             }
         }
@@ -407,7 +407,7 @@ impl KrakenAdapter {
                         (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                     && volume > Decimal::ZERO
                 {
-                    asks.push(janus_core::PriceLevel::new(price, volume));
+                    asks.push(janus_market_types::PriceLevel::new(price, volume));
                 }
             }
         }
@@ -421,7 +421,7 @@ impl KrakenAdapter {
                         (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                     && volume > Decimal::ZERO
                 {
-                    bids.push(janus_core::PriceLevel::new(price, volume));
+                    bids.push(janus_market_types::PriceLevel::new(price, volume));
                 }
             }
         }
@@ -430,7 +430,7 @@ impl KrakenAdapter {
         bids.sort_by(|a, b| b.price.cmp(&a.price));
         asks.sort_by(|a, b| a.price.cmp(&b.price));
 
-        let orderbook_event = janus_core::OrderBookEvent {
+        let orderbook_event = janus_market_types::OrderBookEvent {
             exchange: Exchange::Kraken,
             symbol,
             timestamp: chrono::Utc::now().timestamp_micros(),
@@ -516,7 +516,7 @@ impl KrakenAdapter {
         // For now, default to "1m" - in practice this should come from the subscription
         let interval = "1m".to_string();
 
-        let kline_event = janus_core::KlineEvent {
+        let kline_event = janus_market_types::KlineEvent {
             exchange: Exchange::Kraken,
             symbol,
             interval,

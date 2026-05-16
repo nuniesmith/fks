@@ -60,11 +60,6 @@ pub enum DataQualityError {
     #[error("Database error: {0}")]
     DatabaseError(String),
 
-    /// Metrics error
-    #[cfg(feature = "cns-metrics")]
-    #[error("Metrics error: {0}")]
-    MetricsError(String),
-
     /// Generic error
     #[error("Error: {0}")]
     Other(String),

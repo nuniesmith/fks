@@ -22,7 +22,7 @@
 
 use super::FeatureExtractor;
 use crate::error::Result;
-use janus_core::MarketDataEvent;
+use janus_market_types::MarketDataEvent;
 use rust_decimal::prelude::ToPrimitive;
 use std::collections::VecDeque;
 
@@ -538,7 +538,7 @@ impl FeatureExtractor for VolumeFeatures {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Exchange, KlineEvent, Side, Symbol, TradeEvent};
+    use janus_market_types::{Exchange, KlineEvent, Side, Symbol, TradeEvent};
     use rust_decimal::Decimal;
 
     fn create_test_trade(price: f64, volume: f64) -> MarketDataEvent {

@@ -1,7 +1,7 @@
 //! Timestamp validator for market data
 
 use async_trait::async_trait;
-use janus_core::MarketDataEvent;
+use janus_market_types::MarketDataEvent;
 
 use super::{TimestampValidatorConfig, Validator};
 use crate::{Result, SharedState, ValidationResult};
@@ -21,8 +21,8 @@ impl TimestampValidator {
     /// Validate a timestamp
     async fn validate_timestamp(
         &self,
-        exchange: janus_core::Exchange,
-        symbol: &janus_core::Symbol,
+        exchange: janus_market_types::Exchange,
+        symbol: &janus_market_types::Symbol,
         timestamp: i64,
     ) -> ValidationResult {
         if !self.config.enabled {
@@ -106,7 +106,7 @@ impl Validator for TimestampValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_core::{Exchange, Side, Symbol, TradeEvent};
+    use janus_market_types::{Exchange, Side, Symbol, TradeEvent};
     use rust_decimal::Decimal;
     use std::sync::Arc;
     use tokio::sync::RwLock;

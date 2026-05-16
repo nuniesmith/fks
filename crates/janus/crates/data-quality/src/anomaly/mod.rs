@@ -1,6 +1,6 @@
 //! Anomaly detection for market data
 
-use janus_core::{MarketDataEvent, Symbol};
+use janus_market_types::{MarketDataEvent, Symbol};
 use serde::{Deserialize, Serialize};
 
 pub mod latency;

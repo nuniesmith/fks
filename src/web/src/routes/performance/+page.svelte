@@ -81,7 +81,7 @@
 
   interface MetricCard { label: string; value: string; sub?: string; color?: string }
 
-  let metricCards = $derived<MetricCard[]>(() => {
+  let metricCards = $derived.by<MetricCard[]>(() => {
     if (!perf) return [];
     const p = perf;
     const pnl = p.total_pnl ?? 0;

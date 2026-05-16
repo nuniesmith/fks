@@ -21,6 +21,7 @@
 //!         num_slices: 10,
 //!     },
 //!     limit_price: Some(150.0),
+//!     venues: None,
 //! });
 //!
 //! // Process execution

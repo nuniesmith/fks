@@ -17,19 +17,20 @@
 //!
 //! let config = VWAPConfig {
 //!     total_quantity: 10000.0,
-//!     duration: Duration::from_secs(3600), // 1 hour
+//!     duration: Duration::from_millis(800), // short duration for doc-test
 //!     volume_profile: profile,
 //!     min_slice_size: 50.0,
 //!     participation_rate: 0.2, // 20% of market volume
+//!     adaptive: false,
 //! };
 //!
 //! let mut executor = VWAPExecutor::new(config);
 //!
 //! // Execute slices according to volume profile
 //! while !executor.is_complete() {
-//!     if let Some(slice) = executor.next_slice() {
-//!         println!("Execute {} units ({}% of market volume)",
-//!                  slice.quantity, slice.target_participation * 100.0);
+//!     if let Some((qty, pct)) = executor.next_slice().map(|s| (s.quantity, s.target_participation)) {
+//!         println!("Execute {} units ({}% of market volume)", qty, pct * 100.0);
+//!         executor.mark_executed(qty, 100.5, None);
 //!     }
 //! }
 //! ```

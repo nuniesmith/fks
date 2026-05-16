@@ -67,7 +67,7 @@
 //! ```
 
 use anyhow::{Context, Result};
-use janus_core::{
+use janus_market_types::{
     Exchange, FundingRateEvent, LiquidationEvent, MarketDataEvent, Side, Symbol, TradeEvent,
 };
 use rust_decimal::Decimal;
@@ -354,7 +354,7 @@ impl OkxAdapter {
             let timestamp_ms: i64 = timestamp_str.parse().unwrap_or(0);
             let timestamp_micros = timestamp_ms * 1000;
 
-            let ticker_event = janus_core::TickerEvent {
+            let ticker_event = janus_market_types::TickerEvent {
                 exchange: Exchange::Okx,
                 symbol,
                 timestamp: timestamp_micros,
@@ -399,7 +399,7 @@ impl OkxAdapter {
                             (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                         && volume > Decimal::ZERO
                     {
-                        bids.push(janus_core::PriceLevel::new(price, volume));
+                        bids.push(janus_market_types::PriceLevel::new(price, volume));
                     }
                 }
             }
@@ -416,7 +416,7 @@ impl OkxAdapter {
                             (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                         && volume > Decimal::ZERO
                     {
-                        asks.push(janus_core::PriceLevel::new(price, volume));
+                        asks.push(janus_market_types::PriceLevel::new(price, volume));
                     }
                 }
             }
@@ -437,7 +437,7 @@ impl OkxAdapter {
             // OKX provides sequence number (seqId)
             let sequence = item.get("seqId").and_then(|s| s.as_u64()).unwrap_or(0);
 
-            let orderbook_event = janus_core::OrderBookEvent {
+            let orderbook_event = janus_market_types::OrderBookEvent {
                 exchange: Exchange::Okx,
                 symbol,
                 timestamp: timestamp_micros,
@@ -477,7 +477,7 @@ impl OkxAdapter {
                     (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                 && volume > Decimal::ZERO
             {
-                bids.push(janus_core::PriceLevel::new(price, volume));
+                bids.push(janus_market_types::PriceLevel::new(price, volume));
             }
 
             if let Some(asks_array) = item.get("asks").and_then(|a| a.as_array())
@@ -488,7 +488,7 @@ impl OkxAdapter {
                     (Decimal::from_str(price_str), Decimal::from_str(volume_str))
                 && volume > Decimal::ZERO
             {
-                asks.push(janus_core::PriceLevel::new(price, volume));
+                asks.push(janus_market_types::PriceLevel::new(price, volume));
             }
 
             let timestamp_str = item.get("ts").and_then(|t| t.as_str()).unwrap_or("0");
@@ -497,7 +497,7 @@ impl OkxAdapter {
 
             let sequence = item.get("seqId").and_then(|s| s.as_u64()).unwrap_or(0);
 
-            let orderbook_event = janus_core::OrderBookEvent {
+            let orderbook_event = janus_market_types::OrderBookEvent {
                 exchange: Exchange::Okx,
                 symbol,
                 timestamp: timestamp_micros,
@@ -682,7 +682,7 @@ impl OkxAdapter {
             // In practice, this should be derived from the interval
             let close_time_micros = open_time_micros + 60_000_000; // 60 seconds in microseconds
 
-            let kline_event = janus_core::KlineEvent {
+            let kline_event = janus_market_types::KlineEvent {
                 exchange: Exchange::Okx,
                 symbol: symbol.clone(),
                 interval,

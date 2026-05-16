@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```rust
-//! use vision::execution::analytics::{ExecutionAnalytics, ExecutionRecord};
+//! use vision::execution::analytics::{ExecutionAnalytics, ExecutionRecord, Side};
 //!
 //! let mut analytics = ExecutionAnalytics::new();
 //!

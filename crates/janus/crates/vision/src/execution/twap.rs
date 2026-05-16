@@ -17,13 +17,14 @@
 //!     min_slice_size: 100.0,
 //!     randomize_timing: false,
 //!     randomize_size: false,
+//!     ..Default::default()
 //! };
 //!
 //! let mut executor = TWAPExecutor::new(config);
 //!
 //! // Get next slice to execute
 //! if let Some(slice) = executor.next_slice() {
-//!     println!("Execute {} units at {}", slice.quantity, slice.scheduled_time);
+//!     println!("Execute {} units at {:?}", slice.quantity, slice.scheduled_time);
 //! }
 //! ```
 

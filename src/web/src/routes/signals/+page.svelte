@@ -38,9 +38,9 @@
     // ─── Filter state ────────────────────────────────────────────────────
 
     const STATUS_FILTERS = [
-        { id: "staging", label: "Staging" },
-        { id: "approved", label: "Approved" },
-        { id: "", label: "All" },
+        { value: "staging", label: "Staging" },
+        { value: "approved", label: "Approved" },
+        { value: "", label: "All" },
     ];
 
     let statusFilter = $state("staging");
@@ -165,10 +165,10 @@
     <Panel title="Signal Staging Area" fill>
         {#snippet header()}
             <FilterChips
-                chips={STATUS_FILTERS}
+                options={STATUS_FILTERS}
                 active={statusFilter}
-                onselect={(id) => {
-                    statusFilter = id;
+                onchange={(v) => {
+                    statusFilter = v;
                 }}
             />
             <span class="poll-badge">{signals.length} signals · 5s</span>

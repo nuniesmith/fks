@@ -422,9 +422,9 @@ mod tests {
     fn test_uptime() {
         let monitor = ProductionMonitor::default();
         let uptime_before = monitor.uptime_seconds();
-        std::thread::sleep(Duration::from_millis(100));
+        // uptime_seconds() returns integer seconds; sleep >1s to guarantee it advances
+        std::thread::sleep(Duration::from_millis(1100));
 
-        // Verify uptime increased
         assert!(monitor.uptime_seconds() > uptime_before);
     }
 

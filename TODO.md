@@ -26,8 +26,12 @@
 - [x] `SPLIT_PLAN.md` written.
 - [x] `CLAUDE.md` + `TODO.md` added to each future-external sub-codebase.
 - [x] Root `README.md` / `CLAUDE.md` / `TODO.md` point at the split direction.
-- [ ] Audit each sub-README for `fks-full` path references. Replace
-      with public-repo-shaped equivalents before split.
+- [x] Audit each sub-README for `fks-full` path references. Verified
+      clean across all 8 sub-codebases (rustrade family + indicators-ta
+      + exchange-apiws + spawner + ruby + web + janus). `fks-full` refs
+      that remain are in `TODO.md` / `CLAUDE.md` / `Cargo.toml`
+      structural comments — all `exclude`d from the publish tarball or
+      intentional dev-time notes that get rewritten at split time.
 
 ### CI gates (blocking Phase 2 of `SPLIT_PLAN.md`)
 
@@ -68,21 +72,39 @@ For every crate slated for crates.io: `indicators-ta`,
 
 > When each sub-codebase becomes its own repo, the Dockerfiles need to
 > `git clone --branch ${*_REF:-main} https://github.com/nuniesmith/<repo>`
-> instead of `COPY` from the local tree. Today they `COPY`.
+> instead of `COPY` from the local tree.
+>
+> **Status:** the underlying Dockerfile infrastructure is in place
+> (`infrastructure/docker/base/rust/Dockerfile`,
+> `infrastructure/docker/base/nodejs/Dockerfile`,
+> `infrastructure/docker/services/spawner/Dockerfile`). All four base
+> images already support a dual-mode source acquisition step:
+> `REPO_URL=""` → bind-mount the local context (dev default);
+> `REPO_URL` set → `git clone --depth=1 --branch ${REPO_REF}` from the
+> URL.
 
-- [ ] `infrastructure/docker/services/data/Dockerfile` — clone `ruby`.
-- [ ] `infrastructure/docker/services/web/Dockerfile` (or
-      `infrastructure/docker/base/nodejs/Dockerfile`) — clone `fks-web`.
-- [ ] `infrastructure/docker/base/rust/Dockerfile` for `janus` — clone `janus`.
-- [ ] `infrastructure/docker/services/spawner/Dockerfile` — clone `spawner`.
-- [ ] Add `RUBY_REF`, `JANUS_REF`, `WEB_REF`, `SPAWNER_REF` build args
-      to `docker-compose.yml` (default `main`).
-- [ ] Document the build args in `.env.example`.
+- [x] `infrastructure/docker/base/python/Dockerfile` (the ruby service
+      image; `services/ruby/` only holds entrypoint + supervisord conf).
+      `RUBY_REPO`/`RUBY_REF` wired in `docker-compose.yml`.
+- [x] `infrastructure/docker/base/nodejs/Dockerfile` — supports the
+      git-clone path; `WEB_REPO`/`WEB_REF` wired in `docker-compose.yml`'s
+      `webui:` block.
+- [x] `infrastructure/docker/base/rust/Dockerfile` (used for `janus`).
+      `JANUS_REPO`/`JANUS_REF` wired in `docker-compose.yml`.
+- [x] `infrastructure/docker/services/spawner/Dockerfile`.
+      `SPAWNER_REPO`/`SPAWNER_REF` wired in `docker-compose.yml`.
+- [x] `RUBY_REPO`/`RUBY_REF`, `JANUS_REPO`/`JANUS_REF`,
+      `WEB_REPO`/`WEB_REF`, `SPAWNER_REPO`/`SPAWNER_REF` documented in
+      `.env.example`.
 
 > Reminder: `infrastructure/docker/services/*` is for **external apps**
-> (postgres, redis, prometheus, grafana, etc.). Our own services should
-> use the shared base images under
-> `infrastructure/docker/base/{rust,python,nodejs,python-gpu}`.
+> (postgres, redis, prometheus, grafana, etc.). Our own services use the
+> shared base images under
+> `infrastructure/docker/base/{rust,python,nodejs,python-gpu}`. The
+> `services/ruby/` and `services/spawner/` directories are exceptions —
+> ruby only holds entrypoint glue while the actual build lives in the
+> python base; spawner has its own standalone Dockerfile that mirrors
+> the rust base's git-clone pattern.
 
 ---
 

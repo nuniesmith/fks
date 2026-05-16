@@ -21,7 +21,7 @@
 
 The extraction plan in `JANUS_EXTRACTION_PLAN.md` lists per-sub-crate destinations (public sibling / private brain repo / stay in fks-full). Phase 1 sub-tasks that are tractable today:
 
-- [ ] **1c — Lift `IncrementalEma` (+ `IncrementalAtr` if missing)** from `crates/janus/crates/indicators/` into `crates/indicators-ta`. ~30 LOC per indicator. Plan calls it the smallest follow-up after the regime decision in 1b.
+- [x] **1c — Lift `IncrementalEma` + `IncrementalAtr`** from `crates/janus/crates/indicators/` into `crates/indicators-ta`. The lone consumer (`crates/backtest/`'s test module) now uses `indicators::IncrementalEma`. The lift required dropping the dead `polars` dep from indicators-ta (it was declared but never imported); that side-effect cleared the chrono transitive conflict that would otherwise have blocked the cross-workspace path dep.
 
 ---
 

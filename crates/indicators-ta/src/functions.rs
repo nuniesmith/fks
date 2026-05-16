@@ -287,6 +287,86 @@ impl ATR {
     }
 }
 
+/// Incremental EMA — first-price-seeded variant.
+///
+/// Unlike [`EMA`] (which waits `period` samples and SMA-seeds), this struct
+/// emits a value from sample 1, initialising `state = first_price`. Useful
+/// when downstream code cannot tolerate a warm-up gap (e.g. real-time
+/// strategies that want a comparable signal as soon as data starts flowing).
+///
+/// The smoothing factor is `2 / (period + 1)`, matching the classic EMA.
+#[derive(Debug, Clone)]
+pub struct IncrementalEma {
+    alpha: f64,
+    state: f64,
+    initialized: bool,
+}
+
+impl IncrementalEma {
+    /// Construct an EMA with the standard `2 / (period + 1)` smoothing.
+    pub fn new(period: usize) -> Self {
+        Self {
+            alpha: 2.0 / (period as f64 + 1.0),
+            state: 0.0,
+            initialized: false,
+        }
+    }
+
+    /// Feed one price; returns the updated EMA value.
+    pub fn update(&mut self, price: f64) -> f64 {
+        if !self.initialized {
+            self.state = price;
+            self.initialized = true;
+        } else {
+            self.state = self.alpha * price + (1.0 - self.alpha) * self.state;
+        }
+        self.state
+    }
+
+    /// Current value, or `None` if no samples have been fed yet.
+    pub fn current(&self) -> Option<f64> {
+        if self.initialized {
+            Some(self.state)
+        } else {
+            None
+        }
+    }
+}
+
+/// Incremental ATR — paired with [`IncrementalEma`].
+///
+/// Computes True Range from `(high, low, close)` and smooths it with an
+/// [`IncrementalEma`] of the same period. Emits a value on the first update
+/// (using `high - low` since there's no prior close yet).
+#[derive(Debug, Clone)]
+pub struct IncrementalAtr {
+    ema: IncrementalEma,
+    prev_close: Option<f64>,
+}
+
+impl IncrementalAtr {
+    pub fn new(period: usize) -> Self {
+        Self {
+            ema: IncrementalEma::new(period),
+            prev_close: None,
+        }
+    }
+
+    /// Feed one bar; returns the updated ATR.
+    pub fn update(&mut self, high: f64, low: f64, close: f64) -> Option<f64> {
+        let tr = if let Some(prev) = self.prev_close {
+            let tr1 = high - low;
+            let tr2 = (high - prev).abs();
+            let tr3 = (low - prev).abs();
+            tr1.max(tr2).max(tr3)
+        } else {
+            high - low
+        };
+        self.prev_close = Some(close);
+        Some(self.ema.update(tr))
+    }
+}
+
 /// Bundle of per-strategy indicator series.
 #[derive(Debug, Clone)]
 pub struct StrategyIndicators {

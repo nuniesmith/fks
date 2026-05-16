@@ -17,7 +17,7 @@
 
 Per `crates/janus/JANUS_EXTRACTION_PLAN.md` Phase 1:
 
-- [ ] Lift `IncrementalEma` (and `IncrementalAtr` if missing) from `crates/janus/crates/indicators/` so the consumers in `crates/janus/crates/backtest/` can switch. Lib name is already `indicators`, so import paths don't change.
+- [x] Lift `IncrementalEma` and `IncrementalAtr` from `crates/janus/crates/indicators/` into `crates/indicators-ta/src/functions.rs`. Re-exported from `lib.rs`. The lone consumer (`crates/janus/crates/backtest/` test module) now imports from `indicators` instead of `janus_indicators`. Janus lost ~65 LOC of duplicated streaming primitives. As a side effect the dead `polars` dep was removed from indicators-ta (declared but never imported), which both slimmed the published-tarball surface and resolved the chrono `0.4.42` conflict that the cross-workspace path dep would otherwise have triggered against janus's `polars-arrow` constraint.
 - [ ] Decide whether to absorb `janus-regime` (HMM + router, ~5K LOC) here or in a separate `regime-router-ta` crate. Plan recommendation: separate crate; revisit once a second consumer exists.
 
 ## P3 — Future

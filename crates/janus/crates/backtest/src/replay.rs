@@ -600,7 +600,7 @@ impl ReplayEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use janus_indicators::IncrementalEma;
+    use indicators::IncrementalEma;
 
     fn create_test_ticks(count: usize) -> Vec<Tick> {
         let mut ticks = Vec::new();

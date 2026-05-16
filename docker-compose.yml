@@ -555,6 +555,8 @@ services:
             dockerfile: infrastructure/docker/base/nodejs/Dockerfile
             args:
                 APP_SRC: src/web
+                REPO_URL: ${WEB_REPO:-}
+                REPO_REF: ${WEB_REF:-main}
         container_name: fks_webui
         restart: unless-stopped
         ports:

@@ -39,3 +39,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "macros"] }
 approx = "0.5"
 tempfile = "3.8"
+# Test-only consumer of indicators-ta's incremental streaming primitives.
+# The version pin is what cargo will resolve from once indicators-ta hits
+# crates.io; today it stays the local path.
+indicators-ta = { path = "../../../indicators-ta", version = "0.1.3" }

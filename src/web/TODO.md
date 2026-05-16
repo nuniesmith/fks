@@ -8,7 +8,14 @@
 
 ## P0 — Codebase health
 
-- [ ] **29 pre-existing `npm run check` type errors** across `analysis/`, `chains/`, `news/`, `cnn/`, `pnl/`, `+layout.ts`. Small `any` / `unknown` gaps, unrelated to the dual-script bug already fixed in PR #14. Down from 59 after the SVK-1..17 arc; the remaining ones are surgical fixes per file.
+- [x] **29 pre-existing `npm run check` type errors** were closed by the
+      "ci: add web + python CI workflows; fix all web type errors"
+      commit. The two warnings that remained — a layout `setContext`
+      "state_referenced_locally" gripe and a `<button>`-inside-`<button>`
+      hydration warning on the tasks page — were closed by wrapping the
+      context value in `untrack(() => …)` and refactoring the task row
+      to a `role="button"` div with keyboard handlers. `npm run check`
+      now reports 0 errors, 0 warnings across 270 files.
 
 ---
 

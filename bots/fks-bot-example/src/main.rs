@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
         .shutdown_timeout(Duration::from_secs(10))
         .build()?;
 
-    let bot = Bot::new(config, exchange, brains);
+    let bot = Bot::new(config, exchange, brains)?;
     let bus = bot.market_data_bus().clone();
 
     // Our auxiliary services (metrics server + ticker) share one cancel

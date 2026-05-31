@@ -80,9 +80,9 @@ jobs:
                       path: "bots/fks-bot-example"
                       needs_protoc: false
                       # Standalone bot consuming the published rustrade-framework
-                      # from crates.io — proves end-to-end consumption. No committed
-                      # lock, so resolved fresh at build (not --locked).
-                      lock_flag: ""
+                      # from crates.io — proves end-to-end consumption. Committed
+                      # Cargo.lock pins the deps for reproducible image builds.
+                      lock_flag: "--locked"
                     - workspace: "spawner"
                       path: "crates/spawner"
                       needs_protoc: false

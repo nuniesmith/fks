@@ -35,6 +35,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 mod brain;
+mod janus_brain;
 mod metrics;
 mod mock_exchange;
 mod paper;
@@ -42,6 +43,7 @@ mod server;
 mod source;
 
 use crate::brain::{EmaCrossBrain, EmaCrossConfig};
+use crate::janus_brain::{JanusBrain, JanusBrainConfig};
 use crate::mock_exchange::MockExchange;
 
 /// Read a comma-separated env list, falling back to `default`.
@@ -95,10 +97,26 @@ async fn main() -> anyhow::Result<()> {
     info!(source = candle_source.name(), "market data source selected");
 
     // ── Strategy + paper exchange ──────────────────────────────────────────
-    let brain: Arc<dyn Brain> = Arc::new(EmaCrossBrain::new(
-        format!("ema-cross-{bot_id}"),
-        EmaCrossConfig::default(),
-    ));
+    // DEMO_BRAIN selects who decides:
+    //   "ema-cross" (default) — decide locally from indicators-ta
+    //   "janus"               — POST features to janus and act on its signal
+    let brain_kind = std::env::var("DEMO_BRAIN").unwrap_or_else(|_| "ema-cross".into());
+    let brain: Arc<dyn Brain> = if brain_kind.eq_ignore_ascii_case("janus") {
+        let janus_url =
+            std::env::var("JANUS_HTTP_URL").unwrap_or_else(|_| "http://localhost:8080".into());
+        info!(janus_url = %janus_url, "using JanusBrain — signals delegated to janus");
+        Arc::new(JanusBrain::new(
+            format!("janus-{bot_id}"),
+            JanusBrainConfig::default(),
+            janus_url,
+        ))
+    } else {
+        info!("using EmaCrossBrain — local indicators-ta strategy");
+        Arc::new(EmaCrossBrain::new(
+            format!("ema-cross-{bot_id}"),
+            EmaCrossConfig::default(),
+        ))
+    };
     let exchange: Arc<dyn ExchangeClient> = Arc::new(MockExchange);
 
     // ── Bot config: multi-symbol + risk gates ─────────────────────────────

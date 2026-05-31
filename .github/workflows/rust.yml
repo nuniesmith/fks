@@ -83,6 +83,12 @@ jobs:
                       # from crates.io — proves end-to-end consumption. Committed
                       # Cargo.lock pins the deps for reproducible image builds.
                       lock_flag: "--locked"
+                    - workspace: "crypto-demo"
+                      path: "bots/crypto-demo"
+                      needs_protoc: false
+                      # Working demo bot: rustrade + indicators-ta + exchange-apiws
+                      # from crates.io, paper-traded. Committed lock for repro builds.
+                      lock_flag: "--locked"
                     - workspace: "spawner"
                       path: "crates/spawner"
                       needs_protoc: false
@@ -149,7 +155,7 @@ jobs:
               shell: bash
               run: |
                   set -e
-                  for ws in . bots/fks-bot-example crates/spawner; do
+                  for ws in . bots/fks-bot-example bots/crypto-demo crates/spawner; do
                       printf "\n===> %s\n" "$ws"
                       # `--manifest-path` keeps fmt scoped to THIS workspace's
                       # members — without it, `--all` follows path deps into

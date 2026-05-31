@@ -79,7 +79,10 @@ jobs:
                     - workspace: "rustrade"
                       path: "crates/rustrade"
                       needs_protoc: false
-                      lock_flag: "--locked"
+                      # Throwaway leftover workspace (see crates/rustrade/Cargo.toml).
+                      # Not --locked: the kucoin adapter/examples were trimmed, so
+                      # the committed lock is pruned at build instead of gating CI.
+                      lock_flag: ""
                     - workspace: "spawner"
                       path: "crates/spawner"
                       needs_protoc: false

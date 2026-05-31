@@ -44,7 +44,27 @@ DEMO_SYMBOLS=XBTUSDTM,ETHUSDTM DEMO_POLL_SECS=30 cargo run -p crypto-demo
 
 # Fully offline (synthetic random-walk data — no network, good for CI / demos):
 DEMO_SOURCE=synthetic cargo run -p crypto-demo
+
+# Let JANUS make the decisions (the janus ↔ rustrade tie-in):
+DEMO_BRAIN=janus JANUS_HTTP_URL=http://localhost:8080 cargo run -p crypto-demo
 ```
+
+## Two brains (`DEMO_BRAIN`)
+
+The same wiring runs with either decision-maker:
+
+| `DEMO_BRAIN` | Who decides | How |
+|--------------|-------------|-----|
+| `ema-cross` *(default)* | the demo itself | local `indicators-ta` EMA cross + ATR stop |
+| `janus` | **janus** | computes EMA/ATR features → `POST {JANUS_HTTP_URL}/api/v1/signals/generate` → maps janus's `Buy`/`Sell`/`Hold` (+ confidence, stop, take-profit) onto a rustrade `Decision` |
+
+`JanusBrain` is the realisation of "janus for the trading brain": only the
+`Brain` swaps — candle pollers, supervisor, risk gate, paper exchange, and the
+`fks_bot_*` metrics are identical. It's resilient: if janus is unreachable or
+returns no signal it **holds** (never crashes), so a long run survives janus
+restarts. Point `JANUS_HTTP_URL` at the janus forward service (default
+`http://localhost:8080`); inside the FKS compose network that's
+`http://fks_janus:8080`.
 
 Then watch it work:
 
@@ -63,6 +83,8 @@ curl -s localhost:9091/health      # → ok
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `DEMO_SOURCE` | `kucoin` | `kucoin` (live) or `synthetic` (offline) |
+| `DEMO_BRAIN` | `ema-cross` | `ema-cross` (local) or `janus` (delegate to janus) |
+| `JANUS_HTTP_URL` | `http://localhost:8080` | janus forward service (when `DEMO_BRAIN=janus`) |
 | `DEMO_SYMBOLS` | `XBTUSDTM,ETHUSDTM,SOLUSDTM` | comma-separated pairs (KuCoin Futures symbols) |
 | `DEMO_POLL_SECS` | `60` | how often to poll for new candles |
 | `DEMO_CANDLE_SECS` | `60` | candle interval (maps to KuCoin granularity) |

@@ -39,15 +39,18 @@ members = [
     "crates/rustrade-supervisor",
     "crates/rustrade-risk",
     "crates/rustrade",
-    "crates/rustrade-kucoin",
     "crates/rustrade-backtest",
     "crates/rustrade-notify",
     "examples/noop-bot",
-    "examples/kucoin-stub-bot",
-    "examples/kucoin-v2",
     "examples/backtest-demo",
     "examples/fks-bot-example",
 ]
+# NOTE: this is a leftover throwaway workspace kept only to build the
+# `fks-bot-example` reference bot until it's ported to consume the published
+# `rustrade-framework` crate (see ../../TODO.md P0). The `rustrade-kucoin`
+# adapter + `kucoin-*` examples were removed because they path-depend on
+# `exchange-apiws`, which now lives in its own repo / on crates.io. The real
+# framework is `nuniesmith/rustrade`.
 resolver = "3"
 
 [workspace.package]
@@ -94,7 +97,6 @@ rustrade            = { path = "crates/rustrade",            version = "0.1.0" }
 rustrade-core       = { path = "crates/rustrade-core",       version = "0.1.0" }
 rustrade-supervisor = { path = "crates/rustrade-supervisor", version = "0.1.0" }
 rustrade-risk       = { path = "crates/rustrade-risk",       version = "0.1.0" }
-rustrade-kucoin     = { path = "crates/rustrade-kucoin",     version = "0.1.0" }
 rustrade-backtest   = { path = "crates/rustrade-backtest",   version = "0.1.0" }
 rustrade-notify     = { path = "crates/rustrade-notify",     version = "0.1.0" }
 

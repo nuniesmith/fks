@@ -24,7 +24,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rustrade::{Bot, BotConfig, Brain, ExchangeClient, SupervisorConfig};
+use rustrade::{Bot, BotConfig, Brain, ExchangeClient};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -48,7 +48,7 @@ fn env_u64(key: &str, default: u64) -> u64 {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    rustrade::logging::init();
+    rustrade::logging::init_tracing();
 
     // ── Identity injected by the spawner ─────────────────────────────────
     // `FKS_BOT_ID` and `FKS_BOT_MODE` are forced env vars the spawner
@@ -79,17 +79,17 @@ async fn main() -> anyhow::Result<()> {
 
     let config = BotConfig::builder()
         .name(format!("fks-bot-example-{bot_id}"))
-        .session_symbol(symbol.clone())
-        .supervisor(SupervisorConfig::default().with_shutdown_timeout(Duration::from_secs(10)))
-        .build();
+        .symbol(symbol.clone())
+        .shutdown_timeout(Duration::from_secs(10))
+        .build()?;
 
-    let bot = Bot::new(config, exchange, brains);
-    let bus = bot.market_bus().clone();
+    let bot = Bot::new(config, exchange, brains)?;
+    let bus = bot.market_data_bus().clone();
 
-    // Share the supervisor's cancel token with our own services so a
-    // Ctrl-C / SIGTERM tears down the metrics server + ticker publisher
-    // along with the framework-managed services.
-    let supervisor_cancel: CancellationToken = bot.supervisor().cancel_token().clone();
+    // Our auxiliary services (metrics server + ticker) share one cancel
+    // token. The framework owns its own SIGTERM/Ctrl-C handling, so we cancel
+    // this token once `run_until_shutdown` returns to tear them down in step.
+    let aux_cancel = CancellationToken::new();
 
     // ── Background services ──────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Metrics HTTP server.
     {
-        let cancel = supervisor_cancel.clone();
+        let cancel = aux_cancel.clone();
         tokio::spawn(async move {
             if let Err(e) = server::run(metrics_port, cancel).await {
                 tracing::error!(error = %e, "metrics server crashed");
@@ -109,7 +109,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Synthetic ticker — feeds the brain so the metric counters tick up.
     {
-        let cancel = supervisor_cancel.clone();
+        let cancel = aux_cancel.clone();
         let cfg = TickerConfig {
             symbol: symbol.clone(),
             ..Default::default()
@@ -118,7 +118,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ── Run until shutdown ───────────────────────────────────────────────
+    // Blocks until SIGTERM / Ctrl-C; the framework drives its own shutdown.
     let result = bot.run_until_shutdown().await;
+
+    // Bot is done — stop our auxiliary services too.
+    aux_cancel.cancel();
 
     info!("fks-bot-example exited");
     result

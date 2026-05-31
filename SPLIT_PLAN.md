@@ -11,8 +11,9 @@
 > own GitHub repos, and the libraries are published on crates.io
 > (`rustrade-framework`/`-core`/`-supervisor`/`-risk`/`-backtest` 0.2.1,
 > `indicators-ta` 0.1.3, `exchange-apiws` 0.1.10, `jflow-core` 0.1.0). The
-> in-tree duplicates under `crates/` have been removed (except `crates/rustrade/`,
-> kept until `fks-bot-example` is ported — see `TODO.md` P0).
+> in-tree duplicates under `crates/` have been removed. The reference bot
+> now lives at `bots/fks-bot-example/` and consumes the published
+> `rustrade-framework` from crates.io.
 >
 > What remains is **consumption + consolidation**, not splitting — see the
 > updated sequencing at the bottom and [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md)
@@ -202,8 +203,8 @@ self-contained — readable without any context from `fks-full`.
 ### Phase 3 — Consume the published crates 🔄 in progress ← we are here
 - [x] Repos extracted; `fks-full` carries no library path-deps on them.
 - [x] Stale in-tree duplicates removed (`crates/{janus,indicators-ta,exchange-apiws,kucoin}`).
-- [ ] **Port `fks-bot-example` → `bots/` on crates.io `rustrade-framework`,
-      then delete `crates/rustrade`** (last in-tree copy — `TODO.md` P0).
+- [x] **Ported `fks-bot-example` → `bots/` on crates.io `rustrade-framework`
+      and deleted `crates/rustrade`** — proves end-to-end crates.io consumption.
 - [ ] **Janus consolidation:** janus consumes `indicators-ta` + `exchange-apiws`
       + `rustrade`, retiring `jflow-indicators` / `jflow-exchanges` /
       `jflow-bybit-client` (`TODO.md` P1).

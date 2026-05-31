@@ -34,11 +34,12 @@ reusable pieces from their own repos / crates.io.
 | `src/ruby/` | Python trading system | `CLAUDE.md` + `TODO.md` + `README.md` |
 | `src/web/` | SvelteKit dashboard | `CLAUDE.md` + `TODO.md` + `README.md` |
 | `src/proto/` | `fks-proto` crate (protobuf) | — |
-| `bots/`, `strategies/` | consumers of the published crates | *(planned)* |
+| `bots/fks-bot-example/` | reference bot — consumes the published crates | own `[workspace]` |
+| `strategies/` | private trading IP (consumes the published crates) | *(planned)* |
 
-> `crates/rustrade/` still lingers **only** to host the `fks-bot-example`
-> reference bot until it's ported to the published `rustrade-framework`
-> crate (see `TODO.md` P0). Don't build new work against it.
+> `bots/fks-bot-example/` is the canonical example of consuming the published
+> crates: a standalone crate depending on `rustrade-framework` from crates.io.
+> It's what the spawner launches and the template for real bots.
 
 > **When working in any sub-directory, read its sub-CLAUDE first.** This root
 > file covers cross-cutting concerns: how the pieces wire together at the
@@ -196,8 +197,8 @@ exchange-apiws = "0.1"
 
 Create a crate under `bots/` (or `strategies/` once private) that depends on
 the published `rustrade` + `indicators-ta` + `exchange-apiws`. Implement a
-`rustrade::Brain`. Ship it as a Docker image the spawner can launch. The
-`fks-bot-example` (being ported, `TODO.md` P0) is the reference.
+`rustrade::Brain`. Ship it as a Docker image the spawner can launch.
+`bots/fks-bot-example/` is the working reference.
 
 ### Adding a new service to the stack
 
@@ -222,9 +223,9 @@ the published `rustrade` + `indicators-ta` + `exchange-apiws`. Implement a
 
 ## Gotchas
 
-- **`crates/rustrade/` is a leftover**, kept only for the `fks-bot-example`
-  bot until it's ported to the published crate. The real framework is
-  `nuniesmith/rustrade` on crates.io. Don't add work to the in-tree copy.
+- **No in-tree framework copy.** `rustrade` lives at `nuniesmith/rustrade`
+  on crates.io (facade `rustrade-framework`). Bots under `bots/` depend on it
+  from crates.io — never re-vendor it into the tree.
 - **Janus is no longer in this tree.** Its image always builds via
   `git clone` (`JANUS_REPO` defaults to the janus repo). To hack on janus,
   work in the janus repo and point `JANUS_REF` at your branch.

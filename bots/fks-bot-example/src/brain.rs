@@ -149,7 +149,7 @@ mod tests {
             exchange: "test".into(),
             symbol: Symbol::from("BTCUSDT"),
             tick: Tick {
-                symbol: "BTCUSDT".to_string(),
+                symbol: Symbol::from("BTCUSDT"),
                 timestamp: Utc::now(),
                 bid: Price(100.0),
                 ask: Price(100.1),

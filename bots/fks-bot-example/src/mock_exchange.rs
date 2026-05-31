@@ -5,7 +5,7 @@
 //! own module here so the example can grow without a giant `main.rs`.
 
 use async_trait::async_trait;
-use rustrade::{ExchangeClient, Order, Position, Result};
+use rustrade::{ExchangeClient, Order, Position, Result, Symbol};
 
 /// Always-successful mock exchange. Records nothing.
 pub struct MockExchange;
@@ -20,15 +20,15 @@ impl ExchangeClient for MockExchange {
         Ok("mock-order-id".to_string())
     }
 
-    async fn cancel_all(&self, _symbol: &str) -> Result<usize> {
+    async fn cancel_all(&self, _symbol: &Symbol) -> Result<usize> {
         Ok(0)
     }
 
-    async fn close_position(&self, _symbol: &str, _position: &Position) -> Result<String> {
+    async fn close_position(&self, _symbol: &Symbol, _position: &Position) -> Result<String> {
         Ok("mock-close-id".to_string())
     }
 
-    async fn get_position(&self, _symbol: &str) -> Result<Position> {
+    async fn get_position(&self, _symbol: &Symbol) -> Result<Position> {
         Ok(Position::FLAT)
     }
 

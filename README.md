@@ -2,49 +2,59 @@
 
 **FKS Trading System — infrastructure, orchestration, and runtime.**
 
-The operational home of the FKS platform. Wires together the framework
-crates, builds Docker images, runs the full container stack, and owns
-all CI/CD, monitoring config, and deployment tooling.
+The operational home of the FKS platform. It wires the published framework
+crates and the service repos into a running stack: builds the Docker images,
+runs the full container stack, and owns all CI/CD, monitoring config, and
+deployment tooling.
 
-> 📋 **Heading toward private/orchestrator role.** See
-> [`SPLIT_PLAN.md`](SPLIT_PLAN.md) for the repo-split blueprint. Each
-> sub-codebase under `crates/` and `src/ruby`/`src/web` is being prepared
-> to live in its own repo. This repo will eventually be **private** and
-> hold the actual production strategies + secrets + deployment topology.
+> 📋 **The repo split has happened.** `rustrade`, `janus`, `indicators-ta`,
+> and `exchange-apiws` are now their own repos, and the libraries are on
+> crates.io. This repo consumes them — it doesn't contain them. The full map
+> is in [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md);
+> the remaining moves are in [`SPLIT_PLAN.md`](SPLIT_PLAN.md). `fks-full` is
+> heading toward a **private orchestrator** role that holds the production
+> strategies, secrets, and deployment topology.
 
 ---
 
-## Today's sub-codebases
+## The pieces
 
-Each will eventually live in its own repo. Most already have a
-`CLAUDE.md` + `TODO.md` for split readiness.
+`fks-full` orchestrates four external repos (each its own crate(s) /
+service) plus the bits that stay here.
 
-| Path                       | Future repo                                     | Status |
-|----------------------------|--------------------------------------------------|--------|
-| `crates/rustrade/`         | `nuniesmith/rustrade` (public, crates.io)        | feature-complete 0.1.0 |
-| `crates/indicators-ta/`    | `nuniesmith/indicators-ta` (public, crates.io)   | publishable |
-| `crates/exchange-apiws/`   | `nuniesmith/exchange-apiws` (public, crates.io)  | publishable |
-| `crates/spawner/`          | `nuniesmith/spawner` (public, crates.io)         | hardened (auth + tests) |
-| `crates/janus/`            | `nuniesmith/janus` and/or `janus-private`        | mid-extraction — see `crates/janus/JANUS_EXTRACTION_PLAN.md` |
-| `crates/kucoin/`           | ~~legacy~~                                       | 🪦 scheduled for deletion |
-| `crates/rustcode/`         | ~~paused~~                                       | 🪦 scheduled for deletion (too much going on; revisit later) |
-| `src/ruby/`                | `nuniesmith/ruby` (TBD)                          | active |
-| `src/web/`                 | `nuniesmith/fks-web` (public)                    | active |
-| `src/proto/`               | stays in `fks-full` (or sibling crates.io crate) | source of truth for `.proto` |
+### External — consumed, not contained
 
-**External code that doesn't live here** (built by Dockerfiles via
-`git clone --branch ${*_REF:-main}` once the splits happen):
+| Repo | Role | Consumed as |
+|------|------|-------------|
+| [`rustrade`](https://github.com/nuniesmith/rustrade) | **Trading framework** (`Bot`, `Brain`, supervisor, risk, backtest) | crates.io — `rustrade-framework` 0.2 (imports as `rustrade`) |
+| [`janus`](https://github.com/nuniesmith/janus) | **Trading brain** (neuromorphic + strategies + signals) | Docker image (`git clone` at `JANUS_REF`) + `jflow-*` crates |
+| [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | **TA math** (indicators + regime detection) | crates.io — `indicators-ta` 0.1 |
+| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange APIs/WS** (5 exchanges, REST + WebSocket) | crates.io — `exchange-apiws` 0.1 |
 
-- [janus](https://github.com/nuniesmith/janus) — Rust ML engine
-- [ruby](https://github.com/nuniesmith/ruby) — Python trading system
-- [fks-web](https://github.com/nuniesmith/fks-web) — SvelteKit WebUI
-- [fks-kotlin](https://github.com/nuniesmith/fks-kotlin) — KMP mobile/desktop apps
+Other service repos built via `git clone` at a pinned ref:
+[`ruby`](https://github.com/nuniesmith/ruby) (Python data system),
+[`fks-web`](https://github.com/nuniesmith/fks-web) (SvelteKit UI),
+[`fks-kotlin`](https://github.com/nuniesmith/fks-kotlin) (KMP apps).
+
+### Stays in this repo
+
+| Path | What |
+|------|------|
+| `docker-compose*.yml`, `infrastructure/` | The ~15-service stack + Dockerfiles + nginx/prometheus/grafana config |
+| `proto/` + `src/proto/` | Protobuf source of truth (the `fks-proto` crate) |
+| `scripts/` + `run.sh` | Operational tooling (DB bootstrap, retraining, …) |
+| `crates/spawner/` | Bot-container lifecycle service (until it splits out) |
+| `src/ruby/`, `src/web/` | Python data system + SvelteKit UI (until they split) |
+| `bots/`, `strategies/` | Thin bots / private trading IP that consume the published crates *(planned)* |
+
+> The dependency graph and exact crates.io coordinates are in
+> [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md).
 
 ---
 
 ## Stack (containers)
 
-After the rustcode + openclaw removal, the stack is roughly 15 containers:
+Roughly 15 containers:
 
 | Service | Container | Port(s) | Role |
 |---------|-----------|---------|------|
@@ -64,9 +74,9 @@ After the rustcode + openclaw removal, the stack is roughly 15 containers:
 | Loki + Promtail | — | 3100 | Log aggregation |
 | Jaeger | `fks_jaeger` | 16686 | Distributed tracing (memory storage) |
 
-Plus the dynamically-spawned `fks-bot-*` containers managed by the
-spawner (placed on `fks_network` with `cap_drop: ALL`, scraped by
-Prometheus via the file_sd config the spawner writes).
+Plus the dynamically-spawned `fks-bot-*` containers managed by the spawner
+(placed on `fks_network` with `cap_drop: ALL`, scraped by Prometheus via the
+file_sd config the spawner writes).
 
 ## Access
 
@@ -75,15 +85,16 @@ No external ports. Nginx terminates TLS using Tailscale-issued certs.
 No Authelia, no Let's Encrypt.
 
 WebUI login: SHA-256 hashed password (`WEBUI_PASSWORD_HASH` in `.env`).
-Internal services trust `X-Internal-Token` (set by nginx, validated by
-e.g. the spawner).
+Internal services trust `X-Internal-Token` (set by nginx, validated by e.g.
+the spawner).
 
 ## Getting started
 
 ```bash
-# 1. Copy env template and fill in secrets
+# 1. Copy env template and fill in secrets + repo refs
 cp .env.example .env
-# Edit .env — set XAI_API_KEY, KRAKEN_API_KEY, etc.
+# Edit .env — set XAI_API_KEY, KRAKEN_API_KEY, etc., and pin JANUS_REF /
+# RUBY_REF / WEB_REF / SPAWNER_REF to the branches you want to deploy.
 
 # 2. Generate remaining secrets
 ./run.sh generate-secrets
@@ -110,25 +121,33 @@ cp .env.example .env
 | `./run.sh retrain` | Trigger CNN model retraining |
 | `./run.sh generate-secrets` | Generate all required secrets |
 
-## How builds work today
+## How builds work
 
-Dockerfiles under `infrastructure/docker/services/` currently `COPY` the
-source directories. The migration to `git clone --branch ${*_REF:-main}`
-is in [`SPLIT_PLAN.md`](SPLIT_PLAN.md#sequencing) — moves to that
-pattern as each sub-codebase becomes its own repo.
+The base images under `infrastructure/docker/base/{rust,python,nodejs}/`
+acquire source in **dual mode**:
 
-To pin specific commits or branches once that's done:
+- **`*_REPO` set** → `git clone --depth=1 --branch ${*_REF:-main}` (CI / prod).
+- **`*_REPO` empty** → bind-mount the local context (dev, for sub-codebases
+  that still live in this repo).
+
+`janus` has no in-tree copy, so its image **always** builds via `git clone`
+(`JANUS_REPO` defaults to `https://github.com/nuniesmith/janus`). `ruby`,
+`web`, and `spawner` still have local copies and default to the bind-mount.
+
+Pin a branch/commit at build time:
 
 ```bash
-docker build --build-arg RUBY_REF=my-branch \
-             -f infrastructure/docker/services/data/Dockerfile .
+docker build --build-arg JANUS_REF=my-branch \
+             --build-arg JANUS_REPO=https://github.com/nuniesmith/janus \
+             -f infrastructure/docker/base/rust/Dockerfile .
 ```
 
 Or set the refs in `.env`:
 
 ```
-RUBY_REF=main
+JANUS_REPO=https://github.com/nuniesmith/janus
 JANUS_REF=main
+RUBY_REF=main
 WEB_REF=main
 SPAWNER_REF=main
 ```
@@ -142,44 +161,43 @@ fks-full/
 ├── README.md              # ← you are here
 ├── CLAUDE.md              # AI-assistant project rules
 ├── TODO.md                # cross-cutting roadmap
-├── SPLIT_PLAN.md          # repo-split blueprint
-├── Cargo.toml             # virtual workspace (currently src/proto + crates/spawner)
+├── SPLIT_PLAN.md          # remaining repo-split moves
+├── Cargo.toml             # slim virtual workspace (src/proto)
 ├── docker-compose.yml     # ~15-service unified compose
 ├── docker-compose.prod.yml
 ├── docker-compose.trainer.yml
 ├── run.sh
 ├── proto/fks/             # .proto source of truth
 ├── crates/
-│   ├── rustrade/          # framework — has its own CLAUDE/TODO
-│   ├── indicators-ta/     # publishable — has its own CLAUDE/TODO
-│   ├── exchange-apiws/    # publishable — has its own CLAUDE/TODO
-│   ├── spawner/           # bot lifecycle manager
-│   ├── janus/             # ML engine (nested workspace)
-│   ├── kucoin/            # 🪦 legacy, scheduled for deletion
-│   └── rustcode/          # 🪦 paused, scheduled for deletion
+│   └── spawner/           # bot lifecycle manager (nested workspace)
 ├── src/
 │   ├── ruby/              # Python trading system — has its own CLAUDE/TODO
 │   ├── web/               # SvelteKit dashboard — has its own CLAUDE/TODO
 │   └── proto/             # fks-proto Rust crate (protobuf build)
 ├── infrastructure/
 │   ├── docker/
-│   │   ├── base/          # base Rust / Python / Node Dockerfiles
+│   │   ├── base/          # base Rust / Python / Node Dockerfiles (git-clone capable)
 │   │   └── services/      # per-service Dockerfiles (external apps mostly)
 │   └── config/            # nginx, prometheus, grafana, alertmanager, …
 ├── scripts/               # operational scripts (DB bootstrap, retraining, …)
-├── docs/                  # runbooks + architecture notes
+├── docs/                  # runbooks + architecture notes (see REPO_TOPOLOGY.md)
 └── models/                # model artifacts (mostly gitignored)
 ```
+
+> `crates/rustrade/` still lingers only to host the spawner's
+> `fks-bot-example` reference bot until it's ported to consume the published
+> `rustrade-framework` crate — see [`TODO.md`](TODO.md) P0.
 
 ---
 
 ## Where to go next
 
-- Working on the framework? → [`crates/rustrade/CLAUDE.md`](crates/rustrade/CLAUDE.md)
-- Working on the ML engine? → [`crates/janus/CLAUDE.md`](crates/janus/CLAUDE.md)
+- The repo map + crates.io coordinates? → [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md)
+- Working on the framework? → [`nuniesmith/rustrade`](https://github.com/nuniesmith/rustrade)
+- Working on the brain? → [`nuniesmith/janus`](https://github.com/nuniesmith/janus)
 - Working on bot lifecycles? → [`crates/spawner/CLAUDE.md`](crates/spawner/CLAUDE.md)
 - Working on the Python data API? → [`src/ruby/CLAUDE.md`](src/ruby/CLAUDE.md)
 - Working on the frontend? → [`src/web/CLAUDE.md`](src/web/CLAUDE.md)
-- Planning the split? → [`SPLIT_PLAN.md`](SPLIT_PLAN.md)
+- Remaining split moves? → [`SPLIT_PLAN.md`](SPLIT_PLAN.md)
 - AI-assistant rules for this repo? → [`CLAUDE.md`](CLAUDE.md)
 - Current roadmap? → [`TODO.md`](TODO.md)

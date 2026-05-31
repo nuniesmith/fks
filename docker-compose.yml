@@ -300,7 +300,8 @@ services:
             args:
                 SERVICE_NAME: janus
                 RUST_VERSION: "1.92.0"
-                REPO_URL: ${JANUS_REPO:-}
+                # Janus has no in-tree copy — always clone (override REF for a branch/tag).
+                REPO_URL: ${JANUS_REPO:-https://github.com/nuniesmith/janus}
                 REPO_REF: ${JANUS_REF:-main}
         image: nuniesmith/fks:janus
         container_name: fks_janus

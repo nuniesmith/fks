@@ -1,10 +1,22 @@
 # FKS Split Plan
 
 > Operational blueprint for cracking `fks-full` into multiple repos.
-> Nothing in this document moves code today — it's a checklist so the
-> moves, when they happen, land cleanly on the first try.
 >
-> **Last updated:** 2026-05-10
+> **Last updated:** 2026-05-31
+>
+> ## ✅ Status: the split has executed
+>
+> This started as a "when we split" checklist. Most of it is **done**:
+> `rustrade`, `janus`, `indicators-ta`, and `exchange-apiws` are now their
+> own GitHub repos, and the libraries are published on crates.io
+> (`rustrade-framework`/`-core`/`-supervisor`/`-risk`/`-backtest` 0.2.1,
+> `indicators-ta` 0.1.3, `exchange-apiws` 0.1.10, `jflow-core` 0.1.0). The
+> in-tree duplicates under `crates/` have been removed (except `crates/rustrade/`,
+> kept until `fks-bot-example` is ported — see `TODO.md` P0).
+>
+> What remains is **consumption + consolidation**, not splitting — see the
+> updated sequencing at the bottom and [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md)
+> for the live map.
 
 ---
 
@@ -163,58 +175,49 @@ self-contained — readable without any context from `fks-full`.
 
 ---
 
-## Sequencing — when to actually split
+## Sequencing — status
 
-### Phase 0 — *we are here* (this PR)
+### Phase 0 — Doc prep ✅ done
 - [x] Write `SPLIT_PLAN.md` (this file).
 - [x] Land per-sub-codebase `CLAUDE.md` and `TODO.md`.
-- [x] Update root `CLAUDE.md` / `TODO.md` / `README.md` to reflect the
-      direction and drop dead scope (rustcode, openclaw).
-- [ ] Decide: rustcode + openclaw removal in a follow-up PR (one focused
-      PR that deletes everything in one go).
+- [x] Update root `CLAUDE.md` / `TODO.md` / `README.md`.
+- [x] `rustcode` + `openclaw` + `ollama` + `promptfoo` removal.
 
-### Phase 1 — Tidy in-place
-1. Land the in-progress reorganization (currently uncommitted in working
-   tree): `src/spawner/` → `crates/spawner/`, `src/kucoin/` → `crates/kucoin/`,
-   sql tree co-located with owners, `JANUS_EXTRACTION_PLAN.md` →
-   `crates/janus/JANUS_EXTRACTION_PLAN.md`.
-2. Fix root `Cargo.toml` workspace members to point at the new paths
-   (currently broken; `cargo check --workspace` fails because
-   `src/spawner/Cargo.toml` no longer exists).
-3. Remove `crates/rustcode/`, `crates/kucoin/`, `infrastructure/docker/services/{rustcode,openclaw,openclaw_cli,promptfoo}/`,
-   and the matching nginx + env-var entries.
-4. CI: confirm every remaining workspace's `cargo check` + `cargo test` pass.
+### Phase 1 — Tidy in-place ✅ done
+- [x] `src/spawner/` → `crates/spawner/`; sql co-located with owners.
+- [x] Root `Cargo.toml` slimmed to `members = ["src/proto"]` (builds clean).
+- [x] Removed `crates/rustcode/` + the openclaw/ollama/promptfoo services,
+      nginx blocks, and `RC_*` / `OPENCLAW_*` env vars.
+- [x] `.github/workflows/rust.yml` added (per-workspace check/test/clippy/fmt).
 
-### Phase 2 — Publish the small, safe ones
-- `indicators-ta` → crates.io
-- `exchange-apiws` → crates.io
-- `spawner` → crates.io (binary crate; image becomes `nuniesmith/spawner` on Docker Hub)
-- `rustrade-{core,supervisor,risk,backtest,notify}` → crates.io
-- `rustrade-kucoin` → crates.io
-- `rustrade` (facade) → crates.io
+### Phase 2 — Publish the libraries ✅ mostly done
+- [x] `indicators-ta` → crates.io (0.1.3).
+- [x] `exchange-apiws` → crates.io (0.1.10; local 0.3.x unpublished — reconcile).
+- [x] `rustrade-{core,supervisor,risk,backtest}` + facade `rustrade-framework`
+      → crates.io (0.2.1). _Bare `rustrade` was taken → facade is `rustrade-framework`._
+- [x] `jflow-core` → crates.io (0.1.0).
+- [ ] Finish the `jflow-*` publish run (Tier-0 leaves → Tier-1+ bottom-up).
+- [ ] `spawner` → crates.io / Docker Hub (still in-tree; not yet its own repo).
 
-Each one becomes its own repo; the crates.io publish is the moment of
-truth that proves it's standalone.
+### Phase 3 — Consume the published crates 🔄 in progress ← we are here
+- [x] Repos extracted; `fks-full` carries no library path-deps on them.
+- [x] Stale in-tree duplicates removed (`crates/{janus,indicators-ta,exchange-apiws,kucoin}`).
+- [ ] **Port `fks-bot-example` → `bots/` on crates.io `rustrade-framework`,
+      then delete `crates/rustrade`** (last in-tree copy — `TODO.md` P0).
+- [ ] **Janus consolidation:** janus consumes `indicators-ta` + `exchange-apiws`
+      + `rustrade`, retiring `jflow-indicators` / `jflow-exchanges` /
+      `jflow-bybit-client` (`TODO.md` P1).
 
-### Phase 3 — Move dependents to consume the published crates
-- Update `crates/janus/`'s Cargo.tomls: `rustrade-supervisor = "x.y"` (crates.io) instead of `path = "../../../rustrade/..."`.
-- Verify nothing in `fks-full` still uses a local path dep for the
-  published crates.
+### Phase 4 — Service repos ✅ mostly done
+- [x] `janus` → `github.com/nuniesmith/janus`; image builds via `git clone`.
+- [ ] `src/ruby/` → `github.com/nuniesmith/ruby` (Dockerfile already git-clone capable; flip when ready).
+- [ ] `src/web/` → `github.com/nuniesmith/fks-web` (same).
 
-### Phase 4 — Move janus + ruby + web to their own repos
-- `crates/janus/` → `github.com/nuniesmith/janus` (or `janus-private`)
-  — see `JANUS_EXTRACTION_PLAN.md` for the per-sub-crate destination.
-- `src/ruby/` → `github.com/nuniesmith/ruby`. The Dockerfile in
-  `infrastructure/docker/services/data/Dockerfile` becomes a
-  `git clone --branch ${RUBY_REF:-main}` build.
-- `src/web/` → `github.com/nuniesmith/fks-web`. Same Dockerfile pattern.
-
-### Phase 5 — `fks-full` is the private orchestrator
-- Repo flips `private`.
-- New top-level `strategies/` directory for the actual trading IP.
-- All crate deps in `Cargo.toml` (if any remain) point at crates.io.
-- All service images either `git clone` external repos or pull pre-built
-  images from a private registry.
+### Phase 5 — `fks-full` is the private orchestrator ⬜ not started
+- [ ] Repo flips `private`.
+- [ ] New top-level `strategies/` directory for the actual trading IP.
+- [ ] All service images `git clone` external repos or pull pre-built images
+      from a private registry.
 
 ---
 

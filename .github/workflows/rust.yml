@@ -1,10 +1,10 @@
 # =============================================================================
 # Rust CI — per-workspace check / test / clippy / fmt
 # =============================================================================
-# The repo is intentionally split into multiple nested Cargo workspaces (see
-# SPLIT_PLAN.md). This workflow runs each workspace's compile + test gate
-# independently so a green main means "every sub-codebase about to be
-# extracted to its own repo is in a publishable state."
+# fks-full keeps a few nested Cargo workspaces (src/proto, crates/rustrade,
+# crates/spawner). This workflow runs each one's compile + test gate
+# independently. The framework / brain / TA / exchange crates now live in
+# their own repos (see SPLIT_PLAN.md) and are CI'd there.
 #
 # Trigger: PRs against main, plus pushes to main.
 # Concurrency: in-flight runs on the same ref are cancelled when a new
@@ -80,22 +80,10 @@ jobs:
                       path: "crates/rustrade"
                       needs_protoc: false
                       lock_flag: "--locked"
-                    - workspace: "janus"
-                      path: "crates/janus"
-                      needs_protoc: true
-                      lock_flag: "--locked"
                     - workspace: "spawner"
                       path: "crates/spawner"
                       needs_protoc: false
                       lock_flag: "--locked"
-                    - workspace: "indicators-ta"
-                      path: "crates/indicators-ta"
-                      needs_protoc: false
-                      lock_flag: ""
-                    - workspace: "exchange-apiws"
-                      path: "crates/exchange-apiws"
-                      needs_protoc: false
-                      lock_flag: ""
         steps:
             - name: 📥 Checkout
               uses: actions/checkout@v4
@@ -158,7 +146,7 @@ jobs:
               shell: bash
               run: |
                   set -e
-                  for ws in . crates/rustrade crates/janus crates/spawner crates/indicators-ta crates/exchange-apiws; do
+                  for ws in . crates/rustrade crates/spawner; do
                       printf "\n===> %s\n" "$ws"
                       # `--manifest-path` keeps fmt scoped to THIS workspace's
                       # members — without it, `--all` follows path deps into

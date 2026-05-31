@@ -1,116 +1,113 @@
 # fks-full — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks-full`
-> **Last synced:** 2026-05-11
+> **Last synced:** 2026-05-31
 >
-> This file covers **cross-cutting** work — docker-compose, Dockerfiles,
-> nginx, CI/CD, Postgres bootstrap, observability, deployment. Anything
-> specific to a sub-codebase lives in that sub-codebase's `TODO.md`:
+> This file covers **cross-cutting** orchestration work — consuming the
+> external repos/crates, docker-compose, Dockerfiles, CI/CD, Postgres
+> bootstrap, observability, deployment. Work specific to a sub-codebase
+> now lives in **that repo's** own `TODO.md`:
 >
-> - `crates/rustrade/TODO.md` — framework crates
-> - `crates/janus/TODO.md` — ML engine
-> - `crates/indicators-ta/TODO.md`
-> - `crates/exchange-apiws/TODO.md`
-> - `crates/spawner/TODO.md`
-> - `src/ruby/TODO.md`
-> - `src/web/TODO.md`
+> - [`nuniesmith/rustrade`](https://github.com/nuniesmith/rustrade) — framework
+> - [`nuniesmith/janus`](https://github.com/nuniesmith/janus) — brain
+> - [`nuniesmith/indicators-ta`](https://github.com/nuniesmith/indicators-ta) — TA math
+> - [`nuniesmith/exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) — exchange REST/WS
 >
-> The repo-split blueprint is in `SPLIT_PLAN.md`.
+> The repo map is in [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md);
+> the remaining split moves are in [`SPLIT_PLAN.md`](SPLIT_PLAN.md).
 
 ---
 
-## P0 — Split prep & CI
+## Status snapshot (2026-05-31)
 
-### Per-sub-codebase doc readiness
+The split **happened**. `rustrade`, `janus`, `indicators-ta`, and
+`exchange-apiws` are independent repos, and the libraries are on crates.io:
 
-- [x] `SPLIT_PLAN.md` written.
-- [x] `CLAUDE.md` + `TODO.md` added to each future-external sub-codebase.
-- [x] Root `README.md` / `CLAUDE.md` / `TODO.md` point at the split direction.
-- [x] Audit each sub-README for `fks-full` path references. Verified
-      clean across all 8 sub-codebases (rustrade family + indicators-ta
-      + exchange-apiws + spawner + ruby + web + janus). `fks-full` refs
-      that remain are in `TODO.md` / `CLAUDE.md` / `Cargo.toml`
-      structural comments — all `exclude`d from the publish tarball or
-      intentional dev-time notes that get rewritten at split time.
+| Crate | crates.io | Consume as |
+|-------|-----------|------------|
+| `rustrade-framework` (+ core/supervisor/risk/backtest) | **0.2.1** ✅ | `rustrade = { package = "rustrade-framework", version = "0.2" }` |
+| `indicators-ta` | **0.1.3** ✅ | `indicators-ta = "0.1"` (imports as `indicators`) |
+| `exchange-apiws` | **0.1.10** ✅ | `exchange-apiws = "0.1"` (local tree is 0.3.x — see P0) |
+| `jflow-core` (janus) | **0.1.0** ✅ | first janus lib; rest of `jflow-*` prepped, not pushed |
 
-### CI gates (blocking Phase 2 of `SPLIT_PLAN.md`)
-
-> No Rust CI is configured yet. `.github/workflows/` only has the
-> auto-labeler and the paper-trading soak workflow. Without a CI
-> workflow that runs `cargo check + test` per nested workspace, a bad
-> merge can silently red the build of any sub-codebase that's about
-> to be extracted.
-
-- [ ] **`.github/workflows/rust.yml`** — one matrix job per nested
-      workspace (`crates/rustrade/`, `crates/janus/`, `crates/spawner/`,
-      `crates/indicators-ta/`, `crates/exchange-apiws/`, repo root). Each
-      runs `cargo check --workspace`, `cargo test --workspace`,
-      `cargo clippy --workspace -- -D warnings`.
-- [ ] **`.github/workflows/web.yml`** — `npm run check` on `src/web/`
-      (non-blocking until the existing type errors clear).
-- [ ] **`.github/workflows/python.yml`** — `pytest tests/` on `src/ruby/`
-      (or scoped to whatever subset is green today).
-
-### Pre-publish audit per crate (`SPLIT_PLAN.md` Phase 2)
-
-For every crate slated for crates.io: `indicators-ta`,
-`exchange-apiws`, `spawner`, `rustrade-{core,supervisor,risk,backtest,notify}`,
-`rustrade-kucoin`, `rustrade` (facade).
-
-- [ ] Walk each `Cargo.toml`: `description`, `license`, `repository`,
-      `keywords`, `categories`, `readme` populated.
-- [ ] `publish = true` (or absent) on the crates that should publish.
-- [ ] `cargo publish --dry-run` from each crate's directory. Produce
-      a per-crate blocker list.
-- [ ] Decide crate-name convention for the eventual janus public
-      siblings — `-ta` suffix vs `trading-` prefix vs `rustrade-`
-      prefix (called out in `crates/janus/JANUS_EXTRACTION_PLAN.md`).
+What's left is **consumption + consolidation**, not splitting. `fks-full`
+keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`, infra, and
+(soon) `bots/` + `strategies/`.
 
 ---
 
-## P0 — Dockerfile: build from source
+## P0 — Finish the consume-from-external-repos setup
 
-> When each sub-codebase becomes its own repo, the Dockerfiles need to
-> `git clone --branch ${*_REF:-main} https://github.com/nuniesmith/<repo>`
-> instead of `COPY` from the local tree.
->
-> **Status:** the underlying Dockerfile infrastructure is in place
-> (`infrastructure/docker/base/rust/Dockerfile`,
-> `infrastructure/docker/base/nodejs/Dockerfile`,
-> `infrastructure/docker/services/spawner/Dockerfile`). All four base
-> images already support a dual-mode source acquisition step:
-> `REPO_URL=""` → bind-mount the local context (dev default);
-> `REPO_URL` set → `git clone --depth=1 --branch ${REPO_REF}` from the
-> URL.
+### Done in the current pass
 
-- [x] `infrastructure/docker/base/python/Dockerfile` (the ruby service
-      image; `services/ruby/` only holds entrypoint + supervisord conf).
-      `RUBY_REPO`/`RUBY_REF` wired in `docker-compose.yml`.
-- [x] `infrastructure/docker/base/nodejs/Dockerfile` — supports the
-      git-clone path; `WEB_REPO`/`WEB_REF` wired in `docker-compose.yml`'s
-      `webui:` block.
-- [x] `infrastructure/docker/base/rust/Dockerfile` (used for `janus`).
-      `JANUS_REPO`/`JANUS_REF` wired in `docker-compose.yml`.
-- [x] `infrastructure/docker/services/spawner/Dockerfile`.
-      `SPAWNER_REPO`/`SPAWNER_REF` wired in `docker-compose.yml`.
-- [x] `RUBY_REPO`/`RUBY_REF`, `JANUS_REPO`/`JANUS_REF`,
-      `WEB_REPO`/`WEB_REF`, `SPAWNER_REPO`/`SPAWNER_REF` documented in
-      `.env.example`.
+- [x] Deleted the stale in-tree duplicates `crates/{janus,indicators-ta,exchange-apiws,kucoin}`.
+      They were copies that had drifted **behind** the real repos and were
+      orphaned from the build (root workspace is `members = ["src/proto"]`).
+- [x] `JANUS_REPO` defaults to `https://github.com/nuniesmith/janus` so the
+      janus image builds via `git clone` now that no in-tree copy remains.
+- [x] `.env.example` repo URLs corrected to the real repos
+      (`nuniesmith/janus`, `nuniesmith/ruby`, `nuniesmith/fks-web`,
+      `nuniesmith/spawner`).
+- [x] `.github/workflows/rust.yml` matrix trimmed to the workspaces that
+      actually remain here (`root · src/proto`, `crates/rustrade`,
+      `crates/spawner`).
+- [x] Docs re-based on reality — `README.md`, `CLAUDE.md`, `SPLIT_PLAN.md`,
+      and the new `docs/architecture/REPO_TOPOLOGY.md`.
 
-> Reminder: `infrastructure/docker/services/*` is for **external apps**
-> (postgres, redis, prometheus, grafana, etc.). Our own services use the
-> shared base images under
-> `infrastructure/docker/base/{rust,python,nodejs,python-gpu}`. The
-> `services/ruby/` and `services/spawner/` directories are exceptions —
-> ruby only holds entrypoint glue while the actual build lives in the
-> python base; spawner has its own standalone Dockerfile that mirrors
-> the rust base's git-clone pattern.
+### Immediate follow-ups
+
+- [ ] **Port `fks-bot-example` → `bots/fks-bot-example/` and delete
+      `crates/rustrade`.** This is the last stale in-tree copy. It only
+      survives because it hosts the spawner's reference bot, which was
+      written against rustrade **0.1.0**. The published facade is **0.2.1**,
+      which renamed the API the bot uses:
+      - `BotConfig::builder().session_symbol(x)` → `.symbol(x)`
+      - drop `.supervisor(SupervisorConfig::default()...)` → `.shutdown_timeout(dur)` on the builder
+      - `.build()` now returns `Result<_>` (add `?`)
+      - `bot.market_bus()` → `bot.market_data_bus()`
+      - `bot.supervisor().cancel_token()` → own a `CancellationToken`, pass it
+        via `Bot::new(..).with_external_cancel(token.clone())`, and drive the
+        metrics-server / ticker teardown off `BotHandle::await_shutdown()`.
+      New `bots/fks-bot-example/Cargo.toml` depends on crates.io
+      (`rustrade = { package = "rustrade-framework", version = "0.2" }`).
+      Repoint `infrastructure/docker/services/fks-bot-example/Dockerfile` at
+      `bots/fks-bot-example`. Add the crate to the `rust.yml` matrix.
+      **Verify under CI** (this repo's build env has no crates.io egress).
+- [ ] **Reconcile `exchange-apiws` versioning.** crates.io is **0.1.10**; the
+      local tree is **0.3.2** (unpublished: signed REST, private WS). Decide
+      the version line, then `cargo publish` the 0.3.x release so downstreams
+      can depend on the newer surface. (Its own repo's `todo.md` still claims
+      "never published" — that's stale; it *is* live at 0.1.10.)
+- [ ] **Finish the `jflow-*` publish run** (janus repo). `jflow-core` is live;
+      publish the Tier-0 leaves then Tier-1+ bottom-up per janus `PUBLISHING.md`.
+      Blocked only on the crates.io token + sequencing.
+
+---
+
+## P1 — Janus consolidation (consume the shared crates)
+
+> The big architectural work. Lives in the **janus** repo; tracked here
+> because it's the whole point of the split. Today janus duplicates TA and
+> exchange connectivity internally (`jflow-indicators`, `jflow-exchanges`,
+> `jflow-bybit-client`) and dropped its `rustrade` dependency. Target: one
+> source of truth per concern.
+
+- [ ] **TA → `indicators-ta`.** Migrate janus's `jflow-indicators` consumers
+      onto `indicators-ta`; retire the duplicate. (`IncrementalEma`/`IncrementalAtr`
+      already lifted into `indicators-ta` — continue from there.)
+- [ ] **Connectivity → `exchange-apiws`.** Replace `jflow-exchanges` /
+      `jflow-bybit-client` usage with `exchange-apiws`; retire the duplicates.
+- [ ] **Framework → `rustrade`.** Re-adopt the framework: janus's signal
+      services become `rustrade::Brain`s / `TradingService`s under a
+      `rustrade::Bot`/`Supervisor`, instead of bespoke lifecycle code.
+- [ ] Decide janus public-vs-private once consolidated (the brain IP can stay
+      private while `jflow-*` siblings remain public on crates.io).
 
 ---
 
 ## P0 — Tailscale verification
 
-- [ ] Test access from a second tailnet device (needs physical second device).
+- [ ] Test access from a second tailnet device (needs a physical second device).
 - [ ] Verify trainer container GPU passthrough:
       `./run.sh all --profile training` + nvidia-container-toolkit.
 
@@ -129,55 +126,62 @@ For every crate slated for crates.io: `indicators-ta`,
 
 ## P1 — Multi-account: Janus execution router (ACCT-E)
 
-- [ ] Update `crates/janus/services/execution/` — add `RoutingClient`
-      in `execution/src/routing.rs`: HTTP client calling
-      `GET http://fks_ruby:8000/api/routing/{symbol}`, 60s cache TTL.
-- [ ] On signal: create `ExecutionTarget` per routing rule, fan out
-      signal to each target with `account_id` label.
-- [ ] Add `ROUTING_API_URL=http://fks_ruby:8000` to janus execution env
-      in `docker-compose.yml`.
+> Lives in the janus repo (`services/execution/`); the compose env wiring is here.
+
+- [ ] Add a `RoutingClient` in janus `execution/src/routing.rs`: HTTP client
+      calling `GET http://fks_ruby:8000/api/routing/{symbol}`, 60s cache TTL.
+- [ ] On signal: create one `ExecutionTarget` per routing rule, fan out the
+      signal to each target with an `account_id` label.
+- [ ] Add `ROUTING_API_URL=http://fks_ruby:8000` to janus execution env in
+      `docker-compose.yml`.
 
 ---
 
 ## P1 — Observability
 
 - [ ] **PROM:** Sync Grafana config and restart — ensure all alert rules load.
-- [ ] **GPU metrics** — Prometheus when trainer is running (nvidia-container-toolkit exporter).
-- [ ] **Alertmanager Discord bridge** — container occasionally not running, causes noise in Alertmanager logs. Either fix or remove.
-- [ ] **`bot-alerts.yml`** under `infrastructure/config/prometheus/alerts/` — `BotStopped`, `BotHighDrawdown`, `BotNoSignals`. Add once we have at least one real `fks-bot-*` image producing the metrics.
+- [ ] **GPU metrics** — Prometheus scrape when the trainer is running
+      (nvidia-container-toolkit exporter).
+- [ ] **Alertmanager Discord bridge** — container occasionally not running,
+      causing noise in Alertmanager logs. Either fix or remove.
+- [ ] **`bot-alerts.yml`** under `infrastructure/config/prometheus/alerts/` —
+      `BotStopped`, `BotHighDrawdown`, `BotNoSignals`. Add once at least one
+      real `fks-bot-*` image produces the metrics (see the `bots/` follow-up).
 
 ---
 
 ## P1 — Proto
 
-- [ ] Centralise stray `forward/proto/janus/v1/janus.proto` →
-      `proto/fks/janus/v1/signal_service.proto` — deferred until the
-      gRPC endpoint is actually used (dead code today).
+- [ ] Centralise the stray `forward/proto/janus/v1/janus.proto` (janus repo) →
+      `proto/fks/janus/v1/signal_service.proto` here — deferred until the
+      gRPC endpoint is actually used (dead code today). Mirrors janus
+      `TODO.md` STRUCT-C.
 
 ---
 
 ## P2 — Image push & CI hardening
 
 - [ ] Re-enable ARM64 / multi-arch builds in CI (disabled in batch-013).
-- [ ] `docker push nuniesmith/fks:janus` — publish Janus image for faster deploys.
+- [ ] `docker push nuniesmith/fks:janus` — publish the Janus image for faster deploys.
 - [ ] `docker push nuniesmith/fks:spawner` — same.
-- [ ] Postgres data migration (optional): use `pgloader` if dev data
-      worth preserving across rebuilds.
+- [ ] **`rust.yml` clippy gate.** Clippy currently runs `continue-on-error`.
+      Flip to `-D warnings` per workspace as each closes out its lint backlog.
+- [ ] Postgres data migration (optional): use `pgloader` if dev data is worth
+      preserving across rebuilds.
 
 ---
 
 ## P2 — Feature work (Ruby/strategies)
 
 ### PAPER-TRADING: live validation
-- [ ] Test Redis state persistence: `sim:session:{id}:*` keys
-      written/readable.
+- [ ] Test Redis state persistence: `sim:session:{id}:*` keys written/readable.
 - [ ] Verify SSE streaming: `/sse/paper-trading/{id}` streams to WebUI.
 
 ### PINE-INT: manual verification
 - [ ] Paste generated `ruby.pine` into TradingView Pine editor, confirm it compiles.
 
 ### CRITICAL-FIX-A: Rithmic (remaining)
-- [ ] Live test — verify positions, L1/L2, PnL match dashboard against
+- [ ] Live test — verify positions, L1/L2, PnL match dashboard against a
       Rithmic paper account (needs credentials).
 - [ ] Margin usage field — depends on Rithmic margin data availability.
 
@@ -185,40 +189,38 @@ For every crate slated for crates.io: `indicators-ta`,
 
 ## P3 — Future (post-funding)
 
-- [ ] Retrain: run bracket sweep (`scripts/bracket_sweep.py`), apply
-      optimal brackets, retrain vs 93.5% baseline.
-- [ ] `POSINT-B`: Multi-account position aggregation (needs multiple
-      funded accounts).
-- [ ] `DOM-C`: DOM click-to-trade Phase 2 — click price level → limit
-      order, drag stops.
-- [ ] Profit allocation dashboard: 50% reinvestment / 20% personal /
-      15% tax / 10% emergency / 5% education.
-- [ ] Multi-exchange: crypto.com, Netcoins, BTC hardware wallet xpub
-      monitoring.
-- [ ] K8s manifests — `infrastructure/k8s/` for cloud scaling
-      (post prop-firm funded).
-- [ ] **`strategies/`** — once `fks-full` flips private, this is where
-      the actual trading IP lives. Currently empty. Bots get wired up
-      to consume the published rustrade + indicators-ta + exchange-apiws
-      crates from crates.io.
+- [ ] **`bots/`** — thin strategy bots that consume the published
+      `rustrade` + `indicators-ta` + `exchange-apiws` crates. The
+      `fks-bot-example` port (P0) is the first of these.
+- [ ] **`strategies/`** — once `fks-full` flips **private**, this is where the
+      actual trading IP lives. Bots get wired to consume the published crates.
+- [ ] Retrain: run bracket sweep (`scripts/bracket_sweep.py`), apply optimal
+      brackets, retrain vs the 93.5% baseline.
+- [ ] `POSINT-B`: Multi-account position aggregation (needs multiple funded accounts).
+- [ ] `DOM-C`: DOM click-to-trade Phase 2 — click price level → limit order, drag stops.
+- [ ] Profit allocation dashboard: 50% reinvestment / 20% personal / 15% tax /
+      10% emergency / 5% education.
+- [ ] Multi-exchange: crypto.com, Netcoins, BTC hardware wallet xpub monitoring
+      (note: `exchange-apiws` already covers Binance / Bybit / Kraken /
+      Crypto.com / KuCoin public surfaces).
+- [ ] K8s manifests — `infrastructure/k8s/` for cloud scaling (post prop-firm funded).
 
 ---
 
-## ✅ Recently shipped (PRs #1–#21)
+## ✅ Recently shipped
 
-The 21-PR arc that took fks-full from "broken monolith" to "feature-complete framework + spawner + repo-split-ready":
-
-- **Framework (PRs #1–#10)** — `rustrade-{core,supervisor,risk,backtest,kucoin,notify}` + facade + 4 examples + design invariants documented in `crates/rustrade/CONTRIBUTING.md`. Plus `JANUS_EXTRACTION_PLAN.md` and a doc-coverage pass.
-- **Build rot cleanup (#11)** — root + janus + spawner workspaces compile cleanly.
-- **Spawner: DB persistence + 21 tests + README (#12, #18)** — `BotRunStore` writes spawn/stop/remove to `bot_runs`; `DockerOps` trait + `MockDockerClient` + 10 HTTP integration tests; `X-Internal-Token` auth middleware.
-- **Spawner: WebUI (#13, #19)** — `/bots` route with spawn form, container list, SSE log viewer with follow-tail, run history. `api.*` callsite fixes across signals/backup/performance.
-- **WebUI build fixes (#14)** — dual-script bug, abandoned `$props<{...}>()`, `const err;` syntax error.
-- **Spawner stack lands on main (#15)** — corrected the stacked-PR merges.
-- **Docs sync (#16)** — root `CLAUDE.md` + `TODO.md` updated.
-- **`fks-bot-example` reference image (#17)** — produces the documented `fks_bot_*` metrics for the spawner's `file_sd_configs` job.
-- **Repo-split prep (#20)** — `SPLIT_PLAN.md`, per-sub-codebase `CLAUDE.md` + `TODO.md`, root docs updated.
-- **Cleanup (#21)** — `crates/rustcode/`, `crates/kucoin/` (legacy), `infrastructure/docker/services/{rustcode,openclaw,openclaw_cli,promptfoo,ollama}/`, the matching nginx + env-var entries, and `RC_*` / `OPENCLAW_*` env vars all removed. Sub-codebase SQL co-located with owners. `JANUS_EXTRACTION_PLAN.md` moved to `crates/janus/`. Root `Cargo.toml` slimmed to `members = ["src/proto"]`.
-
-### Structural change worth calling out
-
-**`rustrade-supervisor` deps are now pinned explicitly** (not `workspace = true`). This was the gating change for cross-workspace path deps — `crates/janus/bin/janus/` can now path-dep `rustrade-supervisor` without mirroring its transitive deps into `janus`'s `[workspace.dependencies]`. Same pattern will apply when more rustrade crates need to be consumed by foreign workspaces, including post-publish from crates.io.
+- **Repo split executed** — `rustrade`, `janus`, `indicators-ta`,
+  `exchange-apiws` are their own repos; rustrade family + `indicators-ta` +
+  `exchange-apiws` + `jflow-core` published to crates.io.
+- **Docker git-clone build path** — base images acquire source via
+  `git clone --branch ${*_REF}` (CI/prod) or local bind-mount (dev), wired for
+  janus / ruby / web / spawner.
+- **`indicators-ta` consolidation started** — `IncrementalEma` /
+  `IncrementalAtr` lifted out of janus into `indicators-ta`.
+- **Stale in-tree duplicates removed** — `crates/{janus,indicators-ta,exchange-apiws,kucoin}`
+  deleted; docs re-based on the post-split reality.
+- **Earlier (PRs #1–#21)** — the arc that took fks-full from "broken monolith"
+  to "framework + spawner + repo-split-ready": rustrade family + examples,
+  build-rot cleanup, spawner DB persistence + auth + tests + WebUI, the
+  `fks-bot-example` reference image, and the `rustcode` / `openclaw` /
+  `ollama` / `promptfoo` / legacy-kucoin removal (~23 → ~15 containers).

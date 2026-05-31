@@ -8,12 +8,12 @@
 #   - janus     → github.com/nuniesmith/janus      (trading brain; Docker image)
 #   - indicators-ta / exchange-apiws → crates.io   (TA math / exchange REST-WS)
 #
-# What still builds in-tree, each as its own nested workspace:
+# What still builds in-tree:
 #
-#   - src/proto        — fks-proto (centralised protobuf definitions)
-#   - crates/spawner   — bot-container lifecycle service
-#   - crates/rustrade  — LEFTOVER: kept only to host the fks-bot-example bot
-#                        until it's ported to the published crate (TODO.md P0)
+#   - src/proto            — fks-proto (centralised protobuf definitions)
+#   - crates/spawner       — bot-container lifecycle service
+#   - bots/fks-bot-example — standalone reference bot; consumes the published
+#                            rustrade-framework from crates.io (own [workspace])
 #
 # See `SPLIT_PLAN.md` for the remaining moves.
 # ============================================================================

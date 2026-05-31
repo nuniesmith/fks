@@ -168,6 +168,8 @@ fks-full/
 ├── docker-compose.trainer.yml
 ├── run.sh
 ├── proto/fks/             # .proto source of truth
+├── bots/
+│   └── fks-bot-example/   # standalone reference bot — consumes crates.io rustrade-framework
 ├── crates/
 │   └── spawner/           # bot lifecycle manager (nested workspace)
 ├── src/
@@ -184,9 +186,9 @@ fks-full/
 └── models/                # model artifacts (mostly gitignored)
 ```
 
-> `crates/rustrade/` still lingers only to host the spawner's
-> `fks-bot-example` reference bot until it's ported to consume the published
-> `rustrade-framework` crate — see [`TODO.md`](TODO.md) P0.
+> `bots/fks-bot-example/` is the reference bot the spawner launches — a
+> standalone crate that consumes the published `rustrade-framework` from
+> crates.io. It's the template for real bots (and the future `strategies/`).
 
 ---
 

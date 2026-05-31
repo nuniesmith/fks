@@ -73,7 +73,7 @@ pub async fn publish(
 
                 let spread = price * 0.0001;
                 let tick = Tick {
-                    symbol: config.symbol.clone(),
+                    symbol: config.symbol.clone().into(),
                     timestamp: Utc::now(),
                     bid: Price(price - spread / 2.0),
                     ask: Price(price + spread / 2.0),

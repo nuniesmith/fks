@@ -1,9 +1,9 @@
 # =============================================================================
 # fks-bot-example — reference bot image for the FKS spawner
 #
-# Builds the example bot binary from `crates/rustrade/examples/fks-bot-example/`
-# inside the rustrade nested workspace, then ships a slim runtime image that
-# exposes :9091/metrics with the documented `fks_bot_*` series.
+# Builds the standalone bot crate at `bots/fks-bot-example/`, which consumes the
+# published `rustrade-framework` (+ friends) from crates.io, then ships a slim
+# runtime image that exposes :9091/metrics with the documented `fks_bot_*` series.
 #
 # Build (from repo root):
 #   docker build -f infrastructure/docker/services/fks-bot-example/Dockerfile \
@@ -40,14 +40,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     chmod -R a+w ${RUSTUP_HOME} ${CARGO_HOME}
 
 WORKDIR /build
-# Copy the entire repo so the rustrade workspace + path-deps resolve.
-# Build context is the repo root.
-COPY . .
+# Copy just the standalone bot crate; cargo fetches rustrade-framework and the
+# rest from crates.io during the build. Build context is the repo root.
+COPY bots/fks-bot-example/ .
 
-# Build only the example bot binary out of the rustrade workspace.
-WORKDIR /build/crates/rustrade
-RUN cargo build --release -p fks-bot-example && \
-    strip /build/crates/rustrade/target/release/fks-bot-example
+RUN cargo build --release && \
+    strip /build/target/release/fks-bot-example
 
 # ─── Runtime ─────────────────────────────────────────────────────────────────
 FROM ${RUNTIME_BASE}
@@ -63,7 +61,7 @@ RUN apt-get update && \
 RUN useradd -u 1000 -m -s /bin/bash ${APP_USER}
 
 WORKDIR /app
-COPY --from=builder /build/crates/rustrade/target/release/fks-bot-example /app/fks-bot-example
+COPY --from=builder /build/target/release/fks-bot-example /app/fks-bot-example
 
 USER ${APP_USER}
 

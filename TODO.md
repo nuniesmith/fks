@@ -49,30 +49,23 @@ keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`, infra, and
       (`nuniesmith/janus`, `nuniesmith/ruby`, `nuniesmith/fks-web`,
       `nuniesmith/spawner`).
 - [x] `.github/workflows/rust.yml` matrix trimmed to the workspaces that
-      actually remain here (`root · src/proto`, `crates/rustrade`,
-      `crates/spawner`).
+      remain here (`root · src/proto`, `crates/spawner`, and the standalone
+      `bots/fks-bot-example`).
+- [x] **Ported `fks-bot-example` → `bots/fks-bot-example/` and deleted
+      `crates/rustrade`** — the last in-tree copy is gone. The bot is now a
+      standalone crate depending on crates.io
+      (`rustrade = { package = "rustrade-framework", version = "0.2" }`, own
+      `[workspace]`). Adapted to the 0.2.1 API: `session_symbol`→`symbol`,
+      `.supervisor(SupervisorConfig…)`→`.shutdown_timeout()`, `.build()?`,
+      `market_bus()`→`market_data_bus()`, `logging::init()`→`init_tracing()`,
+      `ExchangeClient` now takes `&Symbol`, `Tick.symbol` is `Symbol`. Dockerfile
+      builds it standalone; it's a `rust.yml` matrix entry. _Verified by CI —
+      this repo's env has no crates.io egress._
 - [x] Docs re-based on reality — `README.md`, `CLAUDE.md`, `SPLIT_PLAN.md`,
       and the new `docs/architecture/REPO_TOPOLOGY.md`.
 
 ### Immediate follow-ups
 
-- [ ] **Port `fks-bot-example` → `bots/fks-bot-example/` and delete
-      `crates/rustrade`.** This is the last stale in-tree copy. It only
-      survives because it hosts the spawner's reference bot, which was
-      written against rustrade **0.1.0**. The published facade is **0.2.1**,
-      which renamed the API the bot uses:
-      - `BotConfig::builder().session_symbol(x)` → `.symbol(x)`
-      - drop `.supervisor(SupervisorConfig::default()...)` → `.shutdown_timeout(dur)` on the builder
-      - `.build()` now returns `Result<_>` (add `?`)
-      - `bot.market_bus()` → `bot.market_data_bus()`
-      - `bot.supervisor().cancel_token()` → own a `CancellationToken`, pass it
-        via `Bot::new(..).with_external_cancel(token.clone())`, and drive the
-        metrics-server / ticker teardown off `BotHandle::await_shutdown()`.
-      New `bots/fks-bot-example/Cargo.toml` depends on crates.io
-      (`rustrade = { package = "rustrade-framework", version = "0.2" }`).
-      Repoint `infrastructure/docker/services/fks-bot-example/Dockerfile` at
-      `bots/fks-bot-example`. Add the crate to the `rust.yml` matrix.
-      **Verify under CI** (this repo's build env has no crates.io egress).
 - [ ] **Reconcile `exchange-apiws` versioning.** crates.io is **0.1.10**; the
       local tree is **0.3.2** (unpublished: signed REST, private WS). Decide
       the version line, then `cargo publish` the 0.3.x release so downstreams
@@ -189,9 +182,9 @@ keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`, infra, and
 
 ## P3 — Future (post-funding)
 
-- [ ] **`bots/`** — thin strategy bots that consume the published
-      `rustrade` + `indicators-ta` + `exchange-apiws` crates. The
-      `fks-bot-example` port (P0) is the first of these.
+- [ ] **`bots/`** — more thin strategy bots that consume the published
+      `rustrade` + `indicators-ta` + `exchange-apiws` crates.
+      `bots/fks-bot-example` is the first, and the template, for these.
 - [ ] **`strategies/`** — once `fks-full` flips **private**, this is where the
       actual trading IP lives. Bots get wired to consume the published crates.
 - [ ] Retrain: run bracket sweep (`scripts/bracket_sweep.py`), apply optimal

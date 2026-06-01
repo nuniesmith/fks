@@ -77,11 +77,39 @@ credentials. The FKS stack defaults to paper everywhere for a reason — see the
 bot keeps `MockExchange` as its default and only constructs this adapter behind
 an explicit `DEMO_EXCHANGE=kucoin` opt-in.
 
+## Real fills — `KucoinFillSource`
+
+A `rustrade::FillSource` that streams the exchange's actual executions into the
+bot, replacing paper-simulated fills. Because the framework gates bracket/OCO
+handling on a fill source being present, wiring it also turns on real SL/TP
+management.
+
+```rust
+use rustrade_exchange_apiws::KucoinFillSource;
+use exchange_apiws::KucoinEnv;
+use std::sync::Arc;
+
+let fills = Arc::new(KucoinFillSource::connect(
+    adapter.client().clone(),
+    KucoinEnv::LiveFutures,
+    vec!["XBTUSDTM".into(), "ETHUSDTM".into()],
+    std::time::Duration::from_secs(5),
+));
+// bot.with_fill_source(fills)
+```
+
+It uses the private `tradeOrders` WS as a **low-latency trigger** and reads the
+authoritative price/size/fee from `/recentFills` (exchange-apiws's `OrderUpdate`
+omits the per-execution match price — and reports `0.0` for market orders), so
+fills carry true prices. Deduped by trade id; baselined at startup so history
+isn't replayed; degrades to poll-only if the private WS token is unavailable.
+
 ## Status & roadmap
 
 - ✅ KuCoin Futures `ExchangeClient` (orders, brackets, positions, balance, order tracking).
-- ⏳ `MarketSource` / `FillSource` over the KuCoin private WS feed (so the same
-  adapter can advertise `PrivateFeed` and route real fills) — see the bot TODO.
+- ✅ `KucoinFillSource` — real fills via the private `tradeOrders` WS trigger + `/recentFills`.
+- ⏳ Expose per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate`
+  so the WS feed can carry fill prices directly (drop the `/recentFills` hydration).
 - ⏳ Bybit / other-exchange variants over `exchange-apiws`'s `BybitPrivateClient`.
 
 ## License

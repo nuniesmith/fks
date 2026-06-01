@@ -2660,6 +2660,7 @@ dependencies = [
  "exchange-apiws",
  "rustrade-framework",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 

@@ -34,8 +34,11 @@ path = "src/main.rs"
 rustrade       = { package = "rustrade-framework", version = "0.2" }
 # TA math — crate `indicators-ta`, library imports as `indicators`.
 indicators-ta  = "0.1"        # 0.1.3 on crates.io; 0.1.4 (Incremental*) pending publish
-# Exchange REST/WS clients.
-exchange-apiws = "0.1"
+# Exchange REST/WS clients (KuCoin kline polling for market data).
+exchange-apiws = { version = "0.5", default-features = false }
+# rustrade `ExchangeClient` over exchange-apiws — the live KuCoin order path,
+# selected with DEMO_EXCHANGE=kucoin (default is the paper MockExchange).
+rustrade-exchange-apiws = { path = "../rustrade-exchange-apiws" }
 
 # ── Async runtime / utilities ─────────────────────────────────────────────────
 async-trait  = "0.1"

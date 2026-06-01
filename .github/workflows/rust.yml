@@ -89,6 +89,14 @@ jobs:
                       # Working demo bot: rustrade + indicators-ta + exchange-apiws
                       # from crates.io, paper-traded. Committed lock for repro builds.
                       lock_flag: "--locked"
+                    - workspace: "rustrade-exchange-apiws"
+                      path: "bots/rustrade-exchange-apiws"
+                      needs_protoc: false
+                      # rustrade ExchangeClient over exchange-apiws (the live KuCoin
+                      # order path). crypto-demo path-depends on it, but that job only
+                      # *compiles* it as a dep — this entry runs its own tests/clippy.
+                      # Committed lock keeps the run reproducible like the bots.
+                      lock_flag: "--locked"
                     - workspace: "spawner"
                       path: "crates/spawner"
                       needs_protoc: false
@@ -155,7 +163,7 @@ jobs:
               shell: bash
               run: |
                   set -e
-                  for ws in . bots/fks-bot-example bots/crypto-demo crates/spawner; do
+                  for ws in . bots/fks-bot-example bots/crypto-demo bots/rustrade-exchange-apiws crates/spawner; do
                       printf "\n===> %s\n" "$ws"
                       # `--manifest-path` keeps fmt scoped to THIS workspace's
                       # members — without it, `--all` follows path deps into

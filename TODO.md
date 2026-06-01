@@ -104,14 +104,23 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
 > `rustrade/TODO.md`.
 
 ### Track 1 — make execution real (the #1 blocker)
-- [ ] **`exchange-apiws → rustrade::ExchangeClient` adapter.** Today both bots
-      use `MockExchange` — nothing places a real order through the framework.
-      New crate (`bots/rustrade-exchange-apiws/` or published) impl-ing
-      `ExchangeClient` (+ `MarketSource`/`FillSource`/`CandleSource`) over
-      exchange-apiws's signed clients (KuCoin `rest/orders`, `BybitPrivateClient`).
-      Map `Capability` truthfully; resolve `contract_value` from instrument metadata.
-- [ ] **Point `crypto-demo` at the real adapter** (testnet / paper creds) so it
-      trades end-to-end with real fills instead of `MockExchange`.
+- [x] **`exchange-apiws → rustrade::ExchangeClient` adapter.** Shipped:
+      `bots/rustrade-exchange-apiws/` (`KucoinExchangeAdapter`) over exchange-apiws's
+      signed KuCoin Futures REST. Maps plain orders (market/limit/IOC/FOK), brackets
+      (SL/TP → `place_stop_order`), `close_position`, `get_position`/`get_balance`,
+      `cancel_all` (orders + stop-orders), and order tracking. `Capability` is
+      truthful (no PostOnly — the surface has no post-only flag); `contract_value`
+      from cached `get_contract().multiplier`. 10 unit tests + doctest green against
+      the published crates.
+- [x] **Point `crypto-demo` at the real adapter.** `DEMO_EXCHANGE=kucoin` selects
+      `KucoinExchangeAdapter` (needs `KC_*`; use a sandbox/sub-account to paper-trade
+      the same path). Paper `MockExchange` stays the default. (Bumped crypto-demo's
+      exchange-apiws 0.1→0.5.)
+- [ ] **Private-WS feed for the adapter** — impl `MarketSource`/`FillSource` over
+      the KuCoin private WS so it advertises `Capability::PrivateFeed` and routes
+      **real fills** back into the bot (today fills are still paper-simulated).
+- [ ] **Bybit adapter variant** over `exchange-apiws`'s `BybitPrivateClient`
+      (shares the mapping; folds into Track 5's multi-exchange breadth).
 
 ### Track 4 — the janus↔rustrade risk contract
 - [ ] **`JanusBrain` v2** (`bots/crypto-demo/src/janus_brain.rs`): send portfolio

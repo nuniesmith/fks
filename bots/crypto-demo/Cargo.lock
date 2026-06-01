@@ -547,6 +547,7 @@ dependencies = [
  "prometheus",
  "rand 0.10.1",
  "reqwest 0.12.28",
+ "rustrade-exchange-apiws",
  "rustrade-framework",
  "serde",
  "serde_json",
@@ -656,9 +657,9 @@ dependencies = [
 
 [[package]]
 name = "exchange-apiws"
-version = "0.1.10"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bc4c62a93d09f1603df36cdf7e08f78d1d8846eb7ac7a12ad1f7bb4a1868cc5"
+checksum = "122c43b81f6e4f60ab4dfcf3448ae52bede7399fabb74554e910d0d77765c81a"
 dependencies = [
  "anyhow",
  "base64",
@@ -2647,6 +2648,18 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "rustrade-exchange-apiws"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "exchange-apiws",
+ "rustrade-framework",
+ "serde_json",
  "tracing",
 ]
 

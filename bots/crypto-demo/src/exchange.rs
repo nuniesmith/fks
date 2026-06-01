@@ -11,25 +11,50 @@
 //! at a sandbox/sub-account to paper-trade the identical code path. If the
 //! adapter can't be built (missing creds, network), the demo logs loudly and
 //! falls back to the paper `MockExchange` rather than trading on broken state.
+//!
+//! When the live adapter is selected, a [`KucoinFillSource`] is wired too so
+//! the bot consumes **real fills** (which also enables the framework's
+//! bracket/OCO handling). The demo's paper PnL simulator is disabled in that
+//! mode to avoid double-counting (see `main.rs`).
 
 use std::sync::Arc;
+use std::time::Duration;
 
-use rustrade::ExchangeClient;
-use rustrade_exchange_apiws::KucoinExchangeAdapter;
+use rustrade::{ExchangeClient, FillSource};
+use rustrade_exchange_apiws::{KucoinExchangeAdapter, KucoinFillSource};
 use tracing::{error, info, warn};
 
 use crate::mock_exchange::MockExchange;
 
-/// Build the configured [`ExchangeClient`].
+/// The selected exchange plus, when live, its real-fill source.
+pub struct Selected {
+    /// Where orders go (paper `MockExchange` or the live KuCoin adapter).
+    pub exchange: Arc<dyn ExchangeClient>,
+    /// Real fills from the exchange, present only on the live path. When
+    /// `Some`, the caller must skip the paper PnL simulator (they'd
+    /// double-count) — and the framework turns on bracket/OCO handling.
+    pub fills: Option<Arc<dyn FillSource>>,
+}
+
+impl Selected {
+    fn paper() -> Self {
+        info!("exchange: MockExchange (paper — places no real orders)");
+        Self {
+            exchange: Arc::new(MockExchange),
+            fills: None,
+        }
+    }
+}
+
+/// Build the configured exchange (+ fill source).
 ///
 /// `leverage` should match the bot's `SizingConfig.leverage` so the per-order
 /// leverage the adapter sends to KuCoin agrees with how positions were sized.
-pub async fn build_exchange(symbols: &[String], leverage: u32) -> Arc<dyn ExchangeClient> {
+pub async fn build_exchange(symbols: &[String], leverage: u32) -> Selected {
     let want = std::env::var("DEMO_EXCHANGE").unwrap_or_else(|_| "mock".into());
 
     if !want.eq_ignore_ascii_case("kucoin") {
-        info!("exchange: MockExchange (paper — places no real orders)");
-        return Arc::new(MockExchange);
+        return Selected::paper();
     }
 
     warn!(
@@ -41,19 +66,32 @@ pub async fn build_exchange(symbols: &[String], leverage: u32) -> Arc<dyn Exchan
     let syms: Vec<&str> = symbols.iter().map(String::as_str).collect();
     match KucoinExchangeAdapter::from_env(leverage, &syms).await {
         Ok(adapter) => {
+            // Reuse the adapter's signed client for the fill source (same creds,
+            // KuCoin Futures). The source streams real executions via the private
+            // tradeOrders WS + /recentFills.
+            let fills = KucoinFillSource::connect(
+                adapter.client().clone(),
+                exchange_apiws::KucoinEnv::LiveFutures,
+                symbols.to_vec(),
+                Duration::from_secs(5),
+            );
             info!(
                 leverage,
                 symbols = syms.len(),
-                "exchange: KuCoin Futures adapter (LIVE) — contract multipliers fetched"
+                "exchange: KuCoin Futures adapter (LIVE) + real fill source — \
+                 contract multipliers fetched, brackets enabled"
             );
-            Arc::new(adapter)
+            Selected {
+                exchange: Arc::new(adapter),
+                fills: Some(Arc::new(fills)),
+            }
         }
         Err(e) => {
             error!(
                 error = %e,
                 "kucoin adapter unavailable — FALLING BACK to MockExchange (paper)"
             );
-            Arc::new(MockExchange)
+            Selected::paper()
         }
     }
 }

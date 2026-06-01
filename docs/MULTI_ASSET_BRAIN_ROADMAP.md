@@ -102,8 +102,12 @@ bot. `exchange-apiws` provides market data **and** order execution.
   and order tracking onto KuCoin Futures; advertises `Capability` truthfully;
   resolves `contract_value` from cached contract multipliers. `crypto-demo`
   selects it with `DEMO_EXCHANGE=kucoin` (paper `MockExchange` stays default).
-  *Remaining:* `MarketSource`/`FillSource` over the KuCoin private WS, and a
-  Bybit variant (Track 5).
+- **Real fills** — `KucoinFillSource` (`FillSource`) streams the exchange's
+  executions in via the private `tradeOrders` WS trigger + `/recentFills`,
+  enabling the framework's bracket/OCO handling; `crypto-demo` wires it on the
+  live path and disables the paper simulator. *Remaining on Track 1:* surface
+  `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate` (drop the REST
+  hydration), and a Bybit variant (Track 5).
 
 ### ❌ Greenfield (doesn't exist anywhere yet)
 - **Portfolio-/account-level risk in rustrade.** Every `SessionPnl` /
@@ -134,8 +138,10 @@ Without a real exchange adapter, nothing trades. This unblocks everything else.
    `get_contract`). `Capability` is advertised truthfully (StopOrders / ReduceOnly
    / Ioc / Fok / OrderTracking yes; PostOnly no — no post-only flag on the surface);
    `contract_value` resolves from cached contract multipliers. Unit-tested against
-   the published crates. *Still open:* `MarketSource`/`FillSource` over the KuCoin
-   **private WS** (so it can advertise `PrivateFeed` + route real fills), and a
+   the published crates. ✅ **Real fills** also done — `KucoinFillSource` routes the
+   exchange's executions in via the private `tradeOrders` WS + `/recentFills`,
+   enabling bracket/OCO handling. *Still open:* per-execution `matchPrice`/`matchSize`
+   on exchange-apiws's `OrderUpdate` (to drop the REST hydration), and a
    `BybitPrivateClient` variant — tracked in the bot TODO + Track 5.
 2. **rustrade `SimulatedExchange`** (its TODO 0.3a) as the paper/backtest-fidelity
    reference — so `crypto-demo` can do realistic paper fills instead of `MockExchange`.
@@ -205,8 +211,9 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
 ## Suggested order of attack
 
 1. ✅ **Track 1.1** — the exchange adapter (`bots/rustrade-exchange-apiws/`).
-   Done: orders now execute through the framework. Next up on this track is the
-   private-WS feed (real fills) and a Bybit variant.
+   Done: orders **and real fills** now flow through the framework (adapter +
+   `KucoinFillSource`). Remaining on this track: the `OrderUpdate` match-price
+   enhancement and a Bybit variant.
 2. **Track 2.1 + 2.4** — portfolio risk + the live tick fix. The risk floor for
    trading more than one symbol. **← now the leading edge.**
 3. **Track 4** — `JanusBrain` v2 consuming risk verdicts. Connects the two halves.

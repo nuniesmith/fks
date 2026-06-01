@@ -116,11 +116,18 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
       `KucoinExchangeAdapter` (needs `KC_*`; use a sandbox/sub-account to paper-trade
       the same path). Paper `MockExchange` stays the default. (Bumped crypto-demo's
       exchange-apiws 0.1→0.5.)
-- [ ] **Private-WS feed for the adapter** — impl `MarketSource`/`FillSource` over
-      the KuCoin private WS so it advertises `Capability::PrivateFeed` and routes
-      **real fills** back into the bot (today fills are still paper-simulated).
+- [x] **Real fills via the private WS** — `KucoinFillSource` (`FillSource`) streams
+      the exchange's executions into the bot: private `tradeOrders` WS as a
+      low-latency trigger + `/recentFills` for authoritative price/size/fee (deduped
+      by trade id, baselined at startup, poll-only fallback). Enables the framework's
+      SL/TP bracket + OCO handling. `crypto-demo` wires it on `DEMO_EXCHANGE=kucoin`
+      and disables the paper PnL simulator to avoid double-counting. 5 unit tests.
+- [ ] **`OrderUpdate` match price/size in exchange-apiws** — expose per-execution
+      `matchPrice`/`matchSize` on the private feed so the fill source can drop the
+      `/recentFills` REST hydration (today `OrderUpdate.price` is `0.0` for market
+      orders). Small additive change; would let the WS carry fill prices directly.
 - [ ] **Bybit adapter variant** over `exchange-apiws`'s `BybitPrivateClient`
-      (shares the mapping; folds into Track 5's multi-exchange breadth).
+      (shares the order mapping + a Bybit fill source; folds into Track 5).
 
 ### Track 4 — the janus↔rustrade risk contract
 - [ ] **`JanusBrain` v2** (`bots/crypto-demo/src/janus_brain.rs`): send portfolio

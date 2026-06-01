@@ -41,6 +41,8 @@ async-trait = "0.1"
 chrono      = "0.4"
 serde_json  = "1"
 tracing     = "0.1"
+# Runtime for the fill source's background task (spawn + channels + interval).
+tokio       = { version = "1", features = ["rt", "sync", "time", "macros"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

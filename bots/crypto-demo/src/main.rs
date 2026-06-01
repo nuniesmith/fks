@@ -124,7 +124,12 @@ async fn main() -> anyhow::Result<()> {
     };
     // Paper MockExchange by default; DEMO_EXCHANGE=kucoin routes to the live
     // KuCoin Futures adapter (rustrade-exchange-apiws) — see src/exchange.rs.
-    let exchange: Arc<dyn ExchangeClient> = exchange::build_exchange(&symbols, DEMO_LEVERAGE).await;
+    let selected = exchange::build_exchange(&symbols, DEMO_LEVERAGE).await;
+    let exchange: Arc<dyn ExchangeClient> = selected.exchange;
+    let fill_source = selected.fills;
+    // On the live path we get REAL fills; the paper PnL simulator must then be
+    // disabled so it doesn't double-count against the real fill routing.
+    let real_fills = fill_source.is_some();
 
     // ── Bot config: multi-symbol + risk gates ─────────────────────────────
     let config = BotConfig::builder()
@@ -149,6 +154,14 @@ async fn main() -> anyhow::Result<()> {
 
     let mut bot = Bot::new(config, exchange, vec![brain])?;
 
+    // Real fills (KuCoin private WS trigger + /recentFills) on the live path.
+    // This also turns on the framework's SL/TP bracket + OCO handling, which it
+    // gates on a fill source being present.
+    if let Some(fills) = fill_source {
+        bot = bot.with_fill_source(fills);
+        info!("real fill source wired (live adapter) — paper PnL simulator disabled");
+    }
+
     // Attach one supervised candle poller per symbol. The poller calls
     // CandleSource::poll on `poll_cadence`, diffs newly-closed candles, and
     // publishes them to the bus as MarketDataEvent::Candle.
@@ -170,12 +183,18 @@ async fn main() -> anyhow::Result<()> {
     let aux_cancel = CancellationToken::new();
 
     // Paper-PnL tracker: signals → simulated round trips → metrics + risk PnL.
-    paper::spawn(
-        handle.clone(),
-        bot.market_data_bus().clone(),
-        bot.signal_bus().clone(),
-        aux_cancel.clone(),
-    );
+    // Skipped on the live path, where the framework's FillRoutingService records
+    // PnL from the real fill source instead (running both would double-count).
+    if real_fills {
+        info!("live fills active — skipping paper PnL simulator");
+    } else {
+        paper::spawn(
+            handle.clone(),
+            bot.market_data_bus().clone(),
+            bot.signal_bus().clone(),
+            aux_cancel.clone(),
+        );
+    }
 
     let start = Arc::new(Instant::now());
     tokio::spawn(metrics::uptime_loop(Arc::clone(&start)));

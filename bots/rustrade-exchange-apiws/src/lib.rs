@@ -29,9 +29,17 @@
 //!
 //! `StopOrders`, `ReduceOnly`, `Ioc`, `Fok`, `OrderTracking` → **yes**.
 //! `PostOnly` → **no** (the exchange-apiws `place_order` exposes no post-only
-//! flag). `PublicFeed` / `PrivateFeed` → **no** (this adapter is trading-only;
-//! a bot wires its own market-data + fill sources — e.g. crypto-demo's KuCoin
-//! candle source).
+//! flag). `PublicFeed` / `PrivateFeed` → **no** on the *adapter object* itself
+//! (it's trading-only); real fills are delivered by the companion
+//! [`KucoinFillSource`], and market data by a bot's own candle source.
+//!
+//! # Real fills
+//!
+//! [`KucoinFillSource`] is a [`rustrade::FillSource`] that streams the
+//! exchange's actual executions (price / size / fee) into the bot, replacing
+//! paper-simulated fills — and, because the framework gates bracket/OCO
+//! handling on a fill source being present, it's what turns on real SL/TP
+//! management. See its docs for the WS-trigger + `/recentFills` design.
 //!
 //! # Leverage & sizing
 //!
@@ -73,6 +81,9 @@ use exchange_apiws::{
     Credentials, KuCoinClient, KucoinEnv, OrderType as EaOrderType, Side as EaSide,
     TimeInForce as EaTif,
 };
+
+mod fills;
+pub use fills::KucoinFillSource;
 
 // ── Error glue ───────────────────────────────────────────────────────────────
 
@@ -173,7 +184,7 @@ fn count_cancelled(v: &serde_json::Value) -> usize {
 }
 
 /// Milliseconds since the epoch → `DateTime<Utc>` (None on overflow).
-fn ms_to_dt(ms: i64) -> Option<DateTime<Utc>> {
+pub(crate) fn ms_to_dt(ms: i64) -> Option<DateTime<Utc>> {
     DateTime::<Utc>::from_timestamp_millis(ms)
 }
 

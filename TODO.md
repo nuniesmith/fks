@@ -18,21 +18,26 @@
 
 ---
 
-## Status snapshot (2026-05-31)
+## Status snapshot (2026-06-01)
 
-The split **happened**. `rustrade`, `janus`, `indicators-ta`, and
-`exchange-apiws` are independent repos, and the libraries are on crates.io:
+The split + consolidation are **done**. `rustrade`, `janus`, `indicators-ta`,
+and `exchange-apiws` are independent repos; the libraries are on crates.io and
+janus consumes them:
 
 | Crate | crates.io | Consume as |
 |-------|-----------|------------|
 | `rustrade-framework` (+ core/supervisor/risk/backtest) | **0.2.1** ✅ | `rustrade = { package = "rustrade-framework", version = "0.2" }` |
-| `indicators-ta` | **0.1.3** ✅ | `indicators-ta = "0.1"` (imports as `indicators`) |
-| `exchange-apiws` | **0.1.10** ✅ | `exchange-apiws = "0.1"` (local tree is 0.3.x — see P0) |
+| `indicators-ta` | **0.1.5** ✅ | `indicators-ta = "0.1"` (imports as `indicators`) |
+| `exchange-apiws` | **0.5.0** ✅ | `exchange-apiws = "0.5"` (signed Bybit + Coinbase/OKX connectors) |
 | `jflow-core` (janus) | **0.1.0** ✅ | first janus lib; rest of `jflow-*` prepped, not pushed |
 
-What's left is **consumption + consolidation**, not splitting. `fks-full`
-keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`, infra, and
-(soon) `bots/` + `strategies/`.
+`fks-full` keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`,
+infra, and `bots/` (with `strategies/` to come). The two reference bots
+(`fks-bot-example`, `crypto-demo`) build as `fks-bot-*` images via
+`./run.sh build-bots` and are spawnable from the WebUI `/bots`.
+
+**Next:** turn the demo wiring into a real risk-aware multi-asset brain — see
+[`docs/MULTI_ASSET_BRAIN_ROADMAP.md`](docs/MULTI_ASSET_BRAIN_ROADMAP.md).
 
 ---
 
@@ -77,24 +82,50 @@ keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`, infra, and
 
 ---
 
-## P1 — Janus consolidation (consume the shared crates)
+## ✅ Janus consolidation — DONE
 
-> The big architectural work. Lives in the **janus** repo; tracked here
-> because it's the whole point of the split. Today janus duplicates TA and
-> exchange connectivity internally (`jflow-indicators`, `jflow-exchanges`,
-> `jflow-bybit-client`) and dropped its `rustrade` dependency. Target: one
-> source of truth per concern.
+> The big architectural work is complete (janus repo). Kept here as a record.
 
-- [ ] **TA → `indicators-ta`.** Migrate janus's `jflow-indicators` consumers
-      onto `indicators-ta`; retire the duplicate. (`IncrementalEma`/`IncrementalAtr`
-      already lifted into `indicators-ta` — continue from there.)
-- [ ] **Connectivity → `exchange-apiws`.** Replace `jflow-exchanges` /
-      `jflow-bybit-client` usage with `exchange-apiws`; retire the duplicates.
-- [ ] **Framework → `rustrade`.** Re-adopt the framework: janus's signal
-      services become `rustrade::Brain`s / `TradingService`s under a
-      `rustrade::Bot`/`Supervisor`, instead of bespoke lifecycle code.
-- [ ] Decide janus public-vs-private once consolidated (the brain IP can stay
-      private while `jflow-*` siblings remain public on crates.io).
+- [x] **TA → `indicators-ta`** — `jflow-indicators` retired (janus#35).
+- [x] **Connectivity → `exchange-apiws`** — `jflow-bybit-client` retired (Bybit,
+      janus#36); `jflow-exchanges` adapters retired (Coinbase/Kraken/OKX
+      ingestion, janus#37); dead adapter code deleted, −2.6k LOC (janus#38).
+- [x] **Framework → reframed, not adopted by janus.** janus is a multi-service
+      ML engine, not a thin bot; `rustrade` lives in the **`bots/` layer** here
+      that *consumes* janus's signals (the `JanusBrain` ↔ rustrade tie-in).
+
+---
+
+## P1 — Multi-asset risk-aware brain (the headline goal)
+
+> **See [`docs/MULTI_ASSET_BRAIN_ROADMAP.md`](docs/MULTI_ASSET_BRAIN_ROADMAP.md)
+> for the full cross-repo plan + evidence.** The items below are the
+> **fks-full / `bots/`** slice. The rest live in `janus/TODO.md` and
+> `rustrade/TODO.md`.
+
+### Track 1 — make execution real (the #1 blocker)
+- [ ] **`exchange-apiws → rustrade::ExchangeClient` adapter.** Today both bots
+      use `MockExchange` — nothing places a real order through the framework.
+      New crate (`bots/rustrade-exchange-apiws/` or published) impl-ing
+      `ExchangeClient` (+ `MarketSource`/`FillSource`/`CandleSource`) over
+      exchange-apiws's signed clients (KuCoin `rest/orders`, `BybitPrivateClient`).
+      Map `Capability` truthfully; resolve `contract_value` from instrument metadata.
+- [ ] **Point `crypto-demo` at the real adapter** (testnet / paper creds) so it
+      trades end-to-end with real fills instead of `MockExchange`.
+
+### Track 4 — the janus↔rustrade risk contract
+- [ ] **`JanusBrain` v2** (`bots/crypto-demo/src/janus_brain.rs`): send portfolio
+      state + position with each request; consume janus's **risk verdict** (size,
+      stop, Hold/Reduce/Exit) via `/api/v1/risk/evaluate` + `/api/v1/positions/event`,
+      not just the raw signal + a stop price as today.
+- [ ] **Position-event feedback loop**: report fills/closes back to
+      `/api/v1/positions/{event,close}` so janus's affinity learning sees outcomes.
+
+### Multi-account (existing, pre-roadmap)
+- [ ] **ACCT-A** — `src/ruby/sql/008_accounts.sql` (exchange_accounts,
+      asset_routing_rules, profit_sweep_*); apply via `./run.sh fix-db`.
+- [ ] **ACCT-E** — janus execution router: `RoutingClient` calling
+      `GET http://fks_ruby:8000/api/routing/{symbol}`, fan out per routing rule.
 
 ---
 

@@ -35,6 +35,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 mod brain;
+mod exchange;
 mod janus_brain;
 mod metrics;
 mod mock_exchange;
@@ -44,7 +45,11 @@ mod source;
 
 use crate::brain::{EmaCrossBrain, EmaCrossConfig};
 use crate::janus_brain::{JanusBrain, JanusBrainConfig};
-use crate::mock_exchange::MockExchange;
+
+/// Leverage used in two places that must agree: the `SizingConfig` (how
+/// positions are sized) and the live exchange adapter (the per-order leverage
+/// KuCoin receives).
+const DEMO_LEVERAGE: u32 = 5;
 
 /// Read a comma-separated env list, falling back to `default`.
 fn env_list(key: &str, default: &[&str]) -> Vec<String> {
@@ -117,7 +122,9 @@ async fn main() -> anyhow::Result<()> {
             EmaCrossConfig::default(),
         ))
     };
-    let exchange: Arc<dyn ExchangeClient> = Arc::new(MockExchange);
+    // Paper MockExchange by default; DEMO_EXCHANGE=kucoin routes to the live
+    // KuCoin Futures adapter (rustrade-exchange-apiws) — see src/exchange.rs.
+    let exchange: Arc<dyn ExchangeClient> = exchange::build_exchange(&symbols, DEMO_LEVERAGE).await;
 
     // ── Bot config: multi-symbol + risk gates ─────────────────────────────
     let config = BotConfig::builder()
@@ -131,7 +138,7 @@ async fn main() -> anyhow::Result<()> {
         // = 0.001 BTC) far smaller margin would suffice — tune per deployment.
         .sizing_config(SizingConfig {
             margin_per_trade: 50_000.0,
-            leverage: 5,
+            leverage: DEMO_LEVERAGE,
             max_contracts: 100,
         })
         // Stop the session if paper PnL drops past this (per UTC day).

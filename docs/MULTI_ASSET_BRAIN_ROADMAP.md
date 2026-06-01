@@ -95,10 +95,17 @@ bot. `exchange-apiws` provides market data **and** order execution.
   **off by default** and not on the live path; the 251K-LOC neuromorphic stack is
   **entirely disconnected** from live trading.
 
+### ✅ Now built (Track 1.1 + 1.3 — was the #1 blocker)
+- **`exchange-apiws → rustrade::ExchangeClient` adapter** — shipped as
+  `bots/rustrade-exchange-apiws/` (`KucoinExchangeAdapter`). Maps orders,
+  brackets (SL/TP via `place_stop_order`), positions, balance, `cancel_all`,
+  and order tracking onto KuCoin Futures; advertises `Capability` truthfully;
+  resolves `contract_value` from cached contract multipliers. `crypto-demo`
+  selects it with `DEMO_EXCHANGE=kucoin` (paper `MockExchange` stays default).
+  *Remaining:* `MarketSource`/`FillSource` over the KuCoin private WS, and a
+  Bybit variant (Track 5).
+
 ### ❌ Greenfield (doesn't exist anywhere yet)
-- **A real `exchange-apiws → rustrade::ExchangeClient` adapter.** Both bots use
-  `MockExchange`. Nothing can place a real order through the framework. *(This is
-  the #1 blocker for any live/paper-with-real-fills trading via rustrade.)*
 - **Portfolio-/account-level risk in rustrade.** Every `SessionPnl` /
   `CircuitBreaker` is per-symbol. No account-wide daily loss, gross/net exposure
   cap, max concurrent positions, or buying-power budget across symbols.
@@ -121,16 +128,21 @@ repo's `TODO.md`; this is the cross-cutting sequence and the "why."
 
 ### Track 1 — Make execution real (highest leverage) · `rustrade` + `fks-full`
 Without a real exchange adapter, nothing trades. This unblocks everything else.
-1. **`exchange-apiws → rustrade::ExchangeClient` adapter.** A new crate
-   (`bots/rustrade-exchange-apiws/` or a published `rustrade-exchange-apiws`) that
-   impls `ExchangeClient` (+ `MarketSource`/`FillSource`/`CandleSource`) over
-   `exchange-apiws`'s signed clients (KuCoin `rest/orders`, `BybitPrivateClient`).
-   Map `Capability` truthfully (KuCoin/Bybit have stop orders, reduce-only).
-   Resolve `contract_value` per symbol from exchange instrument metadata.
+1. ✅ **`exchange-apiws → rustrade::ExchangeClient` adapter.** Shipped as
+   `bots/rustrade-exchange-apiws/` (`KucoinExchangeAdapter`) over `exchange-apiws`'s
+   signed KuCoin Futures REST (`rest/orders`, `rest/account`, `place_stop_order`,
+   `get_contract`). `Capability` is advertised truthfully (StopOrders / ReduceOnly
+   / Ioc / Fok / OrderTracking yes; PostOnly no — no post-only flag on the surface);
+   `contract_value` resolves from cached contract multipliers. Unit-tested against
+   the published crates. *Still open:* `MarketSource`/`FillSource` over the KuCoin
+   **private WS** (so it can advertise `PrivateFeed` + route real fills), and a
+   `BybitPrivateClient` variant — tracked in the bot TODO + Track 5.
 2. **rustrade `SimulatedExchange`** (its TODO 0.3a) as the paper/backtest-fidelity
    reference — so `crypto-demo` can do realistic paper fills instead of `MockExchange`.
-3. **Point `crypto-demo` at the real adapter** (paper creds / testnet) so it
-   trades end-to-end through the framework with real fills.
+3. ✅ **`crypto-demo` can use the real adapter.** `DEMO_EXCHANGE=kucoin` routes
+   orders through `KucoinExchangeAdapter` (needs `KC_*` creds; point them at a
+   sandbox/sub-account to paper-trade the identical path). The paper `MockExchange`
+   remains the default — consistent with the stack's "no autonomous execution" rule.
 
 ### Track 2 — Portfolio & asset-class risk in rustrade · `rustrade`
 The framework's risk tier is per-symbol only; multi-asset trading needs account-level rules.
@@ -192,9 +204,11 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
 
 ## Suggested order of attack
 
-1. **Track 1.1** — the exchange adapter. Nothing is real without it.
+1. ✅ **Track 1.1** — the exchange adapter (`bots/rustrade-exchange-apiws/`).
+   Done: orders now execute through the framework. Next up on this track is the
+   private-WS feed (real fills) and a Bybit variant.
 2. **Track 2.1 + 2.4** — portfolio risk + the live tick fix. The risk floor for
-   trading more than one symbol.
+   trading more than one symbol. **← now the leading edge.**
 3. **Track 4** — `JanusBrain` v2 consuming risk verdicts. Connects the two halves.
 4. **Track 3** — wire janus's real brain/risk inline. The brain gets serious.
 5. **Tracks 5 & 6** — breadth + validation, in parallel as capacity allows.

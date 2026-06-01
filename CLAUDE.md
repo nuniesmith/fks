@@ -35,6 +35,8 @@ reusable pieces from their own repos / crates.io.
 | `src/web/` | SvelteKit dashboard | `CLAUDE.md` + `TODO.md` + `README.md` |
 | `src/proto/` | `fks-proto` crate (protobuf) | — |
 | `bots/fks-bot-example/` | reference bot — consumes the published crates | own `[workspace]` |
+| `bots/crypto-demo/` | working multi-symbol demo bot (paper by default) | own `[workspace]` |
+| `bots/rustrade-exchange-apiws/` | `rustrade::ExchangeClient` over `exchange-apiws` (KuCoin) — the live order path | `README.md` + own `[workspace]` |
 | `strategies/` | private trading IP (consumes the published crates) | *(planned)* |
 
 > `bots/fks-bot-example/` is the canonical example of consuming the published

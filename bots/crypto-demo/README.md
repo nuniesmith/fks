@@ -95,13 +95,26 @@ curl -s localhost:9091/health      # → ok
 
 ## Docker / spawner
 
-Builds and runs exactly like `fks-bot-example`:
+Builds and runs exactly like `fks-bot-example`. The image is tagged
+`fks-bot-crypto-demo` so it matches the spawner's `ALLOWED_IMAGE_PREFIX`
+(default `fks-bot-`):
 
 ```bash
+# Build both bot images from the repo root:
+./run.sh build-bots
+# …or just this one:
 docker build -f infrastructure/docker/services/crypto-demo/Dockerfile \
-             -t crypto-demo:latest .
-docker run --rm -p 9091:9091 crypto-demo:latest                       # live
-docker run --rm -e DEMO_SOURCE=synthetic -p 9091:9091 crypto-demo:latest  # offline
+             -t fks-bot-crypto-demo:latest .
+
+docker run --rm -p 9091:9091 fks-bot-crypto-demo:latest                       # live
+docker run --rm -e DEMO_SOURCE=synthetic -p 9091:9091 fks-bot-crypto-demo:latest  # offline
+```
+
+Spawn it from the WebUI `/bots` page, or via the spawner API:
+
+```json
+{ "image": "fks-bot-crypto-demo:latest", "mode": "paper",
+  "env": { "DEMO_SYMBOLS": "XBTUSDTM,ETHUSDTM" } }
 ```
 
 The image exposes the documented `fks_bot_*` series, so the FKS spawner's

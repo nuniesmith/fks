@@ -6,15 +6,22 @@
 # then ships a slim runtime image exposing :9091/metrics with the `fks_bot_*`
 # series — spawnable by the FKS spawner exactly like fks-bot-example.
 #
+# The image is tagged `fks-bot-crypto-demo` so it matches the spawner's
+# `ALLOWED_IMAGE_PREFIX` (default `fks-bot-`) and can be launched from `/bots`.
+#
 # Build (from repo root):
 #   docker build -f infrastructure/docker/services/crypto-demo/Dockerfile \
-#                -t crypto-demo:latest .
+#                -t fks-bot-crypto-demo:latest .
 #
 # Run (paper, live KuCoin data):
-#   docker run --rm -p 9091:9091 crypto-demo:latest
+#   docker run --rm -p 9091:9091 fks-bot-crypto-demo:latest
 #
 # Run offline (synthetic data, no network):
-#   docker run --rm -e DEMO_SOURCE=synthetic -p 9091:9091 crypto-demo:latest
+#   docker run --rm -e DEMO_SOURCE=synthetic -p 9091:9091 fks-bot-crypto-demo:latest
+#
+# Spawn via the FKS spawner's `/api/spawner/spawn`:
+#   { "image": "fks-bot-crypto-demo:latest", "mode": "paper",
+#     "env": { "DEMO_SYMBOLS": "XBTUSDTM,ETHUSDTM" } }
 # =============================================================================
 
 ARG RUST_VERSION=1.94.1

@@ -26,6 +26,7 @@
 #   build-ruby            Build FKS Python images (base cache → ruby)
 #   build-ruby-trainer    Build GPU trainer image
 #   build-redis           Build custom Redis image
+#   build-bots            Build the spawnable reference bot images (bots/)
 #   retrain               Run 3-tier CNN retrain (default: --tier all)
 #   setup-env             Generate or validate .env, fill missing secrets, prompt for API keys
 #   generate-certs        Generate internal service TLS certs (skips if already present)
@@ -1139,6 +1140,32 @@ cmd_build_redis() {
     fi
 }
 
+# Build the spawnable reference bot images under bots/. These are NOT part of
+# the always-on compose stack — the spawner launches them on demand — so they
+# build directly with `docker build` from the repo root. Both are tagged with
+# the `fks-bot-` prefix the spawner whitelists (ALLOWED_IMAGE_PREFIX).
+cmd_build_bots() {
+    header "Building Reference Bot Images"
+    local rc=0
+    local bots=(
+        "fks-bot-example:infrastructure/docker/services/fks-bot-example/Dockerfile"
+        "fks-bot-crypto-demo:infrastructure/docker/services/crypto-demo/Dockerfile"
+    )
+    for spec in "${bots[@]}"; do
+        local tag="${spec%%:*}"
+        local dockerfile="${spec#*:}"
+        info "Building ${tag}:latest"
+        if docker build -f "$dockerfile" -t "${tag}:latest" .; then
+            ok "${tag}:latest built"
+        else
+            err "${tag} build failed"
+            rc=1
+        fi
+    done
+    [ "$rc" -eq 0 ] && ok "Bot images built — spawn from the WebUI /bots page"
+    return "$rc"
+}
+
 cmd_build() {
     local mode="${1:-dev}"
     shift || true
@@ -2231,6 +2258,7 @@ ${BLUE}Build:${NC}
   ./run.sh build-ruby             Build Python base + ruby image
   ./run.sh build-ruby-trainer     Build GPU trainer image
   ./run.sh build-redis            Build custom Redis image
+  ./run.sh build-bots             Build the spawnable reference bot images
 
 ${BLUE}Training:${NC}
   ./run.sh retrain                  Run 3-tier CNN retrain (default: --tier all)
@@ -2637,6 +2665,7 @@ main() {
         build-ruby)         cmd_build_ruby ;;
         build-ruby-trainer) cmd_build_trainer ;;   # FIX: was unreachable
         build-redis)        cmd_build_redis ;;
+        build-bots)         cmd_build_bots ;;
         retrain)            cmd_retrain "$@" ;;
         setup-env)          setup_env_file ;;
         generate-certs)     ensure_tls_certs ;;

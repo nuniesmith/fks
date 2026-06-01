@@ -169,7 +169,8 @@ fks-full/
 ├── run.sh
 ├── proto/fks/             # .proto source of truth
 ├── bots/
-│   └── fks-bot-example/   # standalone reference bot — consumes crates.io rustrade-framework
+│   ├── fks-bot-example/   # minimal reference bot — heartbeat + fks_bot_* metrics
+│   └── crypto-demo/       # working bot: rustrade + indicators-ta + exchange-apiws (+ optional JanusBrain)
 ├── crates/
 │   └── spawner/           # bot lifecycle manager (nested workspace)
 ├── src/
@@ -186,9 +187,13 @@ fks-full/
 └── models/                # model artifacts (mostly gitignored)
 ```
 
-> `bots/fks-bot-example/` is the reference bot the spawner launches — a
-> standalone crate that consumes the published `rustrade-framework` from
-> crates.io. It's the template for real bots (and the future `strategies/`).
+> **Reference bots** under `bots/` are standalone crates that consume the
+> published crates and ship as `fks-bot-*` images the spawner can launch
+> (build both with `./run.sh build-bots`, then spawn from the WebUI `/bots`):
+> - `fks-bot-example` — the minimal template (heartbeat + `fks_bot_*` metrics).
+> - `crypto-demo` — a working bot exercising the whole stack (rustrade +
+>   indicators-ta + exchange-apiws), with an optional `JanusBrain` that
+>   delegates decisions to janus. See [`bots/crypto-demo/README.md`](bots/crypto-demo/README.md).
 
 ---
 

@@ -7,26 +7,37 @@
 //! (candle pollers, supervisor, risk gate, paper exchange, metrics) is
 //! identical — only the brain changes.
 //!
+//! **v2 — risk-verdict aware.** Beyond the directional signal, the brain routes
+//! it through janus's **risk engine** instead of acting on the raw signal:
+//!
 //! ```text
-//!   candle ──► JanusBrain ──(EMA/RSI/ATR via indicators-ta)──► HTTP POST
+//!   candle ─► JanusBrain ─(EMA/ATR)─► POST /api/v1/signals/generate ─► direction+conf
 //!                                                  │
-//!                            janus /api/v1/signals/generate (port 8080)
-//!                                                  │  TradingSignal
+//!                 POST /api/v1/risk/validate  ◄────┤   (veto? → Hold)
+//!                 POST /api/v1/risk/calculate/position-size  ◄─ (risk-sized quantity)
 //!                                                  ▼
-//!                              SignalType → rustrade::Decision
+//!                   rustrade::Decision { side, SizeHint::Quantity(janus qty), stop, tp }
+//!
+//!   on_fill ─► POST /api/v1/risk/portfolio/positions   (feed janus's portfolio + affinity)
 //! ```
 //!
-//! Resilience: if janus is unreachable or returns no signal, the brain holds
-//! (never throws) so a long demo run survives janus restarts. Set
-//! `JANUS_HTTP_URL` to point at the janus forward service
-//! (default `http://localhost:8080`).
+//! So janus's risk layer is the authority on **whether** to trade (validate) and
+//! **how big** (position-size), and it sees realised fills. Toggle with
+//! [`JanusBrainConfig::use_risk_engine`].
+//!
+//! Resilience: every janus call **fails open** — if the signal or risk API is
+//! unreachable the brain holds or falls back to framework sizing (never throws),
+//! so a long demo run survives janus being down or partial. Set `JANUS_HTTP_URL`
+//! to the forward service (default `http://localhost:8080`).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 use async_trait::async_trait;
 use indicators::{ATR, EMA};
-use rustrade::{Brain, BrainHealth, Decision, MarketDataEvent, Position, Price, Result};
+use rustrade::{
+    Brain, BrainHealth, Decision, Fill, MarketDataEvent, Position, Price, Result, SizeHint, Volume,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
@@ -104,6 +115,80 @@ fn parse_signal_type(s: &str) -> JanusSide {
     }
 }
 
+// ── Risk-API wire types (mirror janus services/forward/src/api/risk_rest.rs) ──
+// v2: instead of acting on the raw signal, the brain asks janus's risk engine
+// to *validate* the signal and *size* the position, then reports fills back so
+// janus's portfolio + affinity stay current.
+
+#[derive(Debug, Serialize)]
+struct SignalDto {
+    symbol: String,
+    signal_type: String, // "Buy" / "Sell" / "Hold"
+    timeframe: String,
+    confidence: f64,
+    entry_price: Option<f64>,
+    stop_loss: Option<f64>,
+    take_profit: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+struct MarketDataDto {
+    current_price: f64,
+    atr: Option<f64>,
+    support: Option<f64>,
+    resistance: Option<f64>,
+    volatility: Option<f64>,
+    recent_high: Option<f64>,
+    recent_low: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+struct PositionDto {
+    symbol: String,
+    entry_price: f64,
+    quantity: f64,
+    side: String, // "Long" / "Short"
+    stop_loss: Option<f64>,
+    take_profit: Option<f64>,
+    position_value: f64,
+    risk_amount: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+struct ValidateSignalRequest {
+    signal: SignalDto,
+}
+
+#[derive(Debug, Deserialize)]
+struct ValidateSignalResponse {
+    is_valid: bool,
+    #[serde(default)]
+    validation_errors: Vec<String>,
+    #[serde(default)]
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct CalculatePositionSizeRequest {
+    signal: SignalDto,
+    market_data: MarketDataDto,
+    sizing_method: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PositionSizeResponse {
+    quantity: f64,
+    #[serde(default)]
+    position_value: f64,
+    #[serde(default)]
+    risk_amount: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct AddPositionRequest {
+    position: PositionDto,
+}
+
 // ── Per-symbol indicator state ────────────────────────────────────────────────
 
 struct SymbolState {
@@ -134,6 +219,12 @@ pub struct JanusBrainConfig {
     pub timeframe: String,
     /// Minimum confidence janus must report before we act.
     pub min_confidence: f64,
+    /// v2: route the directional signal through janus's **risk engine**
+    /// (`/risk/validate` + `/risk/calculate/position-size`) and report fills to
+    /// its portfolio (`/risk/portfolio/positions`). When janus's risk API is
+    /// unreachable the brain degrades gracefully to v1 behaviour (direct sizing
+    /// + the signal's own stop), so a demo run survives janus being partial.
+    pub use_risk_engine: bool,
 }
 
 impl Default for JanusBrainConfig {
@@ -144,6 +235,7 @@ impl Default for JanusBrainConfig {
             atr_period: 14,
             timeframe: "1m".into(),
             min_confidence: 0.5,
+            use_risk_engine: true,
         }
     }
 }
@@ -215,6 +307,93 @@ impl JanusBrain {
             "janus replied"
         );
         Ok(resp.signal)
+    }
+
+    /// Ask janus's risk engine to validate the signal. `Ok(true)` = approved (or
+    /// the endpoint is absent/old and returns nothing parseable — fail open so a
+    /// missing risk service doesn't silently halt trading).
+    async fn risk_validate(&self, signal: &SignalDto) -> std::result::Result<bool, reqwest::Error> {
+        let url = format!("{}/api/v1/risk/validate", self.base_url);
+        let resp: ValidateSignalResponse = self
+            .http
+            .post(&url)
+            .json(&ValidateSignalRequest {
+                signal: signal.clone_shallow(),
+            })
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        if !resp.is_valid {
+            warn!(
+                errors = ?resp.validation_errors,
+                warnings = ?resp.warnings,
+                "janus risk vetoed the signal"
+            );
+        }
+        Ok(resp.is_valid)
+    }
+
+    /// Ask janus's risk engine to size the position. Returns the quantity
+    /// (base/contract units) it recommends, or `None` if it declines / errors.
+    async fn risk_size(
+        &self,
+        signal: &SignalDto,
+        market: MarketDataDto,
+    ) -> std::result::Result<Option<f64>, reqwest::Error> {
+        let url = format!("{}/api/v1/risk/calculate/position-size", self.base_url);
+        let resp: PositionSizeResponse = self
+            .http
+            .post(&url)
+            .json(&CalculatePositionSizeRequest {
+                signal: signal.clone_shallow(),
+                market_data: market,
+                sizing_method: None,
+            })
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        debug!(
+            quantity = resp.quantity,
+            notional = resp.position_value,
+            risk = resp.risk_amount,
+            "janus risk sized the position"
+        );
+        Ok((resp.quantity > 0.0).then_some(resp.quantity))
+    }
+
+    /// Report an opened position to janus's portfolio so its account-level risk
+    /// + affinity learning see it. Best-effort — logged, never fatal.
+    async fn report_position(&self, position: PositionDto) {
+        let url = format!("{}/api/v1/risk/portfolio/positions", self.base_url);
+        if let Err(e) = self
+            .http
+            .post(&url)
+            .json(&AddPositionRequest { position })
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status)
+        {
+            debug!(error = %e, "janus portfolio position report failed (non-fatal)");
+        }
+    }
+}
+
+impl SignalDto {
+    /// Cheap clone for re-sending the same signal to multiple risk endpoints.
+    fn clone_shallow(&self) -> Self {
+        Self {
+            symbol: self.symbol.clone(),
+            signal_type: self.signal_type.clone(),
+            timeframe: self.timeframe.clone(),
+            confidence: self.confidence,
+            entry_price: self.entry_price,
+            stop_loss: self.stop_loss,
+            take_profit: self.take_profit,
+        }
     }
 }
 
@@ -297,12 +476,7 @@ impl Brain for JanusBrain {
             return Ok(Decision::hold()); // already on this side
         }
 
-        // Record the new side.
-        if let Some(st) = self.state.lock().unwrap().get_mut(&symbol.0) {
-            st.last_side = side;
-        }
-        metrics::record_signal();
-        *self.signals.lock().unwrap() += 1;
+        let conf = sig.confidence.clamp(0.0, 1.0);
 
         // Prefer janus's own stop; fall back to a 2×ATR stop.
         let stop = sig.stop_loss.unwrap_or_else(|| {
@@ -317,20 +491,99 @@ impl Brain for JanusBrain {
             }
         });
 
-        let conf = sig.confidence.clamp(0.0, 1.0);
+        // ── v2: route through janus's risk engine (validate + size) ─────
+        // Degrades gracefully: a transport error fails open (don't halt on a
+        // blip); a reachable veto holds; sizing falls back to the framework's.
+        let mut size_hint = SizeHint::Default;
+        if self.cfg.use_risk_engine {
+            let signal_dto = SignalDto {
+                symbol: symbol.0.clone(),
+                signal_type: if side == JanusSide::Buy {
+                    "Buy"
+                } else {
+                    "Sell"
+                }
+                .into(),
+                timeframe: self.cfg.timeframe.clone(),
+                confidence: conf,
+                entry_price: Some(candle.close),
+                stop_loss: Some(stop),
+                take_profit: sig.take_profit,
+            };
+            match self.risk_validate(&signal_dto).await {
+                Ok(false) => return Ok(Decision::hold()), // janus risk vetoed
+                Ok(true) => {}
+                Err(e) => {
+                    *self.errors.lock().unwrap() += 1;
+                    warn!(error = %e, "risk validate failed — proceeding without veto");
+                }
+            }
+            let market = MarketDataDto {
+                current_price: candle.close,
+                atr: (atr_val > 0.0).then_some(atr_val),
+                volatility: (candle.close > 0.0).then(|| atr_val / candle.close),
+                support: None,
+                resistance: None,
+                recent_high: None,
+                recent_low: None,
+            };
+            match self.risk_size(&signal_dto, market).await {
+                Ok(Some(qty)) => size_hint = SizeHint::Quantity(Volume(qty)),
+                Ok(None) => {}
+                Err(e) => {
+                    *self.errors.lock().unwrap() += 1;
+                    warn!(error = %e, "risk size failed — default sizing");
+                }
+            }
+        }
+
+        // Record + count only now that the risk engine didn't veto.
+        if let Some(st) = self.state.lock().unwrap().get_mut(&symbol.0) {
+            st.last_side = side;
+        }
+        metrics::record_signal();
+        *self.signals.lock().unwrap() += 1;
+
         tracing::info!(
             symbol = %symbol.0, signal = %sig.signal_type, confidence = conf,
-            close = candle.close, "janus signal → decision"
+            close = candle.close, ?size_hint, "janus signal → risk-checked decision"
         );
 
         let mut decision = match side {
-            JanusSide::Buy => Decision::buy(conf).with_stop(Price(stop)),
-            _ => Decision::sell(conf).with_stop(Price(stop)),
-        };
+            JanusSide::Buy => Decision::buy(conf),
+            _ => Decision::sell(conf),
+        }
+        .with_stop(Price(stop))
+        .with_size_hint(size_hint);
         if let Some(tp) = sig.take_profit {
             decision = decision.with_take_profit(Price(tp));
         }
         Ok(decision)
+    }
+
+    async fn on_fill(&self, fill: &Fill) -> Result<()> {
+        // v2: report the fill to janus's portfolio so its account-level risk +
+        // affinity learning see realised exposure. Best-effort.
+        if !self.cfg.use_risk_engine {
+            return Ok(());
+        }
+        let (side, qty) = match fill.side {
+            rustrade::Side::Buy => ("Long", fill.size.value()),
+            rustrade::Side::Sell => ("Short", fill.size.value()),
+        };
+        let price = fill.price.value();
+        self.report_position(PositionDto {
+            symbol: fill.symbol.as_str().to_string(),
+            entry_price: price,
+            quantity: qty,
+            side: side.to_string(),
+            stop_loss: None,
+            take_profit: None,
+            position_value: price * qty,
+            risk_amount: None,
+        })
+        .await;
+        Ok(())
     }
 
     async fn health(&self) -> BrainHealth {

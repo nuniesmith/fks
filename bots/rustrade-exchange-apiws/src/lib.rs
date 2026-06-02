@@ -1,12 +1,16 @@
-//! A [`rustrade`] [`ExchangeClient`] backed by `exchange-apiws`'s signed
-//! **KuCoin Futures** REST surface.
+//! [`rustrade`] [`ExchangeClient`] adapters backed by `exchange-apiws`'s signed
+//! REST surfaces:
+//!
+//! - [`KucoinExchangeAdapter`] — **KuCoin Futures** (contracts, leverage,
+//!   brackets), plus [`KucoinFillSource`] for real fills.
+//! - [`KrakenSpotAdapter`] — **Kraken spot** (long-only, base-asset units,
+//!   `position` = balance) → `AssetClass::CryptoSpot`.
 //!
 //! The `rustrade` framework stays exchange-agnostic: it speaks in `Order`,
-//! `Position`, `Capability`. The `exchange-apiws` crate speaks KuCoin's HTTP
-//! API (signed REST, contract metadata, stop orders). This crate is the
-//! adapter between them — the first thing that turns a framework `Order` into
-//! a real order on a real exchange (point it at sandbox credentials to
-//! paper-trade the exact same path).
+//! `Position`, `Capability`. `exchange-apiws` speaks each venue's HTTP API.
+//! These adapters are the bridge — the thing that turns a framework `Order`
+//! into a real order on a real exchange (point them at sandbox/test
+//! credentials to paper-trade the exact same path).
 //!
 //! It is **Track 1** of `docs/MULTI_ASSET_BRAIN_ROADMAP.md`: until now every
 //! bot under `bots/` traded against `MockExchange`, so nothing actually
@@ -85,10 +89,13 @@ use exchange_apiws::{
 mod fills;
 pub use fills::KucoinFillSource;
 
+mod kraken;
+pub use kraken::KrakenSpotAdapter;
+
 // ── Error glue ───────────────────────────────────────────────────────────────
 
 /// Map any `exchange-apiws` error into a framework [`Error::Exchange`].
-fn ex<E: std::fmt::Display>(e: E) -> Error {
+pub(crate) fn ex<E: std::fmt::Display>(e: E) -> Error {
     Error::exchange(e.to_string())
 }
 

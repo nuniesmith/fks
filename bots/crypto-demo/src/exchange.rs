@@ -258,7 +258,7 @@ async fn build_multi(symbols: &[String], leverage: u32) -> Selected {
 /// infer by KuCoin's perpetual suffix — symbols ending in `M` (e.g. `XBTUSDTM`)
 /// are KuCoin Futures, the rest are Kraken spot. When set explicitly,
 /// `DEMO_SYMBOLS` should be the union (every bot symbol needs a venue).
-fn split_venues(symbols: &[String]) -> (Vec<String>, Vec<String>) {
+pub(crate) fn split_venues(symbols: &[String]) -> (Vec<String>, Vec<String>) {
     let explicit_kucoin = std::env::var("DEMO_KUCOIN_SYMBOLS").ok();
     let explicit_kraken = std::env::var("DEMO_KRAKEN_SYMBOLS").ok();
     if explicit_kucoin.is_some() || explicit_kraken.is_some() {

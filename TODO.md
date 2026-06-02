@@ -141,8 +141,11 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
       applies `crypto_perp()` (5×) vs `crypto_spot()` (1×) per symbol — the per-class presets
       finally diverge in a running bot. `crypto-demo` wires it as `DEMO_EXCHANGE=multi`
       (symbols split by KuCoin's `M` suffix, or `DEMO_KUCOIN_SYMBOLS` / `DEMO_KRAKEN_SYMBOLS`);
-      `supports` is the intersection across venues, `get_balance` the sum. Remaining: per-venue
-      **market data** (the demo shares one candle source today) for a production deployment.
+      `supports` is the intersection across venues, `get_balance` the sum.
+- [x] **Per-venue market data** — `KrakenCandleSource` (Kraken public OHLC) + a
+      `RoutingCandleSource` that polls each symbol's candles from its own venue, so the
+      `multi` mode no longer shares one feed (KuCoin klines for perps, Kraken OHLC for spot).
+      `build_source` follows `DEMO_EXCHANGE` (override with `DEMO_SOURCE`), synthetic fallback.
 
 ### Track 2 — portfolio + asset-class risk · `rustrade` ✅ SHIPPED
 All five items merged in `rustrade` main, **published as `rustrade-framework`

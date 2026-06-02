@@ -56,11 +56,12 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use rustrade::{
-    Capability, Error, ExchangeClient, Fill, FillSource, InstrumentSpec, OpenOrder, Order,
-    Position, Result, Symbol,
+    Candle, CandleSource, Capability, Error, ExchangeClient, Fill, FillSource, InstrumentSpec,
+    OpenOrder, Order, Position, Result, Symbol,
 };
 use tokio::sync::{Mutex as AsyncMutex, mpsc};
 use tracing::warn;
@@ -288,6 +289,84 @@ impl FillSource for CompositeFillSource {
     }
 }
 
+// ── RoutingCandleSource ───────────────────────────────────────────────────────
+
+/// A [`rustrade::CandleSource`] that dispatches each `poll` to a per-symbol
+/// source — the market-data companion to [`RoutingExchange`], so a multi-venue
+/// bot pulls each symbol's candles from its **own** venue. An optional default
+/// source handles any symbol without an explicit route.
+pub struct RoutingCandleSource {
+    routes: HashMap<Symbol, Arc<dyn CandleSource>>,
+    default: Option<Arc<dyn CandleSource>>,
+    name: String,
+}
+
+impl RoutingCandleSource {
+    /// Start building a routing candle source.
+    #[must_use]
+    pub fn builder() -> RoutingCandleSourceBuilder {
+        RoutingCandleSourceBuilder::default()
+    }
+}
+
+#[async_trait]
+impl CandleSource for RoutingCandleSource {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn poll(&self, symbol: &Symbol, interval: Duration, limit: usize) -> Result<Vec<Candle>> {
+        match self.routes.get(symbol).or(self.default.as_ref()) {
+            Some(src) => src.poll(symbol, interval, limit).await,
+            None => Err(Error::exchange(format!(
+                "RoutingCandleSource: no source for symbol {symbol}"
+            ))),
+        }
+    }
+}
+
+/// Builder for [`RoutingCandleSource`].
+#[derive(Default)]
+pub struct RoutingCandleSourceBuilder {
+    routes: HashMap<Symbol, Arc<dyn CandleSource>>,
+    default: Option<Arc<dyn CandleSource>>,
+    names: Vec<String>,
+}
+
+impl RoutingCandleSourceBuilder {
+    /// Route every symbol in `symbols` to `source`.
+    #[must_use]
+    pub fn route<I, S>(mut self, symbols: I, source: Arc<dyn CandleSource>) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<Symbol>,
+    {
+        self.names.push(source.name().to_string());
+        for s in symbols {
+            self.routes.insert(s.into(), Arc::clone(&source));
+        }
+        self
+    }
+
+    /// Set the fallback source for symbols without an explicit route.
+    #[must_use]
+    pub fn default_source(mut self, source: Arc<dyn CandleSource>) -> Self {
+        self.default = Some(source);
+        self
+    }
+
+    /// Build the routing source.
+    #[must_use]
+    pub fn build(self) -> RoutingCandleSource {
+        let name = format!("routing-candles({})", self.names.join("+"));
+        RoutingCandleSource {
+            routes: self.routes,
+            default: self.default,
+            name,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -512,5 +591,68 @@ mod tests {
     async fn composite_with_no_sources_ends_immediately() {
         let merged = CompositeFillSource::new(vec![]);
         assert!(merged.next_fill().await.is_none());
+    }
+
+    /// A `CandleSource` that tags each candle's `volume` with a fixed id, so a
+    /// test can tell which source served a poll.
+    struct TaggedCandles {
+        name: String,
+        tag: f64,
+    }
+    #[async_trait]
+    impl CandleSource for TaggedCandles {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        async fn poll(
+            &self,
+            _symbol: &Symbol,
+            _interval: Duration,
+            _limit: usize,
+        ) -> Result<Vec<Candle>> {
+            Ok(vec![Candle {
+                time: 0,
+                open: 0.0,
+                high: 0.0,
+                low: 0.0,
+                close: 0.0,
+                volume: self.tag,
+            }])
+        }
+    }
+
+    fn tagged(name: &str, tag: f64) -> Arc<dyn CandleSource> {
+        Arc::new(TaggedCandles {
+            name: name.into(),
+            tag,
+        })
+    }
+
+    #[tokio::test]
+    async fn candle_routing_dispatches_per_symbol_with_default() {
+        let src = RoutingCandleSource::builder()
+            .route(["XBTUSDTM"], tagged("kucoin", 1.0))
+            .route(["XBTUSD"], tagged("kraken", 2.0))
+            .default_source(tagged("synthetic", 9.0))
+            .build();
+        let i = Duration::from_secs(60);
+        let vol = |c: Vec<Candle>| c[0].volume;
+        // Each symbol's poll is served by its routed source; unmapped → default.
+        assert!((vol(src.poll(&Symbol::from("XBTUSDTM"), i, 1).await.unwrap()) - 1.0).abs() < 1e-9);
+        assert!((vol(src.poll(&Symbol::from("XBTUSD"), i, 1).await.unwrap()) - 2.0).abs() < 1e-9);
+        assert!((vol(src.poll(&Symbol::from("DOGEUSD"), i, 1).await.unwrap()) - 9.0).abs() < 1e-9);
+        assert_eq!(src.name(), "routing-candles(kucoin+kraken)");
+    }
+
+    #[tokio::test]
+    async fn candle_routing_errors_on_unmapped_without_default() {
+        let src = RoutingCandleSource::builder()
+            .route(["XBTUSD"], tagged("kraken", 2.0))
+            .build();
+        assert!(
+            src.poll(&Symbol::from("NOPE"), Duration::from_secs(60), 1)
+                .await
+                .is_err()
+        );
     }
 }

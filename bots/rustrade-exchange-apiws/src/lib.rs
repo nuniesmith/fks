@@ -2,9 +2,14 @@
 //! REST surfaces:
 //!
 //! - [`KucoinExchangeAdapter`] — **KuCoin Futures** (contracts, leverage,
-//!   brackets), plus [`KucoinFillSource`] for real fills.
+//!   brackets), plus [`KucoinFillSource`] for real fills → `AssetClass::CryptoPerp`.
 //! - [`KrakenSpotAdapter`] — **Kraken spot** (long-only, base-asset units,
-//!   `position` = balance) → `AssetClass::CryptoSpot`.
+//!   `position` = balance), plus [`KrakenFillSource`] for real fills →
+//!   `AssetClass::CryptoSpot`.
+//! - [`RoutingExchange`] — composes the above into **one** `ExchangeClient` that
+//!   dispatches per symbol, so a single bot can trade both venues at once and
+//!   per-asset-class risk (`class_risk`) actually diverges; [`CompositeFillSource`]
+//!   merges their fills.
 //!
 //! The `rustrade` framework stays exchange-agnostic: it speaks in `Order`,
 //! `Position`, `Capability`. `exchange-apiws` speaks each venue's HTTP API.
@@ -91,6 +96,9 @@ pub use fills::KucoinFillSource;
 
 mod kraken;
 pub use kraken::{KrakenFillSource, KrakenSpotAdapter};
+
+mod routing;
+pub use routing::{CompositeFillSource, RoutingExchange, RoutingExchangeBuilder};
 
 // ── Error glue ───────────────────────────────────────────────────────────────
 

@@ -12,30 +12,48 @@
 //! adapter can't be built (missing creds, network), the demo logs loudly and
 //! falls back to the paper `MockExchange` rather than trading on broken state.
 //!
-//! When the live adapter is selected, a [`KucoinFillSource`] is wired too so
-//! the bot consumes **real fills** (which also enables the framework's
-//! bracket/OCO handling). The demo's paper PnL simulator is disabled in that
-//! mode to avoid double-counting (see `main.rs`).
+//! Other `DEMO_EXCHANGE` values:
+//!
+//! - `kraken` — live **Kraken spot** ([`KrakenSpotAdapter`], `CryptoSpot`,
+//!   long-only). Needs `KRAKEN_API_KEY` / `KRAKEN_API_SECRET`.
+//! - `multi` (or `kucoin+kraken`) — **both** venues at once behind a
+//!   [`RoutingExchange`], so per-asset-class risk (`class_risk`) actually
+//!   diverges: KuCoin perps resolve to `CryptoPerp` rules (5×), Kraken spot to
+//!   `CryptoSpot` rules (1×). Symbols are split by venue (KuCoin perps end in
+//!   `M`, e.g. `XBTUSDTM`; the rest go to Kraken — or set `DEMO_KUCOIN_SYMBOLS`
+//!   / `DEMO_KRAKEN_SYMBOLS` explicitly). Fills from both venues are merged.
+//!
+//! When a live adapter is selected, its [`FillSource`] is wired too so the bot
+//! consumes **real fills** (which also enables the framework's bracket/OCO
+//! handling). The demo's paper PnL simulator is disabled in that mode to avoid
+//! double-counting (see `main.rs`).
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use rustrade::{ExchangeClient, FillSource};
+use rustrade::{AssetClass, ExchangeClient, FillSource, RiskConfig};
 use rustrade_exchange_apiws::{
-    KrakenFillSource, KrakenSpotAdapter, KucoinExchangeAdapter, KucoinFillSource,
+    CompositeFillSource, KrakenFillSource, KrakenSpotAdapter, KucoinExchangeAdapter,
+    KucoinFillSource, RoutingExchange,
 };
 use tracing::{error, info, warn};
 
 use crate::mock_exchange::MockExchange;
 
-/// The selected exchange plus, when live, its real-fill source.
+/// The selected exchange plus, when live, its real-fill source and any
+/// per-asset-class risk presets to apply.
 pub struct Selected {
-    /// Where orders go (paper `MockExchange` or the live KuCoin adapter).
+    /// Where orders go (paper `MockExchange` or a live adapter / router).
     pub exchange: Arc<dyn ExchangeClient>,
     /// Real fills from the exchange, present only on the live path. When
     /// `Some`, the caller must skip the paper PnL simulator (they'd
     /// double-count) — and the framework turns on bracket/OCO handling.
     pub fills: Option<Arc<dyn FillSource>>,
+    /// Per-asset-class risk presets (`class_risk`) to apply on the bot config.
+    /// Empty for single-venue modes — the bot trades one asset class, so the
+    /// bot-wide config already fits. The multi-venue mode populates it so
+    /// `CryptoPerp` and `CryptoSpot` symbols resolve to divergent rules.
+    pub class_risk: Vec<(AssetClass, RiskConfig)>,
 }
 
 impl Selected {
@@ -44,6 +62,7 @@ impl Selected {
         Self {
             exchange: Arc::new(MockExchange),
             fills: None,
+            class_risk: Vec::new(),
         }
     }
 }
@@ -57,6 +76,7 @@ pub async fn build_exchange(symbols: &[String], leverage: u32) -> Selected {
     match want.to_ascii_lowercase().as_str() {
         "kucoin" => build_kucoin(symbols, leverage).await,
         "kraken" => build_kraken(symbols),
+        "multi" | "kucoin+kraken" => build_multi(symbols, leverage).await,
         _ => Selected::paper(),
     }
 }
@@ -90,6 +110,7 @@ async fn build_kucoin(symbols: &[String], leverage: u32) -> Selected {
             Selected {
                 exchange: Arc::new(adapter),
                 fills: Some(Arc::new(fills)),
+                class_risk: Vec::new(),
             }
         }
         Err(e) => {
@@ -130,6 +151,7 @@ fn build_kraken(symbols: &[String]) -> Selected {
             Selected {
                 exchange: Arc::new(adapter),
                 fills: Some(Arc::new(fills)),
+                class_risk: Vec::new(),
             }
         }
         Err(e) => {
@@ -137,6 +159,130 @@ fn build_kraken(symbols: &[String]) -> Selected {
             Selected::paper()
         }
     }
+}
+
+/// Multi-venue (live): KuCoin Futures **and** Kraken spot behind a
+/// [`RoutingExchange`], so per-asset-class risk diverges. Symbols are split by
+/// venue (see [`split_venues`]); fills from both are merged into one stream.
+/// Requires BOTH venues' credentials — if either adapter can't be built, falls
+/// back to paper rather than trading half the book.
+async fn build_multi(symbols: &[String], leverage: u32) -> Selected {
+    warn!(
+        "DEMO_EXCHANGE=multi — routing orders across LIVE KuCoin Futures + Kraken spot. \
+         Confirm KC_* and KRAKEN_API_* target the accounts you intend to trade."
+    );
+    let (kucoin_syms, kraken_syms) = split_venues(symbols);
+    if kucoin_syms.is_empty() || kraken_syms.is_empty() {
+        error!(
+            kucoin = kucoin_syms.len(),
+            kraken = kraken_syms.len(),
+            "multi needs symbols on BOTH venues (KuCoin perps end in 'M'; or set \
+             DEMO_KUCOIN_SYMBOLS / DEMO_KRAKEN_SYMBOLS) — FALLING BACK to MockExchange (paper)"
+        );
+        return Selected::paper();
+    }
+
+    // KuCoin adapter (fetches contract multipliers for its symbols).
+    let kucoin_refs: Vec<&str> = kucoin_syms.iter().map(String::as_str).collect();
+    let kucoin = match KucoinExchangeAdapter::from_env(leverage, &kucoin_refs).await {
+        Ok(a) => a,
+        Err(e) => {
+            error!(error = %e, "multi: kucoin adapter unavailable — FALLING BACK to paper");
+            return Selected::paper();
+        }
+    };
+
+    // Kraken spot adapter (base-asset codes for balance/position lookups).
+    let kraken_base = kraken_base_assets(&kraken_syms);
+    let kraken_refs: Vec<(&str, &str)> = kraken_base
+        .iter()
+        .map(|(s, c)| (s.as_str(), c.as_str()))
+        .collect();
+    let kraken = match KrakenSpotAdapter::from_env(&kraken_refs) {
+        Ok(a) => a,
+        Err(e) => {
+            error!(error = %e, "multi: kraken adapter unavailable — FALLING BACK to paper");
+            return Selected::paper();
+        }
+    };
+
+    // Real fills per venue (reuse each adapter's signed client), merged so the
+    // framework sees a single FillSource.
+    let kucoin_fills = KucoinFillSource::connect(
+        kucoin.client().clone(),
+        exchange_apiws::KucoinEnv::LiveFutures,
+        kucoin_syms.clone(),
+        Duration::from_secs(5),
+    );
+    let kraken_fills = KrakenFillSource::connect_default(kraken.client().clone(), "USD");
+    let merged: Arc<dyn FillSource> = Arc::new(CompositeFillSource::new(vec![
+        Arc::new(kucoin_fills) as Arc<dyn FillSource>,
+        Arc::new(kraken_fills) as Arc<dyn FillSource>,
+    ]));
+
+    // Compose the two adapters into one symbol-routed ExchangeClient.
+    let kucoin_arc: Arc<dyn ExchangeClient> = Arc::new(kucoin);
+    let kraken_arc: Arc<dyn ExchangeClient> = Arc::new(kraken);
+    let routed = match RoutingExchange::builder()
+        .route(kucoin_syms.iter().cloned(), kucoin_arc)
+        .route(kraken_syms.iter().cloned(), kraken_arc)
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            error!(error = %e, "multi: routing build failed — FALLING BACK to paper");
+            return Selected::paper();
+        }
+    };
+
+    info!(
+        kucoin = kucoin_syms.len(),
+        kraken = kraken_syms.len(),
+        leverage,
+        "exchange: multi-venue RoutingExchange (LIVE) — KuCoin perps (CryptoPerp) + \
+         Kraken spot (CryptoSpot, 1×), real fills merged; per-asset-class risk active"
+    );
+    Selected {
+        exchange: Arc::new(routed),
+        fills: Some(merged),
+        // The whole point of this mode: divergent risk per asset class.
+        class_risk: vec![
+            (AssetClass::CryptoPerp, RiskConfig::crypto_perp()),
+            (AssetClass::CryptoSpot, RiskConfig::crypto_spot()),
+        ],
+    }
+}
+
+/// Split the bot's symbols into `(kucoin, kraken)`. Explicit
+/// `DEMO_KUCOIN_SYMBOLS` / `DEMO_KRAKEN_SYMBOLS` (comma lists) win; otherwise
+/// infer by KuCoin's perpetual suffix — symbols ending in `M` (e.g. `XBTUSDTM`)
+/// are KuCoin Futures, the rest are Kraken spot. When set explicitly,
+/// `DEMO_SYMBOLS` should be the union (every bot symbol needs a venue).
+fn split_venues(symbols: &[String]) -> (Vec<String>, Vec<String>) {
+    let explicit_kucoin = std::env::var("DEMO_KUCOIN_SYMBOLS").ok();
+    let explicit_kraken = std::env::var("DEMO_KRAKEN_SYMBOLS").ok();
+    if explicit_kucoin.is_some() || explicit_kraken.is_some() {
+        let parse = |v: Option<String>| -> Vec<String> {
+            v.map(|s| {
+                s.split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
+        };
+        return (parse(explicit_kucoin), parse(explicit_kraken));
+    }
+    let mut kucoin = Vec::new();
+    let mut kraken = Vec::new();
+    for s in symbols {
+        if s.ends_with('M') {
+            kucoin.push(s.clone());
+        } else {
+            kraken.push(s.clone());
+        }
+    }
+    (kucoin, kraken)
 }
 
 /// Resolve `symbol → Kraken base-asset code` from `DEMO_KRAKEN_BASE_ASSETS`

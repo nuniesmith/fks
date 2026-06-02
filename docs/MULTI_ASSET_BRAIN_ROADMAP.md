@@ -213,9 +213,11 @@ Make `JanusBrain` consume janus's *risk verdicts*, not just signals.
 2. ✅ **`JanusBrain` v2** in `bots/crypto-demo`: sends signal + market-data + position
    context with each request, gated by `use_risk_engine` (default on) and **failing
    open** if janus's risk API is unreachable (falls back to the raw signal).
-3. **Position-event feedback loop**: ✅ entries — `on_fill` reports the resulting
-   position to `/api/v1/risk/portfolio/positions`; ⏳ still report closes/realised PnL
-   so janus's affinity learning sees how trades resolved, not just open exposure.
+3. ✅ **Position-event feedback loop**: `on_fill` mirrors each symbol's position from
+   the fill stream (`apply_fill`) and reports both the open exposure
+   (`/api/v1/risk/portfolio/positions`) **and**, on a closing fill, the realised PnL
+   (`/api/v1/risk/portfolio/positions/close` — a new janus endpoint that folds it into
+   portfolio daily PnL). *Refinement left:* route outcomes into the affinity learner.
 
 ### Track 5 — Multi-asset breadth · `janus` + `exchange-apiws`
 1. **Futures + equities asset classes** in janus's `AssetCategory` + registry
@@ -251,7 +253,8 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
    `portfolio_config` + `with_state_store` + `class_risk` (the last via `DEMO_EXCHANGE=multi`,
    where `CryptoPerp`/`CryptoSpot` diverge) — all of Tracks 1–2 are in the running stack.
 4. ✅ **Track 4** — `JanusBrain` v2 routes entries through janus's `validate` + `size`
-   risk API and reports fills back. Remaining: close/outcome feedback.
+   risk API and reports both open exposure and **realised PnL on close** (new janus
+   `/positions/close` endpoint). Remaining refinement: feed outcomes to affinity learning.
 5. **← LEADING EDGE: Track 3** — wire janus's real brain/risk inline (port
    `event_loop.rs`'s strategy suite + inline prop-firm + regime gating into the live
    loop; emit `regime`/`fear` into signal metadata). The brain gets serious.

@@ -171,8 +171,12 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
       open** (proceed on the raw signal) if janus's risk API is unreachable.
 - [x] **Position-event feedback (entry)**: `on_fill` reports the resulting position to
       `POST /api/v1/risk/portfolio/positions` so janus tracks live exposure + affinity.
-- [ ] **Close/outcome feedback**: also report closes/realised PnL (not just open
-      positions) so janus's affinity learning sees how trades actually resolved.
+- [x] **Close/outcome feedback**: `JanusBrain` mirrors each symbol's position from
+      the fill stream (`apply_fill`) and, on a reducing/closing fill, computes the
+      realised PnL and POSTs it to janus's new `POST /api/v1/risk/portfolio/positions/close`
+      endpoint (added in `services/forward`), which folds it into the portfolio's daily
+      PnL and frees the slot. So janus now sees trade *outcomes*, not just open exposure.
+      *(Further refinement: route the outcome into the affinity/memory learner specifically.)*
 
 ### Multi-account (existing, pre-roadmap)
 - [ ] **ACCT-A** — `src/ruby/sql/008_accounts.sql` (exchange_accounts,

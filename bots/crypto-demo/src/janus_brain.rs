@@ -18,11 +18,14 @@
 //!                                                  ▼
 //!                   rustrade::Decision { side, SizeHint::Quantity(janus qty), stop, tp }
 //!
-//!   on_fill ─► POST /api/v1/risk/portfolio/positions   (feed janus's portfolio + affinity)
+//!   on_fill ─► POST /api/v1/risk/portfolio/positions        (open exposure)
+//!          └─► POST /api/v1/risk/portfolio/positions/close  (realised PnL on a closing fill)
 //! ```
 //!
 //! So janus's risk layer is the authority on **whether** to trade (validate) and
-//! **how big** (position-size), and it sees realised fills. Toggle with
+//! **how big** (position-size), and it sees both the open exposure *and* the
+//! realised PnL when a trade closes — the brain mirrors each symbol's position
+//! from the fill stream to compute that figure. Toggle with
 //! [`JanusBrainConfig::use_risk_engine`].
 //!
 //! Resilience: every janus call **fails open** — if the signal or risk API is
@@ -189,6 +192,92 @@ struct AddPositionRequest {
     position: PositionDto,
 }
 
+/// Close (outcome) report — posted when a fill reduces/closes a position so
+/// janus folds the realised PnL into its portfolio. Matches janus's
+/// `ClosePositionRequest` (`POST /api/v1/risk/portfolio/positions/close`).
+#[derive(Debug, Serialize)]
+struct ClosePositionDto {
+    symbol: String,
+    realized_pnl: f64,
+    exit_price: Option<f64>,
+    quantity: Option<f64>,
+    side: Option<String>,
+    reason: Option<String>,
+}
+
+// ── Local position mirror (for realised-PnL on close) ─────────────────────────
+
+/// A bot-side mirror of a symbol's position, maintained from the fill stream.
+/// The framework computes realised PnL internally but doesn't expose it to a
+/// `Brain`, so the brain reconstructs it here to report trade *outcomes*.
+#[derive(Clone, Copy, Default)]
+struct LocalPos {
+    /// Signed quantity: positive = long, negative = short.
+    qty: f64,
+    /// Volume-weighted average entry price of the currently-open position.
+    avg_entry: f64,
+}
+
+/// Apply a fill to a local position. Returns the new position and, when the fill
+/// **reduced or closed** it, the realised PnL of the closed portion (gross of
+/// fees). Mirrors the framework's own reduce/flip accounting.
+fn apply_fill(
+    prior: LocalPos,
+    side: rustrade::Side,
+    price: f64,
+    size: f64,
+) -> (LocalPos, Option<f64>) {
+    let signed = match side {
+        rustrade::Side::Buy => size,
+        rustrade::Side::Sell => -size,
+    };
+    // Opening from flat or adding in the same direction: no realised PnL; roll
+    // the volume-weighted average entry forward.
+    if prior.qty == 0.0 || prior.qty.signum() == signed.signum() {
+        let abs_prior = prior.qty.abs();
+        let avg_entry = if abs_prior == 0.0 {
+            price
+        } else {
+            (prior.avg_entry * abs_prior + price * size) / (abs_prior + size)
+        };
+        return (
+            LocalPos {
+                qty: prior.qty + signed,
+                avg_entry,
+            },
+            None,
+        );
+    }
+    // Reducing, closing, or flipping: realise PnL on the closed quantity.
+    let closed_qty = prior.qty.abs().min(size);
+    let direction = prior.qty.signum(); // +1 closing a long, -1 closing a short
+    let realised = (price - prior.avg_entry) * direction * closed_qty;
+    let new_qty = prior.qty + signed;
+    let avg_entry = if new_qty == 0.0 {
+        0.0
+    } else if new_qty.signum() == prior.qty.signum() {
+        prior.avg_entry // partial reduce — same side, entry unchanged
+    } else {
+        price // flipped past flat — the remainder opens at the fill price
+    };
+    (
+        LocalPos {
+            qty: new_qty,
+            avg_entry,
+        },
+        Some(realised),
+    )
+}
+
+/// The fill's side as a label for the close report (the action that reduced the
+/// position).
+fn side_label(side: rustrade::Side) -> &'static str {
+    match side {
+        rustrade::Side::Buy => "Buy",
+        rustrade::Side::Sell => "Sell",
+    }
+}
+
 // ── Per-symbol indicator state ────────────────────────────────────────────────
 
 struct SymbolState {
@@ -247,6 +336,8 @@ pub struct JanusBrain {
     base_url: String,
     http: reqwest::Client,
     state: Mutex<HashMap<String, SymbolState>>,
+    /// Per-symbol position mirror, for computing realised PnL on a closing fill.
+    positions: Mutex<HashMap<String, LocalPos>>,
     events: Mutex<u64>,
     signals: Mutex<u64>,
     errors: Mutex<u64>,
@@ -270,6 +361,7 @@ impl JanusBrain {
             base_url: base_url.into(),
             http,
             state: Mutex::new(HashMap::new()),
+            positions: Mutex::new(HashMap::new()),
             events: Mutex::new(0),
             signals: Mutex::new(0),
             errors: Mutex::new(0),
@@ -378,6 +470,22 @@ impl JanusBrain {
             .and_then(reqwest::Response::error_for_status)
         {
             debug!(error = %e, "janus portfolio position report failed (non-fatal)");
+        }
+    }
+
+    /// Report a closed trade's outcome (realised PnL) to janus so its portfolio
+    /// daily PnL + affinity learning see how the trade resolved. Best-effort.
+    async fn report_close(&self, close: ClosePositionDto) {
+        let url = format!("{}/api/v1/risk/portfolio/positions/close", self.base_url);
+        if let Err(e) = self
+            .http
+            .post(&url)
+            .json(&close)
+            .send()
+            .await
+            .and_then(reqwest::Response::error_for_status)
+        {
+            debug!(error = %e, "janus portfolio close report failed (non-fatal)");
         }
     }
 }
@@ -562,27 +670,62 @@ impl Brain for JanusBrain {
     }
 
     async fn on_fill(&self, fill: &Fill) -> Result<()> {
-        // v2: report the fill to janus's portfolio so its account-level risk +
-        // affinity learning see realised exposure. Best-effort.
+        // v2: maintain a local position mirror from the fill stream so we can
+        // tell janus both the open exposure *and* the realised PnL when a trade
+        // closes. Best-effort — janus being down never breaks the bot.
         if !self.cfg.use_risk_engine {
             return Ok(());
         }
-        let (side, qty) = match fill.side {
-            rustrade::Side::Buy => ("Long", fill.size.value()),
-            rustrade::Side::Sell => ("Short", fill.size.value()),
-        };
+        let sym = fill.symbol.as_str().to_string();
         let price = fill.price.value();
-        self.report_position(PositionDto {
-            symbol: fill.symbol.as_str().to_string(),
-            entry_price: price,
-            quantity: qty,
-            side: side.to_string(),
-            stop_loss: None,
-            take_profit: None,
-            position_value: price * qty,
-            risk_amount: None,
-        })
-        .await;
+        let size = fill.size.value();
+
+        // Update the mirror under the lock, then drop it *before* any await.
+        let (new_pos, realised) = {
+            let mut positions = self.positions.lock().unwrap();
+            let prior = positions.get(&sym).copied().unwrap_or_default();
+            let (new_pos, realised) = apply_fill(prior, fill.side, price, size);
+            if new_pos.qty == 0.0 {
+                positions.remove(&sym);
+            } else {
+                positions.insert(sym.clone(), new_pos);
+            }
+            (new_pos, realised)
+        };
+
+        // A reducing/closing fill realised PnL — report the outcome.
+        if let Some(pnl) = realised {
+            self.report_close(ClosePositionDto {
+                symbol: sym.clone(),
+                realized_pnl: pnl,
+                exit_price: Some(price),
+                quantity: Some(size),
+                side: Some(side_label(fill.side).to_string()),
+                reason: Some("fill".to_string()),
+            })
+            .await;
+        }
+
+        // Whatever remains open (added, reduced-but-not-flat, or a flip) is the
+        // current exposure — report it so janus tracks the live position.
+        if new_pos.qty != 0.0 {
+            let (side, qty) = if new_pos.qty > 0.0 {
+                ("Long", new_pos.qty)
+            } else {
+                ("Short", -new_pos.qty)
+            };
+            self.report_position(PositionDto {
+                symbol: sym,
+                entry_price: new_pos.avg_entry,
+                quantity: qty,
+                side: side.to_string(),
+                stop_loss: None,
+                take_profit: None,
+                position_value: new_pos.avg_entry * qty,
+                risk_amount: None,
+            })
+            .await;
+        }
         Ok(())
     }
 
@@ -601,5 +744,69 @@ impl Brain for JanusBrain {
                 "janus_errors": errors,
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LocalPos, apply_fill};
+    use rustrade::Side;
+
+    fn approx(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn opening_from_flat_sets_entry_and_no_pnl() {
+        let (pos, pnl) = apply_fill(LocalPos::default(), Side::Buy, 100.0, 2.0);
+        assert!(pnl.is_none());
+        assert!(approx(pos.qty, 2.0));
+        assert!(approx(pos.avg_entry, 100.0));
+    }
+
+    #[test]
+    fn adding_same_side_rolls_weighted_average() {
+        let p1 = apply_fill(LocalPos::default(), Side::Buy, 100.0, 2.0).0;
+        let (p2, pnl) = apply_fill(p1, Side::Buy, 110.0, 2.0);
+        assert!(pnl.is_none());
+        assert!(approx(p2.qty, 4.0));
+        assert!(approx(p2.avg_entry, 105.0)); // (100*2 + 110*2)/4
+    }
+
+    #[test]
+    fn full_close_realises_pnl_and_goes_flat() {
+        let long = apply_fill(LocalPos::default(), Side::Buy, 100.0, 2.0).0;
+        let (pos, pnl) = apply_fill(long, Side::Sell, 120.0, 2.0);
+        assert!(approx(pnl.unwrap(), 40.0)); // (120-100)*+1*2
+        assert!(approx(pos.qty, 0.0));
+    }
+
+    #[test]
+    fn partial_close_realises_on_closed_qty_keeps_entry() {
+        let long = apply_fill(LocalPos::default(), Side::Buy, 100.0, 4.0).0;
+        let (pos, pnl) = apply_fill(long, Side::Sell, 110.0, 1.0);
+        assert!(approx(pnl.unwrap(), 10.0)); // (110-100)*1
+        assert!(approx(pos.qty, 3.0));
+        assert!(approx(pos.avg_entry, 100.0)); // unchanged on a partial reduce
+    }
+
+    #[test]
+    fn short_close_realises_correct_sign() {
+        let short = apply_fill(LocalPos::default(), Side::Sell, 100.0, 2.0).0;
+        assert!(approx(short.qty, -2.0));
+        // Buy back cheaper than the short entry → profit.
+        let (pos, pnl) = apply_fill(short, Side::Buy, 90.0, 2.0);
+        assert!(approx(pnl.unwrap(), 20.0)); // (90-100)*-1*2
+        assert!(approx(pos.qty, 0.0));
+    }
+
+    #[test]
+    fn flip_realises_prior_and_opens_remainder_at_fill() {
+        let long = apply_fill(LocalPos::default(), Side::Buy, 100.0, 2.0).0;
+        // Sell 5: closes the 2 long (realised on 2), opens 3 short at 120.
+        let (pos, pnl) = apply_fill(long, Side::Sell, 120.0, 5.0);
+        assert!(approx(pnl.unwrap(), 40.0)); // (120-100)*+1*2
+        assert!(approx(pos.qty, -3.0));
+        assert!(approx(pos.avg_entry, 120.0));
     }
 }

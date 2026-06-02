@@ -1,7 +1,7 @@
 # fks-full — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks-full`
-> **Last synced:** 2026-05-31
+> **Last synced:** 2026-06-02
 >
 > This file covers **cross-cutting** orchestration work — consuming the
 > external repos/crates, docker-compose, Dockerfiles, CI/CD, Postgres
@@ -18,7 +18,7 @@
 
 ---
 
-## Status snapshot (2026-06-01)
+## Status snapshot (2026-06-02)
 
 The split + consolidation are **done**. `rustrade`, `janus`, `indicators-ta`,
 and `exchange-apiws` are independent repos; the libraries are on crates.io and
@@ -26,7 +26,7 @@ janus consumes them:
 
 | Crate | crates.io | Consume as |
 |-------|-----------|------------|
-| `rustrade-framework` (+ core/supervisor/risk/backtest) | **0.2.1** ✅ | `rustrade = { package = "rustrade-framework", version = "0.2" }` |
+| `rustrade-framework` (+ core/supervisor/risk/backtest) | **0.3.0** ✅ | `rustrade = { package = "rustrade-framework", version = "0.3" }` |
 | `indicators-ta` | **0.1.5** ✅ | `indicators-ta = "0.1"` (imports as `indicators`) |
 | `exchange-apiws` | **0.5.0** ✅ | `exchange-apiws = "0.5"` (signed Bybit + Coinbase/OKX connectors) |
 | `jflow-core` (janus) | **0.1.0** ✅ | first janus lib; rest of `jflow-*` prepped, not pushed |
@@ -126,32 +126,42 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
       `matchPrice`/`matchSize` on the private feed so the fill source can drop the
       `/recentFills` REST hydration (today `OrderUpdate.price` is `0.0` for market
       orders). Small additive change; would let the WS carry fill prices directly.
-- [ ] **Kraken spot adapter** over `exchange-apiws`'s `KrakenPrivateClient`
+- [x] **Kraken spot adapter + real fills** over `exchange-apiws`'s `KrakenPrivateClient`
       (spot-only: long-only, `position` = base-asset balance, no leverage →
-      `AssetClass::CryptoSpot`, `contract_value` 1.0). KuCoin (futures) + Kraken
-      (spot) are the two target venues; **Bybit is out (not available in Canada).**
-      Folds into Track 5.
+      `AssetClass::CryptoSpot`, `contract_value` 1.0; market/limit, `OrderTracking` only).
+      `KrakenFillSource` streams real fills by polling `/private/TradesHistory` (Kraken
+      has no private own-trades WS here), deduped by trade id + baselined at startup.
+      `crypto-demo` selects both via `DEMO_EXCHANGE=kraken` (base-asset codes from
+      `DEMO_KRAKEN_BASE_ASSETS`, e.g. `XBTUSD:XXBT`). KuCoin (futures) + Kraken (spot) are
+      the two target venues; **Bybit is out (not available in Canada).** Remaining: a
+      multi-venue bot so `class_risk` presets (`CryptoPerp` vs `CryptoSpot`) actually diverge.
 
-### Track 2 — portfolio + asset-class risk · `rustrade` ✅ FRAMEWORK-COMPLETE
-All five items merged in `rustrade` main (see its CHANGELOG `[Unreleased]`):
-`PortfolioRisk`, `InstrumentSpec`/`AssetClass`, per-asset-class `RiskConfig`
-presets, the `RiskSweepService` (UTC rollover), and the `JsonFileStore` durable
-store. **Blocked on a `rustrade-framework` 0.3 publish before the bots consume it.**
-- [ ] **Publish `rustrade-framework` 0.3** (additive; bump `Cargo.toml` workspace
-      version 0.2.1→0.3.0 + the 5 internal dep pins, cut the CHANGELOG, publish in
-      dep order). *(Owner action.)*
-- [ ] **Consume in `crypto-demo`** once 0.3 is out: bump `rustrade` to `0.3`, then
-      add `portfolio_config(...)`, `class_risk(...)`, and
-      `with_state_store(JsonFileStore::open(...))` — putting account/class risk +
-      durability into the running demo.
+### Track 2 — portfolio + asset-class risk · `rustrade` ✅ SHIPPED
+All five items merged in `rustrade` main, **published as `rustrade-framework`
+0.3.0**, and consumed in `crypto-demo`: `PortfolioRisk`, `InstrumentSpec`/`AssetClass`,
+per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and the
+`JsonFileStore` durable store.
+- [x] **Publish `rustrade-framework` 0.3** — released `0.3.0` (workspace version + the
+      5 internal dep pins bumped, CHANGELOG cut, published in dep order via
+      `release.sh minor`). *(Owner action — done.)*
+- [x] **Consume in `crypto-demo`**: bumped `rustrade` to `0.3` and wired
+      `portfolio_config(...)` (daily-loss / max-concurrent / gross-exposure caps from the
+      `DEMO_MAX_*` env vars) + opt-in `with_state_store(JsonFileStore::open(...))` via
+      `DEMO_STATE_FILE`. `class_risk(...)` is intentionally deferred until a multi-venue
+      bot exists — the demo trades one asset class at a time, so per-class presets wouldn't
+      diverge yet (tracked under the Kraken spot adapter item above).
 
 ### Track 4 — the janus↔rustrade risk contract
-- [ ] **`JanusBrain` v2** (`bots/crypto-demo/src/janus_brain.rs`): send portfolio
-      state + position with each request; consume janus's **risk verdict** (size,
-      stop, Hold/Reduce/Exit) via `/api/v1/risk/evaluate` + `/api/v1/positions/event`,
-      not just the raw signal + a stop price as today.
-- [ ] **Position-event feedback loop**: report fills/closes back to
-      `/api/v1/positions/{event,close}` so janus's affinity learning sees outcomes.
+- [x] **`JanusBrain` v2** (`bots/crypto-demo/src/janus_brain.rs`): each entry now
+      consults janus's risk engine — `risk_validate` (`POST /api/v1/risk/validate`; a
+      veto → `Hold`) then `risk_size` (`POST /api/v1/risk/calculate/position-size` →
+      `SizeHint::Quantity`). Sends signal + market-data + position context with each
+      request, gated by `JanusBrainConfig::use_risk_engine` (default on) and **failing
+      open** (proceed on the raw signal) if janus's risk API is unreachable.
+- [x] **Position-event feedback (entry)**: `on_fill` reports the resulting position to
+      `POST /api/v1/risk/portfolio/positions` so janus tracks live exposure + affinity.
+- [ ] **Close/outcome feedback**: also report closes/realised PnL (not just open
+      positions) so janus's affinity learning sees how trades actually resolved.
 
 ### Multi-account (existing, pre-roadmap)
 - [ ] **ACCT-A** — `src/ruby/sql/008_accounts.sql` (exchange_accounts,

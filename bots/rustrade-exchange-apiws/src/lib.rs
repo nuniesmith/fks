@@ -90,7 +90,7 @@ mod fills;
 pub use fills::KucoinFillSource;
 
 mod kraken;
-pub use kraken::KrakenSpotAdapter;
+pub use kraken::{KrakenFillSource, KrakenSpotAdapter};
 
 // ── Error glue ───────────────────────────────────────────────────────────────
 

@@ -132,7 +132,7 @@ async fn main() -> anyhow::Result<()> {
     let real_fills = fill_source.is_some();
 
     // ── Bot config: multi-symbol + risk gates ─────────────────────────────
-    let config = BotConfig::builder()
+    let mut config_builder = BotConfig::builder()
         .name(format!("crypto-demo-{bot_id}"))
         .symbols(symbols.iter().cloned())
         .shutdown_timeout(Duration::from_secs(10))
@@ -158,8 +158,24 @@ async fn main() -> anyhow::Result<()> {
             max_daily_loss: -(env_u64("DEMO_MAX_DAILY_LOSS_USD", 5_000) as f64),
             max_concurrent_positions: env_u64("DEMO_MAX_POSITIONS", symbols.len() as u64) as u32,
             max_gross_exposure: env_u64("DEMO_MAX_GROSS_EXPOSURE_USD", 5_000_000) as f64,
-        })
-        .build()?;
+        });
+
+    // Per-asset-class risk (rustrade 0.3 `class_risk`). The multi-venue exchange
+    // returns presets for each class it trades; the framework resolves a symbol's
+    // class from `instrument_spec` and applies the matching rules (per-symbol →
+    // per-class → default). Empty for single-venue modes — one class, so the
+    // bot-wide config above already fits.
+    for (class, cfg) in &selected.class_risk {
+        config_builder = config_builder.class_risk(*class, cfg.clone());
+    }
+    if !selected.class_risk.is_empty() {
+        info!(
+            classes = selected.class_risk.len(),
+            "per-asset-class risk presets applied (class_risk) — CryptoPerp vs CryptoSpot diverge"
+        );
+    }
+
+    let config = config_builder.build()?;
 
     let mut bot = Bot::new(config, exchange, vec![brain])?;
 

@@ -133,8 +133,16 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
       has no private own-trades WS here), deduped by trade id + baselined at startup.
       `crypto-demo` selects both via `DEMO_EXCHANGE=kraken` (base-asset codes from
       `DEMO_KRAKEN_BASE_ASSETS`, e.g. `XBTUSD:XXBT`). KuCoin (futures) + Kraken (spot) are
-      the two target venues; **Bybit is out (not available in Canada).** Remaining: a
-      multi-venue bot so `class_risk` presets (`CryptoPerp` vs `CryptoSpot`) actually diverge.
+      the two target venues; **Bybit is out (not available in Canada).**
+- [x] **Multi-venue `class_risk` end-to-end** — `RoutingExchange` + `CompositeFillSource`
+      (in `rustrade-exchange-apiws`) compose KuCoin + Kraken into one symbol-routed
+      `ExchangeClient`, so a single bot trades both classes at once. Each symbol's
+      `instrument_spec` carries its venue's `AssetClass`, so the framework's `resolve_risk`
+      applies `crypto_perp()` (5×) vs `crypto_spot()` (1×) per symbol — the per-class presets
+      finally diverge in a running bot. `crypto-demo` wires it as `DEMO_EXCHANGE=multi`
+      (symbols split by KuCoin's `M` suffix, or `DEMO_KUCOIN_SYMBOLS` / `DEMO_KRAKEN_SYMBOLS`);
+      `supports` is the intersection across venues, `get_balance` the sum. Remaining: per-venue
+      **market data** (the demo shares one candle source today) for a production deployment.
 
 ### Track 2 — portfolio + asset-class risk · `rustrade` ✅ SHIPPED
 All five items merged in `rustrade` main, **published as `rustrade-framework`
@@ -147,9 +155,9 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
 - [x] **Consume in `crypto-demo`**: bumped `rustrade` to `0.3` and wired
       `portfolio_config(...)` (daily-loss / max-concurrent / gross-exposure caps from the
       `DEMO_MAX_*` env vars) + opt-in `with_state_store(JsonFileStore::open(...))` via
-      `DEMO_STATE_FILE`. `class_risk(...)` is intentionally deferred until a multi-venue
-      bot exists — the demo trades one asset class at a time, so per-class presets wouldn't
-      diverge yet (tracked under the Kraken spot adapter item above).
+      `DEMO_STATE_FILE`. `class_risk(...)` is now wired too via the multi-venue mode (see the
+      multi-venue item above): `DEMO_EXCHANGE=multi` applies `crypto_perp()` / `crypto_spot()`
+      per asset class, so all of Track 2 is live in the demo.
 
 ### Track 4 — the janus↔rustrade risk contract
 - [x] **`JanusBrain` v2** (`bots/crypto-demo/src/janus_brain.rs`): each entry now

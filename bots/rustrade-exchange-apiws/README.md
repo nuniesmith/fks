@@ -8,6 +8,7 @@ signed REST surfaces:
 |---|---|---|
 | `KucoinExchangeAdapter` (+ `KucoinFillSource`) | **KuCoin Futures** | contracts, leverage, SL/TP brackets, real fills → `CryptoPerp` |
 | `KrakenSpotAdapter` (+ `KrakenFillSource`) | **Kraken spot** | long-only, base-asset units, `position` = balance, real fills → `CryptoSpot` |
+| `RoutingExchange` (+ `CompositeFillSource`) | **both at once** | per-symbol dispatch into the venues above, so one bot's `class_risk` diverges across classes |
 
 The framework speaks `Order` / `Position` / `Capability`; `exchange-apiws`
 speaks each venue's signed HTTP API. These adapters are the bridge — the
@@ -36,6 +37,35 @@ It is **Track 1** of
 [`docs/MULTI_ASSET_BRAIN_ROADMAP.md`](../../docs/MULTI_ASSET_BRAIN_ROADMAP.md):
 until now every bot under `bots/` traded against `MockExchange`, so nothing
 actually executed through the framework.
+
+## Multi-venue — `RoutingExchange`
+
+A `rustrade::Bot` holds **one** `ExchangeClient`, but per-asset-class risk
+(`class_risk`) only earns its keep when one bot trades **more than one** class at
+once. `RoutingExchange` is a single `ExchangeClient` that dispatches each call to
+a **per-symbol** venue, so KuCoin perps and Kraken spot run side by side in one
+bot — and because each symbol's `instrument_spec` (and thus `AssetClass`) comes
+from its own venue, the framework's `resolve_risk` applies the right preset to
+each automatically (`CryptoPerp` → 5×, `CryptoSpot` → 1×):
+
+```rust
+use std::sync::Arc;
+use rustrade_exchange_apiws::{KrakenSpotAdapter, KucoinExchangeAdapter, RoutingExchange};
+
+let kucoin = Arc::new(KucoinExchangeAdapter::from_env(5, &["XBTUSDTM"]).await?);
+let kraken = Arc::new(KrakenSpotAdapter::from_env(&[("XBTUSD", "XXBT")])?);
+let exchange = Arc::new(
+    RoutingExchange::builder()
+        .route(["XBTUSDTM"], kucoin) // → CryptoPerp risk
+        .route(["XBTUSD"], kraken)   // → CryptoSpot risk
+        .build()?,
+);
+```
+
+The two symbol-less calls answer conservatively: `supports` is the **intersection**
+across venues (a capability only if *every* venue has it), and `get_balance` is the
+**sum** for the given currency. `CompositeFillSource` merges the venues' fill
+sources into one stream. `crypto-demo` wires all this behind `DEMO_EXCHANGE=multi`.
 
 ## Mapping
 
@@ -153,10 +183,14 @@ let fills = Arc::new(KrakenFillSource::connect_default(adapter.client().clone(),
   (long-only, `position` = base-asset balance, market/limit, `AssetClass::CryptoSpot`).
 - ✅ `KrakenFillSource` — real fills by polling `/private/TradesHistory` (Kraken has
   no private own-trades WS here), deduped by trade id + baselined at startup.
+- ✅ `RoutingExchange` + `CompositeFillSource` — compose KuCoin + Kraken into one
+  symbol-routed `ExchangeClient` so a single bot's `class_risk` diverges across
+  `CryptoPerp` (5×) and `CryptoSpot` (1×); wired in `crypto-demo` as `DEMO_EXCHANGE=multi`.
 - ⏳ Expose per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate`
   so the WS feed can carry fill prices directly (drop the `/recentFills` hydration).
-- ⏳ Multi-venue `class_risk` end-to-end: a bot trading KuCoin (`CryptoPerp`) **and**
-  Kraken (`CryptoSpot`) at once, so the per-asset-class risk presets diverge in practice.
+- ⏳ Per-venue **market data** for the multi-venue bot: today `crypto-demo` shares one
+  candle source, so Kraken symbols get KuCoin/synthetic candles — a `MarketSource` per
+  venue is the remaining piece for a production multi-venue deployment.
 
 KuCoin (futures) + Kraken (spot) are the target venues; Bybit is unused (N/A in Canada).
 

@@ -109,10 +109,14 @@ bot. `exchange-apiws` provides market data **and** order execution.
 - **Kraken spot** — `KrakenSpotAdapter` + `KrakenFillSource` (a second live venue):
   long-only `AssetClass::CryptoSpot` (market/limit; `position` = base-asset balance),
   with real fills polled from `/private/TradesHistory` (Kraken has no private own-trades
-  WS here). `crypto-demo` selects it with `DEMO_EXCHANGE=kraken`. *Remaining on Track 1:*
-  surface `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate` (drop the REST
-  hydration), and a multi-venue bot so `class_risk` (`CryptoPerp` vs `CryptoSpot`)
-  actually diverges. (Bybit dropped — N/A in Canada.)
+  WS here). `crypto-demo` selects it with `DEMO_EXCHANGE=kraken`. (Bybit dropped — N/A in Canada.)
+- **Multi-venue** — `RoutingExchange` + `CompositeFillSource` compose KuCoin + Kraken into
+  one symbol-routed `ExchangeClient`, so a single bot trades both classes at once and
+  `class_risk` (`CryptoPerp` 5× vs `CryptoSpot` 1×) finally **diverges** per symbol — the
+  framework resolves each symbol's class from the routed `instrument_spec`. `crypto-demo`
+  wires it as `DEMO_EXCHANGE=multi`. *Remaining on Track 1:* surface `matchPrice`/`matchSize`
+  on exchange-apiws's `OrderUpdate` (drop the REST hydration), and **per-venue market data**
+  (the demo shares one candle source today) for a production multi-venue deployment.
 
 ### ❌ Greenfield (doesn't exist anywhere yet)
 - **Portfolio-/account-level risk in rustrade.** Every `SessionPnl` /
@@ -147,10 +151,11 @@ Without a real exchange adapter, nothing trades. This unblocks everything else.
    exchange's executions in via the private `tradeOrders` WS + `/recentFills`,
    enabling bracket/OCO handling. ✅ **Kraken spot** also shipped — `KrakenSpotAdapter`
    + `KrakenFillSource` (`KrakenPrivateClient`; long-only `CryptoSpot`, fills polled from
-   `/private/TradesHistory`), selected with `DEMO_EXCHANGE=kraken`. *Still open:*
-   per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate` (to drop the
-   REST hydration), and a multi-venue bot exercising `class_risk` across `CryptoPerp` +
-   `CryptoSpot`.
+   `/private/TradesHistory`), selected with `DEMO_EXCHANGE=kraken`. ✅ **Multi-venue** also
+   shipped — `RoutingExchange` + `CompositeFillSource` run both venues in one bot
+   (`DEMO_EXCHANGE=multi`), so `class_risk` diverges across `CryptoPerp` + `CryptoSpot`.
+   *Still open:* per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate`
+   (to drop the REST hydration), and per-venue **market data** for the multi-venue bot.
 2. **rustrade `SimulatedExchange`** (its TODO 0.3a) as the paper/backtest-fidelity
    reference — so `crypto-demo` can do realistic paper fills instead of `MockExchange`.
 3. ✅ **`crypto-demo` can use the real adapter.** `DEMO_EXCHANGE=kucoin` routes
@@ -180,8 +185,9 @@ account-level rules. **All five items are merged in `rustrade` main, published a
 > **Bot-side — done.** `crypto-demo` now depends on `rustrade` 0.3 and wires
 > `portfolio_config(...)` (daily-loss / max-concurrent / gross-exposure caps from the
 > `DEMO_MAX_*` env vars) + opt-in `with_state_store(JsonFileStore::open(...))` via
-> `DEMO_STATE_FILE`. `class_risk(...)` waits on a multi-venue bot (the demo trades one
-> asset class at a time). That consume step put Tracks 1–2 into the running stack.
+> `DEMO_STATE_FILE`. `class_risk(...)` is wired too via `DEMO_EXCHANGE=multi` (the
+> multi-venue `RoutingExchange`), so `crypto_perp()` / `crypto_spot()` diverge per asset
+> class. That consume step put **all of** Tracks 1–2 into the running stack.
 
 ### Track 3 — Wire janus's real brain + risk into the live path · `janus`
 The sophistication exists; it's just not in the running binary.
@@ -231,22 +237,22 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
 ## Suggested order of attack
 
 1. ✅ **Track 1** — exchange adapters + real fills (`bots/rustrade-exchange-apiws/`):
-   KuCoin Futures (`KucoinFillSource`) **and** Kraken spot (`KrakenFillSource`) flow
-   orders, brackets, and real fills through the framework. Remaining: the `OrderUpdate`
-   match-price enhancement.
+   KuCoin Futures (`KucoinFillSource`) **and** Kraken spot (`KrakenFillSource`), plus a
+   `RoutingExchange` that runs both in one bot, all flow orders/brackets/real fills through
+   the framework. Remaining: the `OrderUpdate` match-price enhancement + per-venue market data.
 2. ✅ **Track 2** — portfolio + asset-class risk in `rustrade` (all five items merged:
    PortfolioRisk, InstrumentSpec/AssetClass, class presets, risk sweep, `JsonFileStore`),
    **published as 0.3.0**.
-3. ✅ **Publish + consume.** `rustrade-framework` 0.3.0 is out and `crypto-demo` now
-   wires `portfolio_config` + `with_state_store` (`class_risk` waits on a multi-venue
-   bot) — Tracks 1–2 are in the running stack.
+3. ✅ **Publish + consume.** `rustrade-framework` 0.3.0 is out and `crypto-demo` wires
+   `portfolio_config` + `with_state_store` + `class_risk` (the last via `DEMO_EXCHANGE=multi`,
+   where `CryptoPerp`/`CryptoSpot` diverge) — all of Tracks 1–2 are in the running stack.
 4. ✅ **Track 4** — `JanusBrain` v2 routes entries through janus's `validate` + `size`
    risk API and reports fills back. Remaining: close/outcome feedback.
 5. **← LEADING EDGE: Track 3** — wire janus's real brain/risk inline (port
    `event_loop.rs`'s strategy suite + inline prop-firm + regime gating into the live
    loop; emit `regime`/`fear` into signal metadata). The brain gets serious.
-6. **Tracks 5 & 6** — breadth (a multi-venue `class_risk` bot, futures/equities) +
-   backtest risk-gate parity, in parallel as capacity allows.
+6. **Tracks 5 & 6** — breadth (the multi-venue `class_risk` bot is ✅; next is per-venue
+   market data, then futures/equities) + backtest risk-gate parity, in parallel as capacity allows.
 
 The first three turn the existing demo into a genuine paper-trading system with
 janus making risk-aware, multi-symbol decisions through rustrade. Everything after

@@ -105,9 +105,14 @@ bot. `exchange-apiws` provides market data **and** order execution.
 - **Real fills** — `KucoinFillSource` (`FillSource`) streams the exchange's
   executions in via the private `tradeOrders` WS trigger + `/recentFills`,
   enabling the framework's bracket/OCO handling; `crypto-demo` wires it on the
-  live path and disables the paper simulator. *Remaining on Track 1:* surface
-  `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate` (drop the REST
-  hydration), and a Kraken **spot** adapter (Track 5; Bybit dropped — N/A in Canada).
+  live path and disables the paper simulator.
+- **Kraken spot** — `KrakenSpotAdapter` + `KrakenFillSource` (a second live venue):
+  long-only `AssetClass::CryptoSpot` (market/limit; `position` = base-asset balance),
+  with real fills polled from `/private/TradesHistory` (Kraken has no private own-trades
+  WS here). `crypto-demo` selects it with `DEMO_EXCHANGE=kraken`. *Remaining on Track 1:*
+  surface `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate` (drop the REST
+  hydration), and a multi-venue bot so `class_risk` (`CryptoPerp` vs `CryptoSpot`)
+  actually diverges. (Bybit dropped — N/A in Canada.)
 
 ### ❌ Greenfield (doesn't exist anywhere yet)
 - **Portfolio-/account-level risk in rustrade.** Every `SessionPnl` /
@@ -140,9 +145,12 @@ Without a real exchange adapter, nothing trades. This unblocks everything else.
    `contract_value` resolves from cached contract multipliers. Unit-tested against
    the published crates. ✅ **Real fills** also done — `KucoinFillSource` routes the
    exchange's executions in via the private `tradeOrders` WS + `/recentFills`,
-   enabling bracket/OCO handling. *Still open:* per-execution `matchPrice`/`matchSize`
-   on exchange-apiws's `OrderUpdate` (to drop the REST hydration), and a Kraken
-   **spot** adapter (`KrakenPrivateClient`) — tracked in the bot TODO + Track 5.
+   enabling bracket/OCO handling. ✅ **Kraken spot** also shipped — `KrakenSpotAdapter`
+   + `KrakenFillSource` (`KrakenPrivateClient`; long-only `CryptoSpot`, fills polled from
+   `/private/TradesHistory`), selected with `DEMO_EXCHANGE=kraken`. *Still open:*
+   per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate` (to drop the
+   REST hydration), and a multi-venue bot exercising `class_risk` across `CryptoPerp` +
+   `CryptoSpot`.
 2. **rustrade `SimulatedExchange`** (its TODO 0.3a) as the paper/backtest-fidelity
    reference — so `crypto-demo` can do realistic paper fills instead of `MockExchange`.
 3. ✅ **`crypto-demo` can use the real adapter.** `DEMO_EXCHANGE=kucoin` routes
@@ -150,10 +158,10 @@ Without a real exchange adapter, nothing trades. This unblocks everything else.
    sandbox/sub-account to paper-trade the identical path). The paper `MockExchange`
    remains the default — consistent with the stack's "no autonomous execution" rule.
 
-### Track 2 — Portfolio & asset-class risk in rustrade · `rustrade` ✅ FRAMEWORK-COMPLETE
+### Track 2 — Portfolio & asset-class risk in rustrade · `rustrade` ✅ SHIPPED & CONSUMED
 The framework's risk tier was per-symbol only; multi-asset trading needs
-account-level rules. **All five items are now merged in `rustrade` main**
-(pending a `rustrade-framework` 0.3 publish before the bots can consume them):
+account-level rules. **All five items are merged in `rustrade` main, published as
+`rustrade-framework` 0.3.0, and consumed in `crypto-demo`:**
 1. ✅ **`PortfolioRisk`** in `rustrade-risk`: account-wide latching daily-loss
    halt, gross-exposure cap, max concurrent positions — checked as a third
    pre-trade gate (entries only). *(Net-exposure + an explicit buying-power
@@ -169,10 +177,11 @@ account-level rules. **All five items are now merged in `rustrade` main**
 5. ✅ **`JsonFileStore`** durable `StateStore` — per-symbol risk survives restart
    via `Bot::with_state_store`; the portfolio halt re-derives via the sweep.
 
-> **Bot-side, after `rustrade-framework` 0.3 is published:** bump the bots to
-> 0.3, then wire `crypto-demo` with `portfolio_config(...)`, `class_risk(...)`,
-> and `with_state_store(JsonFileStore::open(...))`. That's the consume step that
-> makes this real in the running stack (and the natural lead-in to Track 4).
+> **Bot-side — done.** `crypto-demo` now depends on `rustrade` 0.3 and wires
+> `portfolio_config(...)` (daily-loss / max-concurrent / gross-exposure caps from the
+> `DEMO_MAX_*` env vars) + opt-in `with_state_store(JsonFileStore::open(...))` via
+> `DEMO_STATE_FILE`. `class_risk(...)` waits on a multi-venue bot (the demo trades one
+> asset class at a time). That consume step put Tracks 1–2 into the running stack.
 
 ### Track 3 — Wire janus's real brain + risk into the live path · `janus`
 The sophistication exists; it's just not in the running binary.
@@ -187,17 +196,17 @@ The sophistication exists; it's just not in the running binary.
 4. **Unify the three prop-firm/risk implementations** (`crates/models::prop_firm`,
    `crates/compliance`, `crates/logic::risk_engine`) into one.
 
-### Track 4 — The janus↔rustrade contract · `fks-full` (`bots/`) + `janus`
+### Track 4 — The janus↔rustrade contract · `fks-full` (`bots/`) + `janus` ✅ MOSTLY SHIPPED
 Make `JanusBrain` consume janus's *risk verdicts*, not just signals.
-1. **Extend the janus brain API** (or use the existing `/api/v1/risk/evaluate` +
-   `/api/v1/positions/event`) so a bot can ask "given this signal + my current
-   portfolio, what size / stop / should I even trade?" and get a verdict that
-   already accounts for prop-firm + portfolio limits.
-2. **`JanusBrain` v2** in `bots/`: send portfolio state + position with each
-   request; honor janus's `GuidanceAction` (Hold/Reduce/Exit) and sizing verdict;
-   map to a rustrade `Decision` with the janus-computed stop/TP/size.
-3. **Position-event feedback loop**: the bot reports fills/closes back to
-   `/api/v1/positions/{event,close}` so janus's affinity learning sees outcomes.
+1. ✅ **Route entries through janus's risk API**: `JanusBrain` now calls
+   `/api/v1/risk/validate` (a veto → `Hold`) then `/api/v1/risk/calculate/position-size`
+   (→ `SizeHint::Quantity`), so janus is the authority on *whether* and *how big*.
+2. ✅ **`JanusBrain` v2** in `bots/crypto-demo`: sends signal + market-data + position
+   context with each request, gated by `use_risk_engine` (default on) and **failing
+   open** if janus's risk API is unreachable (falls back to the raw signal).
+3. **Position-event feedback loop**: ✅ entries — `on_fill` reports the resulting
+   position to `/api/v1/risk/portfolio/positions`; ⏳ still report closes/realised PnL
+   so janus's affinity learning sees how trades resolved, not just open exposure.
 
 ### Track 5 — Multi-asset breadth · `janus` + `exchange-apiws`
 1. **Futures + equities asset classes** in janus's `AssetCategory` + registry
@@ -221,19 +230,23 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
 
 ## Suggested order of attack
 
-1. ✅ **Track 1** — exchange adapter + real fills (`bots/rustrade-exchange-apiws/`):
-   orders, brackets, and `KucoinFillSource` real fills flow through the framework.
-   Remaining: the `OrderUpdate` match-price enhancement and a Kraken spot adapter.
-2. ✅ **Track 2** — portfolio + asset-class risk in `rustrade` (all five items
-   merged: PortfolioRisk, InstrumentSpec/AssetClass, class presets, risk sweep,
-   `JsonFileStore`). **Framework-complete; pending a `rustrade-framework` 0.3 publish.**
-3. **← LEADING EDGE: publish + consume.** Publish `rustrade-framework` 0.3, bump
-   the bots, and wire `crypto-demo` (`portfolio_config` + `class_risk` +
-   `with_state_store`) — the step that puts Tracks 1–2 into the running stack.
-4. **Track 4** — `JanusBrain` v2 consuming risk verdicts. Connects the two halves.
-5. **Track 3** — wire janus's real brain/risk inline. The brain gets serious.
-6. **Tracks 5 & 6** — breadth (Kraken spot, futures/equities) + backtest
-   validation, in parallel as capacity allows.
+1. ✅ **Track 1** — exchange adapters + real fills (`bots/rustrade-exchange-apiws/`):
+   KuCoin Futures (`KucoinFillSource`) **and** Kraken spot (`KrakenFillSource`) flow
+   orders, brackets, and real fills through the framework. Remaining: the `OrderUpdate`
+   match-price enhancement.
+2. ✅ **Track 2** — portfolio + asset-class risk in `rustrade` (all five items merged:
+   PortfolioRisk, InstrumentSpec/AssetClass, class presets, risk sweep, `JsonFileStore`),
+   **published as 0.3.0**.
+3. ✅ **Publish + consume.** `rustrade-framework` 0.3.0 is out and `crypto-demo` now
+   wires `portfolio_config` + `with_state_store` (`class_risk` waits on a multi-venue
+   bot) — Tracks 1–2 are in the running stack.
+4. ✅ **Track 4** — `JanusBrain` v2 routes entries through janus's `validate` + `size`
+   risk API and reports fills back. Remaining: close/outcome feedback.
+5. **← LEADING EDGE: Track 3** — wire janus's real brain/risk inline (port
+   `event_loop.rs`'s strategy suite + inline prop-firm + regime gating into the live
+   loop; emit `regime`/`fear` into signal metadata). The brain gets serious.
+6. **Tracks 5 & 6** — breadth (a multi-venue `class_risk` bot, futures/equities) +
+   backtest risk-gate parity, in parallel as capacity allows.
 
 The first three turn the existing demo into a genuine paper-trading system with
 janus making risk-aware, multi-symbol decisions through rustrade. Everything after

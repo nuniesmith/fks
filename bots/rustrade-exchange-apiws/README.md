@@ -7,7 +7,7 @@ signed REST surfaces:
 | adapter | venue | shape |
 |---|---|---|
 | `KucoinExchangeAdapter` (+ `KucoinFillSource`) | **KuCoin Futures** | contracts, leverage, SL/TP brackets, real fills → `CryptoPerp` |
-| `KrakenSpotAdapter` | **Kraken spot** | long-only, base-asset units, `position` = balance, market/limit → `CryptoSpot` |
+| `KrakenSpotAdapter` (+ `KrakenFillSource`) | **Kraken spot** | long-only, base-asset units, `position` = balance, real fills → `CryptoSpot` |
 
 The framework speaks `Order` / `Position` / `Capability`; `exchange-apiws`
 speaks each venue's signed HTTP API. These adapters are the bridge — the
@@ -99,12 +99,14 @@ credentials. The FKS stack defaults to paper everywhere for a reason — see the
 bot keeps `MockExchange` as its default and only constructs this adapter behind
 an explicit `DEMO_EXCHANGE=kucoin` opt-in.
 
-## Real fills — `KucoinFillSource`
+## Real fills
 
-A `rustrade::FillSource` that streams the exchange's actual executions into the
-bot, replacing paper-simulated fills. Because the framework gates bracket/OCO
-handling on a fill source being present, wiring it also turns on real SL/TP
-management.
+Each venue ships a `rustrade::FillSource` that streams the exchange's actual
+executions into the bot, replacing paper-simulated fills. Because the framework
+gates bracket/OCO handling on a fill source being present, wiring one also turns
+on real SL/TP management.
+
+### KuCoin — `KucoinFillSource`
 
 ```rust
 use rustrade_exchange_apiws::KucoinFillSource;
@@ -126,15 +128,37 @@ omits the per-execution match price — and reports `0.0` for market orders), so
 fills carry true prices. Deduped by trade id; baselined at startup so history
 isn't replayed; degrades to poll-only if the private WS token is unavailable.
 
+### Kraken — `KrakenFillSource`
+
+Kraken has no private own-trades WS through `exchange-apiws`, so this source is
+poll-based: it reads `/0/private/TradesHistory` on a cadence (5 s default) and
+emits trades the framework hasn't seen. Trades are in **base-asset units** with
+the fee in the quote currency (which `TradesHistory` doesn't name per row, so
+you pass it — e.g. `"USD"`). Deduped by trade id (bounded FIFO) and baselined at
+startup so pre-existing history isn't replayed.
+
+```rust
+use rustrade_exchange_apiws::KrakenFillSource;
+use std::sync::Arc;
+
+let fills = Arc::new(KrakenFillSource::connect_default(adapter.client().clone(), "USD"));
+// bot.with_fill_source(fills)
+```
+
 ## Status & roadmap
 
 - ✅ KuCoin Futures `ExchangeClient` (orders, brackets, positions, balance, order tracking).
 - ✅ `KucoinFillSource` — real fills via the private `tradeOrders` WS trigger + `/recentFills`.
+- ✅ Kraken **spot** `ExchangeClient` over `exchange-apiws`'s `KrakenPrivateClient`
+  (long-only, `position` = base-asset balance, market/limit, `AssetClass::CryptoSpot`).
+- ✅ `KrakenFillSource` — real fills by polling `/private/TradesHistory` (Kraken has
+  no private own-trades WS here), deduped by trade id + baselined at startup.
 - ⏳ Expose per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate`
   so the WS feed can carry fill prices directly (drop the `/recentFills` hydration).
-- ⏳ Kraken **spot** adapter over `exchange-apiws`'s `KrakenPrivateClient` (spot
-  semantics: long-only, `position` = base-asset balance, `AssetClass::CryptoSpot`).
-  KuCoin (futures) + Kraken (spot) are the target venues; Bybit is unused (N/A in Canada).
+- ⏳ Multi-venue `class_risk` end-to-end: a bot trading KuCoin (`CryptoPerp`) **and**
+  Kraken (`CryptoSpot`) at once, so the per-asset-class risk presets diverge in practice.
+
+KuCoin (futures) + Kraken (spot) are the target venues; Bybit is unused (N/A in Canada).
 
 ## License
 

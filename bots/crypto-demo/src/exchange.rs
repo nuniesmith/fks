@@ -21,7 +21,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use rustrade::{ExchangeClient, FillSource};
-use rustrade_exchange_apiws::{KucoinExchangeAdapter, KucoinFillSource};
+use rustrade_exchange_apiws::{
+    KrakenFillSource, KrakenSpotAdapter, KucoinExchangeAdapter, KucoinFillSource,
+};
 use tracing::{error, info, warn};
 
 use crate::mock_exchange::MockExchange;
@@ -52,11 +54,15 @@ impl Selected {
 /// leverage the adapter sends to KuCoin agrees with how positions were sized.
 pub async fn build_exchange(symbols: &[String], leverage: u32) -> Selected {
     let want = std::env::var("DEMO_EXCHANGE").unwrap_or_else(|_| "mock".into());
-
-    if !want.eq_ignore_ascii_case("kucoin") {
-        return Selected::paper();
+    match want.to_ascii_lowercase().as_str() {
+        "kucoin" => build_kucoin(symbols, leverage).await,
+        "kraken" => build_kraken(symbols),
+        _ => Selected::paper(),
     }
+}
 
+/// KuCoin Futures (live): adapter + real fills via the private WS + /recentFills.
+async fn build_kucoin(symbols: &[String], leverage: u32) -> Selected {
     warn!(
         "DEMO_EXCHANGE=kucoin — routing orders through LIVE KuCoin Futures. \
          Confirm KC_KEY/KC_SECRET/KC_PASSPHRASE target the account you intend to trade \
@@ -94,4 +100,69 @@ pub async fn build_exchange(symbols: &[String], leverage: u32) -> Selected {
             Selected::paper()
         }
     }
+}
+
+/// Kraken **spot** (live): adapter + real fills via TradesHistory polling.
+///
+/// Spot is long-only with no leverage and `AssetClass::CryptoSpot`. Use Kraken
+/// pair names in `DEMO_SYMBOLS` (e.g. `XBTUSD`) and tune the demo's sizing for
+/// spot (a `contract_value` of 1.0 means margin × leverage is the notional).
+fn build_kraken(symbols: &[String]) -> Selected {
+    warn!(
+        "DEMO_EXCHANGE=kraken — routing orders through LIVE Kraken spot. \
+         Confirm KRAKEN_API_KEY/KRAKEN_API_SECRET target the account you intend to trade."
+    );
+    let base_assets = kraken_base_assets(symbols);
+    let refs: Vec<(&str, &str)> = base_assets
+        .iter()
+        .map(|(s, c)| (s.as_str(), c.as_str()))
+        .collect();
+    match KrakenSpotAdapter::from_env(&refs) {
+        Ok(adapter) => {
+            // Kraken has no private own-trades WS through exchange-apiws, so real
+            // fills come from polling TradesHistory. Fee is in the quote (USD).
+            let fills = KrakenFillSource::connect_default(adapter.client().clone(), "USD");
+            info!(
+                symbols = symbols.len(),
+                base_assets = refs.len(),
+                "exchange: Kraken spot adapter (LIVE) + real fill source (CryptoSpot)"
+            );
+            Selected {
+                exchange: Arc::new(adapter),
+                fills: Some(Arc::new(fills)),
+            }
+        }
+        Err(e) => {
+            error!(error = %e, "kraken adapter unavailable — FALLING BACK to MockExchange (paper)");
+            Selected::paper()
+        }
+    }
+}
+
+/// Resolve `symbol → Kraken base-asset code` from `DEMO_KRAKEN_BASE_ASSETS`
+/// (`"XBTUSD:XXBT,ETHUSD:XETH"`) or a built-in default for common USD pairs.
+/// Unmapped symbols report flat positions (the adapter warns).
+fn kraken_base_assets(symbols: &[String]) -> Vec<(String, String)> {
+    if let Ok(env) = std::env::var("DEMO_KRAKEN_BASE_ASSETS") {
+        return env
+            .split(',')
+            .filter_map(|entry| entry.split_once(':'))
+            .map(|(s, c)| (s.trim().to_string(), c.trim().to_string()))
+            .collect();
+    }
+    // Best-effort defaults: Kraken uses legacy X-prefixed codes for BTC/ETH.
+    let code_for = |sym: &str| -> Option<&'static str> {
+        match sym {
+            s if s.starts_with("XBT") => Some("XXBT"),
+            s if s.starts_with("ETH") => Some("XETH"),
+            s if s.starts_with("SOL") => Some("SOL"),
+            s if s.starts_with("ADA") => Some("ADA"),
+            s if s.starts_with("DOT") => Some("DOT"),
+            _ => None,
+        }
+    };
+    symbols
+        .iter()
+        .filter_map(|s| code_for(s).map(|c| (s.clone(), c.to_string())))
+        .collect()
 }

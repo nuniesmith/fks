@@ -38,14 +38,19 @@
 //! ```
 
 use std::collections::HashMap;
+use std::collections::{HashSet, VecDeque};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rustrade::{
-    AssetClass, Capability, ExchangeClient, InstrumentSpec, OpenOrder, Order, OrderKind,
-    OrderStatus, Position, Price, Result, Side, Symbol, Volume,
+    AssetClass, Capability, ExchangeClient, Fill, FillSource, InstrumentSpec, OpenOrder, Order,
+    OrderKind, OrderStatus, Position, Price, Result, Side, Symbol, Volume,
 };
+use tokio::sync::{Mutex as AsyncMutex, mpsc, watch};
+use tracing::{debug, info, warn};
 
+use exchange_apiws::kraken::KrakenTradeHistoryEntry;
 use exchange_apiws::{KrakenCredentials, KrakenPrivateClient};
 
 use crate::ex;
@@ -344,6 +349,165 @@ impl ExchangeClient for KrakenSpotAdapter {
     }
 }
 
+// ── Fill source ──────────────────────────────────────────────────────────────
+
+/// Default poll cadence for the Kraken fill source.
+const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(5);
+/// Bounded dedup memory (Kraken's TradesHistory first page is ~50 trades).
+const SEEN_CAPACITY: usize = 10_000;
+
+/// A [`rustrade::FillSource`] that streams the account's **real** Kraken trades
+/// into the bot by polling `/0/private/TradesHistory`, deduped by trade id.
+///
+/// Kraken doesn't expose a private own-trades WS through `exchange-apiws`, so
+/// this is poll-based (unlike [`KucoinFillSource`](crate::KucoinFillSource)'s
+/// WS trigger). Trades are in **base-asset units** with the fee in quote
+/// currency. Startup is baselined so pre-existing history isn't replayed.
+pub struct KrakenFillSource {
+    rx: AsyncMutex<mpsc::UnboundedReceiver<Fill>>,
+    _shutdown: watch::Sender<bool>,
+}
+
+impl KrakenFillSource {
+    /// Connect a fill source polling every `poll_interval`. `fee_currency` labels
+    /// the fee (Kraken charges it in the quote currency, which `TradesHistory`
+    /// doesn't name per row) — e.g. `"USD"`. Spawns the driver on the current
+    /// Tokio runtime; the baseline snapshot happens inside the task.
+    #[must_use]
+    pub fn connect(
+        client: KrakenPrivateClient,
+        fee_currency: impl Into<String>,
+        poll_interval: Duration,
+    ) -> Self {
+        let (tx, rx) = mpsc::unbounded_channel::<Fill>();
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        tokio::spawn(drive_fills(
+            client,
+            fee_currency.into(),
+            poll_interval.max(Duration::from_secs(1)),
+            tx,
+            shutdown_rx,
+        ));
+        Self {
+            rx: AsyncMutex::new(rx),
+            _shutdown: shutdown_tx,
+        }
+    }
+
+    /// Connect with the default poll cadence (5 s).
+    #[must_use]
+    pub fn connect_default(client: KrakenPrivateClient, fee_currency: impl Into<String>) -> Self {
+        Self::connect(client, fee_currency, DEFAULT_POLL_INTERVAL)
+    }
+}
+
+#[async_trait]
+impl FillSource for KrakenFillSource {
+    async fn next_fill(&self) -> Option<Fill> {
+        self.rx.lock().await.recv().await
+    }
+}
+
+/// Bounded FIFO set of already-emitted trade ids.
+struct Seen {
+    set: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+impl Seen {
+    fn new() -> Self {
+        Self {
+            set: HashSet::new(),
+            order: VecDeque::new(),
+        }
+    }
+    /// Record `id`; returns `true` if it was not seen before.
+    fn insert(&mut self, id: &str) -> bool {
+        if self.set.contains(id) {
+            return false;
+        }
+        if self.order.len() >= SEEN_CAPACITY
+            && let Some(old) = self.order.pop_front()
+        {
+            self.set.remove(&old);
+        }
+        self.set.insert(id.to_string());
+        self.order.push_back(id.to_string());
+        true
+    }
+}
+
+/// Convert a Kraken trade-history entry into a framework [`Fill`].
+fn trade_to_fill(e: &KrakenTradeHistoryEntry, fee_ccy: &str) -> Fill {
+    Fill {
+        symbol: Symbol::from(e.pair.as_str()),
+        order_id: e.ordertxid.clone(),
+        client_id: None,
+        side: if e.side == "sell" {
+            Side::Sell
+        } else {
+            Side::Buy
+        },
+        price: Price(e.price.parse::<f64>().unwrap_or(0.0)),
+        size: Volume(e.vol.parse::<f64>().unwrap_or(0.0)),
+        fee: e.fee.parse::<f64>().unwrap_or(0.0),
+        fee_currency: fee_ccy.to_string(),
+        timestamp: secs_to_dt(e.time).unwrap_or_else(Utc::now),
+    }
+}
+
+/// Driver: baseline, then poll TradesHistory on a cadence, emitting new trades.
+async fn drive_fills(
+    client: KrakenPrivateClient,
+    fee_ccy: String,
+    poll_interval: Duration,
+    tx: mpsc::UnboundedSender<Fill>,
+    mut shutdown: watch::Receiver<bool>,
+) {
+    let mut seen = Seen::new();
+    // Baseline: record existing trades without replaying them.
+    hydrate_fills(&client, &fee_ccy, &mut seen, true, &tx).await;
+    info!("kraken fill source baselined; polling TradesHistory");
+
+    let mut tick = tokio::time::interval(poll_interval);
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            biased;
+            res = shutdown.changed() => {
+                if res.is_err() || *shutdown.borrow() {
+                    break;
+                }
+            }
+            _ = tick.tick() => hydrate_fills(&client, &fee_ccy, &mut seen, false, &tx).await,
+        }
+    }
+    debug!("kraken fill source driver stopped");
+}
+
+/// Fetch TradesHistory and emit trades not yet seen (baseline = record only).
+async fn hydrate_fills(
+    client: &KrakenPrivateClient,
+    fee_ccy: &str,
+    seen: &mut Seen,
+    baseline: bool,
+    tx: &mpsc::UnboundedSender<Fill>,
+) {
+    let history = match client.get_trades_history().await {
+        Ok(h) => h,
+        Err(e) => {
+            warn!(error = %e, "kraken TradesHistory poll failed");
+            return;
+        }
+    };
+    for (trade_id, entry) in &history.trades {
+        let is_new = seen.insert(trade_id);
+        if is_new && !baseline && tx.send(trade_to_fill(entry, fee_ccy)).is_err() {
+            return; // receiver gone
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,5 +574,42 @@ mod tests {
     fn secs_to_dt_roundtrips() {
         let dt = secs_to_dt(1_700_000_000.5).expect("valid");
         assert_eq!(dt.timestamp(), 1_700_000_000);
+    }
+
+    fn trade(side: &str, price: &str, vol: &str) -> KrakenTradeHistoryEntry {
+        KrakenTradeHistoryEntry {
+            ordertxid: "O123-ABC".into(),
+            postxid: String::new(),
+            pair: "XBTUSD".into(),
+            time: 1_700_000_000.0,
+            side: side.into(),
+            ordertype: "market".into(),
+            price: price.into(),
+            cost: "0".into(),
+            fee: "0.42".into(),
+            vol: vol.into(),
+            margin: String::new(),
+            misc: String::new(),
+        }
+    }
+
+    #[test]
+    fn trade_converts_to_fill() {
+        let f = trade_to_fill(&trade("sell", "65000.0", "0.25"), "USD");
+        assert_eq!(f.symbol, Symbol::from("XBTUSD"));
+        assert_eq!(f.order_id, "O123-ABC");
+        assert_eq!(f.side, Side::Sell);
+        assert_eq!(f.price, Price(65000.0));
+        assert_eq!(f.size, Volume(0.25));
+        assert!((f.fee - 0.42).abs() < 1e-9);
+        assert_eq!(f.fee_currency, "USD");
+    }
+
+    #[test]
+    fn seen_dedupes_and_evicts() {
+        let mut seen = Seen::new();
+        assert!(seen.insert("t1"));
+        assert!(!seen.insert("t1"));
+        assert!(seen.insert("t2"));
     }
 }

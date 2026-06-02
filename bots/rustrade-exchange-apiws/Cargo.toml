@@ -20,7 +20,7 @@ version     = "0.1.0"
 edition     = "2024"
 rust-version = "1.94.1"
 publish     = false
-description = "rustrade ExchangeClient backed by exchange-apiws's signed KuCoin Futures REST"
+description = "rustrade ExchangeClient adapters over exchange-apiws — KuCoin Futures + Kraken spot"
 license     = "MIT OR Apache-2.0"
 
 [lib]
@@ -35,7 +35,9 @@ path = "src/lib.rs"
 rustrade       = { package = "rustrade-framework", version = "0.3" }
 # Exchange REST/WS clients. KuCoin REST is always-on, so drop the other
 # exchanges' code we don't touch here.
-exchange-apiws = { version = "0.5", default-features = false }
+# Exchange REST/WS clients. KuCoin REST is always-on; enable `kraken` for the
+# spot adapter. The other exchanges' code stays out of the build.
+exchange-apiws = { version = "0.5", default-features = false, features = ["kraken"] }
 
 # ── Async / glue ──────────────────────────────────────────────────────────────
 async-trait = "0.1"

@@ -1,14 +1,36 @@
 # rustrade-exchange-apiws
 
-A [`rustrade`](https://crates.io/crates/rustrade-framework) `ExchangeClient`
-backed by [`exchange-apiws`](https://crates.io/crates/exchange-apiws)'s signed
-**KuCoin Futures** REST surface.
+[`rustrade`](https://crates.io/crates/rustrade-framework) `ExchangeClient`
+adapters backed by [`exchange-apiws`](https://crates.io/crates/exchange-apiws)'s
+signed REST surfaces:
+
+| adapter | venue | shape |
+|---|---|---|
+| `KucoinExchangeAdapter` (+ `KucoinFillSource`) | **KuCoin Futures** | contracts, leverage, SL/TP brackets, real fills → `CryptoPerp` |
+| `KrakenSpotAdapter` | **Kraken spot** | long-only, base-asset units, `position` = balance, market/limit → `CryptoSpot` |
 
 The framework speaks `Order` / `Position` / `Capability`; `exchange-apiws`
-speaks KuCoin's signed HTTP API. This crate is the adapter between them — the
-first thing in the FKS bots that turns a framework `Order` into a **real**
-order on a real exchange. Point it at sandbox credentials and the exact same
-code path paper-trades.
+speaks each venue's signed HTTP API. These adapters are the bridge — the
+thing in the FKS bots that turns a framework `Order` into a **real** order on a
+real exchange. Point them at sandbox/test credentials and the exact same code
+path paper-trades.
+
+## Kraken spot
+
+Spot is a different shape and the adapter models it honestly: long-only (no
+shorts, no leverage), orders in **base-asset units** (not contracts), and a
+"position" is your **balance** of the base asset (closing it is a market sell).
+Kraken keys balances by its own asset codes (`XXBT`, `XETH`, …), so
+`get_position` needs a `symbol → base-asset-code` map at construction:
+
+```rust
+use rustrade_exchange_apiws::KrakenSpotAdapter;
+let exchange = KrakenSpotAdapter::from_env(&[("XBTUSD", "XXBT"), ("ETHUSD", "XETH")])?;
+```
+
+It advertises `AssetClass::CryptoSpot`, so `class_risk(AssetClass::CryptoSpot, RiskConfig::crypto_spot())`
+applies the spot rules (1× leverage) automatically. *(Bybit is unused — not
+tradeable from Canada.)*
 
 It is **Track 1** of
 [`docs/MULTI_ASSET_BRAIN_ROADMAP.md`](../../docs/MULTI_ASSET_BRAIN_ROADMAP.md):

@@ -114,9 +114,12 @@ bot. `exchange-apiws` provides market data **and** order execution.
   one symbol-routed `ExchangeClient`, so a single bot trades both classes at once and
   `class_risk` (`CryptoPerp` 5× vs `CryptoSpot` 1×) finally **diverges** per symbol — the
   framework resolves each symbol's class from the routed `instrument_spec`. `crypto-demo`
-  wires it as `DEMO_EXCHANGE=multi`. *Remaining on Track 1:* surface `matchPrice`/`matchSize`
-  on exchange-apiws's `OrderUpdate` (drop the REST hydration), and **per-venue market data**
-  (the demo shares one candle source today) for a production multi-venue deployment.
+  wires it as `DEMO_EXCHANGE=multi`.
+- **Per-venue market data** — `KrakenCandleSource` (Kraken public OHLC) + `RoutingCandleSource`
+  poll each symbol's candles from its own venue, so the `multi` mode pulls KuCoin klines for
+  perps and Kraken OHLC for spot instead of sharing one feed. *Remaining on Track 1:*
+  `matchPrice`/`matchSize` **landed in exchange-apiws**; the `KucoinFillSource` simplification
+  (drop the `/recentFills` hydration) follows a publish.
 
 ### ❌ Greenfield (doesn't exist anywhere yet)
 - **Portfolio-/account-level risk in rustrade.** Every `SessionPnl` /
@@ -152,10 +155,10 @@ Without a real exchange adapter, nothing trades. This unblocks everything else.
    enabling bracket/OCO handling. ✅ **Kraken spot** also shipped — `KrakenSpotAdapter`
    + `KrakenFillSource` (`KrakenPrivateClient`; long-only `CryptoSpot`, fills polled from
    `/private/TradesHistory`), selected with `DEMO_EXCHANGE=kraken`. ✅ **Multi-venue** also
-   shipped — `RoutingExchange` + `CompositeFillSource` run both venues in one bot
-   (`DEMO_EXCHANGE=multi`), so `class_risk` diverges across `CryptoPerp` + `CryptoSpot`.
-   *Still open:* per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate`
-   (to drop the REST hydration), and per-venue **market data** for the multi-venue bot.
+   shipped — `RoutingExchange` + `CompositeFillSource` + `RoutingCandleSource` run both
+   venues in one bot (`DEMO_EXCHANGE=multi`), so `class_risk` diverges across `CryptoPerp` +
+   `CryptoSpot` with each venue's own candles. *Still open:* the `KucoinFillSource`
+   simplification once exchange-apiws's new `matchPrice`/`matchSize` fields are published.
 2. **rustrade `SimulatedExchange`** (its TODO 0.3a) as the paper/backtest-fidelity
    reference — so `crypto-demo` can do realistic paper fills instead of `MockExchange`.
 3. ✅ **`crypto-demo` can use the real adapter.** `DEMO_EXCHANGE=kucoin` routes
@@ -210,9 +213,11 @@ Make `JanusBrain` consume janus's *risk verdicts*, not just signals.
 2. ✅ **`JanusBrain` v2** in `bots/crypto-demo`: sends signal + market-data + position
    context with each request, gated by `use_risk_engine` (default on) and **failing
    open** if janus's risk API is unreachable (falls back to the raw signal).
-3. **Position-event feedback loop**: ✅ entries — `on_fill` reports the resulting
-   position to `/api/v1/risk/portfolio/positions`; ⏳ still report closes/realised PnL
-   so janus's affinity learning sees how trades resolved, not just open exposure.
+3. ✅ **Position-event feedback loop**: `on_fill` mirrors each symbol's position from
+   the fill stream (`apply_fill`) and reports both the open exposure
+   (`/api/v1/risk/portfolio/positions`) **and**, on a closing fill, the realised PnL
+   (`/api/v1/risk/portfolio/positions/close` — a new janus endpoint that folds it into
+   portfolio daily PnL). *Refinement left:* route outcomes into the affinity learner.
 
 ### Track 5 — Multi-asset breadth · `janus` + `exchange-apiws`
 1. **Futures + equities asset classes** in janus's `AssetCategory` + registry
@@ -236,10 +241,11 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
 
 ## Suggested order of attack
 
-1. ✅ **Track 1** — exchange adapters + real fills (`bots/rustrade-exchange-apiws/`):
-   KuCoin Futures (`KucoinFillSource`) **and** Kraken spot (`KrakenFillSource`), plus a
-   `RoutingExchange` that runs both in one bot, all flow orders/brackets/real fills through
-   the framework. Remaining: the `OrderUpdate` match-price enhancement + per-venue market data.
+1. ✅ **Track 1** — exchange adapters + real fills + per-venue market data
+   (`bots/rustrade-exchange-apiws/`): KuCoin Futures (`KucoinFillSource`) **and** Kraken spot
+   (`KrakenFillSource`), a `RoutingExchange` running both in one bot, and a
+   `RoutingCandleSource` feeding each its own candles. The `OrderUpdate` match-price fields
+   landed in exchange-apiws; only the `KucoinFillSource` simplification (post-publish) remains.
 2. ✅ **Track 2** — portfolio + asset-class risk in `rustrade` (all five items merged:
    PortfolioRisk, InstrumentSpec/AssetClass, class presets, risk sweep, `JsonFileStore`),
    **published as 0.3.0**.
@@ -247,12 +253,13 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
    `portfolio_config` + `with_state_store` + `class_risk` (the last via `DEMO_EXCHANGE=multi`,
    where `CryptoPerp`/`CryptoSpot` diverge) — all of Tracks 1–2 are in the running stack.
 4. ✅ **Track 4** — `JanusBrain` v2 routes entries through janus's `validate` + `size`
-   risk API and reports fills back. Remaining: close/outcome feedback.
+   risk API and reports both open exposure and **realised PnL on close** (new janus
+   `/positions/close` endpoint). Remaining refinement: feed outcomes to affinity learning.
 5. **← LEADING EDGE: Track 3** — wire janus's real brain/risk inline (port
    `event_loop.rs`'s strategy suite + inline prop-firm + regime gating into the live
    loop; emit `regime`/`fear` into signal metadata). The brain gets serious.
-6. **Tracks 5 & 6** — breadth (the multi-venue `class_risk` bot is ✅; next is per-venue
-   market data, then futures/equities) + backtest risk-gate parity, in parallel as capacity allows.
+6. **Tracks 5 & 6** — breadth (the multi-venue `class_risk` bot ✅ and its per-venue market
+   data ✅; next is futures/equities) + backtest risk-gate parity, in parallel as capacity allows.
 
 The first three turn the existing demo into a genuine paper-trading system with
 janus making risk-aware, multi-symbol decisions through rustrade. Everything after

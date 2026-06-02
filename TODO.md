@@ -141,8 +141,11 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
       applies `crypto_perp()` (5×) vs `crypto_spot()` (1×) per symbol — the per-class presets
       finally diverge in a running bot. `crypto-demo` wires it as `DEMO_EXCHANGE=multi`
       (symbols split by KuCoin's `M` suffix, or `DEMO_KUCOIN_SYMBOLS` / `DEMO_KRAKEN_SYMBOLS`);
-      `supports` is the intersection across venues, `get_balance` the sum. Remaining: per-venue
-      **market data** (the demo shares one candle source today) for a production deployment.
+      `supports` is the intersection across venues, `get_balance` the sum.
+- [x] **Per-venue market data** — `KrakenCandleSource` (Kraken public OHLC) + a
+      `RoutingCandleSource` that polls each symbol's candles from its own venue, so the
+      `multi` mode no longer shares one feed (KuCoin klines for perps, Kraken OHLC for spot).
+      `build_source` follows `DEMO_EXCHANGE` (override with `DEMO_SOURCE`), synthetic fallback.
 
 ### Track 2 — portfolio + asset-class risk · `rustrade` ✅ SHIPPED
 All five items merged in `rustrade` main, **published as `rustrade-framework`
@@ -168,8 +171,12 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
       open** (proceed on the raw signal) if janus's risk API is unreachable.
 - [x] **Position-event feedback (entry)**: `on_fill` reports the resulting position to
       `POST /api/v1/risk/portfolio/positions` so janus tracks live exposure + affinity.
-- [ ] **Close/outcome feedback**: also report closes/realised PnL (not just open
-      positions) so janus's affinity learning sees how trades actually resolved.
+- [x] **Close/outcome feedback**: `JanusBrain` mirrors each symbol's position from
+      the fill stream (`apply_fill`) and, on a reducing/closing fill, computes the
+      realised PnL and POSTs it to janus's new `POST /api/v1/risk/portfolio/positions/close`
+      endpoint (added in `services/forward`), which folds it into the portfolio's daily
+      PnL and frees the slot. So janus now sees trade *outcomes*, not just open exposure.
+      *(Further refinement: route the outcome into the affinity/memory learner specifically.)*
 
 ### Multi-account (existing, pre-roadmap)
 - [ ] **ACCT-A** — `src/ruby/sql/008_accounts.sql` (exchange_accounts,

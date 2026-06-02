@@ -65,7 +65,9 @@ let exchange = Arc::new(
 The two symbol-less calls answer conservatively: `supports` is the **intersection**
 across venues (a capability only if *every* venue has it), and `get_balance` is the
 **sum** for the given currency. `CompositeFillSource` merges the venues' fill
-sources into one stream. `crypto-demo` wires all this behind `DEMO_EXCHANGE=multi`.
+sources into one stream, and `RoutingCandleSource` does the same on the market-data
+side — KuCoin klines for the perp symbols, `KrakenCandleSource` (Kraken public OHLC)
+for the spot symbols. `crypto-demo` wires all this behind `DEMO_EXCHANGE=multi`.
 
 ## Mapping
 
@@ -186,11 +188,12 @@ let fills = Arc::new(KrakenFillSource::connect_default(adapter.client().clone(),
 - ✅ `RoutingExchange` + `CompositeFillSource` — compose KuCoin + Kraken into one
   symbol-routed `ExchangeClient` so a single bot's `class_risk` diverges across
   `CryptoPerp` (5×) and `CryptoSpot` (1×); wired in `crypto-demo` as `DEMO_EXCHANGE=multi`.
+- ✅ `KrakenCandleSource` + `RoutingCandleSource` — market-data side: Kraken public
+  OHLC candles, and a per-symbol candle router so each venue's symbols get their own
+  candles (the `multi` mode pulls KuCoin klines for perps, Kraken OHLC for spot).
 - ⏳ Expose per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate`
   so the WS feed can carry fill prices directly (drop the `/recentFills` hydration).
-- ⏳ Per-venue **market data** for the multi-venue bot: today `crypto-demo` shares one
-  candle source, so Kraken symbols get KuCoin/synthetic candles — a `MarketSource` per
-  venue is the remaining piece for a production multi-venue deployment.
+  *(Landed in exchange-apiws; the `KucoinFillSource` simplification follows a publish.)*
 
 KuCoin (futures) + Kraken (spot) are the target venues; Bybit is unused (N/A in Canada).
 

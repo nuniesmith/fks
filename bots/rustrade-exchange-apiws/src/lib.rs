@@ -10,6 +10,9 @@
 //!   dispatches per symbol, so a single bot can trade both venues at once and
 //!   per-asset-class risk (`class_risk`) actually diverges; [`CompositeFillSource`]
 //!   merges their fills.
+//! - [`KrakenCandleSource`] / [`RoutingCandleSource`] — the market-data side:
+//!   Kraken public OHLC candles, plus a per-symbol candle router so each venue's
+//!   symbols are fed their own candles.
 //!
 //! The `rustrade` framework stays exchange-agnostic: it speaks in `Order`,
 //! `Position`, `Capability`. `exchange-apiws` speaks each venue's HTTP API.
@@ -98,7 +101,13 @@ mod kraken;
 pub use kraken::{KrakenFillSource, KrakenSpotAdapter};
 
 mod routing;
-pub use routing::{CompositeFillSource, RoutingExchange, RoutingExchangeBuilder};
+pub use routing::{
+    CompositeFillSource, RoutingCandleSource, RoutingCandleSourceBuilder, RoutingExchange,
+    RoutingExchangeBuilder,
+};
+
+mod candles;
+pub use candles::KrakenCandleSource;
 
 // ── Error glue ───────────────────────────────────────────────────────────────
 

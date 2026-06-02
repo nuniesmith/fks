@@ -1,25 +1,28 @@
 //! Market-data sources implementing rustrade's [`CandleSource`].
 //!
-//! Two implementations:
-//!
 //! - [`KucoinCandleSource`] — polls KuCoin Futures klines through
-//!   `exchange-apiws` (the same client the kucoin reference bot uses). Public
-//!   market data, no API key required. This is the real path.
+//!   `exchange-apiws`. Public market data, no API key required.
+//! - `KrakenCandleSource` (from `rustrade-exchange-apiws`) — Kraken public OHLC,
+//!   used for Kraken spot symbols.
 //! - [`SyntheticCandleSource`] — a random-walk generator used when
-//!   `DEMO_SOURCE=synthetic` (or when the exchange is unreachable, e.g. CI /
-//!   sandboxes that block exchange endpoints). Keeps the demo runnable
-//!   anywhere so the framework wiring can be verified offline.
+//!   `DEMO_SOURCE=synthetic` (or when an exchange is unreachable, e.g. CI /
+//!   sandboxes that block exchange endpoints). Keeps the demo runnable offline.
+//!
+//! [`build_source`] aligns the market-data feed with the trading venue: the
+//! `kraken` and `multi` exchange modes get Kraken (and, for `multi`, per-symbol
+//! routed via `RoutingCandleSource`) candles instead of always polling KuCoin.
 //!
 //! rustrade's `CandlePollerService` calls `poll(...)` on a cadence, diffs the
 //! returned candles against what it has already seen, and publishes each newly
 //! closed candle to the bot's `MarketDataBus` as `MarketDataEvent::Candle`.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use exchange_apiws::{Credentials, KuCoinClient, KucoinEnv};
 use rustrade::{Candle, CandleSource, Result, Symbol};
+use rustrade_exchange_apiws::{KrakenCandleSource, RoutingCandleSource};
 use tracing::{debug, warn};
 
 /// Map a rustrade poll `interval` to a KuCoin granularity string (minutes).
@@ -163,19 +166,79 @@ impl CandleSource for SyntheticCandleSource {
     }
 }
 
-/// Build the configured source. Defaults to live KuCoin; falls back to the
-/// synthetic generator when `DEMO_SOURCE=synthetic`, or when the KuCoin client
-/// can't be constructed.
-pub fn build_source(symbols: &[String]) -> std::sync::Arc<dyn CandleSource> {
-    let want = std::env::var("DEMO_SOURCE").unwrap_or_else(|_| "kucoin".into());
-    if want.eq_ignore_ascii_case("synthetic") {
-        return std::sync::Arc::new(SyntheticCandleSource::new(symbols));
+/// Build the market-data source. `DEMO_SOURCE` forces a specific source
+/// (`synthetic` / `kucoin` / `kraken`); unset, it follows the trading venue
+/// (`DEMO_EXCHANGE`) so candles come from where orders go — KuCoin for
+/// `kucoin`/`mock`, Kraken for `kraken`, and per-symbol routed for `multi`.
+/// Any real source falls back to the synthetic generator if it can't be built.
+pub fn build_source(symbols: &[String]) -> Arc<dyn CandleSource> {
+    match std::env::var("DEMO_SOURCE")
+        .ok()
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("synthetic") => Arc::new(SyntheticCandleSource::new(symbols)),
+        Some("kucoin") => kucoin_or_synthetic(symbols),
+        Some("kraken") => kraken_or_synthetic(symbols),
+        // Unset/unknown: align market data with the trading venue.
+        _ => match std::env::var("DEMO_EXCHANGE")
+            .unwrap_or_else(|_| "mock".into())
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "kraken" => kraken_or_synthetic(symbols),
+            "multi" | "kucoin+kraken" => multi_source(symbols),
+            _ => kucoin_or_synthetic(symbols),
+        },
     }
+}
+
+fn kucoin_or_synthetic(symbols: &[String]) -> Arc<dyn CandleSource> {
     match KucoinCandleSource::new() {
-        Ok(src) => std::sync::Arc::new(src),
+        Ok(src) => Arc::new(src),
         Err(e) => {
             warn!(error = %e, "kucoin source unavailable — falling back to synthetic");
-            std::sync::Arc::new(SyntheticCandleSource::new(symbols))
+            Arc::new(SyntheticCandleSource::new(symbols))
         }
     }
+}
+
+fn kraken_or_synthetic(symbols: &[String]) -> Arc<dyn CandleSource> {
+    match KrakenCandleSource::new() {
+        Ok(src) => Arc::new(src),
+        Err(e) => {
+            warn!(error = %e, "kraken source unavailable — falling back to synthetic");
+            Arc::new(SyntheticCandleSource::new(symbols))
+        }
+    }
+}
+
+/// Multi-venue market data: KuCoin klines for KuCoin symbols, Kraken OHLC for
+/// Kraken symbols (the same split [`crate::exchange::split_venues`] uses for
+/// order routing), with the synthetic generator as the fallback for any source
+/// that can't be built and for unmapped symbols.
+fn multi_source(symbols: &[String]) -> Arc<dyn CandleSource> {
+    let (kucoin_syms, kraken_syms) = crate::exchange::split_venues(symbols);
+    let synthetic: Arc<dyn CandleSource> = Arc::new(SyntheticCandleSource::new(symbols));
+    let kucoin: Arc<dyn CandleSource> = match KucoinCandleSource::new() {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            warn!(error = %e, "multi: kucoin source unavailable — synthetic for its symbols");
+            Arc::clone(&synthetic)
+        }
+    };
+    let kraken: Arc<dyn CandleSource> = match KrakenCandleSource::new() {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            warn!(error = %e, "multi: kraken source unavailable — synthetic for its symbols");
+            Arc::clone(&synthetic)
+        }
+    };
+    Arc::new(
+        RoutingCandleSource::builder()
+            .route(kucoin_syms, kucoin)
+            .route(kraken_syms, kraken)
+            .default_source(synthetic)
+            .build(),
+    )
 }

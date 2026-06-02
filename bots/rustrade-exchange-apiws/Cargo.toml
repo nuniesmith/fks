@@ -31,7 +31,8 @@ path = "src/lib.rs"
 # ── The published FKS stack (crates.io) ───────────────────────────────────────
 # Framework facade — published as `rustrade-framework`, imported as `rustrade`.
 # Provides the `ExchangeClient` trait + the `Order`/`Position`/`Capability` types.
-rustrade       = { package = "rustrade-framework", version = "0.2" }
+# 0.3 adds `InstrumentSpec`/`AssetClass` (the adapter advertises a real spec below).
+rustrade       = { package = "rustrade-framework", version = "0.3" }
 # Exchange REST/WS clients. KuCoin REST is always-on, so drop the other
 # exchanges' code we don't touch here.
 exchange-apiws = { version = "0.5", default-features = false }

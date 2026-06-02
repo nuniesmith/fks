@@ -30,9 +30,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustrade::{Bot, BotConfig, Brain, ExchangeClient, SizingConfig};
-use rustrade::{CircuitBreakerConfig, SessionPnlConfig};
+use rustrade::{CircuitBreakerConfig, JsonFileStore, PortfolioRiskConfig, SessionPnlConfig};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, warn};
 
 mod brain;
 mod exchange;
@@ -150,6 +150,15 @@ async fn main() -> anyhow::Result<()> {
         .session_pnl_config(SessionPnlConfig::default())
         // Trip after repeated losses, cool down, resume.
         .circuit_breaker_config(CircuitBreakerConfig::default())
+        // Account-wide risk (rustrade 0.3): a daily-loss halt across all symbols,
+        // a concurrency cap, and a gross-notional cap — on top of the per-symbol
+        // gates above. Defaults are paper-safe and roomy so the demo runs; tune
+        // via DEMO_MAX_DAILY_LOSS_USD / DEMO_MAX_POSITIONS / DEMO_MAX_GROSS_EXPOSURE_USD.
+        .portfolio_config(PortfolioRiskConfig {
+            max_daily_loss: -(env_u64("DEMO_MAX_DAILY_LOSS_USD", 5_000) as f64),
+            max_concurrent_positions: env_u64("DEMO_MAX_POSITIONS", symbols.len() as u64) as u32,
+            max_gross_exposure: env_u64("DEMO_MAX_GROSS_EXPOSURE_USD", 5_000_000) as f64,
+        })
         .build()?;
 
     let mut bot = Bot::new(config, exchange, vec![brain])?;
@@ -160,6 +169,22 @@ async fn main() -> anyhow::Result<()> {
     if let Some(fills) = fill_source {
         bot = bot.with_fill_source(fills);
         info!("real fill source wired (live adapter) — paper PnL simulator disabled");
+    }
+
+    // Durable risk state (rustrade 0.3 JsonFileStore). Opt-in: set DEMO_STATE_FILE
+    // to a path and per-symbol risk (session-PnL halt + circuit breaker) survives
+    // a restart instead of resetting; the account daily-loss halt re-derives via
+    // the sweep. Unset ⇒ in-memory (the prior behaviour).
+    if let Ok(path) = std::env::var("DEMO_STATE_FILE") {
+        match JsonFileStore::open(&path).await {
+            Ok(store) => {
+                bot = bot.with_state_store(Arc::new(store));
+                info!(path = %path, "durable risk state enabled (JsonFileStore)");
+            }
+            Err(e) => {
+                warn!(error = %e, path = %path, "state store unavailable — risk state stays in-memory");
+            }
+        }
     }
 
     // Attach one supervised candle poller per symbol. The poller calls

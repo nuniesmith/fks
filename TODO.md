@@ -126,8 +126,11 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
       `matchPrice`/`matchSize` on the private feed so the fill source can drop the
       `/recentFills` REST hydration (today `OrderUpdate.price` is `0.0` for market
       orders). Small additive change; would let the WS carry fill prices directly.
-- [ ] **Bybit adapter variant** over `exchange-apiws`'s `BybitPrivateClient`
-      (shares the order mapping + a Bybit fill source; folds into Track 5).
+- [ ] **Kraken spot adapter** over `exchange-apiws`'s `KrakenPrivateClient`
+      (spot-only: long-only, `position` = base-asset balance, no leverage →
+      `AssetClass::CryptoSpot`, `contract_value` 1.0). KuCoin (futures) + Kraken
+      (spot) are the two target venues; **Bybit is out (not available in Canada).**
+      Folds into Track 5.
 
 ### Track 2 — portfolio + asset-class risk · `rustrade` ✅ FRAMEWORK-COMPLETE
 All five items merged in `rustrade` main (see its CHANGELOG `[Unreleased]`):

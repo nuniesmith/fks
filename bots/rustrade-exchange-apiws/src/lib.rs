@@ -73,8 +73,8 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rustrade::{
-    Capability, Error, ExchangeClient, OpenOrder, Order, OrderKind, OrderStatus, Position, Price,
-    Result, Side, StopAttachment, StopKind, Symbol, Volume,
+    AssetClass, Capability, Error, ExchangeClient, InstrumentSpec, OpenOrder, Order, OrderKind,
+    OrderStatus, Position, Price, Result, Side, StopAttachment, StopKind, Symbol, Volume,
 };
 
 use exchange_apiws::{
@@ -457,6 +457,21 @@ impl ExchangeClient for KucoinExchangeAdapter {
             .unwrap_or(1.0)
     }
 
+    fn instrument_spec(&self, symbol: &Symbol) -> InstrumentSpec {
+        // KuCoin Futures perpetuals: whole-contract lots, the cached contract
+        // multiplier as the contract value, and `CryptoPerp` so per-asset-class
+        // risk rules resolve correctly. Tick size / min-notional aren't cached
+        // yet, so they stay unconstrained (a future enhancement can populate
+        // them from the contract metadata).
+        InstrumentSpec {
+            asset_class: AssetClass::CryptoPerp,
+            contract_value: self.contract_value(symbol),
+            tick_size: 0.0,
+            lot_size: 1.0,
+            min_notional: 0.0,
+        }
+    }
+
     async fn get_open_orders(&self, symbol: &Symbol) -> Result<Vec<OpenOrder>> {
         let details = self
             .client
@@ -659,6 +674,15 @@ mod tests {
         assert_eq!(a.contract_value(&Symbol::from("XBTUSDTM")), 0.001);
         // Unknown symbol falls back to the spot default.
         assert_eq!(a.contract_value(&Symbol::from("UNKNOWN")), 1.0);
+    }
+
+    #[test]
+    fn instrument_spec_is_crypto_perp_whole_contract() {
+        let a = adapter();
+        let spec = a.instrument_spec(&Symbol::from("XBTUSDTM"));
+        assert_eq!(spec.asset_class, AssetClass::CryptoPerp);
+        assert_eq!(spec.contract_value, 0.001); // from the cache
+        assert_eq!(spec.lot_size, 1.0); // whole contracts
     }
 
     #[test]

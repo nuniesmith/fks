@@ -110,7 +110,9 @@ isn't replayed; degrades to poll-only if the private WS token is unavailable.
 - ✅ `KucoinFillSource` — real fills via the private `tradeOrders` WS trigger + `/recentFills`.
 - ⏳ Expose per-execution `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate`
   so the WS feed can carry fill prices directly (drop the `/recentFills` hydration).
-- ⏳ Bybit / other-exchange variants over `exchange-apiws`'s `BybitPrivateClient`.
+- ⏳ Kraken **spot** adapter over `exchange-apiws`'s `KrakenPrivateClient` (spot
+  semantics: long-only, `position` = base-asset balance, `AssetClass::CryptoSpot`).
+  KuCoin (futures) + Kraken (spot) are the target venues; Bybit is unused (N/A in Canada).
 
 ## License
 

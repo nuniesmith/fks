@@ -107,7 +107,7 @@ bot. `exchange-apiws` provides market data **and** order execution.
   enabling the framework's bracket/OCO handling; `crypto-demo` wires it on the
   live path and disables the paper simulator. *Remaining on Track 1:* surface
   `matchPrice`/`matchSize` on exchange-apiws's `OrderUpdate` (drop the REST
-  hydration), and a Bybit variant (Track 5).
+  hydration), and a Kraken **spot** adapter (Track 5; Bybit dropped — N/A in Canada).
 
 ### ❌ Greenfield (doesn't exist anywhere yet)
 - **Portfolio-/account-level risk in rustrade.** Every `SessionPnl` /
@@ -141,8 +141,8 @@ Without a real exchange adapter, nothing trades. This unblocks everything else.
    the published crates. ✅ **Real fills** also done — `KucoinFillSource` routes the
    exchange's executions in via the private `tradeOrders` WS + `/recentFills`,
    enabling bracket/OCO handling. *Still open:* per-execution `matchPrice`/`matchSize`
-   on exchange-apiws's `OrderUpdate` (to drop the REST hydration), and a
-   `BybitPrivateClient` variant — tracked in the bot TODO + Track 5.
+   on exchange-apiws's `OrderUpdate` (to drop the REST hydration), and a Kraken
+   **spot** adapter (`KrakenPrivateClient`) — tracked in the bot TODO + Track 5.
 2. **rustrade `SimulatedExchange`** (its TODO 0.3a) as the paper/backtest-fidelity
    reference — so `crypto-demo` can do realistic paper fills instead of `MockExchange`.
 3. ✅ **`crypto-demo` can use the real adapter.** `DEMO_EXCHANGE=kucoin` routes
@@ -203,8 +203,9 @@ Make `JanusBrain` consume janus's *risk verdicts*, not just signals.
 1. **Futures + equities asset classes** in janus's `AssetCategory` + registry
    (currently crypto + forex only) — class params, liquidity tiers, venues.
 2. **exchange-apiws signed surface for more venues** (its own roadmap B/C):
-   Binance + Bybit private REST/WS, private user-data streams — so non-KuCoin
-   venues can execute, not just stream.
+   Kraken (spot) + Binance private REST/WS, private user-data streams — so
+   non-KuCoin venues can execute, not just stream. *(Bybit is available in
+   exchange-apiws but unused — not tradeable from Canada.)*
 3. **Optimizer emits `stop_loss_pct` / `take_profit_pct`** (the Python side) so
    per-asset risk params actually flow (today they default).
 
@@ -222,7 +223,7 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
 
 1. ✅ **Track 1** — exchange adapter + real fills (`bots/rustrade-exchange-apiws/`):
    orders, brackets, and `KucoinFillSource` real fills flow through the framework.
-   Remaining: the `OrderUpdate` match-price enhancement and a Bybit variant.
+   Remaining: the `OrderUpdate` match-price enhancement and a Kraken spot adapter.
 2. ✅ **Track 2** — portfolio + asset-class risk in `rustrade` (all five items
    merged: PortfolioRisk, InstrumentSpec/AssetClass, class presets, risk sweep,
    `JsonFileStore`). **Framework-complete; pending a `rustrade-framework` 0.3 publish.**
@@ -231,8 +232,8 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
    `with_state_store`) — the step that puts Tracks 1–2 into the running stack.
 4. **Track 4** — `JanusBrain` v2 consuming risk verdicts. Connects the two halves.
 5. **Track 3** — wire janus's real brain/risk inline. The brain gets serious.
-6. **Tracks 5 & 6** — breadth (Bybit, futures/equities) + backtest validation,
-   in parallel as capacity allows.
+6. **Tracks 5 & 6** — breadth (Kraken spot, futures/equities) + backtest
+   validation, in parallel as capacity allows.
 
 The first three turn the existing demo into a genuine paper-trading system with
 janus making risk-aware, multi-symbol decisions through rustrade. Everything after

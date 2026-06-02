@@ -150,19 +150,29 @@ Without a real exchange adapter, nothing trades. This unblocks everything else.
    sandbox/sub-account to paper-trade the identical path). The paper `MockExchange`
    remains the default — consistent with the stack's "no autonomous execution" rule.
 
-### Track 2 — Portfolio & asset-class risk in rustrade · `rustrade`
-The framework's risk tier is per-symbol only; multi-asset trading needs account-level rules.
-1. **`PortfolioRisk`** layer in `rustrade-risk`: account-wide daily loss limit,
-   aggregate drawdown, gross/net exposure cap, max concurrent positions,
-   buying-power budget checked before sizing.
-2. **Asset metadata on `ExchangeClient`** (or a new `InstrumentSpec`): tick size,
-   lot size, min notional, price precision, **asset class** — so sizing rounds
-   correctly and rules can be class-aware.
-3. **Per-asset-class `RiskConfig` presets** (crypto-perp / spot / FX / futures).
-4. **Wire `SessionPnl::tick()` / `CircuitBreaker::tick()` into a periodic sweep**
-   so the daily-loss halt actually rolls over at UTC midnight in a live bot
-   (today it only ticks on restart — a real correctness hole).
-5. **Durable `StateStore`** (`JsonFileStore` or sqlite) so risk state survives restart.
+### Track 2 — Portfolio & asset-class risk in rustrade · `rustrade` ✅ FRAMEWORK-COMPLETE
+The framework's risk tier was per-symbol only; multi-asset trading needs
+account-level rules. **All five items are now merged in `rustrade` main**
+(pending a `rustrade-framework` 0.3 publish before the bots can consume them):
+1. ✅ **`PortfolioRisk`** in `rustrade-risk`: account-wide latching daily-loss
+   halt, gross-exposure cap, max concurrent positions — checked as a third
+   pre-trade gate (entries only). *(Net-exposure + an explicit buying-power
+   budget remain as follow-ups; the gross-exposure cap covers most of the intent.)*
+2. ✅ **`InstrumentSpec` + `AssetClass`** on `ExchangeClient::instrument_spec`:
+   contract value, tick size, lot size, min notional, asset class. The execution
+   service sizes from it, enforces min-notional, and snaps limit prices to the tick.
+3. ✅ **Per-asset-class `RiskConfig` presets** (`crypto_perp` / `crypto_spot` /
+   `fx` / `futures` / `equity` / `preset_for`) + `BotConfig::per_class_risk`,
+   resolved per-symbol → per-class → default for gates *and* sizing.
+4. ✅ **`RiskSweepService`** ticks per-symbol + portfolio risk on a cadence, so
+   the daily-loss halt rolls over at UTC midnight in a live bot.
+5. ✅ **`JsonFileStore`** durable `StateStore` — per-symbol risk survives restart
+   via `Bot::with_state_store`; the portfolio halt re-derives via the sweep.
+
+> **Bot-side, after `rustrade-framework` 0.3 is published:** bump the bots to
+> 0.3, then wire `crypto-demo` with `portfolio_config(...)`, `class_risk(...)`,
+> and `with_state_store(JsonFileStore::open(...))`. That's the consume step that
+> makes this real in the running stack (and the natural lead-in to Track 4).
 
 ### Track 3 — Wire janus's real brain + risk into the live path · `janus`
 The sophistication exists; it's just not in the running binary.
@@ -210,15 +220,19 @@ You can't trust a multi-asset risk brain you can't backtest faithfully.
 
 ## Suggested order of attack
 
-1. ✅ **Track 1.1** — the exchange adapter (`bots/rustrade-exchange-apiws/`).
-   Done: orders **and real fills** now flow through the framework (adapter +
-   `KucoinFillSource`). Remaining on this track: the `OrderUpdate` match-price
-   enhancement and a Bybit variant.
-2. **Track 2.1 + 2.4** — portfolio risk + the live tick fix. The risk floor for
-   trading more than one symbol. **← now the leading edge.**
-3. **Track 4** — `JanusBrain` v2 consuming risk verdicts. Connects the two halves.
-4. **Track 3** — wire janus's real brain/risk inline. The brain gets serious.
-5. **Tracks 5 & 6** — breadth + validation, in parallel as capacity allows.
+1. ✅ **Track 1** — exchange adapter + real fills (`bots/rustrade-exchange-apiws/`):
+   orders, brackets, and `KucoinFillSource` real fills flow through the framework.
+   Remaining: the `OrderUpdate` match-price enhancement and a Bybit variant.
+2. ✅ **Track 2** — portfolio + asset-class risk in `rustrade` (all five items
+   merged: PortfolioRisk, InstrumentSpec/AssetClass, class presets, risk sweep,
+   `JsonFileStore`). **Framework-complete; pending a `rustrade-framework` 0.3 publish.**
+3. **← LEADING EDGE: publish + consume.** Publish `rustrade-framework` 0.3, bump
+   the bots, and wire `crypto-demo` (`portfolio_config` + `class_risk` +
+   `with_state_store`) — the step that puts Tracks 1–2 into the running stack.
+4. **Track 4** — `JanusBrain` v2 consuming risk verdicts. Connects the two halves.
+5. **Track 3** — wire janus's real brain/risk inline. The brain gets serious.
+6. **Tracks 5 & 6** — breadth (Bybit, futures/equities) + backtest validation,
+   in parallel as capacity allows.
 
 The first three turn the existing demo into a genuine paper-trading system with
 janus making risk-aware, multi-symbol decisions through rustrade. Everything after

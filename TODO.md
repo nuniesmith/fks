@@ -129,6 +129,19 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
 - [ ] **Bybit adapter variant** over `exchange-apiws`'s `BybitPrivateClient`
       (shares the order mapping + a Bybit fill source; folds into Track 5).
 
+### Track 2 — portfolio + asset-class risk · `rustrade` ✅ FRAMEWORK-COMPLETE
+All five items merged in `rustrade` main (see its CHANGELOG `[Unreleased]`):
+`PortfolioRisk`, `InstrumentSpec`/`AssetClass`, per-asset-class `RiskConfig`
+presets, the `RiskSweepService` (UTC rollover), and the `JsonFileStore` durable
+store. **Blocked on a `rustrade-framework` 0.3 publish before the bots consume it.**
+- [ ] **Publish `rustrade-framework` 0.3** (additive; bump `Cargo.toml` workspace
+      version 0.2.1→0.3.0 + the 5 internal dep pins, cut the CHANGELOG, publish in
+      dep order). *(Owner action.)*
+- [ ] **Consume in `crypto-demo`** once 0.3 is out: bump `rustrade` to `0.3`, then
+      add `portfolio_config(...)`, `class_risk(...)`, and
+      `with_state_store(JsonFileStore::open(...))` — putting account/class risk +
+      durability into the running demo.
+
 ### Track 4 — the janus↔rustrade risk contract
 - [ ] **`JanusBrain` v2** (`bots/crypto-demo/src/janus_brain.rs`): send portfolio
       state + position with each request; consume janus's **risk verdict** (size,

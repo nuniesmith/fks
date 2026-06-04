@@ -11,10 +11,6 @@
 - [ ] **Edition bump 2021 → 2024** to match the other publishable crates.
 - [ ] **Decide whether to publish at all.** It's a binary-only Docker service; crates.io makes sense only if downstream users want it as a library. If not, drop the publish goal and ship via Docker Hub only.
 
-## P0 — Hardening follow-ups
-
-- [ ] **Bollard 0.19 deprecation migration** — `bollard::container::*Options` → `bollard::query_parameters::*OptionsBuilder`. The `#![allow(deprecated)]` shim in `src/docker_client.rs` masks the warnings. Integration tests already cover the round-trip, so regressions are caught immediately. ~half day mechanical.
-
 ## P1 — Feature work
 
 - [ ] **`bot_configs` template UI** — the `bot_configs` table is part of the schema but unused. Add a preset library: save spawn-form values as a named row, then `POST /spawn?from_config=<name>` fills the rest.
@@ -23,7 +19,6 @@
 
 ## P1 — Test coverage
 
-- [ ] **Restart/SSE/runs tests** — the integration suite covers spawn/list/remove + auth, but not restart, log SSE streaming, or `/runs` history. Each is one extra `tokio::test` with the existing `MockDockerClient`.
 - [ ] **Postgres test fixture** — today the `db` feature is exercised only when `DATABASE_URL` is set. A `testcontainers`-backed integration test that exercises the real `BotRunStore` would catch SQL changes.
 
 ## P2 — Quality of life
@@ -48,6 +43,8 @@
 - `fks-bot-example` reference image demonstrating the `:9091/metrics` contract (PR #17).
 - Auto-scroll on the `/bots` log viewer + `api.*` callsite fixes (PR #19).
 - Promoted from `src/spawner/` to `crates/spawner/` as its own nested workspace (PR #21 cleanup + reorg).
+- Restart / log-SSE / `/runs` integration tests — suite 10 → 13 (PR #57).
+- Bollard 0.19 deprecation migration fully landed — `query_parameters::*OptionsBuilder`, no `#![allow(deprecated)]` shim (the P0 item was stale; verified complete).
 - Root `Cargo.toml` workspace-members refreshed so `cargo check` from repo root works (PR #21).
 - Per-workspace CI job in `.github/workflows/rust.yml` (PR #23) — spawner's job has been passing throughout the CI green-up arc.
 - The "README polish — no fks-full path references" item from earlier was verified clean (zero `fks-full` references in `crates/spawner/README.md`).

@@ -226,9 +226,12 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
       (nvidia-container-toolkit exporter).
 - [ ] **Alertmanager Discord bridge** — container occasionally not running,
       causing noise in Alertmanager logs. Either fix or remove.
-- [ ] **`bot-alerts.yml`** under `infrastructure/config/prometheus/alerts/` —
-      `BotStopped`, `BotHighDrawdown`, `BotNoSignals`. Add once at least one
-      real `fks-bot-*` image produces the metrics (see the `bots/` follow-up).
+- [x] **`bot-alerts.yml`** under `infrastructure/config/prometheus/alerts/` —
+      present with `BotStopped` / `BotHighDrawdown` / `BotNoSignals` plus
+      `BotUptimeTooShort`, `BotLowWinRate`, `BotNoTrades`, and the spawner-health
+      rules (`SpawnerDown`, `SpawnerAtBotCapacity`). The rules go live once a real
+      `fks-bot-*` image emits the `fks_bot_*` gauges at `:9091/metrics` — the only
+      remaining (runtime) dependency.
 
 ---
 
@@ -246,8 +249,11 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
 - [ ] Re-enable ARM64 / multi-arch builds in CI (disabled in batch-013).
 - [ ] `docker push nuniesmith/fks:janus` — publish the Janus image for faster deploys.
 - [ ] `docker push nuniesmith/fks:spawner` — same.
-- [ ] **`rust.yml` clippy gate.** Clippy currently runs `continue-on-error`.
-      Flip to `-D warnings` per workspace as each closes out its lint backlog.
+- [x] **`rust.yml` clippy gate.** Flipped from `continue-on-error` to a blocking
+      `-D warnings` gate — all five matrix workspaces (root·proto,
+      fks-bot-example, crypto-demo, rustrade-exchange-apiws, spawner) are
+      clippy-clean. The proto crate allows `doc_lazy_continuation` crate-wide for
+      tonic-generated docs.
 - [ ] Postgres data migration (optional): use `pgloader` if dev data is worth
       preserving across rebuilds.
 

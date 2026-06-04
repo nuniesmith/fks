@@ -371,13 +371,8 @@ async fn logs_sse_handler(
 ) -> Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>> {
     let log_stream = state.docker.stream_logs(&id, params.tail);
 
-    let sse_stream = log_stream.map(|line| {
-        Ok::<_, Infallible>(
-            Event::default()
-                .event("log")
-                .data(line.trim_end().to_string()),
-        )
-    });
+    let sse_stream = log_stream
+        .map(|line| Ok::<_, Infallible>(Event::default().event("log").data(line.trim_end())));
 
     Sse::new(sse_stream).keep_alive(
         KeepAlive::new()

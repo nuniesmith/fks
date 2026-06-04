@@ -179,8 +179,9 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
       *(Further refinement: route the outcome into the affinity/memory learner specifically.)*
 
 ### Multi-account (existing, pre-roadmap)
-- [ ] **ACCT-A** — `src/ruby/sql/008_accounts.sql` (exchange_accounts,
-      asset_routing_rules, profit_sweep_*); apply via `./run.sh fix-db`.
+- [ ] **ACCT-A** — schema `src/ruby/sql/008_accounts.sql` **created** (verified: 5 tables —
+      exchange_accounts, asset_routing_rules, profit_sweep_config/targets/log); only the
+      `./run.sh fix-db` apply (runtime, against a live DB) remains.
 - [ ] **ACCT-E** — janus execution router: `RoutingClient` calling
       `GET http://fks_ruby:8000/api/routing/{symbol}`, fan out per routing rule.
 
@@ -196,14 +197,14 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
 
 ## P1 — Multi-account: Postgres schema (ACCT-A)
 
-- [ ] Create and apply `src/ruby/sql/008_accounts.sql`:
+- [x] **Created** `src/ruby/sql/008_accounts.sql` (verified: all five tables present). Schema:
   - `exchange_accounts` (id, name, exchange_type, mode, is_active,
     credentials_ref, api_key_hint, timestamps, last_test status)
   - `asset_routing_rules` (id, symbol, account_id, size_pct, priority, is_active)
   - `profit_sweep_config` (id, source_account_id, threshold_usd, mode,
     schedule_time, timestamps)
   - `profit_sweep_targets` (id, sweep_config_id, account_id, allocation_pct)
-- [ ] Apply via `./run.sh fix-db`.
+- [ ] Apply via `./run.sh fix-db` (runtime DB step — not verifiable in-sandbox).
 
 ## P1 — Multi-account: Janus execution router (ACCT-E)
 

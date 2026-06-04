@@ -43,6 +43,11 @@
 
 #![doc(html_root_url = "https://docs.rs/fks-proto/0.1.0")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// Generated tonic/prost output transcribes the `.proto` doc comments verbatim;
+// clippy's `doc_lazy_continuation` fires on their list continuations, which we
+// don't author here. Allow it crate-wide so the generated modules below pass
+// the `-D warnings` clippy gate.
+#![allow(clippy::doc_lazy_continuation)]
 
 // =============================================================================
 // Generated Proto Modules

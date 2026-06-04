@@ -132,12 +132,13 @@ jobs:
               working-directory: ${{ matrix.path }}
               run: cargo test --workspace ${{ matrix.lock_flag }}
 
-            - name: 🔍 cargo clippy (non-blocking day-one)
+            - name: 🔍 cargo clippy (-D warnings)
               working-directory: ${{ matrix.path }}
-              # Day-one mode: clippy runs but doesn't fail the job. Tighten to
-              # `-D warnings` per-workspace as each sub-codebase's TODO.md
-              # closes out its lint findings.
-              continue-on-error: true
+              # Blocking gate: every workspace in the matrix is clippy-clean under
+              # `-D warnings` (root·proto, fks-bot-example, crypto-demo,
+              # rustrade-exchange-apiws, spawner), so a newly-introduced lint now
+              # fails CI. The proto crate allows `doc_lazy_continuation` crate-wide
+              # for tonic-generated docs (see src/proto/src/lib.rs).
               run: cargo clippy --workspace --all-targets ${{ matrix.lock_flag }} -- -D warnings
 
     # -------------------------------------------------------------------------

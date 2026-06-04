@@ -70,7 +70,7 @@ impl HeartbeatBrain {
     }
 
     fn maybe_record_trade(&self, n: u64) {
-        if self.config.trade_every == 0 || n % self.config.trade_every != 0 {
+        if self.config.trade_every == 0 || !n.is_multiple_of(self.config.trade_every) {
             return;
         }
         // Sample from N(pnl_mean, pnl_std) using the central-limit hack —
@@ -100,7 +100,7 @@ impl Brain for HeartbeatBrain {
         self.maybe_record_trade(n);
 
         // Decide whether to emit a signal.
-        if self.config.signal_every == 0 || n % self.config.signal_every != 0 {
+        if self.config.signal_every == 0 || !n.is_multiple_of(self.config.signal_every) {
             return Ok(Decision::hold());
         }
 
@@ -109,7 +109,7 @@ impl Brain for HeartbeatBrain {
 
         // Alternate buy/sell so neither side gets stuck and the position
         // logic in the framework can exercise both directions.
-        let decision = if prev % 2 == 0 {
+        let decision = if prev.is_multiple_of(2) {
             Decision::buy(0.6)
         } else {
             Decision::sell(0.6)

@@ -345,6 +345,94 @@ async fn spawn_then_list_then_remove_round_trips() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Restart / logs-SSE / runs  (previously uncovered — see crates/spawner/TODO.md)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn restart_round_trips() {
+    let (app, _) = build_app(test_config(""));
+
+    // Spawn a container so there is something to restart.
+    let body = serde_json::json!({
+        "image": "fks-bot-example:latest",
+        "bot_id": "rs-test",
+        "mode": "paper"
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/spawn")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let spawned: SpawnResponse = serde_json::from_str(&body_string(resp).await).unwrap();
+
+    // POST /container/{id}/restart succeeds and echoes the action.
+    let id = &spawned.container_id;
+    let resp = app
+        .oneshot(
+            Request::post(format!("/container/{id}/restart"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("restart"), "body was: {payload}");
+}
+
+#[tokio::test]
+async fn logs_endpoint_returns_sse_stream() {
+    let (app, _) = build_app(test_config(""));
+
+    // The mock streams no log lines, but the endpoint must still answer with an
+    // SSE response (status 200 + text/event-stream), not buffer or 404.
+    let resp = app
+        .oneshot(
+            Request::get("/container/some-id/logs")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let ctype = resp
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert!(
+        ctype.starts_with("text/event-stream"),
+        "expected SSE content-type, got: {ctype:?}"
+    );
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn runs_degrades_gracefully_without_db() {
+    // No DATABASE_URL configured (store: None) — /runs must degrade to an empty
+    // list with `db_enabled: false` so the WebUI keeps working, not 500.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(Request::get("/runs").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+    assert!(payload.contains("\"total\":0"), "body: {payload}");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Auth middleware
 // ─────────────────────────────────────────────────────────────────────────────
 

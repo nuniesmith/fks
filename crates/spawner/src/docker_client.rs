@@ -16,13 +16,13 @@ use std::{collections::HashMap, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bollard::{
+    Docker,
     container::LogOutput,
     models::{ContainerCreateBody, EndpointSettings, HostConfig, NetworkingConfig},
     query_parameters::{
         CreateContainerOptionsBuilder, ListContainersOptionsBuilder, LogsOptionsBuilder,
         RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder, StopContainerOptionsBuilder,
     },
-    Docker,
 };
 use chrono::{DateTime, Datelike, Utc};
 use futures_util::StreamExt;
@@ -348,7 +348,7 @@ impl DockerClient {
         &self,
         id: &str,
         tail: Option<String>,
-    ) -> impl Stream<Item = String> + 'static {
+    ) -> impl Stream<Item = String> + 'static + use<> {
         let docker = self.docker.clone();
         let id = id.to_string();
         let tail_str = tail.unwrap_or_else(|| "100".to_string());
@@ -553,11 +553,7 @@ fn container_info_from_inspect(d: bollard::models::ContainerInspectResponse) -> 
             // Docker returns times like "0001-01-01T00:00:00Z" for "never"
             let dt = DateTime::parse_from_rfc3339(ts).ok()?;
             let utc = dt.with_timezone(&Utc);
-            if utc.year() < 2000 {
-                None
-            } else {
-                Some(utc)
-            }
+            if utc.year() < 2000 { None } else { Some(utc) }
         })
     };
 

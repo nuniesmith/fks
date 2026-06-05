@@ -23,9 +23,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tracing::info;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
-use spawner::api::{build_router, AppState};
+use spawner::api::{AppState, build_router};
 use spawner::config::Config;
 #[cfg(feature = "db")]
 use spawner::db;

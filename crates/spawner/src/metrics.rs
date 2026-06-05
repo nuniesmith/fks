@@ -8,8 +8,8 @@
 
 use once_cell::sync::Lazy;
 use prometheus::{
-    register_counter, register_gauge, register_histogram_vec, Counter, Encoder, Gauge,
-    HistogramVec, TextEncoder,
+    Counter, Encoder, Gauge, HistogramVec, TextEncoder, register_counter, register_gauge,
+    register_histogram_vec,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

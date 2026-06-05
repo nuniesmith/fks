@@ -222,8 +222,16 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
 ## P1 — Observability
 
 - [ ] **PROM:** Sync Grafana config and restart — ensure all alert rules load.
-- [ ] **GPU metrics** — Prometheus scrape when the trainer is running
-      (nvidia-container-toolkit exporter).
+- [ ] **GPU metrics (raw exporter)** — a `nvidia-container-toolkit` / DCGM
+      exporter for *raw* GPU utilisation / temp / power. (The `trainer` job
+      already scrapes the trainer's self-reported `trainer_gpu_available` /
+      `trainer_gpu_memory_total_bytes`.)
+- [x] **Trainer / GPU alert rules** — `trainer-alerts.yml`:
+      `TrainerGpuUnavailable`, `TrainerNoChampionModel` (ties to the live Burn
+      inference path — fires when training has produced no champion to serve),
+      and `TrainerLastRunLowAccuracy`. All gated on `trainer_up == 1`, so the
+      optional GPU service stays quiet when it isn't deployed; loaded via the
+      existing `alerts/*.yml` glob.
 - [ ] **Alertmanager Discord bridge** — container occasionally not running,
       causing noise in Alertmanager logs. Either fix or remove.
 - [x] **`bot-alerts.yml`** under `infrastructure/config/prometheus/alerts/` —

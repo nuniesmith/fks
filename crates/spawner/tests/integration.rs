@@ -24,15 +24,15 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::{
-    body::Body,
-    http::{header, Request, StatusCode},
     Router,
+    body::Body,
+    http::{Request, StatusCode, header},
 };
 use chrono::Utc;
 use tokio_stream::Stream;
 use tower::util::ServiceExt;
 
-use spawner::api::{build_router, AppState};
+use spawner::api::{AppState, build_router};
 use spawner::config::Config;
 use spawner::docker_client::{DockerOps, LogStream};
 use spawner::error::{SpawnerError, SpawnerResult};

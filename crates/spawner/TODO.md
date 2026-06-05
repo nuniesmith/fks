@@ -8,7 +8,10 @@
 - [ ] **Name conflict on crates.io.** `spawner` is almost certainly taken. Rename candidates: `fks-spawner`, `bot-spawner`, `docker-bot-spawner`. Decide before publish.
 - [ ] **Cargo.toml metadata.** Missing fields: `license`, `repository`, `documentation`, `readme`, `keywords`, `categories`. See `PRE_PUBLISH_AUDIT.md` in the repo root for the full list.
 - [ ] **`LICENSE` file at the crate root** — required by crates.io and missing today.
-- [ ] **Edition bump 2021 → 2024** to match the other publishable crates.
+- [x] **Edition 2024** — bumped 2021 → 2024 (matches the repo-wide standard) and
+      added `rust-version = "1.94.1"`. `cargo fix --edition` applied the only code
+      change (RPIT `+ use<>` in `docker_client::stream_logs`); rustfmt re-styled
+      imports to the 2024 edition; clippy `-D warnings` + tests stay green.
 - [ ] **Decide whether to publish at all.** It's a binary-only Docker service; crates.io makes sense only if downstream users want it as a library. If not, drop the publish goal and ship via Docker Hub only.
 
 ## P1 — Feature work

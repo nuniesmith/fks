@@ -16,15 +16,15 @@
 use std::{convert::Infallible, sync::Arc, time::Instant};
 
 use axum::{
+    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     middleware,
     response::{
-        sse::{Event, KeepAlive, Sse},
         Json,
+        sse::{Event, KeepAlive, Sse},
     },
     routing::{delete, get, post},
-    Router,
 };
 use futures_util::StreamExt;
 use serde::Deserialize;

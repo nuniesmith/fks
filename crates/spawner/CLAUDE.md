@@ -99,7 +99,10 @@ curl -N http://localhost:8090/container/<id>/logs?tail=100 \
 
 - **Currently a binary crate.** Going to crates.io, decide whether to publish as `spawner-bin` (just a binary) or refactor so most of `lib.rs` is reusable (`spawner` library + thin `spawner-bin` for the binary).
 - **Docker image tag `nuniesmith/fks:spawner`.** Will eventually move to `nuniesmith/spawner:latest` on Docker Hub.
-- **bollard 0.19 deprecation warnings** are silenced with `#![allow(deprecated)]` in `src/docker_client.rs`. The full migration to `bollard::query_parameters::*OptionsBuilder` is in `TODO.md`.
+- **bollard 0.19 migration is complete** — `src/docker_client.rs` uses the
+  `bollard::query_parameters::*Options` API throughout; there is **no**
+  `#![allow(deprecated)]` shim. Verified by the blocking `clippy -D warnings`
+  gate (which denies the `deprecated` lint), so a regression would fail CI.
 - **Postgres schema** lives in `fks-full/src/sql/ruby/007_spawner.sql` (or `src/ruby/sql/` after the in-flight reorg lands). Either way, the schema isn't owned by this crate — it travels with the Ruby DB migrations. Don't duplicate it here.
 
 ## Status

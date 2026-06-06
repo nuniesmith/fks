@@ -34,31 +34,30 @@ exactly as shown.
 [dependencies]
 # Framework facade — the bare name `rustrade` is taken on crates.io, so the
 # facade publishes as `rustrade-framework` but is still imported as `rustrade`.
-rustrade       = { package = "rustrade-framework", version = "0.2" }
+rustrade       = { package = "rustrade-framework", version = "0.3" }
 
 # TA math — the crate is `indicators-ta`, the library imports as `indicators`.
 indicators-ta  = "0.1"
 
 # Exchange REST + WebSocket clients.
-exchange-apiws = "0.1"
+exchange-apiws = "0.7"
 ```
 
 | Crate | Version | Import name | Notes |
 |-------|--------:|-------------|-------|
-| `rustrade-framework` | 0.2.1 | `rustrade` | facade; pulls in the four below |
-| `rustrade-core` | 0.2.1 | `rustrade_core` | types, traits, buses |
-| `rustrade-supervisor` | 0.2.1 | `rustrade_supervisor` | lifecycle, backoff, breakers |
-| `rustrade-risk` | 0.2.1 | `rustrade_risk` | sizing, circuit breakers, session PnL |
-| `rustrade-backtest` | 0.2.1 | `rustrade_backtest` | deterministic replay |
-| `indicators-ta` | 0.1.3 | `indicators` | indicators + regime detection |
-| `exchange-apiws` | 0.1.10 | `exchange_apiws` | ⚠️ local tree is 0.3.x — see reconcile note |
+| `rustrade-framework` | 0.3.0 | `rustrade` | facade; pulls in the four below |
+| `rustrade-core` | 0.3.0 | `rustrade_core` | types, traits, buses |
+| `rustrade-supervisor` | 0.3.0 | `rustrade_supervisor` | lifecycle, backoff, breakers |
+| `rustrade-risk` | 0.3.0 | `rustrade_risk` | sizing, circuit breakers, session PnL |
+| `rustrade-backtest` | 0.3.0 | `rustrade_backtest` | deterministic replay |
+| `indicators-ta` | 0.1.5 | `indicators` | indicators + regime detection |
+| `exchange-apiws` | 0.7.0 | `exchange_apiws` | signed REST (6 exchanges) + private user-data WS + `f64` order/position quantities |
 | `jflow-core` | 0.1.0 | `jflow_core` | first janus lib live; rest of `jflow-*` prepped, not yet pushed |
 
-> ⚠️ **`exchange-apiws` version skew.** crates.io has **0.1.10**; the local
-> `exchange-apiws` tree is at **0.3.2** (unpublished work: signed REST,
-> private WS). A consumer writing `exchange-apiws = "0.1"` gets 0.1.10.
-> Reconcile the version line and publish the 0.3.x release before depending
-> on the newer surface. Tracked in `TODO.md`.
+> ✅ **`exchange-apiws` is published and current.** crates.io has **0.7.0**
+> (signed REST across six exchanges, private user-data WS, `f64`
+> order/position quantities). The bots and janus consume it from the registry;
+> the earlier 0.1 ↔ 0.3 skew is resolved.
 >
 > ℹ️ **janus crate names.** `janus` / `janus-core` are taken on crates.io, so
 > janus's publishable libraries ship under the `jflow-*` prefix (imported by

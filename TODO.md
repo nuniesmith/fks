@@ -28,7 +28,7 @@ janus consumes them:
 |-------|-----------|------------|
 | `rustrade-framework` (+ core/supervisor/risk/backtest) | **0.3.0** ✅ | `rustrade = { package = "rustrade-framework", version = "0.3" }` |
 | `indicators-ta` | **0.1.5** ✅ | `indicators-ta = "0.1"` (imports as `indicators`) |
-| `exchange-apiws` | **0.5.0** ✅ | `exchange-apiws = "0.5"` (signed Bybit + Coinbase/OKX connectors) |
+| `exchange-apiws` | **0.7.0** ✅ | `exchange-apiws = "0.7"` (signed REST across 6 exchanges + private user-data WS + `f64` quantities) |
 | `jflow-core` (janus) | **0.1.0** ✅ | first janus lib; rest of `jflow-*` prepped, not pushed |
 
 `fks-full` keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`,
@@ -71,11 +71,9 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
 
 ### Immediate follow-ups
 
-- [ ] **Reconcile `exchange-apiws` versioning.** crates.io is **0.1.10**; the
-      local tree is **0.3.2** (unpublished: signed REST, private WS). Decide
-      the version line, then `cargo publish` the 0.3.x release so downstreams
-      can depend on the newer surface. (Its own repo's `todo.md` still claims
-      "never published" — that's stale; it *is* live at 0.1.10.)
+- [x] **Reconciled `exchange-apiws` versioning.** Published through **0.7.0**
+      (signed REST across six exchanges, private user-data WS, `f64`
+      order/position quantities); the bots + janus consume it from crates.io.
 - [ ] **Finish the `jflow-*` publish run** (janus repo). `jflow-core` is live;
       publish the Tier-0 leaves then Tier-1+ bottom-up per janus `PUBLISHING.md`.
       Blocked only on the crates.io token + sequencing.

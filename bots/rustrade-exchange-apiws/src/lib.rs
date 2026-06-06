@@ -451,7 +451,7 @@ impl ExchangeClient for KucoinExchangeAdapter {
             .await
             .map_err(ex)?;
         Ok(Position {
-            qty: f64::from(info.current_qty),
+            qty: info.current_qty,
             entry_price: info.avg_entry_price,
             unrealised_pnl: info.unrealised_pnl.unwrap_or(0.0),
         })

@@ -1318,6 +1318,53 @@ services:
                 max-file: "3"
                 labels: "service=fks_bot_spawner,environment=dev"
 
+    # ===========================================================================
+    # DEMO BOT (opt-in — profile: demo)
+    # ===========================================================================
+    # The working crypto-demo paper bot, driving the janus brain end-to-end:
+    #     docker compose --profile demo up crypto-demo
+    # brings up janus (+ its deps) and the bot on fks-network:
+    #   synthetic candles → indicators-ta features → janus brain (signal + risk
+    #   over :8080) → rustrade risk gate → MockExchange (PAPER — no real orders).
+    # Flip DEMO_SOURCE=kucoin|kraken for live market data; keep DEMO_EXCHANGE=mock
+    # to stay paper. Metrics + /health at 127.0.0.1:9091 (fks_bot_* series).
+    crypto-demo:
+        profiles: ["demo"]
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/crypto-demo/Dockerfile
+            args:
+                RUST_VERSION: "1.92.0"
+        image: fks-bot-crypto-demo:latest
+        container_name: fks_bot_crypto_demo
+        user: "1000:1000"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - DEMO_BRAIN=${DEMO_BRAIN:-janus} # janus brain over HTTP (ema-cross = local)
+            - DEMO_SOURCE=${DEMO_SOURCE:-synthetic} # synthetic = no exchange creds/network
+            - DEMO_EXCHANGE=${DEMO_EXCHANGE:-mock} # mock = paper; never places real orders
+            - JANUS_HTTP_URL=${JANUS_HTTP_URL:-http://fks_janus:8080}
+            - DEMO_SYMBOLS=${DEMO_SYMBOLS:-XBTUSDTM,ETHUSDTM,SOLUSDTM}
+            - RUST_LOG=${BOT_RUST_LOG:-info,crypto_demo=debug}
+            - RUST_BACKTRACE=1
+        ports:
+            - "127.0.0.1:9091:9091" # fks_bot_* metrics + /health
+        networks:
+            - fks-network
+        depends_on:
+            janus:
+                condition: service_healthy
+        restart: unless-stopped
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=fks_bot_crypto_demo,environment=dev"
+
 # =============================================================================
 # VOLUMES
 # =============================================================================

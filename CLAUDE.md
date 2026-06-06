@@ -20,10 +20,10 @@ reusable pieces from their own repos / crates.io.
 
 | Repo | Role | Consumed as |
 |------|------|-------------|
-| [`rustrade`](https://github.com/nuniesmith/rustrade) | trading framework | crates.io `rustrade-framework` 0.2 (imports as `rustrade`) |
+| [`rustrade`](https://github.com/nuniesmith/rustrade) | trading framework | crates.io `rustrade-framework` 0.3 (imports as `rustrade`) |
 | [`janus`](https://github.com/nuniesmith/janus) | trading brain | Docker image (`git clone` at `JANUS_REF`) + `jflow-*` crates |
 | [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | TA math | crates.io `indicators-ta` 0.1 (imports as `indicators`) |
-| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.1 |
+| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.7 |
 | [`ruby`](https://github.com/nuniesmith/ruby) · [`fks-web`](https://github.com/nuniesmith/fks-web) | Python data / SvelteKit UI | Docker images (`git clone` at `*_REF`) |
 
 ### Lives in this repo
@@ -159,9 +159,9 @@ When `janus` or a `bots/*` crate needs the framework, TA, or exchange code,
 depend on crates.io — never re-vendor:
 
 ```toml
-rustrade       = { package = "rustrade-framework", version = "0.2" }  # import as `rustrade`
-indicators-ta  = "0.1"                                                # import as `indicators`
-exchange-apiws = "0.1"
+rustrade       = { package = "rustrade-framework", version = "0.3" }  # import as `rustrade`
+indicators-ta  = "0.1"                                                # import as `indicators` (0.1.5)
+exchange-apiws = "0.7"
 ```
 
 ### Rust

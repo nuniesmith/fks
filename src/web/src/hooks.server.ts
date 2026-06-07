@@ -112,6 +112,9 @@ function gracefulEmpty(pathname: string): Response {
   });
 }
 
+const json = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
 // Read a janus JSON endpoint, tolerating failure (returns {} on any error).
 async function janusJson(event: RequestEvent, base: string, path: string): Promise<any> {
   try {
@@ -120,6 +123,15 @@ async function janusJson(event: RequestEvent, base: string, path: string): Promi
   } catch {
     return {};
   }
+}
+
+// janus recent signals — { symbol, signal_type, confidence, timestamp }[].
+// Sourced from /api/dashboard/signals/summary.recent_signals.
+async function janusRecentSignals(
+  event: RequestEvent,
+): Promise<{ symbol?: string; signal_type?: string; confidence?: number; timestamp?: string }[]> {
+  const j = await janusJson(event, JANUS_URL, "/api/dashboard/signals/summary");
+  return Array.isArray(j?.recent_signals) ? j.recent_signals : [];
 }
 
 // /api/health → reshape janus /health into the StatusBar's flat {redis,janus,feed}.
@@ -156,7 +168,40 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
   if (pathname === "/api/health") {
     return janusHealth(event);
   }
-  // More janus panels (overview/signals/performance/brain/risk) land here next —
+
+  // Overview "recent signals" panel → janus signals reshaped to RecentSignal[]
+  // ({ symbol, direction, confidence, timestamp }).
+  if (pathname === "/api/db/redis/get/fks:memories:new") {
+    const sigs = await janusRecentSignals(event);
+    return json(
+      sigs.map((s) => ({
+        symbol: s.symbol,
+        direction: s.signal_type,
+        confidence: s.confidence,
+        timestamp: s.timestamp,
+      })),
+    );
+  }
+
+  // Signals page list → janus signals reshaped to { signals: Signal[] }.
+  // (janus has no staging/approve workflow — surface them as read-only
+  // "generated" signals; the approve/reject actions stay no-ops for now.)
+  if (pathname === "/api/signals") {
+    const sigs = await janusRecentSignals(event);
+    return json({
+      signals: sigs.map((s, i) => ({
+        id: `${s.symbol ?? "sig"}-${s.timestamp ?? i}`,
+        symbol: s.symbol ?? "—",
+        type: "entry",
+        side: s.signal_type,
+        status: "generated",
+        timestamp: s.timestamp,
+        message: s.signal_type,
+      })),
+    });
+  }
+
+  // More janus panels (overview aggregate / performance / brain) land here next —
   // see docs/architecture/WEBUI_JANUS_REPOINT.md for the per-panel mapping.
 
   // ── Everything else under a backend prefix → degrade quietly ────────────────

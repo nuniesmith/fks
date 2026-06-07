@@ -40,23 +40,6 @@
 #   tailscale-serve       Expose FKS dashboard via Tailscale HTTPS
 #   tailscale-stop        Remove Tailscale HTTPS serve config
 #
-# RustCode / OpenClaw commands:
-#   rc up [--ollama] [--skip-build]   Start RUSTCODE + OpenClaw stack
-#   rc down [-v]                      Stop RUSTCODE stack (removes containers)
-#   rc status                         Show RUSTCODE service status
-#   rc logs [svc]                     Tail RUSTCODE service logs
-#   rc health                         Health check RUSTCODE services
-#   rc build [openclaw|app]           Build RUSTCODE / OpenClaw images
-#   rc shell [svc]                    Open shell in RUSTCODE container (default: rc-app)
-#   rc test [args]                    Run Rust tests (cargo test)
-#   rc ci                             Full CI pipeline (fmt + clippy + test)
-#   rc db <backup|shell|size|migrate>
-#   rc diagnose                       RUSTCODE-specific diagnostics
-#   rc clean / rc force-clean         Clean RUSTCODE Docker resources
-#   rc dev                            Run RUSTCODE server locally (cargo run)
-#   rc watch                          Run RUSTCODE with auto-reload (cargo-watch)
-#   openclaw <cmd>                    Run OpenClaw CLI commands (passthrough)
-#
 # =============================================================================
 
 set -euo pipefail
@@ -73,10 +56,6 @@ ENV_FILE=".env"
 
 DC="docker compose -p fks --env-file $ENV_FILE"
 DC_RA="docker compose --env-file $ENV_FILE -f $COMPOSE_FILE"
-
-OPENCLAW_BUILD_SCRIPT="docker/openclaw/build.sh"
-RUSTCODE_PORT="3500"
-OPENCLAW_PORT="18789"
 
 if [ -f "$ENV_FILE" ]; then
     set -a
@@ -171,17 +150,11 @@ _prompt_api_keys() {
             }
 
             echo "  ── Required for AI features ──"
-            _prompt_key XAI_API_KEY "xAI / Grok API key — required for AI analyst"
             echo ""
 
             echo "  ── Trading (optional — skip if not trading yet) ──"
             _prompt_key KRAKEN_API_KEY "Kraken API key"
             _prompt_key KRAKEN_API_SECRET "Kraken API secret"
-            echo ""
-
-            echo "  ── GitHub + Discord (optional — for RUSTCODE / OpenClaw) ──"
-            _prompt_key GITHUB_TOKEN "GitHub PAT (repo read scope)"
-            _prompt_key DISCORD_BOT_TOKEN "Discord bot token for OpenClaw"
             echo ""
 
             echo "  ── Market data (optional — features degrade gracefully) ──"
@@ -399,9 +372,6 @@ ALPHA_VANTAGE_API_KEY=
 # --- TradingView ---
 TV_SESSION_ID=
 
-# --- AI / LLM ---
-XAI_API_KEY=
-
 # --- Copier integration ---
 COPIER_URL=
 
@@ -426,57 +396,6 @@ CMC_POLL_QUOTES=900
 CMC_POLL_GLOBAL=1800
 CMC_POLL_FEAR_GREED=1800
 CMC_POLL_LISTINGS=21600
-
-
-# =============================================================================
-# SECTION 5 — RUSTASSISTANT  (AI Agent + LLM Proxy)
-# =============================================================================
-
-RUSTCODE_PROXY_API_KEYS=${ra_proxy_key}
-RUSTCODE_API_KEY=${ra_proxy_key}
-
-RUSTCODE_BASE_URL=http://fks_rustcode:3500
-RUSTCODE_REPO_ID=rustcode
-
-GITHUB_TOKEN=
-GITHUB_USERNAME=nuniesmith
-GITHUB_ORG=
-GITHUB_WEBHOOK_SECRET=
-
-XAI_BASE_URL=https://api.x.ai/v1
-XAI_MODEL=grok-4-1-fast-reasoning
-XAI_MAX_TOKENS=4096
-XAI_TEMPERATURE=0.3
-
-OLLAMA_BASE_URL=http://fks_ra_ollama:11434
-LOCAL_MODEL=qwen2.5-coder:7b
-FORCE_REMOTE_MODEL=false
-
-REPOS_BASE_PATH=/home/jordan/github/
-
-CACHE_ENABLED=true
-CACHE_PREFIX=rustcode
-
-REPO_SYNC_INTERVAL_SECS=300
-AUTO_SCAN_ENABLED=true
-AUTO_SCAN_INTERVAL=60
-AUTO_SCAN_MAX_CONCURRENT=2
-
-DAILY_BUDGET_USD=5.00
-WARN_AT_PERCENT=80
-BLOCK_ON_EXCEED=true
-
-
-# =============================================================================
-# SECTION 8 — OPENCLAW  (Discord Bot)
-# =============================================================================
-
-OPENCLAW_BASE_IMAGE=nuniesmith/fks:openclaw-base
-OPENCLAW_IMAGE=nuniesmith/fks:openclaw
-OPENCLAW_GATEWAY_TOKEN=$(generate_secret)
-OPENCLAW_CONFIG_DIR=./openclaw/config
-OPENCLAW_WORKSPACE_DIR=./openclaw/workspace
-
 
 # =============================================================================
 # SECTION 9 — LOGGING & TIMEZONE
@@ -555,13 +474,6 @@ EOF
         fi
     done
 
-    local sig_repo; sig_repo=$(_env_get GITHUB_SIGNALS_REPO || true)
-    if [ "$sig_repo" = "nuniesmith/ruby-signals" ]; then
-        _env_set GITHUB_SIGNALS_REPO nuniesmith/fks-signals
-        warn "Fixed GITHUB_SIGNALS_REPO → nuniesmith/fks-signals"
-        needs_update=true
-    fi
-
     # --- Auto-fill missing/empty secrets ---
     _fill_password() {
         local key="$1"; local val; val=$(_env_get "$key")
@@ -589,25 +501,6 @@ EOF
     _fill_fernet   API_KEY_ENCRYPTION_SECRET
     _fill_secret   NGINX_INTERNAL_TOKEN
 
-    # --- RUSTCODE proxy key (RUSTCODE_PROXY_API_KEYS and RUSTCODE_API_KEY must match) ---
-    local ra_proxy; ra_proxy=$(_env_get RUSTCODE_PROXY_API_KEYS)
-    if [ -z "$ra_proxy" ]; then
-        ra_proxy=$(generate_long_secret)
-        _env_set RUSTCODE_PROXY_API_KEYS "$ra_proxy"
-        _env_set RUSTCODE_API_KEY "$ra_proxy"
-        warn "Generated RUSTCODE_PROXY_API_KEYS + RUSTCODE_API_KEY (shared key)"
-        needs_update=true
-    else
-        local ra_api; ra_api=$(_env_get RUSTCODE_API_KEY)
-        if [ "$ra_api" != "$ra_proxy" ]; then
-            _env_set RUSTCODE_API_KEY "$ra_proxy"
-            warn "Synced RUSTCODE_API_KEY to match RUSTCODE_PROXY_API_KEYS"
-            needs_update=true
-        fi
-    fi
-
-    _fill_secret OPENCLAW_GATEWAY_TOKEN
-
     # --- Tailscale IP auto-detect ---
     local ts_val; ts_val=$(_env_get TAILSCALE_IP)
     if [ -z "$ts_val" ] || [ "$ts_val" = "100.x.x.x" ]; then
@@ -623,46 +516,10 @@ EOF
         needs_update=true
     fi
 
-    # --- Ensure RUSTCODE config keys exist ---
-    for ra_key in RUSTCODE_BASE_URL RUSTCODE_REPO_ID GITHUB_TOKEN GITHUB_USERNAME \
-                  XAI_BASE_URL XAI_MODEL OLLAMA_BASE_URL LOCAL_MODEL \
-                  CACHE_ENABLED CACHE_PREFIX TZ; do
-        if ! grep -q "^${ra_key}=" "$env_file"; then
-            case "$ra_key" in
-                RUSTCODE_BASE_URL) _env_set "$ra_key" "http://fks_rustcode:3500" ;;
-                RUSTCODE_REPO_ID)  _env_set "$ra_key" "rustcode" ;;
-                GITHUB_USERNAME)   _env_set "$ra_key" "nuniesmith" ;;
-                XAI_BASE_URL)      _env_set "$ra_key" "https://api.x.ai/v1" ;;
-                XAI_MODEL)         _env_set "$ra_key" "grok-4-1-fast-reasoning" ;;
-                OLLAMA_BASE_URL)   _env_set "$ra_key" "http://fks_ra_ollama:11434" ;;
-                LOCAL_MODEL)       _env_set "$ra_key" "qwen2.5-coder:7b" ;;
-                CACHE_ENABLED)     _env_set "$ra_key" "true" ;;
-                CACHE_PREFIX)      _env_set "$ra_key" "rustcode" ;;
-                TZ)                _env_set "$ra_key" "America/Toronto" ;;
-                *)                 echo "${ra_key}=" >> "$env_file" ;;
-            esac
-            warn "Added ${ra_key}"
-            needs_update=true
-        fi
-    done
-
     for webhook_key in DISCORD_WEBHOOK_ANALYSIS DISCORD_WEBHOOK_GENERAL DISCORD_WEBHOOK_SIGNALS DISCORD_BOT_TOKEN; do
         if ! grep -q "^${webhook_key}=" "$env_file"; then
             echo "${webhook_key}=" >> "$env_file"
             warn "Added ${webhook_key} (empty)"
-            needs_update=true
-        fi
-    done
-
-    for oc_key in OPENCLAW_BASE_IMAGE OPENCLAW_IMAGE OPENCLAW_CONFIG_DIR OPENCLAW_WORKSPACE_DIR; do
-        if ! grep -q "^${oc_key}=" "$env_file"; then
-            case "$oc_key" in
-                OPENCLAW_BASE_IMAGE)    _env_set "$oc_key" "nuniesmith/fks:openclaw-base" ;;
-                OPENCLAW_IMAGE)         _env_set "$oc_key" "nuniesmith/fks:openclaw" ;;
-                OPENCLAW_CONFIG_DIR)    _env_set "$oc_key" "./openclaw/config" ;;
-                OPENCLAW_WORKSPACE_DIR) _env_set "$oc_key" "./openclaw/workspace" ;;
-            esac
-            warn "Added ${oc_key}"
             needs_update=true
         fi
     done
@@ -687,9 +544,7 @@ EOF
     fi
 
     _env_get FINNHUB_API_KEY | grep -q "^$" && warn "FINNHUB_API_KEY is empty" || true
-    _env_get XAI_API_KEY     | grep -q "^$" && warn "XAI_API_KEY is empty — Grok AI tab + RUSTCODE LLM proxy disabled" || true
     _env_get KRAKEN_API_KEY  | grep -q "^$" && warn "KRAKEN_API_KEY is empty — live trading disabled" || true
-    _env_get GITHUB_TOKEN    | grep -q "^$" && warn "GITHUB_TOKEN is empty — RUSTCODE repo sync disabled" || true
     _prompt_web_password "$env_file"
 }
 
@@ -868,7 +723,6 @@ ensure_databases() {
     local pg_container="fks_postgres"
     local janus_db="${JANUS_DB:-janus_db}"
     local ruby_db="${RUBY_DB:-ruby_db}"
-    local rustcode_db="${RUSTCODE_DB:-rustcode_db}"
 
     if ! _wait_for_postgres; then
         warn "postgres not ready after 30s — skipping database bootstrap"
@@ -880,7 +734,6 @@ ensure_databases() {
 
     _ensure_single_db "$janus_db" "$pg_user" "$pg_container"
     _ensure_single_db "$ruby_db"  "$pg_user" "$pg_container"
-    _ensure_single_db "$rustcode_db"  "$pg_user" "$pg_container"
 
     # Apply bot_configs / bot_runs schema (idempotent — uses CREATE TABLE IF NOT EXISTS)
     local bot_sql="infrastructure/config/postgres/09-init-bots.sql"
@@ -899,7 +752,7 @@ ensure_databases() {
     fi
 
     local all_ok=true
-    for db in "$janus_db" "$ruby_db" "$rustcode_db"; do
+    for db in "$janus_db" "$ruby_db"; do
         if docker exec -i "$pg_container" \
             psql -U "$pg_user" -d "$db" -tAc "SELECT 1" 2>/dev/null | grep -q "1"; then
             true
@@ -910,7 +763,7 @@ ensure_databases() {
     done
 
     if [ "$all_ok" = true ]; then
-        ok "All databases verified: ${janus_db}, ${ruby_db}, ${rustcode_db}"
+        ok "All databases verified: ${janus_db}, ${ruby_db}"
     else
         warn "Some databases failed verification — check postgres logs"
         warn "  ./run.sh logs postgres"
@@ -986,40 +839,6 @@ cmd_ssl_local() {
     else
         err "Certificate generation failed"
         exit 1
-    fi
-}
-
-# =============================================================================
-# OpenClaw base image helper
-# =============================================================================
-
-_ensure_openclaw_base() {
-    local base_tag="${OPENCLAW_BASE_IMAGE:-nuniesmith/fks:openclaw-base}"
-
-    if docker image inspect "$base_tag" >/dev/null 2>&1; then
-        ok "openclaw-base image present locally: $base_tag"
-        return 0
-    fi
-
-    log "openclaw-base not found locally — trying to pull $base_tag ..."
-    if docker pull "$base_tag" 2>/dev/null; then
-        ok "Pulled $base_tag from registry"
-        return 0
-    fi
-
-    warn "Could not pull $base_tag — building openclaw-base from source ..."
-    local build_script="infrastructure/docker/services/openclaw/build.sh"
-    if [ ! -f "$build_script" ]; then
-        err "OpenClaw build script not found: $build_script"
-        return 1
-    fi
-
-    if OPENCLAW_BASE_TAG="$base_tag" bash "$build_script" --base-only; then
-        ok "Built openclaw-base image: $base_tag"
-        return 0
-    else
-        err "OpenClaw base build failed"
-        return 1
     fi
 }
 
@@ -1660,7 +1479,7 @@ cmd_clean() {
 
 cmd_force_clean() {
     header "⚠️  Force Clean — Removing ALL FKS Resources"
-    warn "This will destroy all FKS containers, images, volumes (including RUSTCODE/OpenClaw)."
+    warn "This will destroy all FKS containers, images, volumes."
     echo -n "Type 'yes' to confirm: "
     read -r confirm
     if [ "$confirm" != "yes" ]; then
@@ -1676,14 +1495,6 @@ cmd_force_clean() {
     docker images --filter "reference=fks:*" -q          | xargs -r docker rmi -f || true
     docker network ls --filter "name=fks" -q | xargs -r docker network rm || true
     docker network prune -f || true
-
-    # FIX: also remove RUSTCODE/OpenClaw local volumes which have no fks_ prefix
-    log "Removing RUSTCODE/OpenClaw/Promptfoo volumes..."
-    for vol in rustcode-data rustcode-docs rustcode-workspace \
-               rustcode-ollama-data openclaw-config openclaw-workspace \
-               promptfoo-data; do
-        docker volume rm "$vol" 2>/dev/null && warn "  Removed $vol" || true
-    done
 
     ok "Force clean complete"
 }
@@ -1934,26 +1745,10 @@ ${BLUE}Utilities:${NC}
   ./run.sh shell <svc>            Open shell in a container
   ./run.sh web-hash-password      Generate bcrypt hash for WEB_PASSWORD_HASH
   ./run.sh clean                  Remove stopped containers + dangling images
-  ./run.sh force-clean            ⚠️  Remove ALL FKS resources + volumes (incl. RUSTCODE)
+  ./run.sh force-clean            ⚠️  Remove ALL FKS resources + volumes
   ./run.sh network-cleanup        Fix Docker network conflicts
   ./run.sh diagnose               Detailed system diagnostics
   ./run.sh help                   Show this message
-
-${BLUE}RustCode / OpenClaw:${NC}
-  ./run.sh rc up [--ollama]             Start RUSTCODE + OpenClaw stack
-  ./run.sh rc down                      Stop and remove RUSTCODE containers
-  ./run.sh rc status                    Show RUSTCODE service status
-  ./run.sh rc logs [svc]                Tail RUSTCODE logs
-  ./run.sh rc health                    Health check all RUSTCODE services
-  ./run.sh rc build [app|openclaw|all]  Build RUSTCODE images
-  ./run.sh rc shell [svc]               Open shell (default: fks_rustcode)
-  ./run.sh rc test [args]               Run Rust tests (cargo test)
-  ./run.sh rc ci                        Full CI: fmt + clippy + test
-  ./run.sh rc db backup [path]          Dump RUSTCODE database
-  ./run.sh rc db shell                  Open psql CLI
-  ./run.sh rc db size                   Show database size
-  ./run.sh rc db migrate                Apply SQL migrations from sql/rustcode/
-  ./run.sh openclaw <cmd>               Run OpenClaw CLI (passthrough)
 
 ${BLUE}Tailscale:${NC}
   ./run.sh tailscale-serve [--port N]   Expose dashboard via Tailscale HTTPS (default: :3001)
@@ -1979,8 +1774,6 @@ ${BLUE}Examples:${NC}
   ./run.sh start prod             # Env → pull → up (prod)
   ./run.sh logs janus             # Follow janus logs
   ./run.sh down -v                # Stop and remove volumes
-  ./run.sh rc up                  # Start RustCode + OpenClaw
-  ./run.sh rc up --ollama         # Start RustCode + OpenClaw + local Ollama
 EOF
 }
 
@@ -2024,258 +1817,6 @@ main() {
     fi
 
     shift || true
-
-    # ── RUSTCODE / OpenClaw namespace: ./run.sh rc <command> ─────────────────
-    if [ "$command" = "rc" ]; then
-        local ra_cmd="${1:-status}"
-        shift || true
-        local RUSTCODE_SERVICES="fks_rustcode fks_openclaw fks_openclaw_cli"
-        local RUSTCODE_BUILD_SCRIPT="infrastructure/docker/services/openclaw/build.sh"
-        local TAILSCALE_IP="${TAILSCALE_IP:-127.0.0.1}"
-
-        case $ra_cmd in
-            up|start)
-                header "Starting RustCode + OpenClaw stack"
-                local ollama_flag=""
-                local skip_build=false
-                while [ $# -gt 0 ]; do
-                    case "$1" in
-                        --ollama)     ollama_flag="--profile ollama"; shift ;;
-                        --skip-build) skip_build=true; shift ;;
-                        *)            break ;;
-                    esac
-                done
-                local ra_dc="$DC -f $COMPOSE_FILE $ollama_flag"
-                if [ "$skip_build" = false ]; then
-                    log "Building fks_rustcode image..."
-                    $ra_dc build fks_rustcode 2>/dev/null || true
-                fi
-                if [ $# -gt 0 ]; then
-                    $ra_dc up -d "$@"
-                else
-                    $ra_dc up -d $RUSTCODE_SERVICES
-                    if [ -n "$ollama_flag" ]; then
-                        $ra_dc up -d fks_ollama fks_ollama_init
-                    fi
-                fi
-                ok "RUSTCODE stack started"
-                echo ""
-                info "Access points (bind: ${TAILSCALE_IP}):"
-                echo "  RUSTCODE API:            http://${TAILSCALE_IP}:${RUSTCODE_PORT}/health"
-                echo "  RUSTCODE Proxy (OpenAI): http://${TAILSCALE_IP}:${RUSTCODE_PORT}/v1/models"
-                echo "  OpenClaw Gateway:        ws://${TAILSCALE_IP}:${OPENCLAW_PORT}"
-                ;;
-
-            # FIX: was `stop` — changed to `down --remove-orphans` to remove containers
-            down|stop)
-                header "Stopping RustCode + OpenClaw stack"
-                $DC -f "$COMPOSE_FILE" down --remove-orphans \
-                    fks_rustcode fks_openclaw fks_openclaw_cli \
-                    fks_ollama fks_ollama_init 2>/dev/null || true
-                ok "RUSTCODE stack stopped and removed"
-                ;;
-
-            restart)
-                $DC -f "$COMPOSE_FILE" restart ${@:-$RUSTCODE_SERVICES}
-                ;;
-
-            logs)
-                $DC -f "$COMPOSE_FILE" logs -f --tail=100 ${@:-$RUSTCODE_SERVICES}
-                ;;
-
-            status|ps)
-                header "RustCode Service Status"
-                $DC -f "$COMPOSE_FILE" ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" \
-                    fks_rustcode fks_ollama fks_openclaw fks_openclaw_cli 2>/dev/null \
-                    || $DC -f "$COMPOSE_FILE" ps
-                ;;
-
-            health)
-                header "RustCode Health Checks"
-                echo ""
-                log "fks_rustcode (port ${RUSTCODE_PORT})..."
-                if curl -sf "http://${TAILSCALE_IP}:${RUSTCODE_PORT}/health" 2>/dev/null; then
-                    ok "fks_rustcode healthy"
-                elif curl -sf "http://127.0.0.1:${RUSTCODE_PORT}/health" 2>/dev/null; then
-                    ok "fks_rustcode healthy (localhost)"
-                else
-                    err "fks_rustcode not responding"
-                fi
-                echo ""
-                log "postgres (rustcode db)..."
-                if $DC -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "${POSTGRES_USER:-fks_user}" > /dev/null 2>&1; then
-                    ok "postgres healthy (shared)"
-                else
-                    err "postgres not responding"
-                fi
-                echo ""
-                log "redis (db 1)..."
-                if $DC -f "$COMPOSE_FILE" exec -T redis redis-cli -a "${REDIS_PASSWORD:-}" ping 2>/dev/null | grep -q PONG; then
-                    ok "redis healthy (shared)"
-                else
-                    err "redis not responding"
-                fi
-                echo ""
-                log "fks_openclaw (port ${OPENCLAW_PORT})..."
-                if curl -sf "http://127.0.0.1:${OPENCLAW_PORT}/healthz" > /dev/null 2>&1; then
-                    ok "fks_openclaw healthy"
-                else
-                    err "fks_openclaw not responding"
-                fi
-                ;;
-
-            build)
-                local target="${1:-all}"
-                shift 2>/dev/null || true
-                case "$target" in
-                    openclaw|oc)
-                        header "Building OpenClaw image"
-                        if [ -f "$RUSTCODE_BUILD_SCRIPT" ]; then
-                            bash "$RUSTCODE_BUILD_SCRIPT" "$@"
-                        else
-                            warn "OpenClaw build script not found at $RUSTCODE_BUILD_SCRIPT"
-                            warn "Building via docker compose instead..."
-                            $DC -f "$COMPOSE_FILE" build fks_openclaw "$@"
-                        fi
-                        ;;
-                    app|rc-app)
-                        header "Building fks_rustcode image"
-                        $DC -f "$COMPOSE_FILE" build fks_rustcode "$@"
-                        ok "fks_rustcode image built"
-                        ;;
-                    all)
-                        header "Building all RUSTCODE images"
-                        $DC -f "$COMPOSE_FILE" build fks_rustcode "$@"
-                        if [ -f "$RUSTCODE_BUILD_SCRIPT" ]; then
-                            bash "$RUSTCODE_BUILD_SCRIPT" "$@"
-                        else
-                            $DC -f "$COMPOSE_FILE" build fks_openclaw "$@"
-                        fi
-                        ok "All RUSTCODE images built"
-                        ;;
-                    *)
-                        $DC -f "$COMPOSE_FILE" build "$target" "$@"
-                        ;;
-                esac
-                ;;
-
-            shell)
-                local svc="${1:-fks_rustcode}"
-                log "Opening shell in $svc..."
-                $DC -f "$COMPOSE_FILE" exec "$svc" /bin/bash 2>/dev/null \
-                    || $DC -f "$COMPOSE_FILE" exec "$svc" /bin/sh 2>/dev/null \
-                    || $DC -f "$COMPOSE_FILE" exec "$svc" sh
-                ;;
-
-            test)
-                header "Running RUSTCODE Rust tests"
-                cargo test --manifest-path src/rc/Cargo.toml "$@"
-                ;;
-
-            ci)
-                header "RUSTCODE CI Pipeline (fmt → clippy → test)"
-                log "Checking formatting..."
-                cargo fmt --manifest-path src/rc/Cargo.toml -- --check && ok "Format OK" || err "Format failed"
-                log "Running clippy..."
-                cargo clippy --manifest-path src/rc/Cargo.toml --all-targets -- -D warnings && ok "Clippy OK" || err "Clippy failed"
-                log "Running tests..."
-                cargo test --manifest-path src/rc/Cargo.toml --lib --bins && ok "Tests OK" || err "Tests failed"
-                ;;
-
-            db)
-                local db_cmd="${1:-help}"
-                shift 2>/dev/null || true
-                case "$db_cmd" in
-                    backup)
-                        local backup_dir="${1:-./backups}"
-                        local ts; ts=$(date +%Y%m%d-%H%M%S)
-                        mkdir -p "$backup_dir"
-                        log "Dumping RUSTCODE database..."
-                        $DC -f "$COMPOSE_FILE" exec -T postgres pg_dump -U "${POSTGRES_USER:-fks_user}" rustcode \
-                            | gzip > "${backup_dir}/rustcode-${ts}.sql.gz"
-                        ok "Backup: ${backup_dir}/rustcode-${ts}.sql.gz"
-                        ;;
-                    shell|psql)
-                        $DC -f "$COMPOSE_FILE" exec postgres psql -U "${POSTGRES_USER:-fks_user}" -d rustcode
-                        ;;
-                    size)
-                        $DC -f "$COMPOSE_FILE" exec -T postgres psql -U "${POSTGRES_USER:-fks_user}" -d rustcode \
-                            -c "SELECT pg_size_pretty(pg_database_size('rustcode')) AS db_size;"
-                        ;;
-                    migrate)
-                        header "Running RUSTCODE database migrations"
-                        if $DC -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "${POSTGRES_USER:-fks_user}" > /dev/null 2>&1; then
-                            ok "postgres (shared) is ready"
-                            # FIX: corrected path from src/sql/rc/ to sql/rustcode/
-                            local migration_dir="sql/rustcode"
-                            if [ ! -d "$migration_dir" ]; then
-                                err "Migration directory not found: $migration_dir"
-                                err "  Expected layout: sql/rustcode/*.sql"
-                                exit 1
-                            fi
-                            log "Applying migrations from ${migration_dir}/..."
-                            local migration_count=0
-                            for sql_file in "${migration_dir}"/*.sql; do
-                                [ -f "$sql_file" ] || continue
-                                local fname; fname=$(basename "$sql_file")
-                                log "  Applying: $fname"
-                                $DC -f "$COMPOSE_FILE" exec -T postgres \
-                                    psql -U "${POSTGRES_USER:-fks_user}" -d rustcode -f "/dev/stdin" < "$sql_file" 2>&1 \
-                                    | grep -v "^$" | head -5
-                                migration_count=$((migration_count + 1))
-                            done
-                            ok "Applied $migration_count migration file(s)"
-                        else
-                            err "postgres is not running — start with: ./run.sh up"
-                        fi
-                        ;;
-                    *)
-                        echo "RUSTCODE database commands:"
-                        echo "  ./run.sh rc db backup [path]   Dump RUSTCODE database"
-                        echo "  ./run.sh rc db shell           Open psql CLI"
-                        echo "  ./run.sh rc db size            Show database size"
-                        echo "  ./run.sh rc db migrate         Apply SQL migrations from sql/rustcode/"
-                        ;;
-                esac
-                ;;
-
-            *)
-                err "Unknown rc command: $ra_cmd"
-                echo ""
-                echo "Available RUSTCODE commands:"
-                echo "  up [--ollama] [--skip-build]   Start RUSTCODE + OpenClaw stack"
-                echo "  down                           Stop and remove RUSTCODE containers"
-                echo "  restart [svc...]               Restart RUSTCODE services"
-                echo "  logs [svc]                     Tail RUSTCODE logs"
-                echo "  status                         Show RUSTCODE service status"
-                echo "  health                         Health check all RUSTCODE services"
-                echo "  build [openclaw|app|all]       Build RUSTCODE images"
-                echo "  shell [svc]                    Open shell (default: fks_rustcode)"
-                echo "  test [args]                    Run Rust tests"
-                echo "  ci                             Full CI pipeline"
-                echo "  db [backup|shell|size|migrate] Database commands"
-                exit 1
-                ;;
-        esac
-        return 0
-    fi
-
-    # ── openclaw shortcut: ./run.sh openclaw <cmd> ───────────────────────────
-    if [ "$command" = "openclaw" ] || [ "$command" = "oc" ]; then
-        if [ $# -eq 0 ]; then
-            info "OpenClaw CLI — pass any openclaw subcommand."
-            echo ""
-            echo "  ./run.sh openclaw --help"
-            echo "  ./run.sh openclaw doctor"
-            echo "  ./run.sh openclaw models status --plain"
-            echo "  ./run.sh openclaw channels status"
-            echo "  ./run.sh openclaw health"
-            echo "  ./run.sh openclaw agent --message 'Hello' --to '#general'"
-            return 0
-        fi
-        $DC -f "$COMPOSE_FILE" run --rm fks_openclaw_cli "$@"
-        return 0
-    fi
 
     # ── prod prefix: ./run.sh prod <command> ────────────────────────────────
     local mode="dev"

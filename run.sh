@@ -11,9 +11,9 @@
 #   lint                  cargo fmt --check + clippy (no tests)
 #   fmt                   Auto-format Rust (cargo fmt)
 #   test                  Run all Rust tests
-#   all [--ollama]        Build images, then start everything
-#                         (janus + webui + spawner + monitoring [+ ollama])
-#   fresh [--ollama]      Clean rebuild — stop, rebuild images (incl. postgres),
+#   all [--demo]          Build images, then start everything
+#                         (janus + webui + spawner + monitoring [+ crypto-demo bot])
+#   fresh [--demo]        Clean rebuild — stop, rebuild images (incl. postgres),
 #                         bootstrap all databases, start everything
 #   start [prod]          Env setup → build → start all services (dev or prod)
 #   up [prod] [svcs...]   Start services (already built)
@@ -780,13 +780,14 @@ ensure_models() {
 # =============================================================================
 
 ensure_volumes() {
+    # Only the volumes declared `external: true` in docker-compose.yml must be
+    # pre-created — compose auto-creates every other (project-scoped) volume.
+    # These names are matched verbatim (external volumes are NOT project-prefixed),
+    # so they must equal the keys in the compose `volumes:` block exactly.
     local external_volumes=(
-        fks_postgres_data
-        fks_redis_data
-        fks_questdb_data
-        fks_prometheus_data
-        fks_grafana_data
-        fks_alertmanager_data
+        prometheus_data
+        grafana_data
+        alertmanager_data
     )
     local created=0
     for vol in "${external_volumes[@]}"; do
@@ -1080,11 +1081,13 @@ cmd_build() {
 # =============================================================================
 
 cmd_all() {
-    # FIX: support --ollama flag to optionally include Ollama services
-    local with_ollama=false
+    # --demo also brings up the crypto-demo paper bot (drives the janus brain
+    # end-to-end). The Python "Ruby"/Trainer services were removed — this starts
+    # the janus-centric stack only.
+    local with_demo=false
     while [ $# -gt 0 ]; do
         case "$1" in
-            --ollama) with_ollama=true; shift ;;
+            --demo)   with_demo=true; shift ;;
             *)        shift ;;
         esac
     done
@@ -1097,8 +1100,8 @@ cmd_all() {
     ensure_models
     echo ""
 
-    log "Stopping any existing FKS containers..."
-    $DC --profile training --profile monitoring down --remove-orphans --timeout 10 2>/dev/null || true
+    log "Stopping any existing FKS containers (removes orphans: old ruby/trainer/etc.)..."
+    $DC down --remove-orphans --timeout 10 2>/dev/null || true
     ok "Existing containers stopped"
     echo ""
 
@@ -1117,24 +1120,18 @@ cmd_all() {
     ensure_databases
     echo ""
 
+    local demo_profile=""
+    [ "$with_demo" = true ] && demo_profile="--profile demo"
+
     log "Building service images..."
-    _ensure_openclaw_base && $DC build || {
-        warn "openclaw-base not available — building all services except fks_openclaw"
-        warn "  To build OpenClaw manually: ./run.sh rc build openclaw"
-        local _svcs
-        _svcs=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
-            | grep -v '^fks_openclaw$' | grep -v '^fks_openclaw_cli$' | tr '\n' ' ')
-        $DC build $_svcs
-    }
+    $DC $demo_profile build
     echo ""
 
-    local ollama_profile=""
-    [ "$with_ollama" = true ] && ollama_profile="--profile ollama"
-
-    log "Bringing up all services (core + monitoring)..."
+    log "Bringing up all services (core + monitoring${demo_profile:+ + demo bot})..."
     # NOTE: monitoring services (prometheus, grafana, loki, etc.) have no profile
     # in docker-compose.yml so they start with core services by default.
-    $DC $ollama_profile up -d
+    # janus has no in-tree copy — its image is built by git-cloning JANUS_REPO@JANUS_REF.
+    $DC $demo_profile up -d
 
     echo ""
     log "Waiting for services to initialize ..."
@@ -1145,18 +1142,18 @@ cmd_all() {
     ts_ip=$(get_tailscale_ip)
 
     echo ""
-    ok "Everything is up:"
-    echo "    WebUI:        https://${ts_ip}:3001"
-    echo "    Janus API:    https://${ts_ip}:7000"
-    echo "    Grafana:      https://${ts_ip}:3000"
-    echo "    Prometheus:   https://${ts_ip}:9090"
-    echo "    QuestDB:      https://${ts_ip}:9000"
-    echo "    RustCode:     https://${ts_ip}:3500"
-    echo "    OpenClaw:     ws://${ts_ip}:18789"
-    echo "    Bot Spawner:  http://${ts_ip}:8090"
+    ok "Everything is up (bound to 127.0.0.1 — use localhost on this desktop):"
+    echo "    WebUI:        http://localhost:3001   (https://${ts_ip}:3001 via Tailscale)"
+    echo "    Janus API:    http://localhost:7000"
+    echo "    Grafana:      http://localhost:3000"
+    echo "    Prometheus:   http://localhost:9090"
+    echo "    QuestDB:      http://localhost:9000"
+    echo "    Bot Spawner:  http://localhost:8090"
+    [ "$with_demo" = true ] && echo "    Demo bot:     http://localhost:9091/metrics   (fks_bot_* series)"
     echo ""
-    info "Logs:  docker compose logs -f"
-    info "Stop:  ./run.sh down"
+    info "Logs:   docker compose logs -f                 (one service: ./run.sh logs janus)"
+    [ "$with_demo" = true ] && info "Demo:   ./run.sh logs crypto-demo"
+    info "Stop:   ./run.sh down"
 }
 
 _post_start_verify() {
@@ -1180,12 +1177,12 @@ _post_start_verify() {
         issues=$((issues + 1))
     fi
 
-    local rustcode_code
-    rustcode_code=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3500/health 2>/dev/null || echo "000")
-    if [ "$rustcode_code" = "200" ]; then
-        ok "RustCode API healthy"
+    local spawner_code
+    spawner_code=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:8090/health 2>/dev/null || echo "000")
+    if [ "$spawner_code" = "200" ]; then
+        ok "Bot Spawner healthy"
     else
-        warn "RustCode API: HTTP ${rustcode_code} (may still be starting)"
+        warn "Bot Spawner: HTTP ${spawner_code} (may still be starting)"
         issues=$((issues + 1))
     fi
 
@@ -1199,13 +1196,12 @@ _post_start_verify() {
 }
 
 cmd_fresh() {
-    # FIX: support --ollama flag
     local reset_volumes=false
-    local with_ollama=false
+    local with_demo=false
     while [ $# -gt 0 ]; do
         case "$1" in
             --reset-volumes) reset_volumes=true; shift ;;
-            --ollama)        with_ollama=true; shift ;;
+            --demo)          with_demo=true; shift ;;
             *)               shift ;;
         esac
     done
@@ -1229,15 +1225,17 @@ cmd_fresh() {
     echo ""
 
     log "Stopping all FKS containers ..."
-    $DC --profile training --profile base --profile ollama \
-        down --remove-orphans --timeout 10 2>/dev/null || true
+    # -v drops the project-scoped named volumes (postgres/redis/questdb/…) on a
+    # full reset; the external volumes are removed explicitly below.
+    local down_flags="--remove-orphans --timeout 10"
+    [ "$reset_volumes" = true ] && down_flags="-v $down_flags"
+    $DC down $down_flags 2>/dev/null || true
     ok "All containers stopped"
     echo ""
 
     if [ "$reset_volumes" = true ]; then
-        warn "Removing data volumes ..."
-        for vol in fks_postgres_data fks_redis_data fks_questdb_data \
-                   fks_prometheus_data fks_grafana_data fks_alertmanager_data; do
+        warn "Removing external data volumes ..."
+        for vol in prometheus_data grafana_data alertmanager_data; do
             docker volume rm "$vol" 2>/dev/null && warn "  Removed $vol" || true
         done
         echo ""
@@ -1272,22 +1270,15 @@ cmd_fresh() {
     ensure_databases
     echo ""
 
+    local demo_profile=""
+    [ "$with_demo" = true ] && demo_profile="--profile demo"
+
     log "Building service images ..."
-    _ensure_openclaw_base && $DC build || {
-        warn "openclaw-base not available — building all services except fks_openclaw"
-        warn "  To build OpenClaw manually: ./run.sh rc build openclaw"
-        local _svcs
-        _svcs=$(docker compose -f "$COMPOSE_FILE" config --services 2>/dev/null \
-            | grep -v '^fks_openclaw$' | grep -v '^fks_openclaw_cli$' | tr '\n' ' ')
-        $DC build $_svcs
-    }
+    $DC $demo_profile build
     echo ""
 
-    local ollama_profile=""
-    [ "$with_ollama" = true ] && ollama_profile="--profile ollama"
-
-    log "Bringing up all services ..."
-    $DC $ollama_profile up -d
+    log "Bringing up all services${demo_profile:+ + demo bot} ..."
+    $DC $demo_profile up -d
 
     echo ""
     log "Waiting for services to initialize ..."
@@ -1298,14 +1289,14 @@ cmd_fresh() {
     ts_ip=$(get_tailscale_ip)
 
     echo ""
-    ok "Fresh start complete:"
-    echo "    WebUI:        http://${ts_ip}:3001"
-    echo "    Janus API:    http://${ts_ip}:7000"
-    echo "    Grafana:      http://${ts_ip}:3000"
-    echo "    Prometheus:   http://${ts_ip}:9090"
-    echo "    QuestDB:      http://${ts_ip}:9000"
-    echo "    RustCode:     http://${ts_ip}:3500"
-    echo "    OpenClaw:     ws://${ts_ip}:18789"
+    ok "Fresh start complete (bound to 127.0.0.1 — use localhost on this desktop):"
+    echo "    WebUI:        http://localhost:3001   (https://${ts_ip}:3001 via Tailscale)"
+    echo "    Janus API:    http://localhost:7000"
+    echo "    Grafana:      http://localhost:3000"
+    echo "    Prometheus:   http://localhost:9090"
+    echo "    QuestDB:      http://localhost:9000"
+    echo "    Bot Spawner:  http://localhost:8090"
+    [ "$with_demo" = true ] && echo "    Demo bot:     http://localhost:9091/metrics"
     echo ""
     info "Logs:  docker compose logs -f"
     info "Stop:  ./run.sh down"
@@ -1907,12 +1898,12 @@ ${CYAN}FKS — Unified Management Script${NC}
 ${BLUE}Usage:${NC} ./run.sh <command> [options]
 
 ${BLUE}Quick start:${NC}
-  ./run.sh                        Run full check (lint + type-check + test)
-  ./run.sh all                    Build everything and start all services
-  ./run.sh all --ollama           Same but also start local Ollama LLM
+  ./run.sh                        Run full check (clippy + cargo test)
+  ./run.sh all                    Build everything and start the janus stack
+  ./run.sh all --demo             Same, plus the crypto-demo paper bot (end-to-end)
   ./run.sh fresh                  Clean rebuild — stop, rebuild all, bootstrap DBs, start
   ./run.sh fresh --reset-volumes  ⚠️  Same as fresh but wipes all data volumes first
-  ./run.sh fresh --ollama         Fresh rebuild + start Ollama
+  ./run.sh fresh --demo           Fresh rebuild + start the demo bot
 
 ${BLUE}Service management:${NC}
   ./run.sh start [prod]           Env setup → build → start
@@ -1981,8 +1972,8 @@ ${BLUE}Examples:${NC}
   ./run.sh fmt                    # Auto-format everything
   ./run.sh lint                   # Lint only (no tests)
   ./run.sh test                   # Tests only (no lint)
-  ./run.sh all                    # Full build + start (first time / CI)
-  ./run.sh all --ollama           # Full build + start + local Ollama
+  ./run.sh all                    # Full build + start (first time)
+  ./run.sh all --demo             # Full build + start + crypto-demo paper bot
   ./run.sh fresh                  # Clean rebuild + DB bootstrap (fix broken state)
   ./run.sh fix-db                 # Just fix missing databases (no rebuild)
   ./run.sh start                  # Env → build → up (dev)

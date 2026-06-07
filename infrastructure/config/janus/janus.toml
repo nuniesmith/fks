@@ -714,8 +714,15 @@ reconnect_delay_ms = 5000
 max_retries = 0
 
 # ============================================================================
-# ENGINEERED HETEROGENEITY (Crowding Resistance)
+# ENGINEERED HETEROGENEITY (Crowding Resistance)  — DISABLED (commented out)
 # ============================================================================
+# ⚠️  The janus `main` config schema does not define a [heterogeneity] table,
+# and janus parses config with deny_unknown_fields, so leaving this active makes
+# janus crash on boot:
+#     TOML parse error: unknown field `heterogeneity`
+# The whole table is commented out below to keep janus bootable. Re-enable it
+# (uncomment) once the janus image you deploy (JANUS_REF) actually supports it.
+#
 # Each JANUS instance receives a unique parameter profile derived from its
 # instance_id, producing idiosyncratic order flow that reduces cross-instance
 # correlation and mitigates co-impact costs (Bucci et al. 2020).
@@ -723,52 +730,52 @@ max_retries = 0
 # The same instance_id always generates the same profile (deterministic).
 # Different instance_ids generate different profiles (diverse).
 
-[heterogeneity]
+# [heterogeneity]
 # Enable engineered heterogeneity across brain regions
-enabled = true
+# enabled = true
 # Instance identifier — must be unique per deployment.
 # Reuses the param_reload instance_id by convention; override per-instance
 # via the JANUS_HETEROGENEITY_INSTANCE_ID environment variable.
-instance_id = "default"
+# instance_id = "default"
 
 # --- Thalamus (Modality Attention Weights) ---
 # Range of perturbation as fraction of default (e.g., 0.25 = ±25%)
-thalamus_weight_range = 0.25
-thalamus_temperature_range = 0.20
+# thalamus_weight_range = 0.25
+# thalamus_temperature_range = 0.20
 
 # --- Hypothalamus (Risk Setpoints) ---
-hypothalamus_risk_setpoint_range = 0.20
-hypothalamus_position_sizing_range = 0.25
-hypothalamus_drawdown_range = 0.15
+# hypothalamus_risk_setpoint_range = 0.20
+# hypothalamus_position_sizing_range = 0.25
+# hypothalamus_drawdown_range = 0.15
 
 # --- Basal Ganglia (Action Selection) ---
-basal_ganglia_dopamine_range = 0.30
-basal_ganglia_threshold_range = 0.20
-basal_ganglia_discount_range = 0.15
-basal_ganglia_temperature_range = 0.25
+# basal_ganglia_dopamine_range = 0.30
+# basal_ganglia_threshold_range = 0.20
+# basal_ganglia_discount_range = 0.15
+# basal_ganglia_temperature_range = 0.25
 
 # --- Prefrontal (LTN Constraint Priorities) ---
-prefrontal_axiom_weight_range = 0.20
-prefrontal_violation_threshold_range = 0.15
+# prefrontal_axiom_weight_range = 0.20
+# prefrontal_violation_threshold_range = 0.15
 
 # --- Hippocampus (Replay & Consolidation) ---
-hippocampus_alpha_range = 0.25
-hippocampus_beta_range = 0.15
-hippocampus_consolidation_range = 0.20
+# hippocampus_alpha_range = 0.25
+# hippocampus_beta_range = 0.15
+# hippocampus_consolidation_range = 0.20
 
 # --- Cerebellum (Execution Timing) ---
-cerebellum_lambda_range = 0.25
-cerebellum_eta_range = 0.20
-cerebellum_pid_range = 0.15
+# cerebellum_lambda_range = 0.25
+# cerebellum_eta_range = 0.20
+# cerebellum_pid_range = 0.15
 
 # --- Cross-Instance Monitoring ---
-[heterogeneity.monitoring]
+# [heterogeneity.monitoring]
 # Minimum profile distance before crowding alert
-min_distance_threshold = 0.05
+# min_distance_threshold = 0.05
 # Maximum acceptable order flow correlation between instances
-max_flow_correlation = 0.60
+# max_flow_correlation = 0.60
 # Window size for flow correlation estimation
-correlation_window = 100
+# correlation_window = 100
 
 # ============================================================================
 # FEATURE ENGINEERING

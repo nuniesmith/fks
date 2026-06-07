@@ -1,7 +1,7 @@
 # =============================================================================
 # FKS Bot Spawner — Docker image
 #
-# Wraps the workspace base/rust/Dockerfile to build the `spawner` binary.
+# Self-contained multi-stage build for the `spawner` binary.
 # The spawner manages bot container lifecycles via the Docker socket.
 #
 # Build (from repo root):
@@ -12,19 +12,13 @@
 # volume between spawner and prometheus containers.
 # =============================================================================
 
-# Re-use the shared Rust base image (builder-workspace + runtime-base targets).
-# This keeps the build pipeline identical to janus and rustcode — one Dockerfile
-# handles everything; only build args differ.
+# docker-compose.yml's `fks_bot_spawner` service points `dockerfile:` at THIS
+# file (with `context: .` = repo root) and passes SERVICE_PORT / REPO_URL /
+# REPO_REF as build args.
 #
-# docker-compose.yml sets:
-#   dockerfile: infrastructure/docker/base/rust/Dockerfile
-#   target: workspace
-#   args:
-#     SERVICE_NAME: spawner
-#     SERVICE_PORT: "8090"
-#
-# This file exists as a thin reference / standalone alternative for CI pipelines
-# that build the spawner image independently of the monorepo compose setup.
+# Source acquisition mirrors the base/rust workspace builder: with REPO_URL
+# empty (the default) the local build context is copied in; set SPAWNER_REPO /
+# SPAWNER_REF in the environment to git-clone a specific ref instead.
 # =============================================================================
 
 ARG RUST_VERSION=1.92.0
@@ -63,9 +57,16 @@ RUN --mount=type=bind,source=.,target=/ctx \
         cp -r /ctx/. .; \
     fi
 
-ENV SQLX_OFFLINE=true
+ENV SQLX_OFFLINE=true \
+    CARGO_TARGET_DIR=/build/target
 
-RUN cargo build --release --bin spawner && \
+# The spawner is a self-contained crate with its own nested [workspace]
+# (crates/spawner/Cargo.toml) — it is NOT a member of the fks-full root
+# workspace (which only has src/proto). Building `--bin spawner` from /build
+# therefore fails with "no bin target named `spawner` in default-run packages".
+# Point cargo at the crate's own manifest; CARGO_TARGET_DIR pins the output to
+# the /build/target/release/spawner path the runtime stage copies from.
+RUN cargo build --release --manifest-path crates/spawner/Cargo.toml --bin spawner && \
     strip /build/target/release/spawner
 
 # ── Runtime image ─────────────────────────────────────────────────────────────

@@ -18,8 +18,8 @@ import { env } from "$env/dynamic/private";
 // NB: from inside the webui container, janus is fks_janus:8080 (api) /
 //     fks_janus:8180 (forward) — NOT the host-published :7000/:7001.
 const SPAWNER_URL = env.SPAWNER_INTERNAL_URL ?? "http://fks_bot_spawner:8090";
-// const JANUS_URL = env.JANUS_INTERNAL_URL ?? "http://fks_janus:8080";       // Phase 2
-// const JANUS_FORWARD_URL = env.JANUS_FORWARD_INTERNAL_URL ?? "http://fks_janus:8180"; // Phase 2
+const JANUS_URL = env.JANUS_INTERNAL_URL ?? "http://fks_janus:8080"; // janus-api
+// const JANUS_FORWARD_URL = env.JANUS_FORWARD_INTERNAL_URL ?? "http://fks_janus:8180"; // Phase 2b
 
 const BACKEND_PREFIXES = ["/api/", "/sse/", "/bars/", "/factory/", "/kraken/", "/fapi/"];
 
@@ -71,12 +71,23 @@ function gracefulEmpty(pathname: string): Response {
     pathname.endsWith("/stream") ||
     /\/sse(\/|$)/.test(pathname);
   if (isSse) {
+    let iv: ReturnType<typeof setInterval> | undefined;
     const stream = new ReadableStream({
       start(controller) {
-        controller.enqueue(
-          new TextEncoder().encode(": fks — backend not wired yet (janus repoint pending)\n\n"),
-        );
-        // Intentionally left open + idle. Closed when the client disconnects.
+        const enc = new TextEncoder();
+        controller.enqueue(enc.encode(": fks — backend not wired yet (janus repoint pending)\n\n"));
+        // Heartbeat keeps the connection genuinely alive so EventSource doesn't
+        // treat an idle socket as dropped and reconnect-loop.
+        iv = setInterval(() => {
+          try {
+            controller.enqueue(enc.encode(": keepalive\n\n"));
+          } catch {
+            if (iv) clearInterval(iv);
+          }
+        }, 25_000);
+      },
+      cancel() {
+        if (iv) clearInterval(iv);
       },
     });
     return new Response(stream, {
@@ -101,6 +112,35 @@ function gracefulEmpty(pathname: string): Response {
   });
 }
 
+// Read a janus JSON endpoint, tolerating failure (returns {} on any error).
+async function janusJson(event: RequestEvent, base: string, path: string): Promise<any> {
+  try {
+    const r = await fetch(base + path, { headers: upstreamHeaders(event.request.headers) });
+    return await r.json();
+  } catch {
+    return {};
+  }
+}
+
+// /api/health → reshape janus /health into the StatusBar's flat {redis,janus,feed}.
+// janus /health: { status, forward_service, components: Record<string,{status}> }.
+async function janusHealth(event: RequestEvent): Promise<Response> {
+  const j = await janusJson(event, JANUS_URL, "/health");
+  const comp: Record<string, { status?: string }> = (j?.components ?? {}) as Record<
+    string,
+    { status?: string }
+  >;
+  const body = {
+    janus: String(j?.status ?? "down"),
+    redis: String(comp.redis?.status ?? "—"),
+    feed: String(j?.forward_service ?? comp.data?.status ?? comp.questdb?.status ?? "—"),
+  };
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 async function proxyBackend(event: RequestEvent): Promise<Response> {
   const { pathname, search } = event.url;
 
@@ -111,10 +151,13 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
     return forward(event, SPAWNER_URL, rest + search);
   }
 
-  // ── Phase 2: janus mappings go here ─────────────────────────────────────────
-  // e.g. /api/health → JANUS_URL/health ; /api/signals → JANUS_URL/api/signals/latest
-  //      /api/services/* → JANUS_URL/api/services/* ; /api/v1/risk/* → JANUS_FORWARD_URL
-  // (each with a reshape to the panel's expected shape — see WEBUI_JANUS_REPOINT.md)
+  // ── janus mappings (Phase 2) ────────────────────────────────────────────────
+  // Status-bar health: reshape janus /health → {redis,janus,feed}.
+  if (pathname === "/api/health") {
+    return janusHealth(event);
+  }
+  // More janus panels (overview/signals/performance/brain/risk) land here next —
+  // see docs/architecture/WEBUI_JANUS_REPOINT.md for the per-panel mapping.
 
   // ── Everything else under a backend prefix → degrade quietly ────────────────
   return gracefulEmpty(pathname);

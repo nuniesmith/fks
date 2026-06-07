@@ -425,7 +425,13 @@ services:
             #   target: supervisor-from-venv
             target: supervisor
             args:
-                APP_SRC: src/ruby
+                # Code lives at src/ruby/src/ (top-level packages: core, services,
+                # web, …), so copy that dir into /app/src. Then PYTHONPATH=/app/src
+                # resolves `services.data.main`, `web.app`, and the bare `from core…`
+                # imports the code uses.
+                # NOTE: git-clone builds (RUBY_REPO set to nuniesmith/ruby) must pass
+                # APP_SRC=src — that repo roots its code at src/, not src/ruby/src/.
+                APP_SRC: src/ruby/src
                 REPO_URL: ${RUBY_REPO:-}
                 REPO_REF: ${RUBY_REF:-main}
         image: nuniesmith/fks:ruby

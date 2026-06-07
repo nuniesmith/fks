@@ -214,9 +214,11 @@ services:
             - "127.0.0.1:9003:9003" # Prometheus metrics
         volumes:
             - questdb_data:/var/lib/questdb
-        tmpfs:
-            - /tmp
-            - /var/tmp
+        # NOTE: do NOT tmpfs /tmp here. Docker tmpfs mounts default to `noexec`,
+        # but QuestDB extracts its native libquestdb*.so to java.io.tmpdir (/tmp)
+        # and mmaps it with PROT_EXEC at boot. A noexec /tmp makes that fail with
+        # "UnsatisfiedLinkError: ... failed to map segment from shared object" and
+        # the container crash-loops. The container's overlay /tmp is exec-able.
         networks:
             - fks-network
         restart: unless-stopped

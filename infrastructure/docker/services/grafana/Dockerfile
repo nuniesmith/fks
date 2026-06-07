@@ -58,18 +58,6 @@ COPY infrastructure/config/grafana/dashboards/rate-limiter.json \
 COPY infrastructure/config/grafana/dashboards/rpc_dashboard.json \
      /var/lib/grafana/dashboards/rpc_dashboard.json
 
-COPY infrastructure/config/grafana/dashboards/ruby-orb-trading.json \
-     /var/lib/grafana/dashboards/ruby-orb-trading.json
-
-COPY infrastructure/config/grafana/dashboards/ruby-overview.json \
-     /var/lib/grafana/dashboards/ruby-overview.json
-
-COPY infrastructure/config/grafana/dashboards/ruby-trading-analytics.json \
-     /var/lib/grafana/dashboards/ruby-trading-analytics.json
-
-COPY infrastructure/config/grafana/dashboards/ruby-training-health.json \
-     /var/lib/grafana/dashboards/ruby-training-health.json
-
 COPY infrastructure/config/grafana/dashboards/slo-dashboard.json \
      /var/lib/grafana/dashboards/slo-dashboard.json
 

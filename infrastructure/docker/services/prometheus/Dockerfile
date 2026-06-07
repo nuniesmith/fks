@@ -17,13 +17,9 @@ COPY infrastructure/config/prometheus/alerts/execution_alerts.yml \
      /etc/prometheus/alerts/execution_alerts.yml
 COPY infrastructure/config/prometheus/alerts/market-data-pipeline.yml \
      /etc/prometheus/alerts/market-data-pipeline.yml
-COPY infrastructure/config/prometheus/alerts/ruby-trading.yml \
-     /etc/prometheus/alerts/ruby-trading.yml
 COPY infrastructure/config/prometheus/alerts/technical-indicators.yml \
      /etc/prometheus/alerts/technical-indicators.yml
 COPY infrastructure/config/prometheus/alerts/trading-alerts.yml \
      /etc/prometheus/alerts/trading-alerts.yml
 COPY infrastructure/config/prometheus/alerts/bot-alerts.yml \
     /etc/prometheus/alerts/bot-alerts.yml
-COPY infrastructure/config/prometheus/alerts/ruby-alerts.yml \
-    /etc/prometheus/alerts/ruby-alerts.yml

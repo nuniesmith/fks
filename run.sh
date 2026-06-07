@@ -306,6 +306,9 @@ setup_env_file() {
 # SECTION 1 — SERVICE SECRETS  (auto-generated — never commit to git)
 # =============================================================================
 
+# Compose project name — keeps bare docker-compose in sync with ./run.sh (-p fks).
+COMPOSE_PROJECT_NAME=fks
+
 # --- Postgres (shared instance: janus_db + ruby_db) ---
 POSTGRES_USER=fks_user
 POSTGRES_PASSWORD=$(generate_password)

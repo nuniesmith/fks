@@ -340,9 +340,6 @@ API_KEY_ENCRYPTION_SECRET=$(generate_fernet_key)
 # --- Internal API key (data service + web endpoints) ---
 API_KEY=$(generate_secret)
 
-# --- Trainer API key ---
-TRAINER_API_KEY=$(generate_secret)
-
 # --- nginx internal token (nginx → backend trust header) ---
 NGINX_INTERNAL_TOKEN=$(generate_secret)
 
@@ -585,7 +582,6 @@ EOF
     _fill_password QUESTDB_PG_PASSWORD
     _fill_password GRAFANA_PASSWORD
     _fill_secret   API_KEY
-    _fill_secret   TRAINER_API_KEY
     _fill_long     WEB_SESSION_SECRET
     _fill_fernet   API_KEY_ENCRYPTION_SECRET
     _fill_secret   NGINX_INTERNAL_TOKEN

@@ -33,5 +33,9 @@ COPY --from=builder /staging/                    /var/lib/questdb/conf/
 
 EXPOSE 9000 8812 9009
 
+# The base image has no curl/wget and dash has no /dev/tcp, so probe the listening
+# socket instead: 9003 (min HTTP health/metrics server) == 0x232B in /proc/net/tcp.
+# Needs http.min.enabled=true (server.conf). docker-compose.yml overrides this with
+# the same check; keep them in sync.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget -qO- http://localhost:9000/status || exit 1
+    CMD grep -q ':232B' /proc/net/tcp /proc/net/tcp6 2>/dev/null || exit 1

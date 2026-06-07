@@ -222,11 +222,18 @@ services:
         networks:
             - fks-network
         restart: unless-stopped
+        # The QuestDB image ships no curl/wget (and dash has no /dev/tcp), so an
+        # HTTP probe can't run inside the container — `curl` here failed with
+        # "curl: not found" forever, marking questdb unhealthy even though it was
+        # serving fine. Instead, check that the min HTTP server (health + metrics)
+        # is listening on :9003 via /proc/net/tcp (9003 == 0x232B). It only binds
+        # once QuestDB is fully started, so it's a valid readiness signal, and it
+        # needs nothing but grep. Requires http.min.enabled=true (see server.conf).
         healthcheck:
             test:
                 [
                     "CMD-SHELL",
-                    "curl -sf --max-time 5 http://localhost:9003 || exit 1",
+                    "grep -q ':232B' /proc/net/tcp /proc/net/tcp6 2>/dev/null || exit 1",
                 ]
             interval: 10s
             timeout: 8s

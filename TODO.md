@@ -16,6 +16,13 @@
 > The repo map is in [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md);
 > the remaining split moves are in [`SPLIT_PLAN.md`](SPLIT_PLAN.md).
 
+> ⚠️ **2026-06-07 — the Python "Ruby" service was removed.** janus is the
+> platform now. Tasks below that reference `fks_ruby` / the Ruby data API /
+> the `trainer` container / `src/ruby/sql/` are **stale** — the equivalents are
+> being rebuilt natively in janus. The plan + remaining follow-ups are in
+> [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).
+> The spawner's `ruby_db` schema now lives in `src/sql/spawner/`.
+
 ---
 
 ## Status snapshot (2026-06-02)
@@ -31,7 +38,7 @@ janus consumes them:
 | `exchange-apiws` | **0.7.0** ✅ | `exchange-apiws = "0.7"` (signed REST across 6 exchanges + private user-data WS + `f64` quantities) |
 | `jflow-core` (janus) | **0.1.0** ✅ | first janus lib; rest of `jflow-*` prepped, not pushed |
 
-`fks-full` keeps only `src/proto`, `crates/spawner`, `src/ruby`, `src/web`,
+`fks-full` keeps only `src/proto`, `src/sql`, `crates/spawner`, `src/web`,
 infra, and `bots/` (with `strategies/` to come). The two reference bots
 (`fks-bot-example`, `crypto-demo`) build as `fks-bot-*` images via
 `./run.sh build-bots` and are spawnable from the WebUI `/bots`.

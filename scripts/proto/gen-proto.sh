@@ -174,7 +174,12 @@ REPO_ROOT="$(find_repo_root)"
 log "  Repo root : ${REPO_ROOT}"
 
 PROTO_ROOT="${REPO_ROOT}/proto"
-GEN_PYTHON_OUT="${REPO_ROOT}/src/ruby/src/lib/integrations/proto_gen"
+# The Python "Ruby" service that consumed these stubs was removed (janus is the
+# platform — see docs/architecture/RUST_MIGRATION.md). The Rust fks-proto crate
+# (src/proto/) compiles the protos itself via build.rs and does NOT need this
+# script. Python stub generation now writes to a throwaway build dir instead of
+# resurrecting src/ruby; repoint GEN_PYTHON_OUT if you still need the stubs.
+GEN_PYTHON_OUT="${GEN_PYTHON_OUT:-${REPO_ROOT}/build/proto_gen_python}"
 
 log "  Proto root: ${PROTO_ROOT}"
 log "  Python out: ${GEN_PYTHON_OUT}"

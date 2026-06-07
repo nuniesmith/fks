@@ -1,6 +1,8 @@
 # RFC: Phasing out Python (Ruby) into a burn-native Rust platform
 
-> **Status:** Draft / proposed — 2026-06-07
+> **Status:** Active — 2026-06-07. **`src/ruby/` has been removed from
+> `fks-full`** (see §0.1); the remaining work is finishing the burn-native
+> capabilities inside janus.
 > **Goal:** Retire the Python "Ruby" service and run the platform Rust-only,
 > with native `burn` ML, by **growing janus into the platform** rather than
 > building parallel services.
@@ -10,10 +12,58 @@ This is the strategy doc for the "Rust-only" direction. It is deliberately
 incremental: the system stays live and trades correctly at every step. Nothing
 here is a big-bang rewrite.
 
-> ⚠️ **Some specifics are in flux.** `docker-compose.yml` is being reworked
-> (consolidated Ruby container, SvelteKit `webui`, port reshuffle). Pin exact
-> ports / container names against the current compose file before acting on a
-> phase — this RFC stays at the capability level on purpose.
+> ⚠️ **Some specifics are in flux.** Pin exact ports / container names against
+> the current compose file before acting on a phase — this RFC stays at the
+> capability level on purpose.
+
+---
+
+## 0.1 What changed (2026-06-07): Ruby removed from fks-full
+
+`fks-full` no longer carries the Python trading system. **janus is good enough
+for the demo**, so rather than keep the Python service limping behind a service
+boundary until the very end (the original Phase 5 ordering), we cut it now and
+let the repo become the lean janus-centric orchestrator it's heading toward
+(`SPLIT_PLAN.md` Phase 4/5).
+
+**Removed:** `src/ruby/` (the whole Python tree), the `ruby` + `trainer` +
+`base` + `venv` compose services (dev + prod), their Dockerfiles, the
+ruby/trainer Prometheus jobs + alerts + Grafana dashboards, the `python.yml` CI
+workflow, the root `pyproject.toml`, and all the run.sh / `.env.example` wiring.
+
+**Preserved (critical):** the Bot Spawner's `ruby_db` schema —
+`bot_configs` / `bot_runs` — was relocated out of `src/ruby/sql/` into
+[`src/sql/spawner/`](../../src/sql/spawner/) and the postgres init image now
+bakes it from there. The database keeps the `ruby_db` name (env `RUBY_DB`) for
+backward compatibility; the spawner is untouched.
+
+**Consequences (now tracked as follow-ups, see §12):** janus ingests market
+data natively, so dropping `PYTHON_DATA_SERVICE_URL` is fine; but the WebUI's
+data API and the nginx dashboard routes still assume Ruby's contract and need a
+janus-native repoint. Those are infrastructure follow-ups, not blockers for the
+janus demo.
+
+### The burn-native ML track is already substantially built
+
+Since this RFC was first written, the smallest-model-first plan in §8 has largely
+landed in **janus `crates/ml`** (behind the gate; nothing live flips without
+parity):
+
+| Piece | Where (janus) | State |
+|---|---|---|
+| `PerAssetCnn` (burn) + raw-f32 reference oracle | `crates/ml/src/models/per_asset_cnn.rs` | ✅ built |
+| `MasterCnn` (cross-asset MHA) + risk reference | `crates/ml/src/models/master_cnn.rs` | ✅ built |
+| 20-channel feature pipeline (pandas-faithful) | `crates/ml/src/features/per_asset_cnn.rs` | ✅ built |
+| Breakout labeler (consolidation→ATR walk-forward) | `crates/ml/src/labeler.rs` | ✅ built |
+| Windowed dataset + class weights | `crates/ml/src/per_asset_dataset.rs` | ✅ built |
+| Trainable CNN (im2col conv) + `CnnTrainer` (AdamW+CE) | `crates/ml/src/models/trainable_per_asset_cnn.rs` | ✅ built |
+| End-to-end `train_champion` (features→labels→train→inference) | `crates/ml/src/train_per_asset.rs` | ✅ built |
+| Gated CNN vote at the consensus seam | `services/forward/src/cnn_inference.rs` (`ENABLE_CNN_INFERENCE`, default off) | ✅ wired |
+
+What's **not** yet done on the ML track: the PyTorch→burn **champion goldens**
+(needs the user's Python env + the `.pt` weights — the one true parity blocker),
+and training polish (cosine schedule / val-split / temperature calibration /
+champion save+load + promotion). See §12.
 
 ---
 
@@ -183,6 +233,11 @@ Each phase ships independently and leaves the system trading correctly.
 - News/sentiment, on-chain, journal, dashboards → Rust (mostly I/O + glue).
 - **Rithmic stays Python** behind a thin gRPC/HTTP shim — migrated last, or never.
 - **Exit:** `src/ruby/` deleted except (optionally) a minimal Rithmic sidecar.
+- **Status (2026-06-07):** the deletion happened *early* — `src/ruby/` is gone
+  from `fks-full` now (§0.1) since janus is good enough for the demo. The
+  long-tail features were simply **not carried over**; rebuild the ones you
+  actually need as janus crates (or a Rithmic sidecar) rather than porting the
+  whole Python surface. This is the strangler-fig's final cut, pulled forward.
 
 ---
 
@@ -290,12 +345,47 @@ are straightforward Rust. janus's `services/backward` already has the scaffoldin
 
 ---
 
-## 12. Immediate next steps
+## 12. Immediate next steps (post-removal follow-ups)
 
-1. **Phase 0, item 1:** scaffold the parity harness (recorder + asserter + CI gate).
-2. **Phase 0, item 2:** record goldens for `/api/bars` + the asset registry.
-3. **Phase 2 spike (parallel):** reimplement `PerAssetCNN` in `janus-ml` with a
-   golden-vector test — proves the burn-native ML path on the smallest model.
+With `src/ruby/` gone (§0.1) and the burn-native ML scaffolding built, the
+remaining work splits into **ML parity/polish** (inside janus) and
+**infrastructure repoint** (here in fks-full). None of it blocks the janus demo.
+
+### A. ML — finish the burn-native champion (janus `crates/ml`)
+1. **Champion goldens (the one real blocker).** In your Python env, dump
+   ~1,000 `(20×60 input → logits)` pairs + the champion `.pt` weights; drop them
+   into `crates/ml/tests/golden/`. The skip-if-absent parity tests + recorders
+   (`janus/tools/parity/`) are already in place and will light up.
+2. **Weight transfer oracle** (§8.3) — lift the `.pt` weights into the burn
+   `PerAssetCnn` for an immediate known-good baseline, then retrain natively.
+3. **Training polish** — cosine LR schedule, train/val split + best-val
+   checkpoint, temperature calibration, and champion **save/load + promotion**
+   (the `.json` sidecar contract) in `train_per_asset.rs`.
+4. **Flip the gate** — only once parity holds, enable `ENABLE_CNN_INFERENCE`
+   (then `ENABLE_BRAIN_RUNTIME`) on a shadow basis.
+
+### B. Data layer — make janus the sole source of truth (§3, §6 Phase 1)
+5. Move gap-scan / backfill / reconcile into janus `services/data`; retire
+   `python_data_client.rs` once janus is the only QuestDB/Postgres/Redis writer.
+
+### C. Infrastructure repoint (fks-full — left dangling by the removal)
+6. **WebUI → janus data contract.** The SvelteKit app's `PUBLIC_API_URL` now
+   points at janus (`:7000`) but janus doesn't serve Ruby's API shape yet.
+   Either version janus's axum API to cover what the dashboard calls, or trim the
+   dashboard to janus-native endpoints.
+7. **nginx janus-centric rewrite.** `infrastructure/config/nginx/conf.d/*.conf`
+   still route `/`, `/api/*`, `/factory/*`, `/trading*`, etc. at `fks_ruby`.
+   nginx starts fine (lazy variable upstreams → 502 on those routes), but the
+   config needs a rewrite to a janus + spawner + monitoring topology.
+8. **Test harness scripts.** `scripts/testing/{monitor-test,run-integration-tests,
+   test-signal-pipeline}.sh` still probe `fks_ruby`; update or retire them.
+9. **(Optional) rename `ruby_db` → `spawner_db`.** Cosmetic; the spawner is the
+   only consumer now. Kept as `ruby_db` for backward compatibility.
+
+### D. Execution-gate + safety (§6 Phase 3)
+10. Port the 9-check execution gate to Rust with exhaustive parity tests before
+    promoting the Rust strategies to the live signal path. Preserve the
+    no-autonomous-execution invariant (`EXECUTION_MODE=paper_trading` default).
 
 ---
 
@@ -303,7 +393,9 @@ are straightforward Rust. janus's `services/backward` already has the scaffoldin
 
 - `docs/architecture/REPO_TOPOLOGY.md` — the five-repo split + crates.io coordinates.
 - `SPLIT_PLAN.md` — repo-split moves (precedent for this kind of staged plan).
-- `src/ruby/CLAUDE.md` — the Python service's own map + invariants.
-- janus: `crates/ml/` (burn models), `services/data/src/backfill/python_data_client.rs`
-  (the cut-over seam), `services/backward/` (training scaffolding).
+- The old Python service's map + invariants — now in git history (the commit that
+  removed `src/ruby/`) or the `nuniesmith/ruby` repo if it's extracted there.
+- janus: `crates/ml/` (burn models — see §0.1 for the built pieces),
+  `services/data/src/backfill/python_data_client.rs` (the cut-over seam),
+  `services/backward/` (training scaffolding).
 - `models/README.md` — current champion contract (`.pt` + `.json` sidecar).

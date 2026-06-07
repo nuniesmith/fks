@@ -1,17 +1,21 @@
 # =============================================================================
 # FKS — Development Environment
-# Janus (Rust) + Ruby (Python)
+# Janus (Rust) trading platform
 #
 # Architecture:
-#   ruby      — consolidated Python container running data + engine + factory
-#               via supervisord (base/python/Dockerfile target: supervisor)
-#   webui     — SvelteKit frontend, replaces HTMX dashboard (src/webui/Dockerfile)
-#   janus     — Rust trading brain (base/rust/Dockerfile target: workspace)
-#   trainer   — GPU CNN retraining (base/python-gpu/Dockerfile target: trainer)
+#   janus     — Rust trading brain; native data ingestion + burn ML
+#               (base/rust/Dockerfile target: workspace)
+#   webui     — SvelteKit frontend (src/web/Dockerfile)
+#   spawner   — Rust bot-container lifecycle service
 #
-# Postgres: three logical databases on two instances
+# NOTE: the Python "Ruby" data/engine/trainer services were removed — janus is
+# the platform now. See docs/architecture/RUST_MIGRATION.md. The only Ruby
+# remnant is the ruby_db Postgres database, retained (name + schema) for the
+# Bot Spawner's bot_configs/bot_runs tables (src/sql/spawner/).
+#
+# Postgres: two logical databases on one instance
 #   - janus_db       — Janus schema (signals, regime, backtest tables)
-#   - ruby_db        — Ruby schema (bars, journal, orb events, tasks…)
+#   - ruby_db        — Spawner schema (bot_configs, bot_runs) — legacy name
 #   - Single FKS redis (custom image with kernel tuning), three DBs:
 #       db 0 — janus_db + ruby (shared trading state)
 #   - Single RUSTCODE redis  (Alpine, for caching)
@@ -361,11 +365,10 @@ services:
             - OPTIMIZE_TRIALS=${OPTIMIZE_TRIALS:-100}
             - OPTIMIZE_HISTORICAL_DAYS=${OPTIMIZE_HISTORICAL_DAYS:-30}
             - OPTIMIZER_INSTANCE_ID=${OPTIMIZER_INSTANCE_ID:-janus-prod}
-            - PYTHON_DATA_SERVICE_URL=http://fks_ruby:8000
-            - DATA_SERVICE_API_KEY=${API_KEY:-}
-            - DATA_CLIENT_TIMEOUT_SECS=${DATA_CLIENT_TIMEOUT_SECS:-30}
-            - DATA_CLIENT_MAX_RETRIES=${DATA_CLIENT_MAX_RETRIES:-3}
-            - DATA_CLIENT_RETRY_DELAY_MS=${DATA_CLIENT_RETRY_DELAY_MS:-500}
+            # The Python "Ruby" data service was removed — janus ingests market
+            # data natively (DATA_SOURCE/DATA_EXCHANGE/DATA_WS_URL above). The old
+            # PYTHON_DATA_SERVICE_URL + DATA_CLIENT_* fallback wiring is gone;
+            # see docs/architecture/RUST_MIGRATION.md (Phase 1 cut-over).
         ports:
             - "127.0.0.1:9051:50051" # gRPC inference
             - "127.0.0.1:7000:8080" # HTTP API (main janus_api)
@@ -386,8 +389,6 @@ services:
             redis:
                 condition: service_healthy
             questdb:
-                condition: service_healthy
-            ruby:
                 condition: service_healthy
         restart: unless-stopped
         healthcheck:
@@ -412,149 +413,6 @@ services:
                 max-file: "5"
                 labels: "service=janus,environment=dev"
 
-    # ===========================================================================
-    # RUBY — Python trading services (consolidated into fks_ruby)
-    # ===========================================================================
-
-    ruby:
-        build:
-            context: .
-            dockerfile: infrastructure/docker/base/python/Dockerfile
-            # Default target rebuilds the venv on every build (safe for local dev).
-            # For CI/CD fast builds once `venv` image is in the registry, switch to:
-            #   target: supervisor-from-venv
-            target: supervisor
-            args:
-                # Code lives at src/ruby/src/ (top-level packages: core, services,
-                # web, …), so copy that dir into /app/src. Then PYTHONPATH=/app/src
-                # resolves `services.data.main`, `web.app`, and the bare `from core…`
-                # imports the code uses.
-                # NOTE: git-clone builds (RUBY_REPO set to nuniesmith/ruby) must pass
-                # APP_SRC=src — that repo roots its code at src/, not src/ruby/src/.
-                APP_SRC: src/ruby/src
-                REPO_URL: ${RUBY_REPO:-}
-                REPO_REF: ${RUBY_REF:-main}
-        image: nuniesmith/fks:ruby
-        container_name: fks_ruby
-        restart: unless-stopped
-        shm_size: 2gb
-        ports:
-            - "127.0.0.1:8000:8000" # Ruby API (FastAPI REST + SSE)
-        environment:
-            - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-            - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${RUBY_DB:-ruby_db}
-            - DATA_SERVICE_HOST=0.0.0.0
-            - DATA_SERVICE_PORT=8000
-            - ENGINE_MODE=remote
-            - DATA_SERVICE_URL=http://localhost:8000
-            - ENGINE_DATA_URL=http://localhost:8000
-            - JANUS_GRPC_HOST=fks_janus
-            - JANUS_GRPC_PORT=50051
-            - JANUS_HTTP_URL=http://fks_janus:8080
-            - JANUS_FORWARD_URL=${JANUS_FORWARD_URL:-http://fks_janus:8180}
-            - ALERTMANAGER_URL=http://fks_alertmanager:9093
-            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
-            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
-            - ENABLE_KRAKEN_CRYPTO=${ENABLE_KRAKEN_CRYPTO:-1}
-            - TRAINER_SERVICE_URL=http://fks_trainer:8200
-            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
-            - ORB_FILTER_GATE=${ORB_FILTER_GATE:-majority}
-            - ORB_CNN_GATE=${ORB_CNN_GATE:-0}
-            - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
-            - MASSIVE_S3_KEY_ID=${MASSIVE_S3_KEY_ID:-}
-            - MASSIVE_S3_SECRET=${MASSIVE_S3_SECRET:-}
-            - MASSIVE_S3_ENDPOINT=${MASSIVE_S3_ENDPOINT:-https://files.massive.com}
-            - MASSIVE_S3_BUCKET=${MASSIVE_S3_BUCKET:-flatfiles}
-            - BACKFILL_DAYS_BACK=${BACKFILL_DAYS_BACK:-365}
-            - BACKFILL_CHUNK_DAYS=${BACKFILL_CHUNK_DAYS:-30}
-            - FACTORY_ENABLED_CLASSES=${FACTORY_ENABLED_CLASSES:-futures_cme,crypto}
-            - GAP_SCAN_INTERVAL_SECS=${GAP_SCAN_INTERVAL_SECS:-300}
-            - DATA_KLINE_INTERVALS=${DATA_KLINE_INTERVALS:-1m,5m,15m,1h,1d}
-            - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
-            - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
-            - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
-            - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-fks-news-pipeline/1.0}
-            - WHALE_ALERT_API_KEY=${WHALE_ALERT_API_KEY:-}
-            - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY:-}
-            - SOLSCAN_API_KEY=${SOLSCAN_API_KEY:-}
-            - CRYPTOCOMPARE_API_KEY=${CRYPTOCOMPARE_API_KEY:-}
-            - MEMPOOL_SPACE_URL=${MEMPOOL_SPACE_URL:-https://mempool.space/api}
-            - CHAIN_MIN_USD=${CHAIN_MIN_USD:-1000000}
-            - CHAIN_POLL_WHALE=${CHAIN_POLL_WHALE:-30}
-            - CHAIN_POLL_MEMPOOL=${CHAIN_POLL_MEMPOOL:-60}
-            - CHAIN_POLL_FLOW=${CHAIN_POLL_FLOW:-3600}
-            - CMC_API_KEY=${CMC_API_KEY:-}
-            - CMC_POLL_QUOTES=${CMC_POLL_QUOTES:-900}
-            - CMC_POLL_GLOBAL=${CMC_POLL_GLOBAL:-1800}
-            - CMC_POLL_FEAR_GREED=${CMC_POLL_FEAR_GREED:-1800}
-            - CMC_POLL_LISTINGS=${CMC_POLL_LISTINGS:-21600}
-            - QUESTDB_HOST=fks_questdb
-            - QUESTDB_PG_PORT=8812
-            - QUESTDB_PG_USER=${QUESTDB_PG_USER:-admin}
-            - QUESTDB_PG_PASSWORD=${QUESTDB_PG_PASSWORD:-}
-            - LOG_LEVEL=${LOG_LEVEL:-info}
-            - PYTHONPATH=/app/src
-            - PYTHONUNBUFFERED=1
-            - API_KEY=${API_KEY:-}
-            - MODELS_DIR=/app/models
-            - PAPER_TRADING_ENABLED=${PAPER_TRADING_ENABLED:-0}
-            - SIM_ENABLED=${SIM_ENABLED:-0}
-            - SIM_DATA_SOURCE=${SIM_DATA_SOURCE:-kraken}
-            - SIM_INITIAL_BALANCE=${SIM_INITIAL_BALANCE:-100000}
-            - WEB_PASSWORD_HASH=${WEB_PASSWORD_HASH:-}
-            - WEB_SESSION_SECRET=${WEB_SESSION_SECRET:-}
-            - WEB_SESSION_TTL_DAYS=${WEB_SESSION_TTL_DAYS:-30}
-            - API_KEY_ENCRYPTION_SECRET=${API_KEY_ENCRYPTION_SECRET:-}
-            - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
-            - XAI_API_KEY=${XAI_API_KEY:-}
-            - TV_SESSION_ID=${TV_SESSION_ID:-}
-            - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
-            - COPIER_URL=${COPIER_URL:-}
-            - DISCORD_WEBHOOK_GENERAL=${DISCORD_WEBHOOK_GENERAL:-}
-            - DISCORD_WEBHOOK_SIGNALS=${DISCORD_WEBHOOK_SIGNALS:-}
-            - DISCORD_WEBHOOK_ANALYSIS=${DISCORD_WEBHOOK_ANALYSIS:-}
-            - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-            - AUDIT_RUNTIME_ENABLED=${AUDIT_RUNTIME_ENABLED:-false}
-            - AUDIT_LLM_ENABLED=${AUDIT_LLM_ENABLED:-false}
-            - AUDIT_LLM_PROVIDER=${AUDIT_LLM_PROVIDER:-xai}
-            - AUDIT_LLM_API_KEY=${AUDIT_LLM_API_KEY:-}
-            - AUDIT_LLM_MODEL=${AUDIT_LLM_MODEL:-grok-4-1}
-        volumes:
-            - ruby_app_data:/app/data
-            - ./models:/app/models
-            - ./scripts:/app/scripts
-            - ./docs:/app/docs:ro
-            - ./infrastructure/docker/services/ruby/supervisord.conf:/etc/supervisor/conf.d/app.conf:ro
-            - ./src/web:/app/static:ro
-        networks:
-            - fks-network
-        depends_on:
-            redis:
-                condition: service_healthy
-            postgres:
-                condition: service_healthy
-        healthcheck:
-            test:
-                ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
-            interval: 15s
-            timeout: 10s
-            start_period: 90s
-            retries: 5
-        deploy:
-            resources:
-                limits:
-                    cpus: "4.0"
-                    memory: 4g
-                reservations:
-                    cpus: "1.0"
-                    memory: 1g
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "20m"
-                max-file: "5"
-                labels: "service=fks-ruby,environment=dev"
-
     webui:
         image: nuniesmith/fks:webui
         build:
@@ -570,7 +428,10 @@ services:
             - "127.0.0.1:3001:3000"
         environment:
             - NODE_ENV=production
-            - PUBLIC_API_URL=http://fks_ruby:8000
+            # The Ruby data API was removed; point the dashboard's API base at
+            # janus. The SvelteKit app still needs a janus-native data contract —
+            # tracked in docs/architecture/RUST_MIGRATION.md (WebUI repoint).
+            - PUBLIC_API_URL=${PUBLIC_API_URL:-http://fks_janus:7000}
             - PUBLIC_JANUS_URL=http://fks_janus:7000
             - ORIGIN=http://localhost:3001
         networks:
@@ -592,26 +453,6 @@ services:
                     memory: 512M
                     cpus: "0.5"
 
-    base:
-        image: nuniesmith/fks:python-base
-        build:
-            context: .
-            dockerfile: infrastructure/docker/base/python/Dockerfile
-            target: builder
-            args:
-                APP_SRC: src/ruby
-        profiles: ["base"]
-
-    # Build-utility image: installs all Python deps once so downstream CPU services
-    # can inherit from it (FROM venv). Rebuild when pyproject.toml changes.
-    # Usage: docker compose --profile base build venv
-    venv:
-        image: nuniesmith/fks:python-venv
-        build:
-            context: .
-            dockerfile: infrastructure/docker/base/python-venv/Dockerfile
-        profiles: ["base"]
-
     # Build-utility image: generic GPU-enabled Rust base (CUDA runtime).
     # Used as a builder template for any Rust service that requires GPU at runtime.
     # Usage: docker compose --profile base build rust-gpu-base
@@ -624,98 +465,6 @@ services:
                 SERVICE_NAME: app
                 SERVICE_PORT: "8080"
         profiles: ["base"]
-
-    trainer:
-        image: nuniesmith/fks:trainer
-        #profiles: [training]
-        build:
-            context: .
-            dockerfile: infrastructure/docker/base/python-gpu/Dockerfile
-            target: trainer
-        container_name: fks_trainer
-        extra_hosts:
-            - "host.docker.internal:host-gateway"
-        restart: unless-stopped
-        shm_size: 4gb
-        ports:
-            - "127.0.0.1:8200:8200"
-        deploy:
-            resources:
-                reservations:
-                    devices:
-                        - driver: nvidia
-                          count: 1
-                          capabilities: [gpu]
-                limits:
-                    cpus: "8.0"
-                    memory: 16g
-        environment:
-            - TRAINER_HOST=0.0.0.0
-            - TRAINER_PORT=8200
-            - TRAINER_API_KEY=${TRAINER_API_KEY:-}
-            - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
-            - CNN_RETRAIN_MIN_ACC=${CNN_RETRAIN_MIN_ACC:-65.0}
-            - CNN_RETRAIN_MIN_PRECISION=${CNN_RETRAIN_MIN_PRECISION:-55.0}
-            - CNN_RETRAIN_MIN_RECALL=${CNN_RETRAIN_MIN_RECALL:-50.0}
-            - CNN_RETRAIN_IMPROVEMENT=${CNN_RETRAIN_IMPROVEMENT:-0.0}
-            - CNN_RETRAIN_EPOCHS=${CNN_RETRAIN_EPOCHS:-60}
-            - CNN_RETRAIN_BATCH_SIZE=${CNN_RETRAIN_BATCH_SIZE:-64}
-            - CNN_RETRAIN_LR=${CNN_RETRAIN_LR:-0.0001}
-            - CNN_RETRAIN_PATIENCE=${CNN_RETRAIN_PATIENCE:-12}
-            - ENGINE_DATA_URL=http://fks_ruby:8000
-            - DATA_SERVICE_URL=http://fks_ruby:8000
-            - ENGINE_BARS_TIMEOUT=${ENGINE_BARS_TIMEOUT:-60}
-            - ENGINE_FILL_POLL_MAX_WAIT=${ENGINE_FILL_POLL_MAX_WAIT:-300}
-            - ENGINE_FILL_POLL_INTERVAL=${ENGINE_FILL_POLL_INTERVAL:-10}
-            - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
-            - MASSIVE_S3_KEY_ID=${MASSIVE_S3_KEY_ID:-}
-            - MASSIVE_S3_SECRET=${MASSIVE_S3_SECRET:-}
-            - MASSIVE_S3_ENDPOINT=${MASSIVE_S3_ENDPOINT:-https://files.massive.com}
-            - MASSIVE_S3_BUCKET=${MASSIVE_S3_BUCKET:-flatfiles}
-            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
-            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
-            - API_KEY=${API_KEY:-}
-            - CNN_RETRAIN_SYMBOLS=${CNN_RETRAIN_SYMBOLS:-MGC,SIL,MES,MNQ,M2K,MYM}
-            - CNN_RETRAIN_DAYS_BACK=${CNN_RETRAIN_DAYS_BACK:-365}
-            - CNN_RETRAIN_BARS_SOURCE=${CNN_RETRAIN_BARS_SOURCE:-engine}
-            - CNN_RETRAIN_ORB_SESSION=${CNN_RETRAIN_ORB_SESSION:-all}
-            - CNN_ORB_SESSION=${CNN_ORB_SESSION:-all}
-            - NVIDIA_VISIBLE_DEVICES=all
-            - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-            - PYTHONPATH=/app/src/ruby:/app/src
-            - PYTHONUNBUFFERED=1
-            - MODELS_DIR=/app/models
-        volumes:
-            - trainer_dataset:/app/dataset
-            - ./models:/app/models
-            - ./data:/app/data
-            - ./scripts:/app/scripts
-        networks:
-            - fks-network
-        depends_on:
-            ruby:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
-        command: ["python", "-m", "lib.services.training.trainer_server"]
-        healthcheck:
-            test:
-                [
-                    "CMD",
-                    "python",
-                    "-c",
-                    "import urllib.request; urllib.request.urlopen('http://localhost:8200/health')",
-                ]
-            interval: 30s
-            timeout: 10s
-            start_period: 60s
-            retries: 3
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "20m"
-                max-file: "5"
-                labels: "service=trainer,environment=dev"
 
     # ===========================================================================
     # PROXY
@@ -750,8 +499,6 @@ services:
         depends_on:
             janus:
                 condition: service_started
-            ruby:
-                condition: service_healthy
             grafana:
                 condition: service_started
         restart: unless-stopped
@@ -1384,10 +1131,6 @@ volumes:
     qdrant_data:
         driver: local
     optimizer_data:
-        driver: local
-    ruby_app_data:
-        driver: local
-    trainer_dataset:
         driver: local
     prometheus_sd:
         driver: local

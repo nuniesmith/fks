@@ -7,12 +7,12 @@
 #   ./run.sh <command> [flags]
 #
 # Top-level commands:
-#   (no args) / check     Lint + type-check + test everything (Python & Rust)
-#   lint                  Ruff check/fix + clippy (no tests)
-#   fmt                   Auto-format Python (ruff) and Rust (cargo fmt)
-#   test                  Run all Python + Rust tests
-#   all [--ollama]        Build base image, then start everything
-#                         (core + ruby + trainer + monitoring [+ ollama])
+#   (no args) / check     clippy + cargo test (Rust)
+#   lint                  cargo fmt --check + clippy (no tests)
+#   fmt                   Auto-format Rust (cargo fmt)
+#   test                  Run all Rust tests
+#   all [--ollama]        Build images, then start everything
+#                         (janus + webui + spawner + monitoring [+ ollama])
 #   fresh [--ollama]      Clean rebuild — stop, rebuild images (incl. postgres),
 #                         bootstrap all databases, start everything
 #   start [prod]          Env setup → build → start all services (dev or prod)
@@ -23,16 +23,12 @@
 #   status                Show service status
 #   health                Health check all services
 #   build [svcs...]       Build service images
-#   build-ruby            Build FKS Python images (base cache → ruby)
-#   build-ruby-trainer    Build GPU trainer image
 #   build-redis           Build custom Redis image
 #   build-bots            Build the spawnable reference bot images (bots/)
-#   retrain               Run 3-tier CNN retrain (default: --tier all)
 #   setup-env             Generate or validate .env, fill missing secrets, prompt for API keys
 #   generate-certs        Generate internal service TLS certs (skips if already present)
 #   ssl-local             Force-regenerate internal service TLS certs
 #   shell <svc>           Open a shell in a running container
-#   ruby <cmd>            Ruby subsystem shortcuts (build/test/logs/shell/restart/up/down)
 #   clean                 Remove stopped containers and dangling images
 #   force-clean           ⚠️  Remove ALL FKS resources including volumes
 #   fix-db                Bootstrap all databases (idempotent — safe to re-run)
@@ -43,9 +39,6 @@
 #   web-hash-password     Generate bcrypt hash for WEB_PASSWORD_HASH
 #   tailscale-serve       Expose FKS dashboard via Tailscale HTTPS
 #   tailscale-stop        Remove Tailscale HTTPS serve config
-#   test-ruby [svc]       Run pytest in a Ruby container
-#   lint-ruby [svc]       Run ruff lint/format in a Ruby container
-#   local-ruby            Print guide to run Ruby services locally (venv)
 #
 # RustCode / OpenClaw commands:
 #   rc up [--ollama] [--skip-build]   Start RUSTCODE + OpenClaw stack
@@ -436,41 +429,7 @@ CMC_POLL_LISTINGS=21600
 
 
 # =============================================================================
-# SECTION 5 — RUBY PYTHON SERVICES CONFIGURATION
-# =============================================================================
-
-ORB_FILTER_GATE=majority
-ORB_CNN_GATE=0
-
-FACTORY_ENABLED_CLASSES=crypto
-GAP_SCAN_INTERVAL_SECS=300
-
-BACKFILL_DAYS_BACK=365
-BACKFILL_CHUNK_DAYS=30
-
-PAPER_TRADING_ENABLED=0
-SIM_ENABLED=0
-SIM_DATA_SOURCE=kraken
-SIM_INITIAL_BALANCE=100000
-
-# =============================================================================
-# SECTION 6 — TRAINER  (GPU CNN retraining — --profile training)
-# =============================================================================
-
-CNN_RETRAIN_SYMBOLS=MGC,SIL,MES,MNQ,M2K,MYM
-CNN_RETRAIN_DAYS_BACK=365
-CNN_RETRAIN_BARS_SOURCE=engine
-CNN_RETRAIN_EPOCHS=60
-CNN_RETRAIN_BATCH_SIZE=64
-CNN_RETRAIN_LR=0.0001
-CNN_RETRAIN_PATIENCE=12
-CNN_RETRAIN_MIN_ACC=80.0
-CNN_RETRAIN_MIN_PRECISION=75.0
-CNN_RETRAIN_MIN_RECALL=70.0
-
-
-# =============================================================================
-# SECTION 7 — RUSTASSISTANT  (AI Agent + LLM Proxy)
+# SECTION 5 — RUSTASSISTANT  (AI Agent + LLM Proxy)
 # =============================================================================
 
 RUSTCODE_PROXY_API_KEYS=${ra_proxy_key}
@@ -809,7 +768,7 @@ ensure_models() {
             exit 1
         else
             warn "CNN model files missing — ML predictions unavailable until models are present"
-            warn "  Run './run.sh retrain' or copy pre-trained models into ./models/"
+            warn "  Train champions in janus (burn-native) or copy model files into ./models/"
         fi
     else
         ok "CNN model files present"
@@ -1068,68 +1027,6 @@ _ensure_openclaw_base() {
 # Build commands
 # =============================================================================
 
-cmd_build_ruby() {
-    header "Building FKS Ruby Python Services"
-
-    log "Step 1/2 — build python-base (dep cache layer)..."
-    if $DC --profile base build base; then
-        ok "base (nuniesmith/fks:python-base) built"
-    else
-        err "base build failed — aborting"
-        return 1
-    fi
-
-    log "Step 2/2 — build ruby..."
-    if $DC build ruby; then
-        ok "ruby (nuniesmith/fks:ruby) built"
-    else
-        err "ruby build failed"
-        return 1
-    fi
-}
-
-cmd_build_trainer() {
-    header "Building Ruby Trainer (GPU)"
-    if $DC --profile training build trainer; then
-        ok "Trainer image built"
-    else
-        err "Trainer build failed"
-        return 1
-    fi
-}
-
-cmd_retrain() {
-    header "3-Tier CNN Retrain (all tiers)"
-
-    # FIX: use curl on host to check trainer health, not python
-    if ! curl -sf --max-time 5 http://localhost:8200/health > /dev/null 2>&1; then
-        warn "Trainer container not running — starting it..."
-        $DC --profile training up -d trainer
-        log "Waiting for trainer to become healthy..."
-        sleep 15
-    fi
-
-    local trainer_url="http://localhost:8200"
-    local extra_args=""
-
-    if [ $# -gt 0 ]; then
-        extra_args="$*"
-    else
-        extra_args="--tier all --continue-on-failure"
-    fi
-
-    log "Running: python scripts/run_per_group_training.py --trainer-url $trainer_url $extra_args"
-    python3 scripts/run_per_group_training.py --trainer-url "$trainer_url" $extra_args
-    local rc=$?
-
-    if [ $rc -eq 0 ]; then
-        ok "Retrain complete"
-    else
-        err "Retrain failed (exit code $rc)"
-    fi
-    return $rc
-}
-
 cmd_build_redis() {
     header "Building Custom Redis Image"
     if $DC build redis; then
@@ -1220,14 +1117,7 @@ cmd_all() {
     ensure_databases
     echo ""
 
-    cmd_build_ruby
-    echo ""
-
-    log "Building trainer image (GPU)..."
-    cmd_build_trainer || warn "Trainer build failed — continuing without GPU trainer"
-    echo ""
-
-    log "Building remaining service images..."
+    log "Building service images..."
     _ensure_openclaw_base && $DC build || {
         warn "openclaw-base not available — building all services except fks_openclaw"
         warn "  To build OpenClaw manually: ./run.sh rc build openclaw"
@@ -1241,11 +1131,10 @@ cmd_all() {
     local ollama_profile=""
     [ "$with_ollama" = true ] && ollama_profile="--profile ollama"
 
-    log "Bringing up all services (core + training + monitoring profiles)..."
+    log "Bringing up all services (core + monitoring)..."
     # NOTE: monitoring services (prometheus, grafana, loki, etc.) have no profile
     # in docker-compose.yml so they start with core services by default.
-    # The --profile training flag gates the GPU trainer.
-    $DC --profile training $ollama_profile up -d
+    $DC $ollama_profile up -d
 
     echo ""
     log "Waiting for services to initialize ..."
@@ -1259,8 +1148,6 @@ cmd_all() {
     ok "Everything is up:"
     echo "    WebUI:        https://${ts_ip}:3001"
     echo "    Janus API:    https://${ts_ip}:7000"
-    echo "    Ruby API:     https://${ts_ip}:8050"
-    echo "    Trainer API:  https://${ts_ip}:8200"
     echo "    Grafana:      https://${ts_ip}:3000"
     echo "    Prometheus:   https://${ts_ip}:9090"
     echo "    QuestDB:      https://${ts_ip}:9000"
@@ -1274,46 +1161,6 @@ cmd_all() {
 
 _post_start_verify() {
     local issues=0
-
-    local ruby_health
-    ruby_health=$(curl -sf --max-time 5 http://localhost:8050/health 2>/dev/null || echo "{}")
-
-    local pg_status
-    pg_status=$(echo "$ruby_health" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('components', {}).get('postgres', {}).get('status', 'unknown'))
-except: print('unknown')
-" 2>/dev/null || echo "unknown")
-
-    if [ "$pg_status" = "ok" ]; then
-        ok "Ruby → Postgres connection healthy"
-    elif [ "$pg_status" = "unknown" ]; then
-        warn "Ruby data API not responding yet (still starting — check logs)"
-        issues=$((issues + 1))
-    else
-        err "Ruby → Postgres: ${pg_status}"
-        err "  This usually means ruby_db doesn't exist or credentials are wrong."
-        err "  Fix: ./run.sh fix-db && ./run.sh restart ruby"
-        issues=$((issues + 1))
-    fi
-
-    local redis_status
-    redis_status=$(echo "$ruby_health" | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('components', {}).get('redis', {}).get('status', 'unknown'))
-except: print('unknown')
-" 2>/dev/null || echo "unknown")
-
-    if [ "$redis_status" = "ok" ]; then
-        ok "Ruby → Redis connection healthy"
-    else
-        warn "Ruby → Redis: ${redis_status}"
-        issues=$((issues + 1))
-    fi
 
     local janus_code
     janus_code=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:7000/health 2>/dev/null || echo "000")
@@ -1425,14 +1272,7 @@ cmd_fresh() {
     ensure_databases
     echo ""
 
-    cmd_build_ruby
-    echo ""
-
-    log "Building trainer image (GPU) ..."
-    cmd_build_trainer || warn "Trainer build failed — continuing without GPU trainer"
-    echo ""
-
-    log "Building remaining service images ..."
+    log "Building service images ..."
     _ensure_openclaw_base && $DC build || {
         warn "openclaw-base not available — building all services except fks_openclaw"
         warn "  To build OpenClaw manually: ./run.sh rc build openclaw"
@@ -1447,7 +1287,7 @@ cmd_fresh() {
     [ "$with_ollama" = true ] && ollama_profile="--profile ollama"
 
     log "Bringing up all services ..."
-    $DC --profile training $ollama_profile up -d
+    $DC $ollama_profile up -d
 
     echo ""
     log "Waiting for services to initialize ..."
@@ -1460,8 +1300,7 @@ cmd_fresh() {
     echo ""
     ok "Fresh start complete:"
     echo "    WebUI:        http://${ts_ip}:3001"
-    echo "    Ruby API:     http://${ts_ip}:8050"
-    echo "    Trainer:      http://${ts_ip}:8200"
+    echo "    Janus API:    http://${ts_ip}:7000"
     echo "    Grafana:      http://${ts_ip}:3000"
     echo "    Prometheus:   http://${ts_ip}:9090"
     echo "    QuestDB:      http://${ts_ip}:9000"
@@ -1491,33 +1330,6 @@ cmd_fix_db() {
     ensure_databases
     echo ""
 
-    local ruby_status
-    ruby_status=$(docker inspect --format='{{.State.Status}}' fks_ruby 2>/dev/null || echo "not-found")
-
-    if [ "$ruby_status" = "running" ]; then
-        log "Restarting Ruby to pick up database changes ..."
-        $DC restart ruby
-        sleep 8
-
-        local pg_ok
-        pg_ok=$(curl -sf --max-time 5 http://localhost:8050/health 2>/dev/null \
-            | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('components', {}).get('postgres', {}).get('status', 'unknown'))
-except: print('unknown')
-" 2>/dev/null || echo "unknown")
-
-        if [ "$pg_ok" = "ok" ]; then
-            ok "Ruby → Postgres connection verified"
-        else
-            warn "Ruby → Postgres status: ${pg_ok} — may need more time to start"
-            info "  Check: curl http://localhost:8050/health | python3 -m json.tool"
-        fi
-    fi
-
-    echo ""
     ok "Database fix complete"
 }
 
@@ -1676,13 +1488,9 @@ cmd_health() {
     info "HTTP endpoint checks:"
     local http_ok=true
     for entry in \
-        "http://localhost:8050/health:ruby-data" \
-        "http://localhost:8080/health:ruby-web" \
         "http://localhost:3001/:webui" \
         "http://localhost:7000/health:janus" \
-        "http://localhost:3500/health:rustcode" \
         "http://localhost:9094/health:alertmanager-discord-bridge" \
-        "http://localhost:8200/health:trainer" \
         "http://localhost:8090/health:bot-spawner" \
         "http://localhost:16686/:jaeger"; do
         local url="${entry%:*}" label="${entry##*:}"
@@ -1698,65 +1506,15 @@ cmd_health() {
 
     echo ""
     info "Database connectivity:"
-    local pg_status
-    pg_status=$(curl -sf --max-time 3 http://localhost:8050/health 2>/dev/null \
-        | python3 -c "
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(d.get('components', {}).get('postgres', {}).get('status', 'unknown'))
-except: print('unknown')
-" 2>/dev/null || echo "unreachable")
-
-    case "$pg_status" in
-        ok)          ok  "ruby → postgres: connected" ;;
-        error)       err "ruby → postgres: ERROR (run ./run.sh fix-db)"; any_unhealthy=true ;;
-        unreachable) warn "ruby → postgres: data API not responding" ;;
-        *)           warn "ruby → postgres: $pg_status" ;;
+    local pg_state
+    pg_state=$(docker inspect --format='{{.State.Health.Status}}' fks_postgres 2>/dev/null || echo "not-found")
+    case "$pg_state" in
+        healthy)   ok  "postgres: healthy" ;;
+        not-found) warn "postgres: container not found (is the stack up?)" ;;
+        *)         warn "postgres: $pg_state"; any_unhealthy=true ;;
     esac
 
     [ "$any_unhealthy" = true ] || [ "$http_ok" = false ] && return 1 || return 0
-}
-
-# =============================================================================
-# Ruby subsystem
-# =============================================================================
-
-cmd_test_ruby() {
-    local svc="${1:-engine}"
-    header "Running pytest in $svc"
-    $DC -f "$COMPOSE_FILE" exec "$svc" \
-        python -m pytest src/tests/ -x -q --tb=short
-}
-
-cmd_lint_ruby() {
-    header "Linting FKS Python Services"
-    $DC -f "$COMPOSE_FILE" exec "${1:-data}" \
-        sh -c "ruff check src/ && ruff format --check src/"
-}
-
-# FIX: new command — guide for running Ruby services locally without Docker
-cmd_local_ruby() {
-    header "Running Ruby Services Locally (venv guide)"
-    info "This sets up a local Python venv for direct development without Docker."
-    echo ""
-    echo "  1. Create and activate a virtual environment:"
-    echo "       cd src/ruby"
-    echo "       python3 -m venv .venv"
-    echo "       source .venv/bin/activate"
-    echo ""
-    echo "  2. Install dependencies:"
-    echo "       pip install -r requirements.txt"
-    echo ""
-    echo "  3. Export environment (requires .env in repo root):"
-    echo "       set -a && source ../../.env && set +a"
-    echo "       export DATABASE_URL=\"postgresql+psycopg://\${POSTGRES_USER}:\${POSTGRES_PASSWORD}@localhost:5432/\${RUBY_DB:-ruby_db}\""
-    echo "       export REDIS_URL=\"redis://:\${REDIS_PASSWORD}@localhost:6379/0\""
-    echo ""
-    echo "  4. Start the data API:"
-    echo "       PYTHONPATH=src uvicorn services.data.main:app --host 0.0.0.0 --port 8000 --reload"
-    echo ""
-    echo "  NOTE: Postgres and Redis must be running (docker compose up -d postgres redis)"
 }
 
 # =============================================================================
@@ -1764,15 +1522,9 @@ cmd_local_ruby() {
 # =============================================================================
 
 cmd_check() {
-    header "Full Check — Python & Rust"
+    header "Full Check — Rust"
     local errors=0
 
-    cmd_lint_python  || ((errors++))
-    echo ""
-    cmd_typecheck    || ((errors++))
-    echo ""
-    cmd_test_python  || ((errors++))
-    echo ""
     cmd_lint_rust    || ((errors++))
     echo ""
     cmd_test_rust    || ((errors++))
@@ -1783,58 +1535,6 @@ cmd_check() {
         return 1
     fi
     ok "All checks passed ✨"
-}
-
-# ── Python ──────────────────────────────────────────────────────────────────
-
-cmd_lint_python() {
-    header "Python — ruff fix + lint + format"
-    local rc=0
-
-    log "ruff check --fix (auto-fix safe issues)..."
-    if ruff check --fix src/ scripts/ 2>/dev/null; then
-        ok "ruff auto-fix complete"
-    else
-        warn "ruff auto-fix applied changes (or found unfixable issues)"
-    fi
-
-    log "ruff check (lint)..."
-    if ruff check src/ scripts/; then
-        ok "ruff lint passed"
-    else
-        err "ruff lint found errors"
-        rc=1
-    fi
-
-    log "ruff format --check..."
-    if ruff format --check src/ scripts/; then
-        ok "ruff format check passed"
-    else
-        warn "ruff format: files need formatting — run './run.sh fmt' to fix"
-        rc=1
-    fi
-
-    return $rc
-}
-
-cmd_typecheck() {
-    header "Python — mypy"
-    if mypy; then
-        ok "mypy passed"
-    else
-        err "mypy found type errors"
-        return 1
-    fi
-}
-
-cmd_test_python() {
-    header "Python — pytest"
-    if python3 -m pytest -x -q --tb=short; then
-        ok "pytest passed"
-    else
-        err "pytest failed"
-        return 1
-    fi
 }
 
 # ── Rust ────────────────────────────────────────────────────────────────────
@@ -1914,13 +1614,7 @@ cmd_test_rust() {
 # ── Format (write mode) ─────────────────────────────────────────────────────
 
 cmd_fmt() {
-    header "Auto-format — Python & Rust"
-
-    log "ruff format..."
-    ruff format src/ scripts/ && ok "ruff format done" || warn "ruff format had issues"
-
-    log "ruff check --fix..."
-    ruff check --fix src/ scripts/ 2>/dev/null && ok "ruff fix done" || warn "ruff fix had issues"
+    header "Auto-format — Rust"
 
     log "cargo fmt..."
     cargo fmt --all && ok "cargo fmt done" || warn "cargo fmt had issues"
@@ -1931,37 +1625,13 @@ cmd_fmt() {
 # ── Convenience aliases ──────────────────────────────────────────────────────
 
 cmd_lint() {
-    header "Lint — Python & Rust"
-    local errors=0
-
-    cmd_lint_python || ((errors++))
-    echo ""
-    cmd_typecheck   || ((errors++))
-    echo ""
-    cmd_lint_rust   || ((errors++))
-
-    echo ""
-    if [ "$errors" -gt 0 ]; then
-        err "$errors lint stage(s) failed"
-        return 1
-    fi
-    ok "All lints passed"
+    header "Lint — Rust"
+    cmd_lint_rust
 }
 
 cmd_test_all() {
-    header "Test — Python & Rust"
-    local errors=0
-
-    cmd_test_python || ((errors++))
-    echo ""
-    cmd_test_rust   || ((errors++))
-
-    echo ""
-    if [ "$errors" -gt 0 ]; then
-        err "$errors test stage(s) failed"
-        return 1
-    fi
-    ok "All tests passed"
+    header "Test — Rust"
+    cmd_test_rust
 }
 
 # =============================================================================
@@ -2255,42 +1925,19 @@ ${BLUE}Service management:${NC}
 
 ${BLUE}Build:${NC}
   ./run.sh build [prod] [svcs...] Build images
-  ./run.sh build-ruby             Build Python base + ruby image
-  ./run.sh build-ruby-trainer     Build GPU trainer image
   ./run.sh build-redis            Build custom Redis image
   ./run.sh build-bots             Build the spawnable reference bot images
-
-${BLUE}Training:${NC}
-  ./run.sh retrain                  Run 3-tier CNN retrain (default: --tier all)
-  ./run.sh retrain --tier 2         Run only tier 2 (per-group) retrain
-
-${BLUE}Ruby subsystem:${NC}
-  ./run.sh ruby build             Build all Ruby images
-  ./run.sh ruby build-trainer     Build trainer image
-  ./run.sh ruby test [svc]        Run pytest (default: engine)
-  ./run.sh ruby lint [svc]        Run ruff lint/format (default: data)
-  ./run.sh ruby logs [svc]        Follow FKS Python service logs
-  ./run.sh ruby shell [svc]       Open shell (default: data)
-  ./run.sh ruby restart [svcs...] Restart Ruby services
-  ./run.sh ruby up [svcs...]      Start Ruby services
-  ./run.sh ruby down [svcs...]    Stop Ruby services
-  ./run.sh test-ruby [svc]        Run pytest in a Ruby container (Docker)
-  ./run.sh lint-ruby [svc]        Run ruff lint/format in a Ruby container (Docker)
-  ./run.sh local-ruby             Guide to run Ruby services locally (venv)
 
 ${BLUE}Environment:${NC}
   ./run.sh setup-env              Generate or validate .env, fill secrets, prompt for API keys
 
 ${BLUE}Code quality (local — no Docker):${NC}
-  ./run.sh check                  Full check: lint + type-check + test (Python & Rust)
-  ./run.sh lint                   Ruff + mypy + clippy (no tests)
-  ./run.sh test                   pytest + cargo test
-  ./run.sh fmt                    Auto-format Python (ruff) & Rust (cargo fmt)
-  ./run.sh lint-python            Ruff check/fix only
+  ./run.sh check                  Full check: clippy + cargo test (Rust)
+  ./run.sh lint                   cargo fmt --check + clippy (no tests)
+  ./run.sh test                   cargo test
+  ./run.sh fmt                    Auto-format Rust (cargo fmt)
   ./run.sh lint-rust              Cargo fmt --check + clippy only
-  ./run.sh test-python            pytest only
   ./run.sh test-rust              cargo test only
-  ./run.sh typecheck              mypy only
 
 ${BLUE}Utilities:${NC}
   ./run.sh fix-db                 Bootstrap all databases (idempotent — safe to re-run)
@@ -2340,8 +1987,7 @@ ${BLUE}Examples:${NC}
   ./run.sh fix-db                 # Just fix missing databases (no rebuild)
   ./run.sh start                  # Env → build → up (dev)
   ./run.sh start prod             # Env → pull → up (prod)
-  ./run.sh ruby build             # Rebuild only Ruby images
-  ./run.sh logs ruby              # Follow ruby logs
+  ./run.sh logs janus             # Follow janus logs
   ./run.sh down -v                # Stop and remove volumes
   ./run.sh rc up                  # Start RustCode + OpenClaw
   ./run.sh rc up --ollama         # Start RustCode + OpenClaw + local Ollama
@@ -2355,8 +2001,8 @@ EOF
 needs_docker() {
     case "$1" in
         # FIX: added setup-env — safe to run without Docker (just edits .env)
-        check|lint|test|fmt|lint-python|lint-rust|test-python|test-rust|typecheck|\
-        setup-env|web-hash-password|local-ruby|\
+        check|lint|test|fmt|lint-rust|test-rust|\
+        setup-env|web-hash-password|\
         tailscale-serve|tailscale-stop|help|--help|-h|"")
             return 1 ;;
         *)
@@ -2662,11 +2308,8 @@ main() {
         status|ps)          cmd_status "$mode" ;;
         health)             cmd_health ;;
         build)              cmd_build "$mode" "$@" ;;
-        build-ruby)         cmd_build_ruby ;;
-        build-ruby-trainer) cmd_build_trainer ;;   # FIX: was unreachable
         build-redis)        cmd_build_redis ;;
         build-bots)         cmd_build_bots ;;
-        retrain)            cmd_retrain "$@" ;;
         setup-env)          setup_env_file ;;
         generate-certs)     ensure_tls_certs ;;
         ssl-local)          cmd_ssl_local "$@" ;;
@@ -2676,14 +2319,8 @@ main() {
         lint)               cmd_lint ;;
         test)               cmd_test_all ;;
         fmt|format)         cmd_fmt ;;
-        lint-python)        cmd_lint_python ;;
         lint-rust)          cmd_lint_rust ;;
-        test-python)        cmd_test_python ;;
         test-rust)          cmd_test_rust ;;
-        test-ruby)          cmd_test_ruby "$@" ;;   # FIX: was unreachable
-        lint-ruby)          cmd_lint_ruby "$@" ;;   # FIX: was unreachable
-        local-ruby)         cmd_local_ruby ;;       # FIX: was unreachable (no function existed)
-        typecheck|mypy)     cmd_typecheck ;;
         tailscale-serve)    cmd_tailscale_serve "$@" ;;
         tailscale-stop)     cmd_tailscale_stop ;;
         clean)              cmd_clean ;;
@@ -2693,27 +2330,6 @@ main() {
         setup-hosts)        cmd_setup_hosts ;;      # FIX: function now properly defined above main()
         diagnose|diag)      cmd_diagnose ;;
         help|--help|-h)     show_usage ;;
-
-        # FIX: ruby subsystem shortcut — was fully missing from dispatch
-        ruby)
-            local ruby_cmd="${1:-help}"; shift || true
-            case $ruby_cmd in
-                build)          cmd_build_ruby ;;
-                build-trainer)  cmd_build_trainer ;;
-                test)           cmd_test_ruby "${1:-engine}" ;;
-                lint)           cmd_lint_ruby "${1:-data}" ;;
-                logs)           cmd_logs "$mode" "${1:-ruby}" ;;
-                shell)          cmd_shell "$mode" "${1:-ruby}" ;;
-                restart)        cmd_restart "$mode" "${@:-ruby}" ;;
-                up)             cmd_up "$mode" "${@:-ruby}" ;;
-                down)           cmd_down "$mode" "${@:-ruby}" ;;
-                *)
-                    err "Unknown ruby command: $ruby_cmd"
-                    echo "  ./run.sh ruby build|build-trainer|test|lint|logs|shell|restart|up|down"
-                    exit 1
-                    ;;
-            esac
-            ;;
 
         *)
             err "Unknown command: $command"

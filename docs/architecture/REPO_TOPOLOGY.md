@@ -94,7 +94,7 @@ exchange-apiws = "0.7"
               │     • docker-compose + infrastructure              │
               │     • proto/  +  src/proto  (fks-proto)            │
               │     • scripts/ (run.sh)                            │
-              │     • builds janus/ruby/web/spawner images by      │
+              │     • builds janus/web/spawner images by           │
               │       `git clone` at a pinned ref                  │
               └────────────────────────────────────────────────────┘
 ```
@@ -117,7 +117,7 @@ consumes them two ways:
 
 ### 1. Service images — `git clone` at a pinned ref
 
-The base Docker images (`infrastructure/docker/base/{rust,python,nodejs}/`)
+The base Docker images (`infrastructure/docker/base/{rust,nodejs}/`)
 acquire source in dual mode:
 
 - `REPO_URL` **set** → `git clone --depth=1 --branch ${REPO_REF}` (CI / prod).
@@ -129,14 +129,16 @@ Refs are wired in `docker-compose.yml` and configured in `.env`:
 | Service | Build arg | Repo | Default ref |
 |---------|-----------|------|-------------|
 | `janus` | `JANUS_REPO` / `JANUS_REF` | `nuniesmith/janus` | `main` |
-| `ruby` | `RUBY_REPO` / `RUBY_REF` | `nuniesmith/ruby` | `main` |
 | `webui` | `WEB_REPO` / `WEB_REF` | `nuniesmith/fks-web` | `main` |
 | `spawner` | `SPAWNER_REPO` / `SPAWNER_REF` | `nuniesmith/spawner` | `main` |
 
 > `janus` is no longer present in this repo's tree, so its image **always**
 > builds via `git clone` — `JANUS_REPO` must resolve to the janus repo. The
-> other three still have local copies under `src/`/`crates/`, so they default
+> other two still have local copies under `src/`/`crates/`, so they default
 > to the local bind-mount unless their `*_REPO` is set.
+>
+> The Python `ruby` service was **removed** (2026-06-07) — see
+> [`RUST_MIGRATION.md`](RUST_MIGRATION.md).
 
 ### 2. Library crates — from crates.io
 
@@ -149,12 +151,13 @@ Refs are wired in `docker-compose.yml` and configured in `.env`:
 
 ## What stays in `fks-full`
 
-- `docker-compose*.yml` — the ~15-service stack
+- `docker-compose*.yml` — the ~14-service stack
 - `infrastructure/` — Dockerfiles + configs (nginx, prometheus, grafana, …)
 - `proto/` + `src/proto/` — protobuf source of truth (`fks-proto`)
+- `src/sql/` — postgres bootstrap baked into the image (`janus/`, `spawner/`)
 - `scripts/` + `run.sh` — operational tooling
 - `crates/spawner/` — bot-container lifecycle service (until it splits out)
-- `src/ruby/`, `src/web/` — Python data system + SvelteKit UI (until they split)
+- `src/web/` — SvelteKit UI (until it splits)
 - `bots/` — thin strategy bots that consume the published crates *(planned)*
 - `strategies/` — the private trading IP, once the repo flips private *(planned)*
 

@@ -38,7 +38,6 @@ const PAGE_TITLES: { path: string; title: RegExp }[] = [
   { path: "/dom", title: /DOM.*FKS Terminal/ },
   { path: "/paper", title: /Paper Trading.*FKS Terminal/ },
   { path: "/positions", title: /Positions.*FKS Terminal/ },
-  { path: "/trainer", title: /Trainer.*FKS Terminal/ },
   { path: "/docs", title: /Docs.*FKS Terminal/ },
   { path: "/login", title: /FKS Terminal.*Login/ },
 ];
@@ -199,7 +198,7 @@ test.describe("Janus AI workspace (/janus-ai)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. EmbedPage routes — DOM, Paper, Positions, Trainer, Docs
+// 3. EmbedPage routes — DOM, Paper, Positions, Docs
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMBED_ROUTES = [
@@ -220,12 +219,6 @@ const EMBED_ROUTES = [
     name: "Positions",
     docTitle: /Positions.*FKS Terminal/i,
     iframeTitle: "Position Intelligence — Risk Monitor",
-  },
-  {
-    path: "/trainer",
-    name: "Trainer",
-    docTitle: /Trainer.*FKS Terminal/i,
-    iframeTitle: "CNN Trainer — FKS",
   },
   {
     path: "/docs",

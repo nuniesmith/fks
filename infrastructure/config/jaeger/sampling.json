@@ -12,7 +12,7 @@
 
     {
       "_comment": "==========================================================",
-      "_comment2": "JANUS — Rust trading brain",
+      "_comment2": "JANUS — Rust trading brain (data ingestion + signals + ML)",
       "_comment3": "High-frequency market-data ingestion is sampled at 2 % to",
       "_comment4": "keep trace volume manageable. All trade-execution and",
       "_comment5": "optimizer operations are always captured.",
@@ -44,6 +44,12 @@
           "_comment": "25 % of signal events — enough to spot regime shifts."
         },
         {
+          "operation": "backfill",
+          "type": "probabilistic",
+          "param": 0.5,
+          "_comment": "Backfill jobs are slow and infrequent — worth capturing."
+        },
+        {
           "operation": "optimizer_run",
           "type": "const",
           "param": 1,
@@ -64,51 +70,6 @@
           "operation": "GET /health",
           "type": "const",
           "param": 0
-        }
-      ]
-    },
-
-    {
-      "_comment": "==========================================================",
-      "_comment2": "RUBY — consolidated Python service (data + engine + factory)",
-      "_comment3": "API requests sampled at 10 %. Health checks suppressed.",
-      "_comment4": "==========================================================",
-      "service": "ruby",
-      "type": "probabilistic",
-      "param": 0.1,
-      "operation_strategies": [
-        {
-          "operation": "GET /health",
-          "type": "const",
-          "param": 0
-        },
-        {
-          "operation": "backfill",
-          "type": "probabilistic",
-          "param": 0.5,
-          "_comment": "Backfill jobs are slow and infrequent — worth capturing."
-        },
-        {
-          "operation": "orb_scan",
-          "type": "probabilistic",
-          "param": 0.25
-        },
-        {
-          "operation": "factory_scan",
-          "type": "probabilistic",
-          "param": 0.1
-        },
-        {
-          "operation": "paper_trade",
-          "type": "const",
-          "param": 1,
-          "_comment": "Always trace paper-trade execution for audit trail."
-        },
-        {
-          "operation": "chain_ingest",
-          "type": "probabilistic",
-          "param": 0.05,
-          "_comment": "On-chain data polling is high-frequency; keep sample rate low."
         }
       ]
     },
@@ -239,39 +200,6 @@
       "type": "probabilistic",
       "param": 0.1,
       "operation_strategies": [
-        {
-          "operation": "GET /health",
-          "type": "const",
-          "param": 0
-        }
-      ]
-    },
-
-    {
-      "_comment": "==========================================================",
-      "_comment2": "TRAINER — GPU CNN retraining service",
-      "_comment3": "Long-running batch jobs — always trace starts/completions.",
-      "_comment4": "==========================================================",
-      "service": "trainer",
-      "type": "probabilistic",
-      "param": 1.0,
-      "operation_strategies": [
-        {
-          "operation": "retrain_epoch",
-          "type": "probabilistic",
-          "param": 0.1,
-          "_comment": "Individual epochs are very frequent; sample lightly."
-        },
-        {
-          "operation": "retrain_complete",
-          "type": "const",
-          "param": 1
-        },
-        {
-          "operation": "model_evaluate",
-          "type": "const",
-          "param": 1
-        },
         {
           "operation": "GET /health",
           "type": "const",

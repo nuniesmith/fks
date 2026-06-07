@@ -117,14 +117,7 @@
                     shiftKey: "3",
                     href: "/janus-ai",
                 },
-                {
-                    id: "trainer",
-                    label: "Trainer",
-                    dot: "var(--purple)",
-                    shiftKey: "4",
-                    href: "/trainer",
-                },
-                { id: "docs", label: "Docs", shiftKey: "5", href: "/docs" },
+                { id: "docs", label: "Docs", shiftKey: "4", href: "/docs" },
             ],
         },
     ];

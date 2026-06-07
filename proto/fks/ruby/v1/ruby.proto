@@ -1,6 +1,0 @@
-syntax = "proto3";
-
-package fks.ruby.v1;
-
-option go_package = "github.com/nuniesmith/fks/proto/fks/ruby/v1;rav1";
-

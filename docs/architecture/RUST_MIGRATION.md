@@ -43,6 +43,16 @@ data API and the nginx dashboard routes still assume Ruby's contract and need a
 janus-native repoint. Those are infrastructure follow-ups, not blockers for the
 janus demo.
 
+> **2026-06-07 (later) — dead-artifact sweep.** A follow-up cleanup removed the
+> orphaned bits the removal left behind: the Ruby-era training orchestrators
+> (`scripts/training/`), the empty `fks.ruby.v1` proto (`proto/fks/ruby/`), the
+> dead trainer Grafana dashboard + Jaeger sampler entries (`ruby` + `trainer`) +
+> `TRAINER_API_KEY` in `run.sh`, and the dead WebUI `/trainer` iframe route. The
+> remaining `fks_ruby` references are the **repoints** in §12-C (nginx ×74,
+> `vite.config.ts` ×9, WebUI `ruby_signal` ×10), which are gated on janus serving
+> the data contract — see the janus `TODO.md` Track D. `ruby_db` (spawner schema)
+> is intentionally kept.
+
 ### The burn-native ML track is already substantially built
 
 Since this RFC was first written, the smallest-model-first plan in §8 has largely
@@ -383,9 +393,17 @@ remaining work splits into **ML parity/polish** (inside janus) and
    only consumer now. Kept as `ruby_db` for backward compatibility.
 
 ### D. Execution-gate + safety (§6 Phase 3)
-10. Port the 9-check execution gate to Rust with exhaustive parity tests before
-    promoting the Rust strategies to the live signal path. Preserve the
+10. **Port the 9-check execution gate to Rust** with exhaustive parity tests
+    before promoting the Rust strategies to the live signal path. Preserve the
     no-autonomous-execution invariant (`EXECUTION_MODE=paper_trading` default).
+    - ✅ **Core ported (2026-06-07):** the 9-gate chain + consecutive-loss breaker
+      + correlation guard + adaptive threshold now live in janus
+      `crates/execution-gate` — a faithful, pure/synchronous port with 36 unit
+      tests + doctest, clippy-clean.
+    - ⏳ **Remaining:** wire it into `services/forward`'s live loop (advisory →
+      enforce behind `JANUS_GATE_ENFORCE`), feed it the producer inputs +
+      closed-trade outcomes, add the Redis persistence adapter. Tracked in the
+      janus `TODO.md` (Track C).
 
 ---
 

@@ -343,8 +343,7 @@ groups:
       - alert: DatabaseExporterDown
         # Only alert on exporters that are expected to be running:
         #   postgres-exporter (:9187) and redis-exporter (:9121).
-        # Excludes questdb-exporter (not deployed — use questdb-direct instead)
-        # and trainer (optional GPU service, not always running).
+        # Excludes questdb-exporter (not deployed — use questdb-direct instead).
         expr: |
           up{job=~"postgres|redis"} == 0
         for: 5m

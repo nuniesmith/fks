@@ -10,7 +10,7 @@
 #   runtime  — lean CUDA runtime image            ← default target
 #
 # Build args (set via --build-arg or docker-compose build.args):
-#   RUST_VERSION     Rust toolchain version               (default: 1.87)
+#   RUST_VERSION     Rust toolchain version               (default: 1.94.1)
 #   CUDA_VERSION     nvidia/cuda image tag for builder     (default: 12.4.1-devel-ubuntu22.04)
 #   CUDA_RUNTIME     nvidia/cuda image tag for runtime     (default: 12.4.1-runtime-ubuntu22.04)
 #   SERVICE_NAME     Binary name to build and run          (default: app)
@@ -40,7 +40,7 @@
 #                 capabilities: [gpu]
 # ==============================================================================
 
-ARG RUST_VERSION=1.92.0
+ARG RUST_VERSION=1.94.1
 ARG CUDA_VERSION=12.4.1-devel-ubuntu22.04
 ARG CUDA_RUNTIME=12.4.1-runtime-ubuntu22.04
 

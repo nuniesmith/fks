@@ -21,13 +21,13 @@
 # SPAWNER_REF in the environment to git-clone a specific ref instead.
 # =============================================================================
 
-ARG RUST_VERSION=1.92.0
+ARG RUST_VERSION=1.94.1
 ARG BUILDER_BASE=debian:bookworm-slim
 ARG RUNTIME_BASE=debian:bookworm-slim
 
 FROM ${BUILDER_BASE} AS base
 
-ARG RUST_VERSION=1.92.0
+ARG RUST_VERSION=1.94.1
 ARG REPO_URL=""
 ARG REPO_REF=main
 

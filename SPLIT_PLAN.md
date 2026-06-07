@@ -89,7 +89,7 @@ crates.io / PyPI / npm.
 
 ### What stays in `fks-full` post-split
 
-- `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.trainer.yml`
+- `docker-compose.yml`, `docker-compose.prod.yml`
 - `infrastructure/` — Dockerfiles, configs (nginx, prometheus, grafana, …), Kubernetes manifests, Tailscale certs
 - `proto/` — shared `.proto` definitions (source of truth)
 - `src/proto/` — `fks-proto` Rust crate (consumed by rustrade, janus, spawner)
@@ -106,7 +106,7 @@ Eventually empty (each becomes a `*_REF` build arg pointing at the external repo
 - `crates/exchange-apiws/`
 - `crates/spawner/`
 - `crates/janus/`
-- `src/ruby/`
+- ~~`src/ruby/`~~ — **removed 2026-06-07** (deleted, not extracted; janus is the platform)
 - `src/web/`
 
 ---
@@ -211,8 +211,12 @@ self-contained — readable without any context from `fks-full`.
 
 ### Phase 4 — Service repos ✅ mostly done
 - [x] `janus` → `github.com/nuniesmith/janus`; image builds via `git clone`.
-- [ ] `src/ruby/` → `github.com/nuniesmith/ruby` (Dockerfile already git-clone capable; flip when ready).
-- [ ] `src/web/` → `github.com/nuniesmith/fks-web` (same).
+- [x] **`src/ruby/` removed from `fks-full`** (2026-06-07) — janus is the platform
+      now; the Python service was deleted rather than carried as a git-clone build.
+      Rebuild whatever long-tail features you need as janus crates (or a Rithmic
+      sidecar). See [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).
+      The spawner's `ruby_db` schema was preserved in `src/sql/spawner/`.
+- [ ] `src/web/` → `github.com/nuniesmith/fks-web` (Dockerfile already git-clone capable; flip when ready).
 
 ### Phase 5 — `fks-full` is the private orchestrator ⬜ not started
 - [ ] Repo flips `private`.

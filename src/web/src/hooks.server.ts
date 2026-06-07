@@ -19,7 +19,7 @@ import { env } from "$env/dynamic/private";
 //     fks_janus:8180 (forward) — NOT the host-published :7000/:7001.
 const SPAWNER_URL = env.SPAWNER_INTERNAL_URL ?? "http://fks_bot_spawner:8090";
 const JANUS_URL = env.JANUS_INTERNAL_URL ?? "http://fks_janus:8080"; // janus-api
-// const JANUS_FORWARD_URL = env.JANUS_FORWARD_INTERNAL_URL ?? "http://fks_janus:8180"; // Phase 2b
+const JANUS_FORWARD_URL = env.JANUS_FORWARD_INTERNAL_URL ?? "http://fks_janus:8180"; // forward (brain/risk)
 
 const BACKEND_PREFIXES = ["/api/", "/sse/", "/bars/", "/factory/", "/kraken/", "/fapi/"];
 
@@ -153,6 +153,53 @@ async function janusHealth(event: RequestEvent): Promise<Response> {
   });
 }
 
+// /api/janus/state → the /janus-ai "Janus State" panel's JanusStateResponse:
+//   { janus: { status }, redis: { regime, affinity, signals_recent } }.
+// `janus.status` is the trading brain's health (forward /api/v1/brain/health),
+// falling back to the api service /health. `signals_recent` reuses the dashboard
+// signals feed. regime/affinity have no janus feed wired here yet → empty (the
+// panel renders a clean "no data" state rather than stale Ruby shapes).
+async function janusState(event: RequestEvent): Promise<Response> {
+  const [brain, health, sigs] = await Promise.all([
+    janusJson(event, JANUS_FORWARD_URL, "/api/v1/brain/health"),
+    janusJson(event, JANUS_URL, "/health"),
+    janusRecentSignals(event),
+  ]);
+  const rawStatus =
+    typeof brain?.healthy === "boolean"
+      ? brain.healthy
+        ? "ok"
+        : "down"
+      : String(brain?.state ?? brain?.status ?? health?.status ?? "down");
+  // The panel greens on 'UP'/'ok'; normalise any healthy-ish word to 'ok'.
+  const status = /^(ok|up|healthy|running|connected|active)$/i.test(rawStatus)
+    ? "ok"
+    : rawStatus.toUpperCase();
+  return json({
+    janus: { status },
+    redis: {
+      regime: {},
+      affinity: {},
+      signals_recent: sigs.map((s) => ({
+        symbol: s.symbol,
+        direction: s.signal_type,
+        confidence: s.confidence,
+        timestamp: s.timestamp,
+      })),
+    },
+  });
+}
+
+// /api/janus/affinity → the /janus-ai "Strategy Affinity" matrix:
+//   { status, weights: Record<strategy, Record<asset, number>> }.
+// Sourced from forward /api/v1/brain/affinity; if janus returns a different
+// shape we degrade to an empty matrix (panel shows "no affinity data").
+async function janusAffinity(event: RequestEvent): Promise<Response> {
+  const a = await janusJson(event, JANUS_FORWARD_URL, "/api/v1/brain/affinity");
+  const weights = a && typeof a.weights === "object" && a.weights ? a.weights : {};
+  return json({ status: String(a?.status ?? "ok"), weights });
+}
+
 async function proxyBackend(event: RequestEvent): Promise<Response> {
   const { pathname, search } = event.url;
 
@@ -201,7 +248,17 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
     });
   }
 
-  // More janus panels (overview aggregate / performance / brain) land here next —
+  // janus-ai "Janus State" panel → brain health + recent signals.
+  if (pathname === "/api/janus/state") {
+    return janusState(event);
+  }
+
+  // janus-ai "Strategy Affinity" matrix → forward brain affinity.
+  if (pathname === "/api/janus/affinity") {
+    return janusAffinity(event);
+  }
+
+  // More janus panels (overview aggregate / performance) land here next —
   // see docs/architecture/WEBUI_JANUS_REPOINT.md for the per-panel mapping.
 
   // ── Everything else under a backend prefix → degrade quietly ────────────────

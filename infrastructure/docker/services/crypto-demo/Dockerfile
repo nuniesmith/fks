@@ -47,12 +47,17 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     chmod -R a+w ${RUSTUP_HOME} ${CARGO_HOME}
 
 WORKDIR /build
-# Copy just the standalone bot crate; cargo fetches the published crates from
-# crates.io during the build. Build context is the repo root.
-COPY bots/crypto-demo/ .
+# crypto-demo consumes the published crates from crates.io AND has a path
+# dependency on the sibling bots/rustrade-exchange-apiws crate (the live KuCoin
+# order path). Copy BOTH, preserving the sibling layout its Cargo.toml expects:
+#   rustrade-exchange-apiws = { path = "../rustrade-exchange-apiws" }
+# Build context is the repo root.
+COPY bots/crypto-demo/             ./crypto-demo/
+COPY bots/rustrade-exchange-apiws/ ./rustrade-exchange-apiws/
 
+WORKDIR /build/crypto-demo
 RUN cargo build --release --locked && \
-    strip /build/target/release/crypto-demo
+    strip /build/crypto-demo/target/release/crypto-demo
 
 # ─── Runtime ─────────────────────────────────────────────────────────────────
 FROM ${RUNTIME_BASE}
@@ -68,7 +73,7 @@ RUN apt-get update && \
 RUN useradd -u 1000 -m -s /bin/bash ${APP_USER}
 
 WORKDIR /app
-COPY --from=builder /build/target/release/crypto-demo /app/crypto-demo
+COPY --from=builder /build/crypto-demo/target/release/crypto-demo /app/crypto-demo
 
 USER ${APP_USER}
 

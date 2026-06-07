@@ -1,22 +1,27 @@
 -- =============================================================================
--- 001-init-ruby.sql — Ruby data/engine database initialisation
+-- 001-init.sql — Spawner database bootstrap
 -- =============================================================================
--- Creates ruby_db on the shared FKS PostgreSQL instance and grants fks_user
--- full access with proper schema defaults.
+-- Creates the shared application database on the FKS PostgreSQL instance and
+-- grants fks_user full access with proper schema defaults.
+--
+-- NOTE: the database is still named `ruby_db` (env var RUBY_DB) for backward
+-- compatibility — the Python "Ruby" service that originally owned it has been
+-- removed (see docs/architecture/RUST_MIGRATION.md), but the Bot Spawner
+-- service (crates/spawner/) persists bot_runs/bot_configs here. The name is
+-- retained so existing volumes + connection strings keep working; renaming to
+-- `spawner_db` is an optional future cleanup.
 --
 -- Prerequisites:
---   • 01-init-janus.sql must have run first (creates fks_user).
+--   • 01-janus-init.sql must have run first (creates fks_user).
 --   • Runs automatically on first container start (empty data volume).
 --     Subsequent starts skip initdb entirely (volume already populated).
 --
 -- Manual re-creation (e.g. after `./run.sh fresh --reset-volumes`):
 --   docker compose exec postgres psql -U postgres \
---     -f /docker-entrypoint-initdb.d/02-init-ruby.sql
+--     -f /docker-entrypoint-initdb.d/02-spawner-init.sql
 --
 -- Databases managed here:
---   ruby_db — Ruby data + engine service
---             (bars, journal, tasks, signals, news, chain, memories,
---              api_keys, asset_registry, paper trading)
+--   ruby_db — Spawner persistence (bot_configs, bot_runs); see 002_spawner.sql
 -- =============================================================================
 
 \getenv fks_user    POSTGRES_USER

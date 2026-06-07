@@ -1,17 +1,19 @@
 -- =============================================================================
--- 007-spawner.sql — Bot Spawner schema (SPAWN-C)
+-- 002-spawner.sql — Bot Spawner schema (SPAWN-C)
 -- =============================================================================
--- Creates bot_configs and bot_runs tables in ruby_db.
--- Used by the fks_bot_spawner service and the Bot Manager WebUI.
+-- Creates bot_configs and bot_runs tables in ruby_db (see 001_init.sql for why
+-- the database keeps the ruby_db name). Owned by the fks_bot_spawner service
+-- (crates/spawner/) and the Bot Manager WebUI.
 --
--- Prerequisites: 006_memories.sql
--- Status: PENDING — apply when fks_bot_spawner service is ready (SPAWN-A)
+-- Prerequisites: 001_init.sql (creates the database). Self-contained otherwise —
+-- the only foreign key (bot_runs.bot_config_id → bot_configs.id) is in-file, and
+-- gen_random_uuid() is built into PostgreSQL 13+.
 --
 -- Idempotent — safe to re-run (CREATE TABLE IF NOT EXISTS, DROP TRIGGER IF EXISTS).
 --
 -- Manual execution:
 --   docker compose exec postgres \
---     psql -U fks_user -d ruby_db -f /docker-entrypoint-initdb.d/007-spawner.sql
+--     psql -U fks_user -d ruby_db -f /docker-entrypoint-initdb.d/25-spawner.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
@@ -74,8 +76,8 @@ COMMENT ON COLUMN bot_configs.is_active    IS 'Soft-delete flag — set false ra
 -- =============================================================================
 -- bot_runs — individual container execution records
 -- =============================================================================
--- One row per container spawn. Populated by the spawner service and updated
--- by the Ruby data service (which polls bot container metrics/health).
+-- One row per container spawn. Populated and updated by the spawner service
+-- (which polls bot container metrics/health from each bot's /metrics endpoint).
 -- bot_config_id is SET NULL on delete so run history is preserved.
 -- =============================================================================
 

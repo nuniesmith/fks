@@ -198,7 +198,7 @@ test.describe("Janus AI workspace (/janus-ai)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. EmbedPage routes — DOM, Paper, Positions, Trainer, Docs
+// 3. EmbedPage routes — DOM, Paper, Positions, Docs
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMBED_ROUTES = [

@@ -12,7 +12,7 @@
 #     builder: copies the full workspace, builds one or more binaries
 #
 # Build args (set via --build-arg or docker-compose build.args):
-#   RUST_VERSION       Rust toolchain version                  (default: 1.87)
+#   RUST_VERSION       Rust toolchain version                  (default: 1.94.1)
 #   BUILDER_BASE       Debian-based builder image              (default: debian:bookworm-slim)
 #                      Set to debian:trixie-slim for glibc 2.41+ (e.g. ort-sys/ONNX Runtime)
 #   RUNTIME_BASE       Debian-based runtime image              (default: debian:bookworm-slim)
@@ -61,7 +61,7 @@
 #         MIGRATIONS_DEST: src/rc/migrations
 # ==============================================================================
 
-ARG RUST_VERSION=1.92.0
+ARG RUST_VERSION=1.94.1
 ARG BUILDER_BASE=debian:bookworm-slim
 ARG RUNTIME_BASE=debian:bookworm-slim
 
@@ -74,7 +74,7 @@ ARG RUNTIME_BASE=debian:bookworm-slim
 # ==============================================================================
 FROM ${BUILDER_BASE} AS base
 
-ARG RUST_VERSION=1.92.0
+ARG RUST_VERSION=1.94.1
 ARG EXTRUSTCODE_BUILD_PKGS=""
 
 ENV RUSTUP_HOME=/usr/local/rustup \

@@ -299,7 +299,7 @@ services:
             target: workspace
             args:
                 SERVICE_NAME: janus
-                RUST_VERSION: "1.92.0"
+                RUST_VERSION: "1.94.1"
                 # Janus has no in-tree copy — always clone (override REF for a branch/tag).
                 REPO_URL: ${JANUS_REPO:-https://github.com/nuniesmith/janus}
                 REPO_REF: ${JANUS_REF:-main}
@@ -1334,7 +1334,7 @@ services:
             context: .
             dockerfile: infrastructure/docker/services/crypto-demo/Dockerfile
             args:
-                RUST_VERSION: "1.92.0"
+                RUST_VERSION: "1.94.1"
         image: fks-bot-crypto-demo:latest
         container_name: fks_bot_crypto_demo
         user: "1000:1000"

@@ -17,7 +17,7 @@
 #   }
 # =============================================================================
 
-ARG RUST_VERSION=1.94
+ARG RUST_VERSION=1.94.1
 ARG BUILDER_BASE=debian:bookworm-slim
 ARG RUNTIME_BASE=debian:bookworm-slim
 

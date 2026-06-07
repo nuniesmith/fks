@@ -9,14 +9,17 @@
 
 FROM alpine:3.21 AS builder
 
-ARG EXPORTER_VERSION=v0.19.1
+# NOTE: prometheus-community releases tag as vX.Y.Z but the asset filename
+# drops the leading 'v' (postgres_exporter-0.19.1.linux-amd64.tar.gz). Keep the
+# version bare and add the 'v' only in the tag path.
+ARG EXPORTER_VERSION=0.19.1
 
 RUN apk add --no-cache ca-certificates curl tar
 
 WORKDIR /build
 
 RUN curl -fsSL \
-    "https://github.com/prometheus-community/postgres_exporter/releases/download/${EXPORTER_VERSION}/postgres_exporter-${EXPORTER_VERSION}.linux-amd64.tar.gz" \
+    "https://github.com/prometheus-community/postgres_exporter/releases/download/v${EXPORTER_VERSION}/postgres_exporter-${EXPORTER_VERSION}.linux-amd64.tar.gz" \
     | tar xz --strip-components=1 \
     && chmod +x postgres_exporter
 

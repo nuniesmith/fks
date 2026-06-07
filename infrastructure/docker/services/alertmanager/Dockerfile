@@ -9,14 +9,17 @@
 
 FROM alpine:3.21 AS builder
 
-ARG ALERTMANAGER_VERSION=v0.27.0
+# NOTE: Prometheus-ecosystem releases tag as vX.Y.Z but the asset filename
+# drops the leading 'v' (alertmanager-0.27.0.linux-amd64.tar.gz). Keep the
+# version bare and add the 'v' only in the tag path.
+ARG ALERTMANAGER_VERSION=0.27.0
 
 RUN apk add --no-cache ca-certificates curl tar
 
 WORKDIR /build
 
 RUN curl -fsSL \
-    "https://github.com/prometheus/alertmanager/releases/download/${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz" \
+    "https://github.com/prometheus/alertmanager/releases/download/v${ALERTMANAGER_VERSION}/alertmanager-${ALERTMANAGER_VERSION}.linux-amd64.tar.gz" \
     | tar xz --strip-components=1 \
     && chmod +x alertmanager amtool
 

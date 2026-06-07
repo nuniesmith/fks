@@ -1214,11 +1214,9 @@ cmd_down() {
     header "Stopping Services (${mode})"
     if [ "$mode" = "prod" ]; then
         $DC -f "$COMPOSE_FILE" -f "$PROD_COMPOSE_FILE" \
-            --profile training --profile ollama \
             down "$@" --remove-orphans || true
     else
         $DC -f "$COMPOSE_FILE" \
-            --profile training --profile ollama \
             down "$@" --remove-orphans || true
     fi
     ok "All services stopped"
@@ -1487,7 +1485,7 @@ cmd_force_clean() {
         return
     fi
 
-    $DC -f "$COMPOSE_FILE" --profile training --profile ollama \
+    $DC -f "$COMPOSE_FILE" \
         down --volumes --remove-orphans --timeout 5 2>/dev/null || true
 
     docker ps -a --filter "name=fks_" -q | xargs -r docker rm -f || true
@@ -1574,7 +1572,7 @@ cmd_diagnose() {
     echo "Networks:"; docker network ls --filter "name=fks"
     echo ""
     echo "Port usage (selected):"
-    for port in 80 443 3001 3500 5432 5433 6379 6380 7000 8050 8080 8090 8200 9000 9090 9093 9094 3000 16686 18789; do
+    for port in 80 3000 3001 5432 6379 7000 7001 8090 8812 9000 9009 9090 9091 9093 16686 6333; do
         local owner; owner=$(ss -tlnp 2>/dev/null | grep ":${port} " | awk '{print $NF}' | head -1 || true)
         [ -n "$owner" ] && echo "  :$port — $owner" || true
     done

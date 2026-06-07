@@ -1754,7 +1754,7 @@ cmd_local_ruby() {
     echo "       export REDIS_URL=\"redis://:\${REDIS_PASSWORD}@localhost:6379/0\""
     echo ""
     echo "  4. Start the data API:"
-    echo "       uvicorn lib.services.data.main:app --host 0.0.0.0 --port 8000 --reload"
+    echo "       PYTHONPATH=src uvicorn services.data.main:app --host 0.0.0.0 --port 8000 --reload"
     echo ""
     echo "  NOTE: Postgres and Redis must be running (docker compose up -d postgres redis)"
 }

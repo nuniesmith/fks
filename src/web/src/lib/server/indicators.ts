@@ -168,6 +168,126 @@ function vwapArr(c: Candle[]): (number | null)[] {
   return out;
 }
 
+// Weighted moving average (linear weights 1..period).
+function wmaArr(vals: number[], period: number): (number | null)[] {
+  const out: (number | null)[] = new Array(vals.length).fill(null);
+  if (period <= 0 || vals.length < period) return out;
+  const denom = (period * (period + 1)) / 2;
+  for (let i = period - 1; i < vals.length; i++) {
+    let s = 0;
+    for (let j = 0; j < period; j++) s += vals[i - period + 1 + j] * (j + 1);
+    out[i] = s / denom;
+  }
+  return out;
+}
+
+// Stochastic oscillator: %K (period) + %D (SMA of %K over dPeriod).
+function stochArr(c: Candle[], kPeriod: number, dPeriod: number) {
+  const k: (number | null)[] = new Array(c.length).fill(null);
+  for (let i = kPeriod - 1; i < c.length; i++) {
+    let hh = -Infinity;
+    let ll = Infinity;
+    for (let j = i - kPeriod + 1; j <= i; j++) {
+      if (c[j].high > hh) hh = c[j].high;
+      if (c[j].low < ll) ll = c[j].low;
+    }
+    const range = hh - ll;
+    k[i] = range === 0 ? 100 : (100 * (c[i].close - ll)) / range;
+  }
+  // %D = trailing SMA of the (contiguous) %K values.
+  const d: (number | null)[] = new Array(c.length).fill(null);
+  const win: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < c.length; i++) {
+    if (k[i] == null) continue;
+    win.push(k[i] as number);
+    sum += k[i] as number;
+    if (win.length > dPeriod) sum -= win.shift() as number;
+    if (win.length === dPeriod) d[i] = sum / dPeriod;
+  }
+  return { k, d };
+}
+
+// Williams %R (−100..0).
+function williamsRArr(c: Candle[], period: number): (number | null)[] {
+  const out: (number | null)[] = new Array(c.length).fill(null);
+  for (let i = period - 1; i < c.length; i++) {
+    let hh = -Infinity;
+    let ll = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      if (c[j].high > hh) hh = c[j].high;
+      if (c[j].low < ll) ll = c[j].low;
+    }
+    const range = hh - ll;
+    out[i] = range === 0 ? -50 : (-100 * (hh - c[i].close)) / range;
+  }
+  return out;
+}
+
+// Commodity Channel Index (typical price vs its SMA, scaled by mean deviation).
+function cciArr(c: Candle[], period: number): (number | null)[] {
+  const out: (number | null)[] = new Array(c.length).fill(null);
+  const tp = c.map((x) => (x.high + x.low + x.close) / 3);
+  for (let i = period - 1; i < c.length; i++) {
+    let mean = 0;
+    for (let j = i - period + 1; j <= i; j++) mean += tp[j];
+    mean /= period;
+    let md = 0;
+    for (let j = i - period + 1; j <= i; j++) md += Math.abs(tp[j] - mean);
+    md /= period;
+    out[i] = md === 0 ? 0 : (tp[i] - mean) / (0.015 * md);
+  }
+  return out;
+}
+
+// On-Balance Volume (cumulative).
+function obvArr(c: Candle[]): (number | null)[] {
+  const out: (number | null)[] = new Array(c.length).fill(null);
+  if (c.length === 0) return out;
+  let obv = 0;
+  out[0] = 0;
+  for (let i = 1; i < c.length; i++) {
+    if (c[i].close > c[i - 1].close) obv += c[i].volume;
+    else if (c[i].close < c[i - 1].close) obv -= c[i].volume;
+    out[i] = obv;
+  }
+  return out;
+}
+
+// Donchian channel: highest-high / lowest-low / midline over `period`.
+function donchianArr(c: Candle[], period: number) {
+  const upper: (number | null)[] = new Array(c.length).fill(null);
+  const lower: (number | null)[] = new Array(c.length).fill(null);
+  const mid: (number | null)[] = new Array(c.length).fill(null);
+  for (let i = period - 1; i < c.length; i++) {
+    let hh = -Infinity;
+    let ll = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      if (c[j].high > hh) hh = c[j].high;
+      if (c[j].low < ll) ll = c[j].low;
+    }
+    upper[i] = hh;
+    lower[i] = ll;
+    mid[i] = (hh + ll) / 2;
+  }
+  return { upper, mid, lower };
+}
+
+// Keltner channel: EMA midline ± mult·ATR.
+function keltnerArr(c: Candle[], period: number, mult: number) {
+  const mid = emaArr(c.map((x) => x.close), period);
+  const atr = atrArr(c, period);
+  const upper: (number | null)[] = new Array(c.length).fill(null);
+  const lower: (number | null)[] = new Array(c.length).fill(null);
+  for (let i = 0; i < c.length; i++) {
+    if (mid[i] != null && atr[i] != null) {
+      upper[i] = (mid[i] as number) + mult * (atr[i] as number);
+      lower[i] = (mid[i] as number) - mult * (atr[i] as number);
+    }
+  }
+  return { upper, mid, lower };
+}
+
 // ── Catalog (metadata for the UI picker) ────────────────────────────────────
 
 export interface IndicatorMeta {
@@ -183,9 +303,16 @@ export const INDICATOR_CATALOG: IndicatorMeta[] = [
   { id: "sma20", label: "SMA 20", pane: "overlay", keys: ["sma20"] },
   { id: "bbands", label: "Bollinger Bands (20, 2)", pane: "overlay", keys: ["bb_upper", "bb_middle", "bb_lower"] },
   { id: "vwap", label: "VWAP", pane: "overlay", keys: ["vwap"] },
+  { id: "wma20", label: "WMA 20", pane: "overlay", keys: ["wma20"] },
+  { id: "donchian", label: "Donchian (20)", pane: "overlay", keys: ["dc_upper", "dc_middle", "dc_lower"] },
+  { id: "keltner", label: "Keltner (20, 2)", pane: "overlay", keys: ["kc_upper", "kc_middle", "kc_lower"] },
   { id: "rsi", label: "RSI 14", pane: "separate", keys: ["rsi"] },
   { id: "macd", label: "MACD (12, 26, 9)", pane: "separate", keys: ["macd_line", "macd_signal", "macd_hist"] },
   { id: "atr", label: "ATR 14", pane: "separate", keys: ["atr"] },
+  { id: "stoch", label: "Stochastic (14, 3)", pane: "separate", keys: ["stoch_k", "stoch_d"] },
+  { id: "willr", label: "Williams %R 14", pane: "separate", keys: ["willr"] },
+  { id: "cci", label: "CCI 20", pane: "separate", keys: ["cci"] },
+  { id: "obv", label: "OBV", pane: "separate", keys: ["obv"] },
 ];
 
 // ── Dispatcher ──────────────────────────────────────────────────────────────
@@ -219,6 +346,28 @@ export function computeIndicators(
       out.macd_hist = toPoints(times, m.hist);
     } else if (name === "vwap") {
       out.vwap = toPoints(times, vwapArr(candles));
+    } else if (name === "stoch") {
+      const s = stochArr(candles, 14, 3);
+      out.stoch_k = toPoints(times, s.k);
+      out.stoch_d = toPoints(times, s.d);
+    } else if (name === "willr" || name === "williamsr") {
+      out.willr = toPoints(times, williamsRArr(candles, 14));
+    } else if (name === "cci") {
+      out.cci = toPoints(times, cciArr(candles, 20));
+    } else if (name === "obv") {
+      out.obv = toPoints(times, obvArr(candles));
+    } else if (name === "donchian" || name === "dc") {
+      const d = donchianArr(candles, 20);
+      out.dc_upper = toPoints(times, d.upper);
+      out.dc_middle = toPoints(times, d.mid);
+      out.dc_lower = toPoints(times, d.lower);
+    } else if (name === "keltner" || name === "kc") {
+      const k = keltnerArr(candles, 20, 2);
+      out.kc_upper = toPoints(times, k.upper);
+      out.kc_middle = toPoints(times, k.mid);
+      out.kc_lower = toPoints(times, k.lower);
+    } else if (/^wma\d+$/.test(name)) {
+      out[name] = toPoints(times, wmaArr(closes, parseInt(name.slice(3), 10)));
     } else if (/^ema\d+$/.test(name)) {
       out[name] = toPoints(times, emaArr(closes, parseInt(name.slice(3), 10)));
     } else if (/^sma\d+$/.test(name)) {

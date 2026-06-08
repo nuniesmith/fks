@@ -1,6 +1,6 @@
 import type { Handle, RequestEvent } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
-import { computeIndicators, type Candle } from "$lib/server/indicators";
+import { computeIndicators, INDICATOR_CATALOG, type Candle } from "$lib/server/indicators";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Backend proxy  (replaces the old vite/nginx → fks_ruby reverse proxy)
@@ -517,6 +517,11 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
       /* malformed %-encoding — fall back to the raw segment */
     }
     return questdbCandles(event, sym);
+  }
+
+  // Indicator catalog (metadata for the chart's picker UI).
+  if (pathname === "/api/indicators/catalog") {
+    return json(INDICATOR_CATALOG);
   }
 
   // ── /charts indicators → computed in-adapter from QuestDB candles ───────────

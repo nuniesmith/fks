@@ -395,6 +395,17 @@
         return `${h}h ${m}m`;
     }
 
+    /// Live uptime for a running container, derived from its start time. Refreshes
+    /// on each containers poll (every 3s) since the list re-renders.
+    function uptime(c: ContainerInfo): string {
+        if (c.state !== "running") return "—";
+        const start = c.started_at ?? c.created_at;
+        if (!start) return "—";
+        const ms = Date.now() - Date.parse(start);
+        if (!Number.isFinite(ms) || ms < 0) return "—";
+        return fmtRuntime(Math.floor(ms / 1000));
+    }
+
     // ─── Lifecycle ────────────────────────────────────────────────────────
 
     onMount(() => {
@@ -638,17 +649,27 @@
                                 <span class="c-mode dim">{c.mode}</span>
                             </div>
                             <div class="container-meta">
+                                {#if c.state === "running"}
+                                    <span class="meta-cell mono" title="Uptime"
+                                        >↑ {uptime(c)}</span
+                                    >
+                                {/if}
                                 {#if c.memory_bytes != null}
-                                    <span class="meta-cell mono"
-                                        >{fmtBytes(c.memory_bytes)}</span
+                                    <span
+                                        class="meta-cell mono"
+                                        title="Memory used / limit"
+                                        >{fmtBytes(c.memory_bytes)}{#if c.memory_limit_bytes != null}
+                                            / {fmtBytes(
+                                                c.memory_limit_bytes,
+                                            )}{/if}</span
                                     >
                                 {/if}
                                 {#if c.cpu_percent != null}
-                                    <span class="meta-cell mono"
+                                    <span class="meta-cell mono" title="CPU"
                                         >{c.cpu_percent.toFixed(1)}%</span
                                     >
                                 {/if}
-                                <span class="meta-cell dim">
+                                <span class="meta-cell dim" title="Created">
                                     {c.created_at
                                         ? fmtDateTime(c.created_at)
                                         : "—"}

@@ -104,6 +104,7 @@ impl DockerOps for MockDockerClient {
             labels,
             cpu_percent: None,
             memory_bytes: None,
+            memory_limit_bytes: None,
         };
         state.containers.insert(container_id.clone(), info);
 
@@ -390,6 +391,10 @@ async fn containers_listing_includes_live_stats() {
     assert!(payload.contains("\"cpu_percent\":12.5"), "body: {payload}");
     assert!(
         payload.contains("\"memory_bytes\":67108864"),
+        "body: {payload}"
+    );
+    assert!(
+        payload.contains("\"memory_limit_bytes\":268435456"),
         "body: {payload}"
     );
 }

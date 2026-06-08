@@ -553,6 +553,7 @@ fn container_info_from_summary(s: bollard::models::ContainerSummary) -> Containe
         labels,
         cpu_percent: None,
         memory_bytes: None,
+        memory_limit_bytes: None,
     }
 }
 
@@ -619,6 +620,7 @@ fn container_info_from_inspect(d: bollard::models::ContainerInspectResponse) -> 
         labels,
         cpu_percent: None,
         memory_bytes: None,
+        memory_limit_bytes: None,
     }
 }
 

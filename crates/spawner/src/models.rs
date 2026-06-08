@@ -138,6 +138,8 @@ pub struct ContainerInfo {
     pub cpu_percent: Option<f64>,
     /// Memory usage in bytes, if available.
     pub memory_bytes: Option<i64>,
+    /// Memory limit in bytes, if the container has one.
+    pub memory_limit_bytes: Option<i64>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -268,6 +268,7 @@ async fn list_containers_handler(
         if let Some(s) = s {
             b.cpu_percent = s.cpu_percent;
             b.memory_bytes = s.memory_bytes;
+            b.memory_limit_bytes = s.memory_limit_bytes;
         }
     }
 

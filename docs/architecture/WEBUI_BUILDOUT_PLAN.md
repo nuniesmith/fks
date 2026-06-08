@@ -93,9 +93,9 @@
 ### Phase D — Charting polish  *(webui)*
 - [ ] **D1** Harden live updates: client Binance/Kraken WS (reconnect/backoff,
   multi-symbol) + an adapter `/sse/bars/:sym` bridge for futures.
-- [~] **D2** **Symbol/timeframe persistence** (localStorage) done — `/charts`
-  restores the last-viewed symbol + TF on load. *(Remaining: crosshair OHLCV
-  readout, volume pane, symbol-from-URL, drawing tools.)*
+- [~] **D2** Done: **symbol/timeframe persistence** (localStorage, restores last
+  symbol + TF on load) and a **crosshair OHLC readout** (hover shows the bar's
+  O/H/L/C + change%). *(Remaining: volume pane, symbol-from-URL, drawing tools.)*
 - *Done = smooth live chart with indicators, clean reconnects, no console errors.*
 
 ### Phase E — API key management (secure, server-side)  *(webui + spawner/janus)*  — **decision needed**

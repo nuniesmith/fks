@@ -40,7 +40,8 @@ use uuid::Uuid;
 use crate::error::SpawnerError;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BotRunStore — thin wrapper around a sqlx PgPool, scoped to bot_runs ops.
+// BotRunStore — thin wrapper around a sqlx PgPool. Scoped to bot_runs ops plus
+// the exchange_secrets credential store (003_secrets.sql); both share the pool.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -211,6 +212,58 @@ impl BotRunStore {
 
         Ok(rows.into_iter().map(BotRunRow::from_row).collect())
     }
+
+    // ── exchange_secrets (see src/sql/spawner/003_secrets.sql) ──────────────
+    // The WebUI submits exchange API credentials here; they are stored
+    // server-side and never returned. `upsert_secret` writes them (overwriting
+    // any prior row for that exchange); `configured_exchanges` reports only
+    // which exchanges are set — never the key/secret material.
+
+    /// Store (UPSERT) API credentials for one exchange. `exchange` is the
+    /// primary key, so re-submitting overwrites rather than duplicating.
+    pub async fn upsert_secret(
+        &self,
+        exchange: &str,
+        api_key: &str,
+        api_secret: &str,
+        api_passphrase: Option<&str>,
+    ) -> Result<(), SpawnerError> {
+        sqlx::query(
+            "INSERT INTO exchange_secrets (exchange, api_key, api_secret, api_passphrase) \
+             VALUES ($1, $2, $3, $4) \
+             ON CONFLICT (exchange) DO UPDATE \
+             SET api_key = EXCLUDED.api_key, \
+                 api_secret = EXCLUDED.api_secret, \
+                 api_passphrase = EXCLUDED.api_passphrase, \
+                 updated_at = NOW()",
+        )
+        .bind(exchange)
+        .bind(api_key)
+        .bind(api_secret)
+        .bind(api_passphrase)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        debug!(exchange = %exchange, "exchange_secrets row upserted");
+        Ok(())
+    }
+
+    /// Which exchanges have credentials stored — newest update first. Returns
+    /// only metadata (exchange, whether a passphrase is set, last update); the
+    /// key/secret values are deliberately never selected.
+    pub async fn configured_exchanges(&self) -> Result<Vec<SecretStatusRow>, SpawnerError> {
+        let rows = sqlx::query(
+            "SELECT exchange, (api_passphrase IS NOT NULL) AS has_passphrase, updated_at \
+             FROM exchange_secrets \
+             ORDER BY updated_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        Ok(rows.into_iter().map(SecretStatusRow::from_row).collect())
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -254,6 +307,25 @@ impl BotRunRow {
             stopped_at: r.try_get("stopped_at").ok(),
             runtime_secs: r.try_get("runtime_secs").ok(),
             error_message: r.try_get("error_message").ok(),
+        }
+    }
+}
+
+/// A row from `exchange_secrets` exposed via GET /secrets/status. Carries only
+/// non-sensitive metadata — never the key, secret, or passphrase value.
+#[derive(Debug, serde::Serialize)]
+pub struct SecretStatusRow {
+    pub exchange: String,
+    pub has_passphrase: bool,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl SecretStatusRow {
+    fn from_row(r: PgRow) -> Self {
+        Self {
+            exchange: r.try_get("exchange").unwrap_or_default(),
+            has_passphrase: r.try_get("has_passphrase").unwrap_or(false),
+            updated_at: r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
         }
     }
 }

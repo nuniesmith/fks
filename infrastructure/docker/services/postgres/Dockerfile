@@ -24,7 +24,8 @@
 #
 #   01-02  — Database + user bootstrap   (must run before any migrations)
 #   10     — Janus migrations
-#   25     — Spawner schema
+#   25     — Spawner schema       (bot_configs / bot_runs)
+#   26     — Exchange secrets     (exchange_secrets — WebUI Phase E)
 #
 # Rebuild whenever SQL files change:
 #   docker compose build postgres
@@ -53,3 +54,8 @@ COPY src/sql/janus/002_api_keys.sql                       /docker-entrypoint-ini
 # Phase 3 — Spawner schema (ruby_db) — bot_configs / bot_runs
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/002_spawner.sql                      /docker-entrypoint-initdb.d/25-spawner.sql
+
+# ---------------------------------------------------------------------------
+# Phase 4 — Exchange secrets (ruby_db) — exchange_secrets (WebUI Phase E)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/003_secrets.sql                      /docker-entrypoint-initdb.d/26-secrets.sql

@@ -50,6 +50,31 @@ fn default_mode() -> String {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Secrets request (POST /secrets)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Request body for `POST /secrets` — stores exchange API credentials.
+///
+/// SECURITY: the WebUI browser only ever SUBMITS this; the spawner persists it
+/// server-side and never returns the key/secret. Keys unlock the authenticated
+/// order path (`exchange-apiws`), which stays behind the manual execution gate.
+#[derive(Debug, Deserialize)]
+pub struct SecretRequest {
+    /// Exchange identifier, e.g. "kraken", "kucoin", "binance".
+    pub exchange: String,
+
+    /// API key (public part).
+    pub api_key: String,
+
+    /// API secret (private part) — stored server-side, never returned.
+    pub api_secret: String,
+
+    /// Optional passphrase (KuCoin / Coinbase). Omitted for Kraken / Binance.
+    #[serde(default)]
+    pub api_passphrase: Option<String>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Spawn response
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -198,6 +223,22 @@ mod tests {
             "cmd vec should have 2 entries"
         );
         assert!(req.entrypoint.is_some());
+    }
+
+    #[test]
+    fn secret_request_deserializes_with_optional_passphrase() {
+        // Kraken / Binance: no passphrase → defaults to None.
+        let raw = r#"{"exchange":"kraken","api_key":"k","api_secret":"s"}"#;
+        let req: SecretRequest = serde_json::from_str(raw).expect("valid JSON");
+        assert_eq!(req.exchange, "kraken");
+        assert_eq!(req.api_key, "k");
+        assert_eq!(req.api_secret, "s");
+        assert!(req.api_passphrase.is_none(), "passphrase defaults to None");
+
+        // KuCoin / Coinbase: passphrase present.
+        let raw2 = r#"{"exchange":"kucoin","api_key":"k","api_secret":"s","api_passphrase":"p"}"#;
+        let req2: SecretRequest = serde_json::from_str(raw2).expect("valid JSON");
+        assert_eq!(req2.api_passphrase.as_deref(), Some("p"));
     }
 
     #[test]

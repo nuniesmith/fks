@@ -72,6 +72,9 @@
   let krakenTesting = $state(false);
   let krakenFeedback = $state('');
   let krakenFeedbackVariant = $state<'green' | 'red' | 'default'>('default');
+  // Whether keys are stored server-side (spawner). null = unknown/unreachable.
+  // The browser only submits keys; it never reads the secret back.
+  let krakenConfigured = $state<boolean | null>(null);
 
   // ─── Rithmic State ─────────────────────────────────────────────────
   let rithmicStatus = $state('Unknown');
@@ -187,6 +190,15 @@
 
   // ─── API: Kraken Keys ─────────────────────────────────────────────
 
+  async function loadKrakenStatus() {
+    try {
+      const res = await api.get<{ configured?: boolean }>('/api/settings/kraken-status');
+      krakenConfigured = res?.configured ?? false;
+    } catch {
+      krakenConfigured = null;
+    }
+  }
+
   async function saveKrakenKeys() {
     krakenSaving = true;
     krakenFeedback = '';
@@ -194,6 +206,10 @@
       await api.post('/api/settings/kraken-keys', { api_key: krakenKey, api_secret: krakenSecret });
       krakenFeedback = 'Keys saved ✓';
       krakenFeedbackVariant = 'green';
+      // Browser submits then forgets: clear the inputs and refresh the badge.
+      krakenKey = '';
+      krakenSecret = '';
+      loadKrakenStatus();
       clearFeedbackAfter(v => krakenFeedback = v);
     } catch (err: any) {
       krakenFeedback = `Error: ${err.message ?? 'Failed to save'}`;
@@ -390,6 +406,7 @@
     fetchHealth();
     loadJanusConfig();
     loadRisk();
+    loadKrakenStatus();
     healthTimer = setInterval(fetchHealth, 15_000);
   });
 
@@ -456,6 +473,14 @@
       <!-- Kraken -->
       <div class="connection-block">
         <div class="connection-title">Kraken</div>
+        {#if krakenConfigured !== null}
+          <div class="status-display key-status">
+            <span class="status-dot" class:dot-green={krakenConfigured} class:dot-amber={!krakenConfigured}></span>
+            <span class="mono">
+              {krakenConfigured ? 'API keys stored — authenticated path available' : 'No keys — using public/keyless data'}
+            </span>
+          </div>
+        {/if}
         <div class="form-group">
           <label class="form-label" for="kraken-api-key">API Key</label>
           <input
@@ -913,6 +938,11 @@
     gap: 6px;
     font-size: 12px;
     color: var(--t1);
+  }
+
+  .key-status {
+    margin-bottom: 8px;
+    font-size: 11px;
   }
 
   /* ═══════════════════════════════════════════════════════════════════

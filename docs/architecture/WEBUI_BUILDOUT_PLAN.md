@@ -150,15 +150,16 @@
   `{ max_daily_loss: -usd, max_concurrent_positions, max_gross_exposure }`. Honest
   failure surfaced (502) instead of a fake success. *(If janus's actual contract
   differs, the GET reveals it and the adapter mapping is a one-line tweak.)*
-- [~] **G2** Error / empty / loading-state audit. Added a reusable **`EmptyState`**
+- [x] **G2** Error / empty / loading-state audit. Added a reusable **`EmptyState`**
   primitive (`$components/ui/EmptyState.svelte`, with an optional `action` snippet
-  for a CTA button) and adopted it on **charts** (no-data vs. fetch-error overlay),
-  **signals**, **performance**, and **janus-ai** (all 11 regime/affinity/sessions/
-  live-signals/memories empty + error states — the "No sessions" case keeps its
-  *Create Session* button via the action snippet). Each shows a consistent icon +
-  title + hint, error-tinted on failures; the old `.empty*` / `.err*` CSS is
-  pruned. *(Remaining: the `/` overview briefing line; monitoring's compact inline
-  cell placeholders are intentionally left — `EmptyState` is panel-sized.)*
+  for a CTA button) and adopted it across every panel-level empty/error state:
+  **charts** (no-data vs. fetch-error overlay), **signals**, **performance**,
+  **janus-ai** (regime/affinity/sessions — the "No sessions" case keeps its
+  *Create Session* button via the action snippet — live-signals/memories), and the
+  **overview** (briefing/trades/factory/signals). Each shows a consistent icon +
+  title + hint, error-tinted on failures; the old `.empty*` / `.err*` / `.error-*`
+  CSS is pruned. *(Monitoring's compact inline cell placeholders are intentionally
+  left — `EmptyState` is panel-sized.)*
 - [ ] **G3** Playwright E2E for the wired pages.
 - [ ] **G4** Final nginx comment cleanup; refresh docs; remove remaining dead surface.
 

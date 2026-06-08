@@ -38,7 +38,7 @@ export function fmtPct(n: number | undefined | null): string {
  */
 export function fmtDollar(n: number | undefined | null): string {
   if (n == null) return '—';
-  const sign = n >= 0 ? '+' : '';
+  const sign = n >= 0 ? '+' : '-';
   return `${sign}$${Math.abs(n).toFixed(2)}`;
 }
 

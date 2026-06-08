@@ -9,6 +9,7 @@
   import ProgressBar from '$components/ui/ProgressBar.svelte';
   import Skeleton from '$components/ui/Skeleton.svelte';
   import Panel from '$components/ui/Panel.svelte';
+  import EmptyState from '$components/ui/EmptyState.svelte';
   import type { StripData } from '$lib/types';
   import {
     fmtPrice,
@@ -324,18 +325,18 @@
           {#if briefingLoading && !briefing}
             <Skeleton lines={4} />
           {:else if briefingError && !briefing}
-            <p class="error-text">{briefingError}</p>
+            <EmptyState icon="⚠️" title="Couldn't load briefing" variant="error" hint={briefingError} />
           {:else if briefing}
             <pre class="briefing-text">{briefing}</pre>
           {:else}
-            <p class="muted empty-state">No briefing available.</p>
+            <EmptyState icon="∅" title="No briefing available" hint="The brain hasn't published a briefing yet." />
           {/if}
       </Panel>
 
       <!-- Panel 2: Active Trades -->
       <Panel title="Active Trades" badge="5s poll">
           {#if trades.length === 0}
-            <p class="muted empty-state">No open trades.</p>
+            <EmptyState icon="∅" title="No open trades" hint="Open positions will appear here." />
           {:else}
             <ul class="compact-list">
               {#each trades as trade}
@@ -361,7 +362,7 @@
       <!-- Panel 3: Data Factory -->
       <Panel title="Data Factory" badge="30s poll">
           {#if factory.status === 'unknown'}
-            <p class="muted empty-state">Factory status unavailable.</p>
+            <EmptyState icon="∅" title="Factory status unavailable" hint="The data factory isn't reporting status." />
           {:else}
             <ul class="compact-list">
               <li class="compact-item">
@@ -401,7 +402,7 @@
       <!-- Panel 4: Recent Signals -->
       <Panel title="Recent Signals" badge="10s poll">
           {#if signals.length === 0}
-            <p class="muted empty-state">No recent signals.</p>
+            <EmptyState icon="∅" title="No recent signals" hint="Signals appear here as the brain emits them." />
           {:else}
             <ul class="compact-list">
               {#each signals as sig}
@@ -606,12 +607,6 @@
     overflow-y: auto;
   }
 
-  .error-text {
-    font-size: 11px;
-    color: var(--red);
-    padding: 8px;
-  }
-
   /* ═══════════════════════════════════════════════════════════════════
      Compact Lists (trades, signals)
      ═══════════════════════════════════════════════════════════════════ */
@@ -661,12 +656,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .empty-state {
-    padding: 12px 0;
-    text-align: center;
-    font-size: 11px;
-    color: var(--t3);
-  }
 
   /* ═══════════════════════════════════════════════════════════════════
      Utility

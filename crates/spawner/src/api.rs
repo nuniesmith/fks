@@ -42,6 +42,8 @@ use crate::{
 
 #[cfg(feature = "db")]
 use crate::db::{BotRunStore, RecordSpawn};
+#[cfg(feature = "db")]
+use crate::models::SecretRequest;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared state
@@ -91,7 +93,10 @@ pub fn build_router(state: AppState) -> Router {
         .route("/container/{id}/logs", get(logs_sse_handler));
 
     #[cfg(feature = "db")]
-    let protected = protected.route("/runs", get(runs_handler));
+    let protected = protected
+        .route("/runs", get(runs_handler))
+        .route("/secrets", post(secrets_handler))
+        .route("/secrets/status", get(secrets_status_handler));
 
     let protected = protected
         .layer(middleware::from_fn_with_state(
@@ -359,6 +364,89 @@ async fn runs_handler(
     let rows = store.recent_runs(params.limit.unwrap_or(50)).await?;
     Ok(Json(serde_json::json!({
         "runs": rows,
+        "total": rows.len(),
+        "db_enabled": true,
+    })))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Secrets  (db feature only) — exchange API credential storage
+//
+// SECURITY: the WebUI browser only ever SUBMITS credentials here; they are
+// never returned. POST stores (UPSERT by exchange); GET /secrets/status reports
+// only which exchanges are configured (never the key/secret material). Storage
+// is plaintext-at-rest for now — the whole stack is internal / Tailscale-only
+// and every route here is gated by X-Internal-Token. Encryption is a follow-up.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+async fn secrets_handler(
+    State(state): State<AppState>,
+    Json(req): Json<SecretRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>), SpawnerError> {
+    let exchange = req.exchange.trim().to_lowercase();
+    let api_key = req.api_key.trim();
+    let api_secret = req.api_secret.trim();
+    let api_passphrase = req
+        .api_passphrase
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    if exchange.is_empty() || api_key.is_empty() || api_secret.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "exchange, api_key and api_secret are required",
+            })),
+        ));
+    }
+
+    let Some(store) = state.store.as_ref() else {
+        // No Postgres configured — can't persist. Tell the caller honestly
+        // instead of pretending the credentials were saved.
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "ok": false,
+                "db_enabled": false,
+                "error": "secret storage requires the spawner Postgres DB",
+            })),
+        ));
+    };
+
+    // AWAIT the write — unlike bot_runs (fire-and-forget via tokio::spawn) we
+    // confirm the credential persisted before reporting success to the operator.
+    store
+        .upsert_secret(&exchange, api_key, api_secret, api_passphrase)
+        .await?;
+
+    // Log only the exchange — never the key or secret.
+    info!(exchange = %exchange, "stored exchange API credentials");
+
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "exchange": exchange })),
+    ))
+}
+
+#[cfg(feature = "db")]
+async fn secrets_status_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        // DB not configured — empty list so the WebUI degrades gracefully.
+        return Ok(Json(serde_json::json!({
+            "exchanges": [],
+            "total": 0,
+            "db_enabled": false,
+        })));
+    };
+
+    let rows = store.configured_exchanges().await?;
+    Ok(Json(serde_json::json!({
+        "exchanges": rows,
         "total": rows.len(),
         "db_enabled": true,
     })))

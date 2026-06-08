@@ -108,6 +108,17 @@ Use `lightweight-charts`. Pattern: `routes/charts/+page.svelte`. Bars come from 
 - **`vite.config.ts` proxies** point at internal hostnames (`fks_ruby`, `fks_bot_spawner`, `fks_janus`) that only resolve inside the Docker network. After the split, the new repo's `vite.config.ts` will need a localhost-friendly default for dev outside Docker.
 - **`PUBLIC_API_URL`** is currently used as the dev proxy target. Production talks to nginx via relative URLs.
 - **Auth.** Today the WebUI sits behind nginx + Tailscale; nginx injects `X-Internal-Token` on every proxied request. The Svelte side carries no auth. Don't add browser-side credential handling — Tailscale + a single shared token is the policy.
+- **Exchange API keys are submit-only (server-side storage).** The `/settings`
+  form POSTs `{api_key, api_secret}` to `/api/settings/kraken-keys`; the adapter
+  forwards to the spawner's `POST /secrets`, which persists them in Postgres
+  (`ruby_db.exchange_secrets`) behind `X-Internal-Token`. The secret is **never
+  returned** to the browser — `/api/settings/kraken-status` only reports whether
+  keys are configured. This is compatible with the "no browser-credential
+  handling" policy because the browser submits and forgets (inputs are cleared
+  on save). Default operation stays keyless/public; keys only unlock the
+  authenticated `exchange-apiws` order path, which remains behind the execution
+  gate. (Plaintext-at-rest for now — internal/Tailscale-only; pgcrypto is a
+  tracked follow-up.)
 - **29 pre-existing type errors** in `npm run check` (`analysis/`, `chains/`, `news/`, `cnn/`, `pnl/`, +layout.ts) — small `any`/`unknown` gaps unrelated to the dual-script bug we already fixed in PR #14. Cleanup is in `TODO.md`.
 
 ## Status

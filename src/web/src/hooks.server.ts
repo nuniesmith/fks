@@ -468,6 +468,64 @@ async function riskConfigPost(event: RequestEvent): Promise<Response> {
   }
 }
 
+// ── /settings exchange API keys → the spawner's secret store (Postgres ruby_db).
+// SECURITY: the browser only ever SUBMITS credentials here; they are never read
+// back. The spawner persists them server-side behind X-Internal-Token; the
+// status endpoint reports only WHICH exchanges are configured (never the keys).
+// Default operation is keyless/public — keys only unlock the authenticated path.
+async function exchangeKeysPost(event: RequestEvent, exchange: string): Promise<Response> {
+  let body: any = {};
+  try {
+    body = await event.request.json();
+  } catch {
+    /* empty / non-JSON body */
+  }
+  const str = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
+  const api_key = str(body?.api_key);
+  const api_secret = str(body?.api_secret);
+  const passphrase = str(body?.api_passphrase);
+  if (!api_key || !api_secret) {
+    return json({ ok: false, message: "API key and secret are required" }, 400);
+  }
+  const payload: Record<string, string> = { exchange, api_key, api_secret };
+  if (passphrase) payload.api_passphrase = passphrase;
+  try {
+    const headers = upstreamHeaders(event.request.headers);
+    headers.set("content-type", "application/json");
+    const r = await fetch(`${SPAWNER_URL}/secrets`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (r.status === 503) {
+      return json({ ok: false, message: "Secret storage (spawner DB) is not configured" }, 503);
+    }
+    if (!r.ok) return json({ ok: false, message: `Save rejected by spawner (${r.status})` }, 502);
+    return json({ ok: true, exchange });
+  } catch {
+    return json({ ok: false, message: "Secret storage service unreachable" }, 502);
+  }
+}
+
+// GET → whether the given exchange has stored credentials (never the secrets).
+async function exchangeKeysStatus(event: RequestEvent, exchange: string): Promise<Response> {
+  try {
+    const headers = upstreamHeaders(event.request.headers);
+    const r = await fetch(`${SPAWNER_URL}/secrets/status`, { headers });
+    if (!r.ok) return json({ configured: false, db_enabled: false });
+    const j: any = await r.json();
+    const list: any[] = Array.isArray(j?.exchanges) ? j.exchanges : [];
+    const match = list.find((e) => String(e?.exchange ?? "").toLowerCase() === exchange);
+    return json({
+      configured: !!match,
+      updated_at: match?.updated_at,
+      db_enabled: j?.db_enabled !== false,
+    });
+  } catch {
+    return json({ configured: false, db_enabled: false });
+  }
+}
+
 async function proxyBackend(event: RequestEvent): Promise<Response> {
   const { pathname, search } = event.url;
 
@@ -534,6 +592,15 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
   // /settings risk panel — load (GET) / save (POST→PUT) janus risk config.
   if (pathname === "/api/settings/risk") {
     return event.request.method === "POST" ? riskConfigPost(event) : riskConfigGet(event);
+  }
+
+  // /settings Kraken API keys → spawner secret store (browser submits only;
+  // GET reports only whether keys are configured, never the secrets).
+  if (pathname === "/api/settings/kraken-keys") {
+    return exchangeKeysPost(event, "kraken");
+  }
+  if (pathname === "/api/settings/kraken-status") {
+    return exchangeKeysStatus(event, "kraken");
   }
   // /performance trade history — janus has no closed-trade ledger here; the
   // demo bot keeps fills on its MockExchange. Honest empty until that's exposed.

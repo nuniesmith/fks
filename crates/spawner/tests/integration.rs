@@ -433,6 +433,85 @@ async fn runs_degrades_gracefully_without_db() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Secrets endpoints (db feature) — graceful behaviour without a live Postgres
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn secrets_status_degrades_gracefully_without_db() {
+    // No DATABASE_URL (store: None) — GET /secrets/status must degrade to an
+    // empty list with db_enabled:false, never 500.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(Request::get("/secrets/status").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+    assert!(payload.contains("\"total\":0"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn secrets_post_without_db_returns_503() {
+    // A well-formed credential submission with no DB configured must report an
+    // honest 503 (storage unavailable), not a fake success.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "exchange": "kraken",
+        "api_key": "pub-key",
+        "api_secret": "priv-secret"
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/secrets")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn secrets_post_rejects_missing_fields() {
+    // Validation runs before the store check, so a blank secret is rejected
+    // (400) regardless of whether Postgres is configured.
+    let (app, _) = build_app(test_config(""));
+
+    // Blank api_secret.
+    let body = serde_json::json!({
+        "exchange": "kraken",
+        "api_key": "k",
+        "api_secret": ""
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/secrets")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Auth middleware
 // ─────────────────────────────────────────────────────────────────────────────
 

@@ -100,14 +100,24 @@
   `DrawingTools`.) *(Optional later: dedicated volume pane.)*
 - *Done = smooth live chart with indicators, clean reconnects, no console errors.*
 
-### Phase E — API key management (secure, server-side)  *(webui + spawner/janus)*  — **decision needed**
-- [ ] **E1** Settings form → POST key/secret to a server endpoint → persisted
-  server-side (never returned to browser; masked input). Default keyless.
-- [ ] **E2** Connection-status badge (public vs authenticated); wire `exchange-apiws`
-  authenticated calls (account/balance) behind it.
-- [ ] **E3** Update `src/web/CLAUDE.md` policy note to reflect server-side storage.
-- **Decision:** storage target — gitignored `.env` via a spawner endpoint, or a
-  janus secret config? Keys enable the live order path → stays behind the gate.
+### Phase E — API key management (secure, server-side)  *(webui + spawner)*  — **decision made: spawner → Postgres**
+- [x] **E1** Settings form → `POST /api/settings/kraken-keys {api_key, api_secret}`
+  → adapter forwards to the spawner's **`POST /secrets`**, which UPSERTs into
+  `ruby_db.exchange_secrets` (new `003_secrets.sql`, gated on the spawner `db`
+  feature, behind `X-Internal-Token`). The write is **awaited** (honest save, no
+  fake "Saved ✓"); inputs are masked (`type="password"`) and **cleared on save**
+  so the browser submits then forgets. The secret is never returned.
+- [x] **E2** Connection-status badge: `/api/settings/kraken-status` → spawner
+  **`GET /secrets/status`** (reports only *which* exchanges are configured, never
+  the keys). The Kraken block shows "API keys stored — authenticated path
+  available" vs "No keys — using public/keyless data". *(Follow-up: wire
+  `exchange-apiws` authenticated account/balance calls behind the badge.)*
+- [x] **E3** `src/web/CLAUDE.md` policy note updated to document submit-only
+  server-side storage.
+- **Decision (made):** storage target = the **spawner's Postgres `ruby_db`**
+  (reuses the existing pool/`BotRunStore`; no new service). Plaintext-at-rest for
+  now — internal/Tailscale-only; pgcrypto column encryption is a tracked
+  follow-up. Keys enable the live order path → stays behind the execution gate.
 
 ### Phase F — Bot spawner deepening  *(webui + spawner)*
 - [~] **F1** `/bots` **spawn presets** done: one-click pre-fill of the spawn form

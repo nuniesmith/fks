@@ -1123,17 +1123,26 @@
   function setSymbol(s: string) {
     ignoreNextFocusChange = true;
     symbol = s;
+    try { localStorage.setItem('fks_chart_symbol', s); } catch { /* unavailable */ }
     focusSymbol.set(s);
     loadChart();
   }
 
   function switchTimeframe(tf: string) {
     interval = tf;
+    try { localStorage.setItem('fks_chart_tf', tf); } catch { /* unavailable */ }
     loadChart();
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(() => {
+    // Restore the last-viewed symbol/timeframe before the first chart load.
+    try {
+      const ss = localStorage.getItem('fks_chart_symbol');
+      const st = localStorage.getItem('fks_chart_tf');
+      if (ss) { symbol = ss; focusSymbol.set(ss); }
+      if (st) interval = st;
+    } catch { /* unavailable */ }
     loadChart();
     loadOscillatorCatalog();
 

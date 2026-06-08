@@ -134,18 +134,22 @@ The adapter lives in `src/web/src/hooks.server.ts` (the strangler seam). Landed:
   (`workspaces.ts` — `/fapi/*` is gone), so the UI only surfaces wired pages.
   Removed the dead `vite.config.ts` dev proxies (all → `fks_ruby`/spawner) — the
   `hooks.server.ts` hook is now the single backend seam in dev **and** prod.
+- **Phase 4b (nginx — dev):** rewrote `conf.d/dev.conf` so the nginx-fronted path
+  (localhost:80) actually works: every dead `fks_ruby` upstream and the
+  adapter-bypassing `/api/* → fks_janus` block now point at **`fks_webui:3000`**
+  (the adapter is the single seam — it reshapes/stubs all backend prefixes), the
+  SSE block keeps its unbuffered streaming settings, and the dead `/charts/ →
+  fks_charting` block was removed (charting service is gone). Direct routes kept:
+  `/grafana|/prometheus|/questdb|/jaeger`, janus `/ws/`, and the spawner
+  (`/api/bots/`, `/api/spawner/`). ⚠️ nginx isn't CI-validated — run
+  `nginx -t` + a localhost smoke test before relying on it.
 
-Remaining Phase 4: **delete** the pruned route dirs (still reachable by URL) and
-**rewrite the nginx confs** — today they route `/`, `/charts`, `/sse/*` at the
-dead `fks_ruby`, and `/api/*` straight at `fks_janus` (bypassing the adapter's
-reshaping), so the Tailscale-fronted path is broken; it should route page +
-backend-prefix traffic to `fks_webui` (the adapter) and keep only direct
-`/grafana|/prometheus|/questdb|/jaeger` proxies. Plus the `/settings` risk-config
-write and `/charts` indicators + live SSE bars. (Risk/performance/candles data is
-empty in the paper demo until live ingestion/orders.)
+Remaining Phase 4: mirror the dev.conf nginx fix to **prod `fkstrading.xyz.conf`**
+(same change; it's the Tailscale-fronted conf), **delete** the pruned route dirs
+(still reachable by URL), the `/settings` risk-config write, and `/charts`
+indicators + live SSE bars. (Risk/performance/candles data is empty in the paper
+demo until live ingestion/orders.)
 
 ## Notes
-- nginx `conf.d/*.conf` still routes `/api/*`/`/factory/*`/`/trading*` at
-  `fks_ruby` — to be rewritten in Phase 4 (janus + spawner + monitoring only).
 - The adapter is the strangler seam: it lets us repoint panel-by-panel without a
   big-bang dashboard rewrite, and degrades cleanly while panels are unmapped.

@@ -81,11 +81,12 @@
   accept any period) + **ADX (+DI/−DI)**. Serves the metadata at
   **`GET /api/indicators/catalog`** (`INDICATOR_CATALOG`) for the picker.
   *(Follow-up: per-indicator params.)*
-- [~] **C2** Charts indicator UI. Added **SMA 20, VWAP, WMA 20, Donchian, Keltner**
-  server-computed overlay toggles (matching the BB/ATR pattern). *(Remaining: a
-  generic catalog dropdown/picker over `INDICATOR_CATALOG` (incl. the **sub-pane
-  oscillators** Stoch/Williams %R/CCI/OBV) with per-indicator params — best built
-  with live visual iteration; the overlay toggle bar is getting full.)*
+- [x] **C2** Charts indicator UI. **Overlay toggles** for SMA/VWAP/WMA/Donchian/
+  Keltner (BB/ATR pattern), **plus a catalog-driven picker** (`+ IND`) that adds
+  any **oscillator sub-pane** from `/api/indicators/catalog` — Stoch/Williams %R/
+  CCI/OBV/ADX — via a generic `IndicatorPane.svelte` (own chart instance, synced
+  to the main chart, removable, self-cleaning). *(Follow-up: per-indicator params
+  + fold RSI/MACD into the same generic pane.)*
 - [ ] **C3** Indicator presets + persistence (per symbol/timeframe).
 - *Done = full indicator set renders, parameterized, aligned to candles.*
 

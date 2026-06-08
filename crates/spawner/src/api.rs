@@ -13,7 +13,11 @@
 //   GET    /container/{id}/logs        → SSE stream (text/event-stream)
 // =============================================================================
 
-use std::{convert::Infallible, sync::Arc, time::Instant};
+use std::{
+    convert::Infallible,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use axum::{
     Router,
@@ -232,9 +236,36 @@ impl From<&SpawnResponse> for OwnedSpawnRecord {
 async fn list_containers_handler(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, SpawnerError> {
-    let bots = state.docker.list_bots().await?;
+    let mut bots = state.docker.list_bots().await?;
     let running = bots.iter().filter(|b| b.state == "running").count();
     metrics::RUNNING_BOTS.set(running as f64);
+
+    // Enrich running containers with live CPU/memory — best-effort and
+    // concurrent, each bounded by a short timeout so a slow stat can't stall the
+    // listing. Failures simply leave cpu_percent/memory_bytes as None.
+    // (Only this listing pays for stats; /health stays a cheap label query.)
+    let stats = futures_util::future::join_all(bots.iter().map(|b| {
+        let docker = state.docker.clone();
+        let id = b.id_full.clone();
+        let is_running = b.state == "running";
+        async move {
+            if !is_running {
+                return None;
+            }
+            match tokio::time::timeout(Duration::from_secs(3), docker.stats(&id)).await {
+                Ok(Ok(s)) => Some(s),
+                _ => None,
+            }
+        }
+    }))
+    .await;
+    for (b, s) in bots.iter_mut().zip(stats) {
+        if let Some(s) = s {
+            b.cpu_percent = s.cpu_percent;
+            b.memory_bytes = s.memory_bytes;
+        }
+    }
+
     Ok(Json(serde_json::json!({
         "containers": bots,
         "total": bots.len(),

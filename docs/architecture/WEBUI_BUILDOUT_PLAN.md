@@ -129,8 +129,11 @@
 - [~] **F1** `/bots` **spawn presets** done: one-click pre-fill of the spawn form
   with the verified `crypto-demo` config (image `fks-bot-crypto-demo:latest`,
   paper/synthetic/mock, janus-brain & local-ema-cross variants — exact compose
-  env, no keys). Editable before submit. *(Remaining: config editor, per-bot
-  Prometheus metrics, clearer lifecycle/status.)*
+  env, no keys). Editable before submit. **Per-bot live metrics** done too: the
+  spawner now enriches the `/containers` listing with real **CPU% + memory** from
+  the Docker stats API (concurrent, timeout-bounded; `/health` stays cheap), so
+  the `/bots` resource cells — already wired in the UI — light up. *(Remaining:
+  config editor, clearer lifecycle/status.)*
 - [ ] **F2** Spawn a paper crypto bot end-to-end from the UI on the keyless path.
 
 ### Phase G — Robustness & finish

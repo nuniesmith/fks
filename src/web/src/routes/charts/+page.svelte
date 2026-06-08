@@ -1139,28 +1139,39 @@
     if (e.key === 'Escape') showDropdown = false;
   }
 
+  // Persist symbol+timeframe to localStorage and reflect them in the URL (shareable).
+  function persistChartState() {
+    try {
+      localStorage.setItem('fks_chart_symbol', symbol);
+      localStorage.setItem('fks_chart_tf', interval);
+      history.replaceState(null, '', `?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(interval)}`);
+    } catch { /* unavailable */ }
+  }
+
   function setSymbol(s: string) {
     ignoreNextFocusChange = true;
     symbol = s;
-    try { localStorage.setItem('fks_chart_symbol', s); } catch { /* unavailable */ }
+    persistChartState();
     focusSymbol.set(s);
     loadChart();
   }
 
   function switchTimeframe(tf: string) {
     interval = tf;
-    try { localStorage.setItem('fks_chart_tf', tf); } catch { /* unavailable */ }
+    persistChartState();
     loadChart();
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(() => {
-    // Restore the last-viewed symbol/timeframe before the first chart load.
+    // URL params (?symbol=&tf=) win for shareable links; else the last-viewed
+    // values (localStorage). Persist whatever we resolve.
     try {
-      const ss = localStorage.getItem('fks_chart_symbol');
-      const st = localStorage.getItem('fks_chart_tf');
-      if (ss) { symbol = ss; focusSymbol.set(ss); }
-      if (st) interval = st;
+      const params = new URLSearchParams(window.location.search);
+      const ss = params.get('symbol') || localStorage.getItem('fks_chart_symbol');
+      const st = params.get('tf') || params.get('interval') || localStorage.getItem('fks_chart_tf');
+      if (ss) { symbol = ss; focusSymbol.set(ss); localStorage.setItem('fks_chart_symbol', ss); }
+      if (st) { interval = st; localStorage.setItem('fks_chart_tf', st); }
     } catch { /* unavailable */ }
     loadChart();
     loadOscillatorCatalog();

@@ -132,8 +132,12 @@
   env, no keys). Editable before submit. **Per-bot live metrics** done too: the
   spawner now enriches the `/containers` listing with real **CPU% + memory** from
   the Docker stats API (concurrent, timeout-bounded; `/health` stays cheap), so
-  the `/bots` resource cells — already wired in the UI — light up. *(Remaining:
-  config editor, clearer lifecycle/status.)*
+  the `/bots` resource cells — already wired in the UI — light up. **Persisted
+  spawn configs** done too: the spawner exposes `GET`/`POST /configs` +
+  `DELETE /configs/{name}` (backed by the long-dormant `bot_configs` table), and
+  `/bots` now has a **Saved** row — save the current form as a named config,
+  one-click apply, delete — alongside the built-in presets. *(Remaining: clearer
+  lifecycle/status.)*
 - [ ] **F2** Spawn a paper crypto bot end-to-end from the UI on the keyless path.
 
 ### Phase G — Robustness & finish

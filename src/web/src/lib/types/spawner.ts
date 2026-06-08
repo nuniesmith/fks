@@ -126,6 +126,36 @@ export interface RunsResponse {
   db_enabled: boolean;
 }
 
+// ─── Saved spawn configs (db feature) ────────────────────────────────────
+
+/** Request body for `POST /configs` — a named, reusable spawn template. */
+export interface SaveConfigRequest {
+  name: string;
+  image: string;
+  mode?: BotMode | string;
+  cpu_limit?: number;
+  memory_mb?: number;
+  env?: Record<string, string>;
+}
+
+/** A saved spawn config row from `GET /configs`. */
+export interface BotConfig {
+  id: string;
+  name: string;
+  image: string;
+  mode: string;
+  cpu_limit: number | null;
+  memory_mb: number | null;
+  env: Record<string, string>;
+}
+
+/** `GET /configs` wrapper. When `db_enabled=false` the array is empty. */
+export interface ConfigsResponse {
+  configs: BotConfig[];
+  total: number;
+  db_enabled: boolean;
+}
+
 // ─── Errors ──────────────────────────────────────────────────────────────
 
 /** Error envelope used by all 4xx/5xx responses. */

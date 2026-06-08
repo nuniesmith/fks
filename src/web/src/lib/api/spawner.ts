@@ -27,10 +27,12 @@
 import { api } from "./client";
 import type {
   ActionResponse,
+  ConfigsResponse,
   ContainerInfo,
   ContainersResponse,
   HealthResponse,
   RunsResponse,
+  SaveConfigRequest,
   SpawnRequest,
   SpawnResponse,
 } from "$lib/types/spawner";
@@ -67,6 +69,21 @@ export const spawner = {
    * the flag before showing a "no data" message instead of an error.
    */
   runs: (limit = 50) => api.get<RunsResponse>(`${BASE}/runs?limit=${limit}`),
+
+  // ── Saved spawn configs (db feature) ───────────────────────────────────
+
+  /** List active saved spawn configs. `db_enabled:false` ⇒ empty array. */
+  listConfigs: () => api.get<ConfigsResponse>(`${BASE}/configs`),
+
+  /** Save (UPSERT by name) a reusable spawn config. */
+  saveConfig: (req: SaveConfigRequest) =>
+    api.post<{ ok: boolean; id?: string; name?: string }>(`${BASE}/configs`, req),
+
+  /** Soft-delete a saved config by name. */
+  deleteConfig: (name: string) =>
+    api.delete<{ ok: boolean; name?: string }>(
+      `${BASE}/configs/${encodeURIComponent(name)}`,
+    ),
 
   // ── SSE log stream ─────────────────────────────────────────────────────
 

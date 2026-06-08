@@ -53,9 +53,9 @@
   backup, chains, cnn, crypto, data, dom, logging, news, paper, pnl, positions,
   reporting, simulations, tasks, trades`). Kept `journal` + `db` (URL-only) for a
   possible later janus rebuild.
-- [ ] **A2** Trim `$lib/api` + `$lib/types` of now-unused clients/types; drive
-  `npm run check` toward clean (most of the 29 pre-existing warnings lived in the
-  deleted dirs).
+- [x] **A2** `$lib` trim — **no-op**: `$lib` is already lean (`api/{client,spawner}`,
+  `types/{index,spawner}`, `stores/{focusSymbol,poll,sse,strip}`, all in active
+  use). The pruned routes held their types inline, so nothing was orphaned.
 - [x] **A3** Added a dedicated prod `/api/spawner/` block to `fkstrading.xyz.conf`
   (→ `fks_bot_spawner:8090`, unbuffered) so `/bots` log-tail streams over nginx
   instead of buffering through the `/api/` adapter route. *(Verify with `nginx -t`.)*
@@ -93,8 +93,9 @@
 ### Phase D — Charting polish  *(webui)*
 - [ ] **D1** Harden live updates: client Binance/Kraken WS (reconnect/backoff,
   multi-symbol) + an adapter `/sse/bars/:sym` bridge for futures.
-- [ ] **D2** Crosshair OHLCV readout, multi-pane time-scale sync, volume pane,
-  timeframe/symbol from URL + persistence, drawing tools.
+- [~] **D2** **Symbol/timeframe persistence** (localStorage) done — `/charts`
+  restores the last-viewed symbol + TF on load. *(Remaining: crosshair OHLCV
+  readout, volume pane, symbol-from-URL, drawing tools.)*
 - *Done = smooth live chart with indicators, clean reconnects, no console errors.*
 
 ### Phase E — API key management (secure, server-side)  *(webui + spawner/janus)*  — **decision needed**

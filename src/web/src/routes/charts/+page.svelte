@@ -5,6 +5,7 @@
   import { focusSymbol } from '$stores/focusSymbol';
   import Panel from '$components/ui/Panel.svelte';
   import DrawingTools from '$components/ui/DrawingTools.svelte';
+  import IndicatorPane from '$components/ui/IndicatorPane.svelte';
   import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 
   // ─── Types ─────────────────────────────────────────────────────────────────
@@ -167,6 +168,12 @@
   let showDonchian = $state(false);
   let showKeltner = $state(false);
   let drawingActive = $state(false);
+
+  // Oscillator sub-pane picker (generic, catalog-driven)
+  interface OscMeta { id: string; label: string; keys: string[]; }
+  let oscillatorCatalog = $state<OscMeta[]>([]);
+  let activeOscillators = $state<OscMeta[]>([]);
+  let indPickerOpen = $state(false);
 
   // Loading state
   let loading = $state(true);
@@ -1050,6 +1057,30 @@
     await loadKeltner();
   }
 
+  // ─── Oscillator sub-pane picker (catalog-driven) ───────────────────────────
+  async function loadOscillatorCatalog() {
+    try {
+      const cat = await api.get<{ id: string; label: string; pane: string; keys: string[] }[]>(
+        '/api/indicators/catalog'
+      );
+      const buttoned = new Set(['rsi', 'macd', 'atr']);
+      oscillatorCatalog = (cat ?? [])
+        .filter((c) => c.pane === 'separate' && !buttoned.has(c.id))
+        .map((c) => ({ id: c.id, label: c.label, keys: c.keys }));
+    } catch {
+      oscillatorCatalog = [];
+    }
+  }
+  function addOscillator(m: OscMeta) {
+    if (!activeOscillators.some((x) => x.id === m.id)) {
+      activeOscillators = [...activeOscillators, m];
+    }
+    indPickerOpen = false;
+  }
+  function removeOscillator(id: string) {
+    activeOscillators = activeOscillators.filter((x) => x.id !== id);
+  }
+
   // ─── Chart export / screenshot ─────────────────────────────────────────────
   function exportChart() {
     const canvas = chartContainer.querySelector('canvas');
@@ -1104,6 +1135,7 @@
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(() => {
     loadChart();
+    loadOscillatorCatalog();
 
     const ro = new ResizeObserver(() => {
       if (chart && chartContainer) {
@@ -1270,6 +1302,24 @@
         </button>
       </div>
 
+      <!-- More indicators: oscillator sub-pane picker -->
+      <div class="ind-group ind-picker" aria-label="Add oscillator sub-pane">
+        <button class="ind-btn" onclick={() => (indPickerOpen = !indPickerOpen)}
+          aria-expanded={indPickerOpen ? 'true' : 'false'} aria-haspopup="menu"
+          title="Add an oscillator sub-pane (Stoch, Williams %R, CCI, OBV, ADX)">+ IND</button>
+        {#if indPickerOpen}
+          <div class="ind-menu" role="menu">
+            {#each oscillatorCatalog as m (m.id)}
+              <button class="ind-menu-item" role="menuitem"
+                onclick={() => addOscillator(m)}
+                disabled={activeOscillators.some((x) => x.id === m.id)}>{m.label}</button>
+            {:else}
+              <span class="ind-menu-empty">loading…</span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
       <!-- Quick picks -->
       <div class="quick-picks">
         {#each quickPicks as s}
@@ -1358,6 +1408,19 @@
           <div class="pane-chart" bind:this={macdChartEl}></div>
         </div>
       {/if}
+
+      <!-- Generic oscillator sub-panes (picker-driven) -->
+      {#each activeOscillators as osc (osc.id)}
+        <IndicatorPane
+          {symbol}
+          {interval}
+          id={osc.id}
+          label={osc.label}
+          keys={osc.keys}
+          mainChart={chart}
+          onremove={() => removeOscillator(osc.id)}
+        />
+      {/each}
     </div>
   </div>
 </div>
@@ -1462,6 +1525,46 @@
     gap: 3px;
     padding-left: 8px;
     border-left: 1px solid var(--b1);
+  }
+  .ind-picker {
+    position: relative;
+  }
+  .ind-menu {
+    position: absolute;
+    top: 100%;
+    left: 8px;
+    z-index: 20;
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    min-width: 150px;
+    padding: 4px;
+    background: var(--bg2, #0c0f14);
+    border: 1px solid var(--b2, #1a1a2e);
+    border-radius: var(--r, 4px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  }
+  .ind-menu-item {
+    all: unset;
+    cursor: pointer;
+    padding: 5px 8px;
+    font-size: 11px;
+    color: var(--t2, #b8c0e0);
+    border-radius: var(--r, 4px);
+    white-space: nowrap;
+  }
+  .ind-menu-item:hover:not(:disabled) {
+    background: var(--bg3, #161b24);
+    color: var(--t1, #e6e9f5);
+  }
+  .ind-menu-item:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .ind-menu-empty {
+    padding: 5px 8px;
+    font-size: 10px;
+    color: var(--t3, #8890b8);
   }
   .ind-btn {
     all: unset;

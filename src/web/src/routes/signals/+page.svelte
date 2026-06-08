@@ -4,6 +4,7 @@
     import Panel from "$components/ui/Panel.svelte";
     import Badge from "$components/ui/Badge.svelte";
     import Skeleton from "$components/ui/Skeleton.svelte";
+    import EmptyState from "$components/ui/EmptyState.svelte";
     import FilterChips from "$components/ui/FilterChips.svelte";
     import { fmtDateTime } from "$lib/utils/format";
 
@@ -181,9 +182,9 @@
                 {/each}
             </div>
         {:else if signalsError}
-            <p class="err-text">{signalsError}</p>
+            <EmptyState icon="⚠️" title="Couldn't load signals" variant="error" hint={signalsError} />
         {:else if signals.length === 0}
-            <p class="empty">No {statusFilter || ""} signals.</p>
+            <EmptyState icon="∅" title="No signals" hint={statusFilter ? `No ${statusFilter} signals yet.` : "No signals generated yet."} />
         {:else}
             <div class="table-wrap">
                 <table>
@@ -266,9 +267,9 @@
                 {/each}
             </div>
         {:else if alertsError}
-            <p class="err-text">{alertsError}</p>
+            <EmptyState icon="⚠️" title="Couldn't load alerts" variant="error" hint={alertsError} />
         {:else if alerts.length === 0}
-            <p class="empty">No alerts.</p>
+            <EmptyState icon="🔕" title="No alerts" hint="No active alerts right now." />
         {:else}
             <div class="alerts-list">
                 {#each alerts as alert}
@@ -433,15 +434,5 @@
         flex-direction: column;
         gap: 6px;
         padding: 8px;
-    }
-    .empty {
-        padding: 20px;
-        font-size: 11px;
-        color: var(--t3);
-    }
-    .err-text {
-        font-size: 11px;
-        color: var(--red);
-        padding: 12px;
     }
 </style>

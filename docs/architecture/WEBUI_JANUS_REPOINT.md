@@ -83,6 +83,25 @@ drop the Ruby-only panels.** The adapter lives in the SvelteKit server
 - **Phase 4:** remove the dropped pages/components + the dead `vite.config.ts`
   proxies + the Ruby-era nginx routes; trim `$lib/api`.
 
+## Progress (as built)
+
+The adapter lives in `src/web/src/hooks.server.ts` (the strangler seam). Landed:
+
+- **#79 — Phase 1:** server proxy in `hooks.server.ts`; `/api/spawner/*` → spawner;
+  unmapped backend paths degrade quietly (empty REST / idle SSE) → kills the 404 spam.
+- **#80 — Phase 2a:** status bar live (`/api/health` ← janus `/health`) + favicon + SSE keepalive.
+- **#81 — Phase 2b:** signals wired — overview "recent signals"
+  (`/api/db/redis/get/fks:memories:new`) and the `/signals` page (`/api/signals`)
+  ← janus `/api/dashboard/signals/summary`. Approve/reject stay no-ops.
+- **Phase 2c:** `/janus-ai` brain panels — `/api/janus/state` ← forward
+  `/api/v1/brain/health` (status) + recent signals; `/api/janus/affinity` ←
+  forward `/api/v1/brain/affinity`. Live-signals tab already rides the #81 mapping.
+  *Deferred/dropped:* per-symbol `regime` (no janus feed wired yet → empty),
+  `sessions`/`memories` (no janus equivalent → graceful empty).
+
+Remaining: `/performance` + `/settings` (risk) + `/monitoring` (Prometheus proxy),
+then candles/`/charts` (Phase 3), then the Phase 4 cleanup.
+
 ## Notes
 - nginx `conf.d/*.conf` still routes `/api/*`/`/factory/*`/`/trading*` at
   `fks_ruby` — to be rewritten in Phase 4 (janus + spawner + monitoring only).

@@ -21,7 +21,8 @@ use bollard::{
     models::{ContainerCreateBody, EndpointSettings, HostConfig, NetworkingConfig},
     query_parameters::{
         CreateContainerOptionsBuilder, ListContainersOptionsBuilder, LogsOptionsBuilder,
-        RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder, StopContainerOptionsBuilder,
+        RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder, StatsOptionsBuilder,
+        StopContainerOptionsBuilder,
     },
 };
 use chrono::{DateTime, Datelike, Utc};
@@ -351,10 +352,10 @@ impl DockerClient {
         // stream=false + one_shot=false ⇒ Docker collects two samples ~1s apart
         // and returns a single reading with `precpu_stats` populated, which is
         // what the CPU-percent delta needs.
-        let opts = bollard::container::StatsOptions {
-            stream: false,
-            one_shot: false,
-        };
+        let opts = StatsOptionsBuilder::new()
+            .stream(false)
+            .one_shot(false)
+            .build();
 
         let mut stream = self.docker.stats(id, Some(opts));
         match stream.next().await {

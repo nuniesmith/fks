@@ -6,6 +6,7 @@
   import Panel from '$components/ui/Panel.svelte';
   import DrawingTools from '$components/ui/DrawingTools.svelte';
   import IndicatorPane from '$components/ui/IndicatorPane.svelte';
+  import EmptyState from '$components/ui/EmptyState.svelte';
   import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 
   // ─── Types ─────────────────────────────────────────────────────────────────
@@ -212,6 +213,7 @@
   // Loading state
   let loading = $state(true);
   let indicatorLoading = $state(false);
+  let barsError = $state(false); // true when the historical-bars fetch fails (vs. just empty)
 
   // Auto-focus symbol from strip SSE
   let ignoreNextFocusChange = false;
@@ -935,6 +937,7 @@
   async function loadChart() {
     if (!chartContainer) return;
     loading = true;
+    barsError = false;
 
     const { createChart } = await import('lightweight-charts');
 
@@ -1007,6 +1010,7 @@
     } catch (e) {
       console.warn('[charts] Failed to load bars:', e);
       candles = [];
+      barsError = true;
     } finally {
       loading = false;
     }
@@ -1553,6 +1557,18 @@
           <div class="chart-overlay">
             <div class="spinner" role="status" aria-label="Loading chart"></div>
             <span>Loading {symbol} · {interval}…</span>
+          </div>
+        {/if}
+        {#if !loading && candles.length === 0}
+          <div class="chart-overlay">
+            <EmptyState
+              icon={barsError ? '⚠️' : '∅'}
+              title={barsError ? 'Failed to load data' : 'No data'}
+              variant={barsError ? 'error' : 'default'}
+              hint={barsError
+                ? `Couldn't reach the bars service for ${apiSymbol} · ${interval}.`
+                : `No stored candles for ${apiSymbol} · ${interval}. Live ticks will populate as they arrive.`}
+            />
           </div>
         {/if}
         {#if hoverBar}

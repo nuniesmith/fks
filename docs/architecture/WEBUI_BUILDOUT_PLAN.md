@@ -77,8 +77,10 @@
   BB/RSI/MACD/ATR chart toggles server-side. Ships EMA/SMA/RSI/MACD/BBands/ATR/VWAP
   + an `INDICATOR_CATALOG` for the picker. *(Follow-up: WMA, Stochastic, ADX, OBV,
   Keltner, Donchian + per-indicator params.)*
-- [ ] **C2** Charts **indicator catalog UI**: searchable list, per-indicator toggle,
-  parameter controls (period, stddev, fast/slow/signal…), overlay-vs-subpane.
+- [~] **C2** Charts indicator UI. Added **SMA 20** + **VWAP** server-computed
+  overlay toggles (matching the BB/ATR pattern). *(Remaining: a generic catalog
+  dropdown/picker over `INDICATOR_CATALOG` with per-indicator params (period,
+  stddev, fast/slow/signal) instead of fixed toggle buttons.)*
 - [ ] **C3** Indicator presets + persistence (per symbol/timeframe).
 - *Done = full indicator set renders, parameterized, aligned to candles.*
 

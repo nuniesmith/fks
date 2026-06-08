@@ -21,7 +21,8 @@ use bollard::{
     models::{ContainerCreateBody, EndpointSettings, HostConfig, NetworkingConfig},
     query_parameters::{
         CreateContainerOptionsBuilder, ListContainersOptionsBuilder, LogsOptionsBuilder,
-        RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder, StopContainerOptionsBuilder,
+        RemoveContainerOptionsBuilder, RestartContainerOptionsBuilder, StatsOptionsBuilder,
+        StopContainerOptionsBuilder,
     },
 };
 use chrono::{DateTime, Datelike, Utc};
@@ -33,7 +34,7 @@ use uuid::Uuid;
 use crate::{
     config::Config,
     error::{SpawnerError, SpawnerResult},
-    models::{ContainerInfo, SpawnRequest, SpawnResponse},
+    models::{ContainerInfo, ContainerStats, SpawnRequest, SpawnResponse},
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -74,6 +75,9 @@ pub trait DockerOps: Send + Sync + 'static {
 
     /// All containers carrying the `fks.bot=true` label.
     async fn list_bots(&self) -> SpawnerResult<Vec<ContainerInfo>>;
+
+    /// One-shot live resource stats (CPU% + memory) for a single container.
+    async fn stats(&self, id: &str) -> SpawnerResult<ContainerStats>;
 
     /// Returns a stream of log lines for `id`, optionally tailing the
     /// last `tail` lines first.
@@ -341,6 +345,32 @@ impl DockerClient {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // stats — one-shot CPU + memory usage for a single container
+    // ─────────────────────────────────────────────────────────────────────────
+
+    pub async fn stats(&self, id: &str) -> SpawnerResult<ContainerStats> {
+        // stream=false + one_shot=false ⇒ Docker collects two samples ~1s apart
+        // and returns a single reading with `precpu_stats` populated, which is
+        // what the CPU-percent delta needs.
+        let opts = StatsOptionsBuilder::new()
+            .stream(false)
+            .one_shot(false)
+            .build();
+
+        let mut stream = self.docker.stats(id, Some(opts));
+        match stream.next().await {
+            Some(Ok(resp)) => Ok(stats_from_response(resp)),
+            Some(Err(e)) => Err(match e {
+                bollard::errors::Error::DockerResponseServerError {
+                    status_code: 404, ..
+                } => SpawnerError::NotFound(id.to_string()),
+                other => SpawnerError::Docker(other),
+            }),
+            None => Err(SpawnerError::Other(format!("no stats returned for {id}"))),
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // stream_logs — returns an async Stream of log line strings
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -474,6 +504,10 @@ impl DockerOps for DockerClient {
         DockerClient::list_bots(self).await
     }
 
+    async fn stats(&self, id: &str) -> SpawnerResult<ContainerStats> {
+        DockerClient::stats(self, id).await
+    }
+
     fn stream_logs(&self, id: &str, tail: Option<String>) -> LogStream {
         Box::pin(DockerClient::stream_logs(self, id, tail))
     }
@@ -585,5 +619,130 @@ fn container_info_from_inspect(d: bollard::models::ContainerInspectResponse) -> 
         labels,
         cpu_percent: None,
         memory_bytes: None,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Stats math — pure helpers (unit-tested; no daemon required)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Docker's CPU-percent formula:
+///   (cpu_delta / system_delta) × online_cpus × 100
+/// Returns `None` when the deltas aren't usable (zero system delta, no online
+/// cpus, or a counter reset where the previous reading exceeds the current).
+fn compute_cpu_percent(
+    cpu_total: u64,
+    precpu_total: u64,
+    system: u64,
+    presystem: u64,
+    online: u64,
+) -> Option<f64> {
+    let cpu_delta = cpu_total.checked_sub(precpu_total)? as f64;
+    let system_delta = system.checked_sub(presystem)? as f64;
+    if system_delta <= 0.0 || online == 0 {
+        return None;
+    }
+    Some((cpu_delta / system_delta) * online as f64 * 100.0)
+}
+
+/// Resident memory = total usage minus reclaimable page cache, saturating at 0.
+fn mem_used_bytes(usage: u64, cache: u64) -> i64 {
+    usage.saturating_sub(cache) as i64
+}
+
+/// Reduce a Docker stats frame to the CPU%/memory figures we surface.
+fn stats_from_response(r: bollard::models::ContainerStatsResponse) -> ContainerStats {
+    let cpu = r.cpu_stats.as_ref();
+    let precpu = r.precpu_stats.as_ref();
+
+    let cpu_total = cpu
+        .and_then(|c| c.cpu_usage.as_ref())
+        .and_then(|u| u.total_usage);
+    let precpu_total = precpu
+        .and_then(|c| c.cpu_usage.as_ref())
+        .and_then(|u| u.total_usage);
+    let system = cpu.and_then(|c| c.system_cpu_usage);
+    let presystem = precpu.and_then(|c| c.system_cpu_usage);
+    let online = cpu
+        .and_then(|c| c.online_cpus)
+        .map(u64::from)
+        .or_else(|| {
+            cpu.and_then(|c| c.cpu_usage.as_ref())
+                .and_then(|u| u.percpu_usage.as_ref())
+                .map(|v| v.len() as u64)
+        })
+        .unwrap_or(0);
+
+    let cpu_percent = match (cpu_total, precpu_total, system, presystem) {
+        (Some(ct), Some(pt), Some(s), Some(ps)) => compute_cpu_percent(ct, pt, s, ps, online),
+        _ => None,
+    };
+
+    let mem = r.memory_stats.as_ref();
+    // cgroup v2 exposes reclaimable cache as `inactive_file`; v1 as `cache`.
+    let cache = mem
+        .and_then(|m| m.stats.as_ref())
+        .and_then(|s| s.get("inactive_file").or_else(|| s.get("cache")).copied())
+        .unwrap_or(0);
+    let memory_bytes = mem
+        .and_then(|m| m.usage)
+        .map(|usage| mem_used_bytes(usage, cache));
+    let memory_limit_bytes = mem.and_then(|m| m.limit).map(|l| l as i64);
+
+    ContainerStats {
+        cpu_percent,
+        memory_bytes,
+        memory_limit_bytes,
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tests — exercise the pure stats math (the daemon-dependent path is covered by
+// the MockDockerClient in tests/integration.rs).
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::{compute_cpu_percent, mem_used_bytes};
+
+    #[test]
+    fn cpu_percent_basic_delta() {
+        // cpu_delta=100, system_delta=1000, 4 cpus → 100/1000 × 4 × 100 = 40%
+        assert_eq!(compute_cpu_percent(1100, 1000, 5000, 4000, 4), Some(40.0));
+    }
+
+    #[test]
+    fn cpu_percent_idle_is_zero() {
+        // No CPU movement but a positive system delta → 0%, not None.
+        assert_eq!(compute_cpu_percent(1000, 1000, 5000, 4000, 4), Some(0.0));
+    }
+
+    #[test]
+    fn cpu_percent_zero_system_delta_is_none() {
+        assert_eq!(compute_cpu_percent(1100, 1000, 4000, 4000, 4), None);
+    }
+
+    #[test]
+    fn cpu_percent_no_online_cpus_is_none() {
+        assert_eq!(compute_cpu_percent(1100, 1000, 5000, 4000, 0), None);
+    }
+
+    #[test]
+    fn cpu_percent_counter_reset_is_none() {
+        // Previous reading exceeds current (counter reset) → checked_sub fails.
+        assert_eq!(compute_cpu_percent(900, 1000, 5000, 4000, 4), None);
+    }
+
+    #[test]
+    fn mem_used_subtracts_cache() {
+        assert_eq!(
+            mem_used_bytes(100 * 1024 * 1024, 30 * 1024 * 1024),
+            70 * 1024 * 1024
+        );
+    }
+
+    #[test]
+    fn mem_used_saturates_when_cache_exceeds_usage() {
+        assert_eq!(mem_used_bytes(10, 50), 0);
     }
 }

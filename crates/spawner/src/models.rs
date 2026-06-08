@@ -115,6 +115,22 @@ pub struct ContainerInfo {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Container resource stats (live CPU + memory)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Live resource usage for one container, derived from the Docker stats API.
+/// Used to enrich `ContainerInfo` on the `/containers` listing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContainerStats {
+    /// CPU usage percent (0–100 per core × online cpus). None when unavailable.
+    pub cpu_percent: Option<f64>,
+    /// Resident memory in bytes (total usage minus reclaimable cache).
+    pub memory_bytes: Option<i64>,
+    /// Configured memory limit in bytes, if any.
+    pub memory_limit_bytes: Option<i64>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Action responses
 // ─────────────────────────────────────────────────────────────────────────────
 

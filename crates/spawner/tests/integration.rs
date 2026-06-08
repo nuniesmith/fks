@@ -36,7 +36,7 @@ use spawner::api::{AppState, build_router};
 use spawner::config::Config;
 use spawner::docker_client::{DockerOps, LogStream};
 use spawner::error::{SpawnerError, SpawnerResult};
-use spawner::models::{ContainerInfo, SpawnRequest, SpawnResponse};
+use spawner::models::{ContainerInfo, ContainerStats, SpawnRequest, SpawnResponse};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MockDockerClient — in-memory implementation of DockerOps
@@ -162,6 +162,19 @@ impl DockerOps for MockDockerClient {
     async fn list_bots(&self) -> SpawnerResult<Vec<ContainerInfo>> {
         let state = self.state.lock().expect("MockState mutex poisoned");
         Ok(state.containers.values().cloned().collect())
+    }
+
+    async fn stats(&self, id: &str) -> SpawnerResult<ContainerStats> {
+        let state = self.state.lock().expect("MockState mutex poisoned");
+        if state.containers.contains_key(id) {
+            Ok(ContainerStats {
+                cpu_percent: Some(12.5),
+                memory_bytes: Some(64 * 1024 * 1024),
+                memory_limit_bytes: Some(256 * 1024 * 1024),
+            })
+        } else {
+            Err(SpawnerError::NotFound(id.to_string()))
+        }
     }
 
     fn stream_logs(&self, _id: &str, _tail: Option<String>) -> LogStream {
@@ -342,6 +355,43 @@ async fn spawn_then_list_then_remove_round_trips() {
             state.containers.keys()
         );
     }
+}
+
+#[tokio::test]
+async fn containers_listing_includes_live_stats() {
+    // The /containers listing enriches each running container with live CPU%
+    // and memory from the stats path (mocked here to canned values).
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "image": "fks-bot-example:latest",
+        "bot_id": "stats-bot",
+        "mode": "paper"
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::post("/spawn")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let resp = app
+        .oneshot(Request::get("/containers").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"cpu_percent\":12.5"), "body: {payload}");
+    assert!(
+        payload.contains("\"memory_bytes\":67108864"),
+        "body: {payload}"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

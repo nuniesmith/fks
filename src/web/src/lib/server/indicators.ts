@@ -288,6 +288,73 @@ function keltnerArr(c: Candle[], period: number, mult: number) {
   return { upper, mid, lower };
 }
 
+// Wilder's ADX with +DI / −DI (directional movement). Needs > 2·period bars.
+function adxArr(c: Candle[], period: number) {
+  const n = c.length;
+  const plusDI: (number | null)[] = new Array(n).fill(null);
+  const minusDI: (number | null)[] = new Array(n).fill(null);
+  const adx: (number | null)[] = new Array(n).fill(null);
+  if (n <= 2 * period) return { plusDI, minusDI, adx };
+
+  const tr = new Array(n).fill(0);
+  const pDM = new Array(n).fill(0);
+  const mDM = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const up = c[i].high - c[i - 1].high;
+    const down = c[i - 1].low - c[i].low;
+    pDM[i] = up > down && up > 0 ? up : 0;
+    mDM[i] = down > up && down > 0 ? down : 0;
+    tr[i] = Math.max(
+      c[i].high - c[i].low,
+      Math.abs(c[i].high - c[i - 1].close),
+      Math.abs(c[i].low - c[i - 1].close),
+    );
+  }
+  // Wilder "sum" smoothing of TR/+DM/−DM, seeded over the first `period` bars.
+  let sTR = 0;
+  let sP = 0;
+  let sM = 0;
+  for (let i = 1; i <= period; i++) {
+    sTR += tr[i];
+    sP += pDM[i];
+    sM += mDM[i];
+  }
+  const dx: (number | null)[] = new Array(n).fill(null);
+  for (let i = period; i < n; i++) {
+    if (i > period) {
+      sTR = sTR - sTR / period + tr[i];
+      sP = sP - sP / period + pDM[i];
+      sM = sM - sM / period + mDM[i];
+    }
+    const pdi = sTR === 0 ? 0 : (100 * sP) / sTR;
+    const mdi = sTR === 0 ? 0 : (100 * sM) / sTR;
+    plusDI[i] = pdi;
+    minusDI[i] = mdi;
+    const sum = pdi + mdi;
+    dx[i] = sum === 0 ? 0 : (100 * Math.abs(pdi - mdi)) / sum;
+  }
+  // ADX = Wilder smoothing of DX (seed = mean of the first `period` DX values).
+  let adxVal = 0;
+  let cnt = 0;
+  let seeded = false;
+  for (let i = period; i < n; i++) {
+    const d = dx[i];
+    if (d == null) continue;
+    if (!seeded) {
+      adxVal += d;
+      if (++cnt === period) {
+        adxVal /= period;
+        adx[i] = adxVal;
+        seeded = true;
+      }
+    } else {
+      adxVal = (adxVal * (period - 1) + d) / period;
+      adx[i] = adxVal;
+    }
+  }
+  return { plusDI, minusDI, adx };
+}
+
 // ── Catalog (metadata for the UI picker) ────────────────────────────────────
 
 export interface IndicatorMeta {
@@ -313,6 +380,7 @@ export const INDICATOR_CATALOG: IndicatorMeta[] = [
   { id: "willr", label: "Williams %R 14", pane: "separate", keys: ["willr"] },
   { id: "cci", label: "CCI 20", pane: "separate", keys: ["cci"] },
   { id: "obv", label: "OBV", pane: "separate", keys: ["obv"] },
+  { id: "adx", label: "ADX 14 (+DI/−DI)", pane: "separate", keys: ["adx", "plus_di", "minus_di"] },
 ];
 
 // ── Dispatcher ──────────────────────────────────────────────────────────────
@@ -356,6 +424,11 @@ export function computeIndicators(
       out.cci = toPoints(times, cciArr(candles, 20));
     } else if (name === "obv") {
       out.obv = toPoints(times, obvArr(candles));
+    } else if (name === "adx") {
+      const a = adxArr(candles, 14);
+      out.adx = toPoints(times, a.adx);
+      out.plus_di = toPoints(times, a.plusDI);
+      out.minus_di = toPoints(times, a.minusDI);
     } else if (name === "donchian" || name === "dc") {
       const d = donchianArr(candles, 20);
       out.dc_upper = toPoints(times, d.upper);

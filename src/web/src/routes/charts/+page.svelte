@@ -182,6 +182,9 @@
     : n >= 1 ? n.toFixed(2)
     : n.toFixed(5);
 
+  // Logarithmic vs linear price scale
+  let logScale = $state(false);
+
   // Loading state
   let loading = $state(true);
   let indicatorLoading = $state(false);
@@ -941,6 +944,9 @@
       }
     });
 
+    // Keep the chosen price-scale mode across reloads.
+    if (logScale) chart.applyOptions({ rightPriceScale: { mode: 1 as any } });
+
     // Resolve asset data source
     await lookupAsset(symbol);
 
@@ -1162,6 +1168,11 @@
     loadChart();
   }
 
+  function toggleLogScale() {
+    logScale = !logScale;
+    chart?.applyOptions({ rightPriceScale: { mode: (logScale ? 1 : 0) as any } });
+  }
+
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(() => {
     // URL params (?symbol=&tf=) win for shareable links; else the last-viewed
@@ -1380,6 +1391,11 @@
         aria-label="Toggle drawing tools"
         aria-pressed={drawingActive ? 'true' : 'false'}
       >✏️ Draw</button>
+
+      <!-- Log/linear price scale -->
+      <button class="ind-btn" class:active={logScale} onclick={toggleLogScale}
+        title="Toggle logarithmic price scale" aria-pressed={logScale ? 'true' : 'false'}
+      >{logScale ? 'Log' : 'Lin'}</button>
 
       <!-- Screenshot / export -->
       <button

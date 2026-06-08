@@ -110,8 +110,11 @@
   janus secret config? Keys enable the live order path → stays behind the gate.
 
 ### Phase F — Bot spawner deepening  *(webui + spawner)*
-- [ ] **F1** Richer `/bots`: presets (crypto-demo / exchange-apiws bot), config
-  editor, per-bot Prometheus metrics, clearer lifecycle/status.
+- [~] **F1** `/bots` **spawn presets** done: one-click pre-fill of the spawn form
+  with the verified `crypto-demo` config (image `fks-bot-crypto-demo:latest`,
+  paper/synthetic/mock, janus-brain & local-ema-cross variants — exact compose
+  env, no keys). Editable before submit. *(Remaining: config editor, per-bot
+  Prometheus metrics, clearer lifecycle/status.)*
 - [ ] **F2** Spawn a paper crypto bot end-to-end from the UI on the keyless path.
 
 ### Phase G — Robustness & finish

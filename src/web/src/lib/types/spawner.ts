@@ -43,6 +43,8 @@ export interface ContainerInfo {
   cpu_percent: number | null;
   /** Last sampled memory in bytes. */
   memory_bytes: number | null;
+  /** Memory limit in bytes, if the container has one. */
+  memory_limit_bytes: number | null;
 }
 
 /** Wrapper returned by `GET /containers`. */

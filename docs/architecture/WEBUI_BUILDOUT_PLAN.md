@@ -136,8 +136,10 @@
   spawn configs** done too: the spawner exposes `GET`/`POST /configs` +
   `DELETE /configs/{name}` (backed by the long-dormant `bot_configs` table), and
   `/bots` now has a **Saved** row — save the current form as a named config,
-  one-click apply, delete — alongside the built-in presets. *(Remaining: clearer
-  lifecycle/status.)*
+  one-click apply, delete — alongside the built-in presets. **Lifecycle/status**
+  clearer too: each running container shows live **uptime** (↑ from start time,
+  refreshed on the 3s poll) and **memory used / limit** (the spawner now carries
+  `memory_limit_bytes` alongside the usage stat). F1 done.
 - [ ] **F2** Spawn a paper crypto bot end-to-end from the UI on the keyless path.
 
 ### Phase G — Robustness & finish

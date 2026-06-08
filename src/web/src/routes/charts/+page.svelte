@@ -139,6 +139,13 @@
   // Extra server-computed overlays
   let sma20Series: any = null;
   let vwapSeries: any = null;
+  let wmaSeries: any = null;
+  let dcUpperSeries: any = null;
+  let dcMidSeries: any = null;
+  let dcLowSeries: any = null;
+  let kcUpperSeries: any = null;
+  let kcMidSeries: any = null;
+  let kcLowSeries: any = null;
 
   // Candle cache for client-side indicators
   let candles = $state<CandleData[]>([]);
@@ -156,6 +163,9 @@
   let showATR  = $state(false);
   let showSMA20 = $state(false);
   let showVWAP = $state(false);
+  let showWMA = $state(false);
+  let showDonchian = $state(false);
+  let showKeltner = $state(false);
   let drawingActive = $state(false);
 
   // Loading state
@@ -494,6 +504,81 @@
     }
   }
 
+  async function loadWMA() {
+    if (!chart) return;
+    if (wmaSeries) { chart.removeSeries(wmaSeries); wmaSeries = null; }
+    if (!showWMA) return;
+    indicatorLoading = true;
+    try {
+      const res = await api.get<{ indicators?: Record<string, IndicatorPoint[]> }>(
+        `/api/chart/${encodeURIComponent(apiSymbol)}/indicators?interval=${interval}&days_back=5&indicators=wma20`
+      );
+      const data = res.indicators?.wma20 ?? [];
+      if (data.length && chart) {
+        wmaSeries = chart.addLineSeries({
+          color: '#34d399', lineWidth: 1,
+          priceLineVisible: false, lastValueVisible: false,
+          crosshairMarkerVisible: false, title: 'WMA 20',
+        });
+        wmaSeries.setData(data);
+      }
+    } catch (e) {
+      console.warn('[charts] WMA load failed:', e);
+    } finally {
+      indicatorLoading = false;
+    }
+  }
+
+  async function loadDonchian() {
+    if (!chart) return;
+    if (dcUpperSeries) { chart.removeSeries(dcUpperSeries); dcUpperSeries = null; }
+    if (dcMidSeries)   { chart.removeSeries(dcMidSeries);   dcMidSeries = null; }
+    if (dcLowSeries)   { chart.removeSeries(dcLowSeries);   dcLowSeries = null; }
+    if (!showDonchian) return;
+    try {
+      const res = await api.get<{ indicators?: Record<string, IndicatorPoint[]> }>(
+        `/api/chart/${encodeURIComponent(apiSymbol)}/indicators?interval=${interval}&days_back=5&indicators=donchian`
+      );
+      const ind = res.indicators ?? {};
+      if (ind.dc_upper?.length && chart) {
+        const lineOpts = { priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+        dcUpperSeries = chart.addLineSeries({ ...lineOpts, color: '#38bdf880', lineWidth: 1, title: 'DC+' });
+        dcUpperSeries.setData(ind.dc_upper);
+        dcMidSeries = chart.addLineSeries({ ...lineOpts, color: '#38bdf840', lineWidth: 1, lineStyle: 2 });
+        dcMidSeries.setData(ind.dc_middle ?? []);
+        dcLowSeries = chart.addLineSeries({ ...lineOpts, color: '#38bdf880', lineWidth: 1, title: 'DC-' });
+        dcLowSeries.setData(ind.dc_lower ?? []);
+      }
+    } catch (e) {
+      console.warn('[charts] Donchian load failed:', e);
+    }
+  }
+
+  async function loadKeltner() {
+    if (!chart) return;
+    if (kcUpperSeries) { chart.removeSeries(kcUpperSeries); kcUpperSeries = null; }
+    if (kcMidSeries)   { chart.removeSeries(kcMidSeries);   kcMidSeries = null; }
+    if (kcLowSeries)   { chart.removeSeries(kcLowSeries);   kcLowSeries = null; }
+    if (!showKeltner) return;
+    try {
+      const res = await api.get<{ indicators?: Record<string, IndicatorPoint[]> }>(
+        `/api/chart/${encodeURIComponent(apiSymbol)}/indicators?interval=${interval}&days_back=5&indicators=keltner`
+      );
+      const ind = res.indicators ?? {};
+      if (ind.kc_upper?.length && chart) {
+        const lineOpts = { priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+        kcUpperSeries = chart.addLineSeries({ ...lineOpts, color: '#c084fc80', lineWidth: 1, title: 'KC+' });
+        kcUpperSeries.setData(ind.kc_upper);
+        kcMidSeries = chart.addLineSeries({ ...lineOpts, color: '#c084fc40', lineWidth: 1, lineStyle: 2 });
+        kcMidSeries.setData(ind.kc_middle ?? []);
+        kcLowSeries = chart.addLineSeries({ ...lineOpts, color: '#c084fc80', lineWidth: 1, title: 'KC-' });
+        kcLowSeries.setData(ind.kc_lower ?? []);
+      }
+    } catch (e) {
+      console.warn('[charts] Keltner load failed:', e);
+    }
+  }
+
   // ─── MACD sub-pane ─────────────────────────────────────────────────────────
   async function initMACDChart() {
     if (!macdChartEl) return;
@@ -806,6 +891,9 @@
     ema9Series = null; ema21Series = null; volumeSeries = null;
     bbUpperSeries = null; bbMidSeries = null; bbLowSeries = null;
     atrSeries = null; sma20Series = null; vwapSeries = null;
+    wmaSeries = null;
+    dcUpperSeries = null; dcMidSeries = null; dcLowSeries = null;
+    kcUpperSeries = null; kcMidSeries = null; kcLowSeries = null;
     if (chart) chart.remove();
 
     chart = createChart(chartContainer, {
@@ -864,6 +952,9 @@
     if (showATR) await loadATR();
     if (showSMA20) await loadSMA20();
     if (showVWAP) await loadVWAP();
+    if (showWMA) await loadWMA();
+    if (showDonchian) await loadDonchian();
+    if (showKeltner) await loadKeltner();
 
     // Reconnect RSI if open
     if (showRSI) {
@@ -945,6 +1036,18 @@
   async function toggleVWAP() {
     showVWAP = !showVWAP;
     await loadVWAP();
+  }
+  async function toggleWMA() {
+    showWMA = !showWMA;
+    await loadWMA();
+  }
+  async function toggleDonchian() {
+    showDonchian = !showDonchian;
+    await loadDonchian();
+  }
+  async function toggleKeltner() {
+    showKeltner = !showKeltner;
+    await loadKeltner();
   }
 
   // ─── Chart export / screenshot ─────────────────────────────────────────────
@@ -1136,6 +1239,21 @@
           title="Volume-Weighted Average Price (server-computed)">
           <span class="ind-dot" style="background:#e879f9"></span>VWAP
           {#if indicatorLoading && showVWAP}<span class="ind-spin"></span>{/if}
+        </button>
+        <button class="ind-btn" class:active={showWMA} onclick={toggleWMA} aria-pressed={showWMA ? 'true' : 'false'}
+          title="Weighted Moving Average 20 (server-computed)">
+          <span class="ind-dot" style="background:#34d399"></span>WMA
+          {#if indicatorLoading && showWMA}<span class="ind-spin"></span>{/if}
+        </button>
+        <button class="ind-btn" class:active={showDonchian} onclick={toggleDonchian} aria-pressed={showDonchian ? 'true' : 'false'}
+          title="Donchian Channel 20 (server-computed)">
+          <span class="ind-dot" style="background:#38bdf8"></span>DC
+          {#if indicatorLoading && showDonchian}<span class="ind-spin"></span>{/if}
+        </button>
+        <button class="ind-btn" class:active={showKeltner} onclick={toggleKeltner} aria-pressed={showKeltner ? 'true' : 'false'}
+          title="Keltner Channel 20/2 (server-computed)">
+          <span class="ind-dot" style="background:#c084fc"></span>KC
+          {#if indicatorLoading && showKeltner}<span class="ind-spin"></span>{/if}
         </button>
       </div>
 

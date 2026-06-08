@@ -56,8 +56,9 @@
 - [ ] **A2** Trim `$lib/api` + `$lib/types` of now-unused clients/types; drive
   `npm run check` toward clean (most of the 29 pre-existing warnings lived in the
   deleted dirs).
-- [ ] **A3** Add a dedicated prod `/api/spawner/` SSE block (+ `@spawner_unavailable`)
-  to `fkstrading.xyz.conf` so `/bots` log-tail streams over nginx.
+- [x] **A3** Added a dedicated prod `/api/spawner/` block to `fkstrading.xyz.conf`
+  (→ `fks_bot_spawner:8090`, unbuffered) so `/bots` log-tail streams over nginx
+  instead of buffering through the `/api/` adapter route. *(Verify with `nginx -t`.)*
 - *Done = no dead nav/URLs of value, `npm run check` near-clean, prod log streaming.*
 
 ### Phase B — Solidify the keyless crypto data path  *(verify janus / webui)*
@@ -79,10 +80,11 @@
   **Stochastic, Williams %R, CCI, OBV, Donchian, Keltner** (`ema<N>`/`sma<N>`/`wma<N>`
   accept any period). Serves the metadata at **`GET /api/indicators/catalog`**
   (`INDICATOR_CATALOG`) for the picker. *(Follow-up: ADX + per-indicator params.)*
-- [~] **C2** Charts indicator UI. Added **SMA 20** + **VWAP** server-computed
-  overlay toggles (matching the BB/ATR pattern). *(Remaining: a generic catalog
-  dropdown/picker over `INDICATOR_CATALOG` with per-indicator params (period,
-  stddev, fast/slow/signal) instead of fixed toggle buttons.)*
+- [~] **C2** Charts indicator UI. Added **SMA 20, VWAP, WMA 20, Donchian, Keltner**
+  server-computed overlay toggles (matching the BB/ATR pattern). *(Remaining: a
+  generic catalog dropdown/picker over `INDICATOR_CATALOG` (incl. the **sub-pane
+  oscillators** Stoch/Williams %R/CCI/OBV) with per-indicator params — best built
+  with live visual iteration; the overlay toggle bar is getting full.)*
 - [ ] **C3** Indicator presets + persistence (per symbol/timeframe).
 - *Done = full indicator set renders, parameterized, aligned to candles.*
 

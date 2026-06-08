@@ -20,7 +20,7 @@ and the spawner (`/api/spawner/*`, `/api/bots/*`).
 | Build | Vite 6 + `@sveltejs/adapter-node` |
 | Language | TypeScript (strict) |
 | Charts | `lightweight-charts` |
-| Tests | Playwright (E2E) |
+| Tests | Vitest (unit) · Playwright (E2E) |
 | Lint | `svelte-check` |
 
 ## Build & test
@@ -34,6 +34,9 @@ npm run dev                # http://localhost:5173
 # Type-check
 npm run check
 npm run check:watch
+
+# Unit tests (Vitest) — pure-TS modules, e.g. the indicator engine
+npm run test:unit
 
 # E2E tests (Playwright)
 npm run test:e2e

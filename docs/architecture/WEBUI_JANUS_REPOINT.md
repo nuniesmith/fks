@@ -93,13 +93,22 @@ The adapter lives in `src/web/src/hooks.server.ts` (the strangler seam). Landed:
 - **#81 — Phase 2b:** signals wired — overview "recent signals"
   (`/api/db/redis/get/fks:memories:new`) and the `/signals` page (`/api/signals`)
   ← janus `/api/dashboard/signals/summary`. Approve/reject stay no-ops.
-- **Phase 2c:** `/janus-ai` brain panels — `/api/janus/state` ← forward
+- **#82 — Phase 2c:** `/janus-ai` brain panels — `/api/janus/state` ← forward
   `/api/v1/brain/health` (status) + recent signals; `/api/janus/affinity` ←
   forward `/api/v1/brain/affinity`. Live-signals tab already rides the #81 mapping.
   *Deferred/dropped:* per-symbol `regime` (no janus feed wired yet → empty),
   `sessions`/`memories` (no janus equivalent → graceful empty).
+- **Phase 2d:** `/monitoring` ← Prometheus (`fks_prometheus:9090`). `/api/metrics/`
+  `{query,query_range,targets}` are straight pass-throughs (identical shapes);
+  `/api/metrics/alerts` reshapes `/api/v1/alerts` (+ derived `age_str`);
+  `/api/metrics/layout` ships a small default of synthetic-metric panels
+  (`up`, `scrape_duration_seconds`) since Ruby's layout service is gone.
+  *Caveat:* the page's hardcoded **CPU%/Memory%** health stats query `node_*`
+  metrics — the active `prometheus.yml` has no node-exporter, so those read "—"
+  until one is scraped (Targets/Alerts/PromQL/Redis-ops are live now).
 
-Remaining: `/performance` + `/settings` (risk) + `/monitoring` (Prometheus proxy),
+Remaining: `/performance` + `/settings` (risk) — both ← forward `/api/v1/risk/*`,
+which is empty in the paper demo (correct shapes, no data until a live order path);
 then candles/`/charts` (Phase 3), then the Phase 4 cleanup.
 
 ## Notes

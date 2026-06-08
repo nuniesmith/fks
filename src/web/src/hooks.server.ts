@@ -20,6 +20,7 @@ import { env } from "$env/dynamic/private";
 const SPAWNER_URL = env.SPAWNER_INTERNAL_URL ?? "http://fks_bot_spawner:8090";
 const JANUS_URL = env.JANUS_INTERNAL_URL ?? "http://fks_janus:8080"; // janus-api
 const JANUS_FORWARD_URL = env.JANUS_FORWARD_INTERNAL_URL ?? "http://fks_janus:8180"; // forward (brain/risk)
+const PROMETHEUS_URL = env.PROMETHEUS_INTERNAL_URL ?? "http://fks_prometheus:9090"; // /monitoring
 
 const BACKEND_PREFIXES = ["/api/", "/sse/", "/bars/", "/factory/", "/kraken/", "/fapi/"];
 
@@ -200,6 +201,58 @@ async function janusAffinity(event: RequestEvent): Promise<Response> {
   return json({ status: String(a?.status ?? "ok"), weights });
 }
 
+// ── /monitoring: Prometheus proxy ───────────────────────────────────────────
+// The /monitoring page calls /api/metrics/* (these used to be served by Ruby's
+// data service, which queried Prometheus and reshaped). We reprise that role:
+// query/query_range/targets are a straight pass-through (identical shapes), and
+// alerts/layout get a light reshape.
+
+// "2026-06-08T12:00:00Z" → "5m" / "2h" / "3d" (compact age, for the alert feed).
+function humanizeSince(iso?: string): string {
+  if (!iso) return "—";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "—";
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+
+// /api/metrics/alerts → reshape Prometheus /api/v1/alerts ({data:{alerts:[…]}})
+// into the page's { data: Alert[] } with an age_str derived from activeAt.
+async function promAlerts(event: RequestEvent): Promise<Response> {
+  const j = await janusJson(event, PROMETHEUS_URL, "/api/v1/alerts");
+  const list: any[] = Array.isArray(j?.data?.alerts) ? j.data.alerts : [];
+  return json({
+    data: list.map((a) => ({
+      labels: a?.labels ?? {},
+      age_str: humanizeSince(a?.activeAt),
+      severity_color: "",
+    })),
+  });
+}
+
+// /api/metrics/layout — Ruby served a configurable dashboard layout; there's no
+// janus/Prometheus equivalent, so we ship a small default built only from
+// synthetic metrics Prometheus always generates (up, scrape_duration_seconds),
+// plus the live alert-feed/targets panels. Node/redis KPIs depend on exporters.
+const METRICS_LAYOUT = {
+  panels: [
+    { id: "targets_up", type: "stat", title: "Targets Up", query: "sum(up)" },
+    { id: "targets_total", type: "stat", title: "Targets Total", query: "count(up)" },
+    {
+      id: "scrape_p95",
+      type: "sparkline",
+      title: "Scrape Duration (1h, max)",
+      query: "max(scrape_duration_seconds)",
+      color: "var(--cyan)",
+    },
+    { id: "alerts", type: "alert-feed", title: "Active Alerts" },
+    { id: "targets", type: "targets", title: "Scrape Targets" },
+  ],
+};
+
 async function proxyBackend(event: RequestEvent): Promise<Response> {
   const { pathname, search } = event.url;
 
@@ -256,6 +309,24 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
   // janus-ai "Strategy Affinity" matrix → forward brain affinity.
   if (pathname === "/api/janus/affinity") {
     return janusAffinity(event);
+  }
+
+  // ── /monitoring → Prometheus (fks_prometheus:9090) ──────────────────────────
+  // Instant/range queries + targets are identical in shape → straight proxy.
+  if (pathname === "/api/metrics/query") {
+    return forward(event, PROMETHEUS_URL, "/api/v1/query" + search);
+  }
+  if (pathname === "/api/metrics/query_range") {
+    return forward(event, PROMETHEUS_URL, "/api/v1/query_range" + search);
+  }
+  if (pathname === "/api/metrics/targets") {
+    return forward(event, PROMETHEUS_URL, "/api/v1/targets" + search);
+  }
+  if (pathname === "/api/metrics/alerts") {
+    return promAlerts(event);
+  }
+  if (pathname === "/api/metrics/layout") {
+    return json(METRICS_LAYOUT);
   }
 
   // More janus panels (overview aggregate / performance) land here next —

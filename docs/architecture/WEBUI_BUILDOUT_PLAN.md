@@ -87,7 +87,13 @@
   CCI/OBV/ADX — via a generic `IndicatorPane.svelte` (own chart instance, synced
   to the main chart, removable, self-cleaning). *(Follow-up: per-indicator params
   + fold RSI/MACD into the same generic pane.)*
-- [ ] **C3** Indicator presets + persistence (per symbol/timeframe).
+- [x] **C3** Indicator **presets + layout persistence**. The active indicator
+  set (all overlay/sub-pane toggles + oscillator panes) now survives a full page
+  reload via `localStorage` (`fks_chart_indicators`), restored on mount after the
+  chart + catalog load. Plus a **☰ Presets** menu (Clean / Trend / Bands /
+  Momentum / Volume / Full) that one-click reconciles the chart to a named layout
+  via `applyIndicatorState`. *(Persistence is global/last-layout — the more
+  standard UX — rather than per-symbol; per-indicator params remain a follow-up.)*
 - *Done = full indicator set renders, parameterized, aligned to candles.*
 
 ### Phase D — Charting polish  *(webui)*

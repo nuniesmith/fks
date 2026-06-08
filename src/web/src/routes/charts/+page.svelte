@@ -175,6 +175,30 @@
   let activeOscillators = $state<OscMeta[]>([]);
   let indPickerOpen = $state(false);
 
+  // Indicator presets + layout persistence (C3)
+  let presetMenuOpen = $state(false);
+  let persistReady = $state(false); // gate persistence until the initial restore runs
+
+  interface IndicatorState {
+    ema9: boolean; ema21: boolean; volume: boolean; bb: boolean;
+    atr: boolean; sma20: boolean; vwap: boolean; wma: boolean;
+    donchian: boolean; keltner: boolean; rsi: boolean; macd: boolean;
+    oscillators: string[];
+  }
+  const BLANK_INDICATORS: IndicatorState = {
+    ema9: false, ema21: false, volume: false, bb: false, atr: false,
+    sma20: false, vwap: false, wma: false, donchian: false, keltner: false,
+    rsi: false, macd: false, oscillators: [],
+  };
+  const INDICATOR_PRESETS: { id: string; label: string; state: Partial<IndicatorState> }[] = [
+    { id: 'clean',    label: 'Clean',    state: {} },
+    { id: 'trend',    label: 'Trend',    state: { ema9: true, ema21: true, sma20: true } },
+    { id: 'bands',    label: 'Bands',    state: { bb: true, keltner: true } },
+    { id: 'momentum', label: 'Momentum', state: { rsi: true, macd: true } },
+    { id: 'volume',   label: 'Volume',   state: { volume: true, vwap: true } },
+    { id: 'full',     label: 'Full',     state: { ema9: true, ema21: true, bb: true, volume: true, rsi: true, macd: true } },
+  ];
+
   // Crosshair OHLC readout (updated on hover)
   let hoverBar = $state<{ o: number; h: number; l: number; c: number; chg: number } | null>(null);
   const fmtP = (n: number): string =>
@@ -226,6 +250,17 @@
       macdLineSeries = null;
       macdSignalSeries = null;
     }
+  });
+
+  // Persist the active indicator layout whenever it changes — but only after the
+  // initial restore has run, so we never overwrite the saved set with defaults.
+  $effect(() => {
+    const _track = [
+      showEma9, showEma21, showVolume, showBB, showATR, showSMA20,
+      showVWAP, showWMA, showDonchian, showKeltner, showRSI, showMACD,
+      activeOscillators,
+    ];
+    if (persistReady && _track.length) saveIndicatorState();
   });
 
   // ─── Timeframes ────────────────────────────────────────────────────────────
@@ -1106,6 +1141,65 @@
     activeOscillators = activeOscillators.filter((x) => x.id !== id);
   }
 
+  // ─── Indicator presets + layout persistence (C3) ───────────────────────────
+  function currentIndicatorState(): IndicatorState {
+    return {
+      ema9: showEma9, ema21: showEma21, volume: showVolume, bb: showBB,
+      atr: showATR, sma20: showSMA20, vwap: showVWAP, wma: showWMA,
+      donchian: showDonchian, keltner: showKeltner, rsi: showRSI, macd: showMACD,
+      oscillators: activeOscillators.map((m) => m.id),
+    };
+  }
+
+  function saveIndicatorState() {
+    try {
+      localStorage.setItem('fks_chart_indicators', JSON.stringify(currentIndicatorState()));
+    } catch { /* unavailable */ }
+  }
+
+  function readSavedIndicatorState(): IndicatorState | null {
+    try {
+      const raw = localStorage.getItem('fks_chart_indicators');
+      if (!raw) return null;
+      const p = JSON.parse(raw) as Partial<IndicatorState>;
+      return {
+        ...BLANK_INDICATORS,
+        ...p,
+        oscillators: Array.isArray(p.oscillators) ? p.oscillators.map(String) : [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // Reconcile the chart to a desired indicator set (used by presets + restore).
+  async function applyIndicatorState(s: IndicatorState) {
+    // Client overlays (synchronous add/remove).
+    showEma9 = s.ema9;     if (s.ema9) addEma9(); else removeEma9();
+    showEma21 = s.ema21;   if (s.ema21) addEma21(); else removeEma21();
+    showVolume = s.volume; if (s.volume) addVolume(); else removeVolume();
+    // Server overlays — each loader checks its own show* flag and (re)loads.
+    showBB = s.bb;             await loadBBands();
+    showATR = s.atr;           await loadATR();
+    showSMA20 = s.sma20;       await loadSMA20();
+    showVWAP = s.vwap;         await loadVWAP();
+    showWMA = s.wma;           await loadWMA();
+    showDonchian = s.donchian; await loadDonchian();
+    showKeltner = s.keltner;   await loadKeltner();
+    // Sub-panes: the $effects on showRSI/showMACD init/tear-down the panes.
+    showRSI = s.rsi;
+    showMACD = s.macd;
+    if (s.rsi || s.macd) await tick();
+    // Oscillator panes (only those present in the loaded catalog).
+    activeOscillators = oscillatorCatalog.filter((m) => s.oscillators.includes(m.id));
+    saveIndicatorState();
+  }
+
+  function applyPreset(p: { state: Partial<IndicatorState> }) {
+    presetMenuOpen = false;
+    void applyIndicatorState({ ...BLANK_INDICATORS, ...p.state });
+  }
+
   // ─── Chart export / screenshot ─────────────────────────────────────────────
   function exportChart() {
     const canvas = chartContainer.querySelector('canvas');
@@ -1184,8 +1278,14 @@
       if (ss) { symbol = ss; focusSymbol.set(ss); localStorage.setItem('fks_chart_symbol', ss); }
       if (st) { interval = st; localStorage.setItem('fks_chart_tf', st); }
     } catch { /* unavailable */ }
-    loadChart();
-    loadOscillatorCatalog();
+    // Load the chart + oscillator catalog, then restore the saved indicator
+    // layout (the catalog is needed to rebuild oscillator panes). persistReady
+    // gates the persistence effect until this restore has completed.
+    Promise.all([loadChart(), loadOscillatorCatalog()]).then(() => {
+      const saved = readSavedIndicatorState();
+      if (saved) applyIndicatorState(saved).finally(() => { persistReady = true; });
+      else persistReady = true;
+    });
 
     const ro = new ResizeObserver(() => {
       if (chart && chartContainer) {
@@ -1365,6 +1465,20 @@
                 disabled={activeOscillators.some((x) => x.id === m.id)}>{m.label}</button>
             {:else}
               <span class="ind-menu-empty">loading…</span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
+      <!-- Indicator presets -->
+      <div class="ind-group ind-picker" aria-label="Indicator presets">
+        <button class="ind-btn" onclick={() => (presetMenuOpen = !presetMenuOpen)}
+          aria-expanded={presetMenuOpen ? 'true' : 'false'} aria-haspopup="menu"
+          title="Apply an indicator preset layout">☰ Presets</button>
+        {#if presetMenuOpen}
+          <div class="ind-menu" role="menu">
+            {#each INDICATOR_PRESETS as p (p.id)}
+              <button class="ind-menu-item" role="menuitem" onclick={() => applyPreset(p)}>{p.label}</button>
             {/each}
           </div>
         {/if}

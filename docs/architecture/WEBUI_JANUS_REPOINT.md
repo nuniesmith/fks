@@ -106,10 +106,22 @@ The adapter lives in `src/web/src/hooks.server.ts` (the strangler seam). Landed:
   *Caveat:* the page's hardcoded **CPU%/Memory%** health stats query `node_*`
   metrics — the active `prometheus.yml` has no node-exporter, so those read "—"
   until one is scraped (Targets/Alerts/PromQL/Redis-ops are live now).
+- **Phase 2e:** `/performance` + `/settings` reads. `/api/performance` ← forward
+  `/api/v1/risk/performance` (+ `/api/dashboard/performance`), mapped defensively;
+  `/api/trades` → honest `[]` (no janus closed-trade ledger). Also extended
+  `/api/health` to a **superset** (`{status,components,version,uptime}` for the
+  `/settings` System Info panel **+** flat `{janus,redis,feed}` for the StatusBar)
+  — fixes a latent `healthData.status` crash on `/settings` introduced in #80.
+  *Deferred:* the `/settings` **risk-config write** (`/api/settings/risk`). The
+  page's `{daily_loss_limit (+USD), max_contracts, hard_stop}` does **not** map to
+  janus's `{max_daily_loss (≤0), max_positions, max_gross_exposure_usd}` /
+  `daily_loss_limit_pct` — wiring it blind would mis-set a safety control, so it
+  stays a graceful no-op until the janus risk-config schema + page UI are aligned.
+  Data-source/kraken/rithmic/analysis/optimizer/bootstrap stay dropped.
 
-Remaining: `/performance` + `/settings` (risk) — both ← forward `/api/v1/risk/*`,
-which is empty in the paper demo (correct shapes, no data until a live order path);
-then candles/`/charts` (Phase 3), then the Phase 4 cleanup.
+Remaining: the `/settings` risk-config write (needs janus schema + UI alignment),
+then candles/`/charts` (Phase 3), then the Phase 4 cleanup. Risk/performance data
+is empty in the paper demo (correct shapes, no data until a live order path).
 
 ## Notes
 - nginx `conf.d/*.conf` still routes `/api/*`/`/factory/*`/`/trading*` at

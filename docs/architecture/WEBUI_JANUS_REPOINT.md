@@ -143,12 +143,18 @@ The adapter lives in `src/web/src/hooks.server.ts` (the strangler seam). Landed:
   `/grafana|/prometheus|/questdb|/jaeger`, janus `/ws/`, and the spawner
   (`/api/bots/`, `/api/spawner/`). ⚠️ nginx isn't CI-validated — run
   `nginx -t` + a localhost smoke test before relying on it.
+- **Phase 4c (nginx — prod):** mirrored the same fix to `conf.d/fkstrading.xyz.conf`
+  (the Tailscale-fronted conf): all dead `fks_ruby` upstreams + the `/api/(signals|
+  inference|model|janus|session)` carve-out → `fks_webui:3000`; `fks_janus` kept
+  only on `/ws/` + `/health/janus`; dead `= /charts`/`/charts/`(`fks_charting`)
+  blocks removed. The vestigial `/health/{web,ruby-web,ruby-data,trainer}` probes
+  are left (harmless; `fks_trainer` is also gone). ⚠️ verify with `nginx -t`.
+  *Not added:* dedicated prod `/api/spawner/` SSE block — `/bots` works via the
+  `/api/` adapter route, but live log-tail streaming may buffer until one is added.
 
-Remaining Phase 4: mirror the dev.conf nginx fix to **prod `fkstrading.xyz.conf`**
-(same change; it's the Tailscale-fronted conf), **delete** the pruned route dirs
-(still reachable by URL), the `/settings` risk-config write, and `/charts`
-indicators + live SSE bars. (Risk/performance/candles data is empty in the paper
-demo until live ingestion/orders.)
+Remaining Phase 4: **delete** the pruned route dirs (still reachable by URL), the
+`/settings` risk-config write, and `/charts` indicators + live SSE bars.
+(Risk/performance/candles data is empty in the paper demo until live ingestion/orders.)
 
 ## Notes
 - The adapter is the strangler seam: it lets us repoint panel-by-panel without a

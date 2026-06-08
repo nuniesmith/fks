@@ -29,6 +29,7 @@
 
 #![cfg(feature = "db")]
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -38,6 +39,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::error::SpawnerError;
+use crate::models::ConfigRequest;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BotRunStore — thin wrapper around a sqlx PgPool. Scoped to bot_runs ops plus
@@ -264,6 +266,71 @@ impl BotRunStore {
 
         Ok(rows.into_iter().map(SecretStatusRow::from_row).collect())
     }
+
+    // ── bot_configs (see src/sql/spawner/002_spawner.sql) ───────────────────
+    // Reusable named spawn templates. Resource limits + env live in the row's
+    // JSONB `config_json` (the sqlx build has no decimal feature, so the NUMERIC
+    // `cpu_limit` column is left to the blob rather than bound directly).
+
+    /// Save (UPSERT by name) a spawn config; returns its id.
+    pub async fn upsert_config(&self, req: &ConfigRequest) -> Result<Uuid, SpawnerError> {
+        let config_json = serde_json::json!({
+            "cpu_limit": req.cpu_limit,
+            "memory_mb": req.memory_mb,
+            "env": req.env,
+        });
+        let row = sqlx::query(
+            "INSERT INTO bot_configs (name, image, mode, config_json) \
+             VALUES ($1, $2, $3, $4) \
+             ON CONFLICT (name) DO UPDATE \
+             SET image = EXCLUDED.image, \
+                 mode = EXCLUDED.mode, \
+                 config_json = EXCLUDED.config_json, \
+                 is_active = TRUE, \
+                 updated_at = NOW() \
+             RETURNING id",
+        )
+        .bind(&req.name)
+        .bind(&req.image)
+        .bind(&req.mode)
+        .bind(config_json)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        let id: Uuid = row.try_get("id").map_err(map_sqlx)?;
+        debug!(name = %req.name, config_id = %id, "bot_configs row upserted");
+        Ok(id)
+    }
+
+    /// All active saved configs, name-ordered.
+    pub async fn list_configs(&self) -> Result<Vec<BotConfigRow>, SpawnerError> {
+        let rows = sqlx::query(
+            "SELECT id, name, image, mode, config_json \
+             FROM bot_configs \
+             WHERE is_active = TRUE \
+             ORDER BY name ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        Ok(rows.into_iter().map(BotConfigRow::from_row).collect())
+    }
+
+    /// Soft-delete a config by name (sets `is_active = FALSE`). Returns whether
+    /// a row was affected.
+    pub async fn deactivate_config(&self, name: &str) -> Result<bool, SpawnerError> {
+        let r = sqlx::query(
+            "UPDATE bot_configs SET is_active = FALSE, updated_at = NOW() \
+             WHERE name = $1 AND is_active = TRUE",
+        )
+        .bind(name)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+        Ok(r.rows_affected() > 0)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -326,6 +393,48 @@ impl SecretStatusRow {
             exchange: r.try_get("exchange").unwrap_or_default(),
             has_passphrase: r.try_get("has_passphrase").unwrap_or(false),
             updated_at: r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
+        }
+    }
+}
+
+/// A row from `bot_configs` exposed via GET /configs. Resource limits + env are
+/// unpacked from the row's JSONB `config_json`.
+#[derive(Debug, serde::Serialize)]
+pub struct BotConfigRow {
+    pub id: Uuid,
+    pub name: String,
+    pub image: String,
+    pub mode: String,
+    pub cpu_limit: Option<f64>,
+    pub memory_mb: Option<i32>,
+    pub env: HashMap<String, String>,
+}
+
+impl BotConfigRow {
+    fn from_row(r: PgRow) -> Self {
+        let cfg: serde_json::Value = r.try_get("config_json").unwrap_or(serde_json::Value::Null);
+        let cpu_limit = cfg.get("cpu_limit").and_then(serde_json::Value::as_f64);
+        let memory_mb = cfg
+            .get("memory_mb")
+            .and_then(serde_json::Value::as_i64)
+            .map(|n| n as i32);
+        let env = cfg
+            .get("env")
+            .and_then(serde_json::Value::as_object)
+            .map(|o| {
+                o.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self {
+            id: r.try_get("id").unwrap_or_else(|_| Uuid::nil()),
+            name: r.try_get("name").unwrap_or_default(),
+            image: r.try_get("image").unwrap_or_default(),
+            mode: r.try_get("mode").unwrap_or_default(),
+            cpu_limit,
+            memory_mb,
+            env,
         }
     }
 }

@@ -63,9 +63,10 @@
 ### Phase B — Solidify the keyless crypto data path  *(verify janus / webui)*
 - [ ] **B1** Verify janus writes Binance candles → `candles_crypto` (which symbols,
   which intervals); confirm `/bars/:sym/candles` returns real bars end-to-end.
-- [ ] **B2** **Symbol catalog**: adapter endpoint over QuestDB
-  (`SELECT DISTINCT symbol FROM candles_crypto`) → real symbol picker in the UI
-  (replaces the dead `/api/assets/search`).
+- [x] **B2** **Symbol catalog**: adapter endpoints over QuestDB —
+  `/api/assets/search?q=` (`SELECT DISTINCT symbol …`) powers the chart's symbol
+  search with real symbols; `/api/assets/:short` maps the stored exchange →
+  `source`/`source_chain` so the page picks the right live-data path.
 - [ ] **B3** Interval coverage: ensure 1m/5m/15m/1h/4h/1D exist, or resample higher
   TFs from 1m in the adapter.
 - *Done = charts show live Binance data for the available symbols; search works.*

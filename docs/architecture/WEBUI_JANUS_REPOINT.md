@@ -118,10 +118,19 @@ The adapter lives in `src/web/src/hooks.server.ts` (the strangler seam). Landed:
   `daily_loss_limit_pct` — wiring it blind would mis-set a safety control, so it
   stays a graceful no-op until the janus risk-config schema + page UI are aligned.
   Data-source/kraken/rithmic/analysis/optimizer/bootstrap stay dropped.
+- **Phase 3 (candles):** `/charts` historical OHLC. `GET /bars/:symbol/candles`
+  ← QuestDB `candles_crypto` via the HTTP `/exec` query API (`fks_questdb:9000`),
+  reshaped to `{candles:[{timestamp_ms,open,high,low,close,volume}]}` ascending.
+  Symbol matched loosely (the page strips the quote ccy: `BTC/USD`→`BTC`), inputs
+  sanitised before hitting SQL. *Follow-ups:* server indicators
+  (`/api/chart/:sym/indicators` — degrades gracefully today; the page also has
+  client-side EMA/BB) and live `/sse/bars/:sym` for futures (crypto already gets
+  live ticks from the page's own Kraken/Binance WS). Empty in the paper demo until
+  janus ingestion populates `candles_crypto`.
 
 Remaining: the `/settings` risk-config write (needs janus schema + UI alignment),
-then candles/`/charts` (Phase 3), then the Phase 4 cleanup. Risk/performance data
-is empty in the paper demo (correct shapes, no data until a live order path).
+`/charts` server indicators + live SSE bars, then the Phase 4 cleanup. Risk/
+performance/candles data is empty in the paper demo until live ingestion/orders.
 
 ## Notes
 - nginx `conf.d/*.conf` still routes `/api/*`/`/factory/*`/`/trading*` at

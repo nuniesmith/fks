@@ -21,6 +21,7 @@ const SPAWNER_URL = env.SPAWNER_INTERNAL_URL ?? "http://fks_bot_spawner:8090";
 const JANUS_URL = env.JANUS_INTERNAL_URL ?? "http://fks_janus:8080"; // janus-api
 const JANUS_FORWARD_URL = env.JANUS_FORWARD_INTERNAL_URL ?? "http://fks_janus:8180"; // forward (brain/risk)
 const PROMETHEUS_URL = env.PROMETHEUS_INTERNAL_URL ?? "http://fks_prometheus:9090"; // /monitoring
+const QUESTDB_URL = env.QUESTDB_INTERNAL_URL ?? "http://fks_questdb:9000"; // /charts OHLC (HTTP query API)
 
 const BACKEND_PREFIXES = ["/api/", "/sse/", "/bars/", "/factory/", "/kraken/", "/fapi/"];
 
@@ -285,6 +286,53 @@ const METRICS_LAYOUT = {
   ],
 };
 
+// ── /charts: historical OHLC from QuestDB ───────────────────────────────────
+// GET /bars/:symbol/candles?interval=&days_back=&limit= →
+//   { candles: [{ timestamp /*ms*/, open, high, low, close, volume }] } ascending.
+// Sourced from QuestDB's `candles_crypto` (ts µs, symbol, exchange, interval,
+// o/h/l/c/v) via the HTTP /exec query API. The page strips the quote currency
+// (BTC/USD → BTC), so we match the symbol loosely (exact, or `SYM/…`/`SYM-…`).
+// Live updates are client-side (crypto: Kraken/Binance WS) or /sse/bars (futures,
+// still stubbed); this endpoint is the history backbone for every symbol.
+async function questdbCandles(event: RequestEvent, symbolRaw: string): Promise<Response> {
+  // Strip anything that isn't a symbol char — these go straight into a SQL
+  // string literal, so this is also the injection guard.
+  const sym = symbolRaw.replace(/[^A-Za-z0-9._/-]/g, "").slice(0, 32);
+  const p = event.url.searchParams;
+  const iv = (p.get("interval") ?? "5m").replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "5m";
+  const days = Math.min(365, Math.max(1, parseInt(p.get("days_back") ?? "5", 10) || 5));
+  const lim = Math.min(5000, Math.max(1, parseInt(p.get("limit") ?? "1000", 10) || 1000));
+  if (!sym) return json({ candles: [] });
+  const sql =
+    `SELECT cast(ts as long) t, open, high, low, close, volume FROM candles_crypto ` +
+    `WHERE (symbol = '${sym}' OR symbol LIKE '${sym}/%' OR symbol LIKE '${sym}-%') ` +
+    `AND interval = '${iv}' AND ts >= dateadd('d', -${days}, now()) ` +
+    `ORDER BY ts DESC LIMIT ${lim}`;
+  try {
+    const r = await fetch(`${QUESTDB_URL}/exec?query=${encodeURIComponent(sql)}`, {
+      headers: { accept: "application/json" },
+    });
+    const j: any = await r.json();
+    const rows: any[] = Array.isArray(j?.dataset) ? j.dataset : [];
+    // dataset row order matches the SELECT: [t_µs, open, high, low, close, volume].
+    // QuestDB returns newest-first (ORDER BY ts DESC); reverse → ascending for
+    // lightweight-charts' setData().
+    const candles = rows
+      .map((row) => ({
+        timestamp: Math.round(Number(row[0]) / 1000), // µs → ms
+        open: Number(row[1]),
+        high: Number(row[2]),
+        low: Number(row[3]),
+        close: Number(row[4]),
+        volume: Number(row[5] ?? 0),
+      }))
+      .reverse();
+    return json({ candles });
+  } catch {
+    return json({ candles: [] });
+  }
+}
+
 async function proxyBackend(event: RequestEvent): Promise<Response> {
   const { pathname, search } = event.url;
 
@@ -369,6 +417,18 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
   }
   if (pathname === "/api/metrics/layout") {
     return json(METRICS_LAYOUT);
+  }
+
+  // ── /charts historical candles → QuestDB candles_crypto (OHLCV) ─────────────
+  const barsMatch = /^\/bars\/([^/]+)\/candles$/.exec(pathname);
+  if (barsMatch) {
+    let sym = barsMatch[1];
+    try {
+      sym = decodeURIComponent(sym);
+    } catch {
+      /* malformed %-encoding — fall back to the raw segment */
+    }
+    return questdbCandles(event, sym);
   }
 
   // More janus panels (overview aggregate / performance) land here next —

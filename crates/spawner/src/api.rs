@@ -47,7 +47,7 @@ use crate::{
 #[cfg(feature = "db")]
 use crate::db::{BotRunStore, RecordSpawn};
 #[cfg(feature = "db")]
-use crate::models::SecretRequest;
+use crate::models::{ConfigRequest, SecretRequest};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared state
@@ -100,7 +100,12 @@ pub fn build_router(state: AppState) -> Router {
     let protected = protected
         .route("/runs", get(runs_handler))
         .route("/secrets", post(secrets_handler))
-        .route("/secrets/status", get(secrets_status_handler));
+        .route("/secrets/status", get(secrets_status_handler))
+        .route(
+            "/configs",
+            get(list_configs_handler).post(save_config_handler),
+        )
+        .route("/configs/{name}", delete(delete_config_handler));
 
     let protected = protected
         .layer(middleware::from_fn_with_state(
@@ -481,6 +486,83 @@ async fn secrets_status_handler(
         "total": rows.len(),
         "db_enabled": true,
     })))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saved spawn configs  (db feature only) — reusable named spawn templates
+//
+// Persisted in `bot_configs`. The browser saves the spawn form as a named
+// config (POST), lists them (GET), and removes them (DELETE, soft). The actual
+// image-prefix / concurrency guards still apply at /spawn time.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+async fn save_config_handler(
+    State(state): State<AppState>,
+    Json(req): Json<ConfigRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>), SpawnerError> {
+    if req.name.trim().is_empty() || req.image.trim().is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "name and image are required",
+            })),
+        ));
+    }
+
+    let Some(store) = state.store.as_ref() else {
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "ok": false,
+                "db_enabled": false,
+                "error": "config storage requires the spawner Postgres DB",
+            })),
+        ));
+    };
+
+    let id = store.upsert_config(&req).await?;
+    info!(name = %req.name, "saved bot config");
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "id": id, "name": req.name })),
+    ))
+}
+
+#[cfg(feature = "db")]
+async fn list_configs_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        return Ok(Json(serde_json::json!({
+            "configs": [],
+            "total": 0,
+            "db_enabled": false,
+        })));
+    };
+
+    let rows = store.list_configs().await?;
+    Ok(Json(serde_json::json!({
+        "configs": rows,
+        "total": rows.len(),
+        "db_enabled": true,
+    })))
+}
+
+#[cfg(feature = "db")]
+async fn delete_config_handler(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        return Ok(Json(
+            serde_json::json!({ "ok": false, "db_enabled": false }),
+        ));
+    };
+
+    let removed = store.deactivate_config(&name).await?;
+    Ok(Json(serde_json::json!({ "ok": removed, "name": name })))
 }
 
 async fn logs_sse_handler(

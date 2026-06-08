@@ -75,6 +75,32 @@ pub struct SecretRequest {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Saved spawn config (POST /configs) — a reusable, named spawn template
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Request body for `POST /configs` — persists a named spawn template in
+/// `bot_configs`. Resource limits + env live in the row's `config_json` (the
+/// spawner's sqlx build has no decimal feature, so the NUMERIC `cpu_limit`
+/// column is left to the JSON blob rather than bound directly).
+#[derive(Debug, Deserialize)]
+pub struct ConfigRequest {
+    /// Unique human-readable name (the upsert key).
+    pub name: String,
+    /// Docker image (validated against the prefix when actually spawned).
+    pub image: String,
+    /// Execution mode label.
+    #[serde(default = "default_mode")]
+    pub mode: String,
+    /// Optional CPU limit in fractional cores.
+    pub cpu_limit: Option<f64>,
+    /// Optional memory limit in megabytes.
+    pub memory_mb: Option<i32>,
+    /// Environment variables for the spawn.
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Spawn response
 // ─────────────────────────────────────────────────────────────────────────────
 

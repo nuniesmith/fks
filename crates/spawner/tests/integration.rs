@@ -562,6 +562,74 @@ async fn secrets_post_rejects_missing_fields() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Saved spawn configs (db feature) — graceful behaviour without a live Postgres
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn configs_list_degrades_without_db() {
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(Request::get("/configs").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+    assert!(payload.contains("\"total\":0"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn config_save_without_db_returns_503() {
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "name": "demo-paper",
+        "image": "fks-bot-crypto-demo:latest",
+        "mode": "paper"
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/configs")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn config_save_rejects_missing_name() {
+    let (app, _) = build_app(test_config(""));
+
+    // Blank name → 400 (validation precedes the store check).
+    let body = serde_json::json!({ "name": "", "image": "fks-bot-x:latest" }).to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/configs")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Auth middleware
 // ─────────────────────────────────────────────────────────────────────────────
 

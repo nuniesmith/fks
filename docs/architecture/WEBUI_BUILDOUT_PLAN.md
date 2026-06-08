@@ -71,9 +71,11 @@
 - *Done = charts show live Binance data for the available symbols; search works.*
 
 ### Phase C — Indicators everywhere  *(webui adapter + charts UI)*
-- [ ] **C1** TS indicators module (adapter-side) computed from QuestDB candles:
-  EMA, SMA, WMA, RSI, MACD, Bollinger Bands, ATR, VWAP, Stochastic, ADX, OBV,
-  Keltner, Donchian, … Wire `/api/chart/:sym/indicators`.
+- [x] **C1** TS indicators module (`$lib/server/indicators.ts`) computed from QuestDB
+  candles, wired to `/api/chart/:sym/indicators` — lights up the existing
+  BB/RSI/MACD/ATR chart toggles server-side. Ships EMA/SMA/RSI/MACD/BBands/ATR/VWAP
+  + an `INDICATOR_CATALOG` for the picker. *(Follow-up: WMA, Stochastic, ADX, OBV,
+  Keltner, Donchian + per-indicator params.)*
 - [ ] **C2** Charts **indicator catalog UI**: searchable list, per-indicator toggle,
   parameter controls (period, stddev, fast/slow/signal…), overlay-vs-subpane.
 - [ ] **C3** Indicator presets + persistence (per symbol/timeframe).

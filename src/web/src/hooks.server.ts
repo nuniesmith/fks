@@ -1,5 +1,6 @@
 import type { Handle, RequestEvent } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
+import { computeIndicators, type Candle } from "$lib/server/indicators";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Backend proxy  (replaces the old vite/nginx → fks_ruby reverse proxy)
@@ -286,23 +287,27 @@ const METRICS_LAYOUT = {
   ],
 };
 
-// ── /charts: historical OHLC from QuestDB ───────────────────────────────────
-// GET /bars/:symbol/candles?interval=&days_back=&limit= →
-//   { candles: [{ timestamp /*ms*/, open, high, low, close, volume }] } ascending.
-// Sourced from QuestDB's `candles_crypto` (ts µs, symbol, exchange, interval,
-// o/h/l/c/v) via the HTTP /exec query API. The page strips the quote currency
-// (BTC/USD → BTC), so we match the symbol loosely (exact, or `SYM/…`/`SYM-…`).
-// Live updates are client-side (crypto: Kraken/Binance WS) or /sse/bars (futures,
-// still stubbed); this endpoint is the history backbone for every symbol.
-async function questdbCandles(event: RequestEvent, symbolRaw: string): Promise<Response> {
+// ── /charts: historical OHLC + indicators from QuestDB ──────────────────────
+// Candles come from QuestDB's `candles_crypto` (ts µs, symbol, exchange,
+// interval, o/h/l/c/v) via the HTTP /exec query API. The page strips the quote
+// currency (BTC/USD → BTC), so we match the symbol loosely (exact, or
+// `SYM/…`/`SYM-…`). Live updates are client-side (crypto: Kraken/Binance WS) or
+// /sse/bars (futures, still stubbed); this is the history backbone.
+
+// Query candles_crypto → ascending rows { tsMs, o,h,l,c,v }. Shared by the
+// candles endpoint and the indicators endpoint.
+async function fetchCandles(
+  event: RequestEvent,
+  symbolRaw: string,
+): Promise<{ tsMs: number; open: number; high: number; low: number; close: number; volume: number }[]> {
   // Strip anything that isn't a symbol char — these go straight into a SQL
   // string literal, so this is also the injection guard.
   const sym = symbolRaw.replace(/[^A-Za-z0-9._/-]/g, "").slice(0, 32);
+  if (!sym) return [];
   const p = event.url.searchParams;
   const iv = (p.get("interval") ?? "5m").replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "5m";
   const days = Math.min(365, Math.max(1, parseInt(p.get("days_back") ?? "5", 10) || 5));
   const lim = Math.min(5000, Math.max(1, parseInt(p.get("limit") ?? "1000", 10) || 1000));
-  if (!sym) return json({ candles: [] });
   const sql =
     `SELECT cast(ts as long) t, open, high, low, close, volume FROM candles_crypto ` +
     `WHERE (symbol = '${sym}' OR symbol LIKE '${sym}/%' OR symbol LIKE '${sym}-%') ` +
@@ -314,12 +319,11 @@ async function questdbCandles(event: RequestEvent, symbolRaw: string): Promise<R
     });
     const j: any = await r.json();
     const rows: any[] = Array.isArray(j?.dataset) ? j.dataset : [];
-    // dataset row order matches the SELECT: [t_µs, open, high, low, close, volume].
-    // QuestDB returns newest-first (ORDER BY ts DESC); reverse → ascending for
-    // lightweight-charts' setData().
-    const candles = rows
+    // Row order matches the SELECT: [t_µs, open, high, low, close, volume].
+    // QuestDB returns newest-first; reverse → ascending for setData().
+    return rows
       .map((row) => ({
-        timestamp: Math.round(Number(row[0]) / 1000), // µs → ms
+        tsMs: Math.round(Number(row[0]) / 1000), // µs → ms
         open: Number(row[1]),
         high: Number(row[2]),
         low: Number(row[3]),
@@ -327,10 +331,42 @@ async function questdbCandles(event: RequestEvent, symbolRaw: string): Promise<R
         volume: Number(row[5] ?? 0),
       }))
       .reverse();
-    return json({ candles });
   } catch {
-    return json({ candles: [] });
+    return [];
   }
+}
+
+// GET /bars/:symbol/candles → { candles: [{ timestamp /*ms*/, o,h,l,c,v }] }.
+async function questdbCandles(event: RequestEvent, symbolRaw: string): Promise<Response> {
+  const rows = await fetchCandles(event, symbolRaw);
+  return json({
+    candles: rows.map((r) => ({
+      timestamp: r.tsMs,
+      open: r.open,
+      high: r.high,
+      low: r.low,
+      close: r.close,
+      volume: r.volume,
+    })),
+  });
+}
+
+// GET /api/chart/:symbol/indicators?interval=&indicators=rsi,macd,bbands,atr,… →
+// { indicators: { <key>: [{ time /*sec*/, value }] } } computed from the candles.
+// Keys match what the chart expects (bb_upper/bb_middle/bb_lower, rsi, atr,
+// macd_line/macd_signal/macd_hist, ema9/sma20/vwap, …).
+async function chartIndicators(event: RequestEvent, symbolRaw: string): Promise<Response> {
+  const rows = await fetchCandles(event, symbolRaw);
+  const candles: Candle[] = rows.map((r) => ({
+    time: Math.floor(r.tsMs / 1000), // ms → s, matching the chart's candle time
+    open: r.open,
+    high: r.high,
+    low: r.low,
+    close: r.close,
+    volume: r.volume,
+  }));
+  const names = (event.url.searchParams.get("indicators") ?? "").split(",");
+  return json({ indicators: computeIndicators(candles, names) });
 }
 
 async function proxyBackend(event: RequestEvent): Promise<Response> {
@@ -429,6 +465,18 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
       /* malformed %-encoding — fall back to the raw segment */
     }
     return questdbCandles(event, sym);
+  }
+
+  // ── /charts indicators → computed in-adapter from QuestDB candles ───────────
+  const indMatch = /^\/api\/chart\/([^/]+)\/indicators$/.exec(pathname);
+  if (indMatch) {
+    let sym = indMatch[1];
+    try {
+      sym = decodeURIComponent(sym);
+    } catch {
+      /* malformed %-encoding — fall back to the raw segment */
+    }
+    return chartIndicators(event, sym);
   }
 
   // More janus panels (overview aggregate / performance) land here next —

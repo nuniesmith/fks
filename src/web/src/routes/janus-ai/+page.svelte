@@ -7,6 +7,7 @@
   import ProgressBar from '$components/ui/ProgressBar.svelte';
   import Skeleton from '$components/ui/Skeleton.svelte';
   import Modal from '$components/ui/Modal.svelte';
+  import EmptyState from '$components/ui/EmptyState.svelte';
 
   // ─── Types ──────────────────────────────────────────────────────────
 
@@ -502,7 +503,7 @@
         {#if janusLoading && !janusState}
           <Skeleton lines={4} />
         {:else if janusError && !janusState}
-          <p class="error-msg">⚠ {janusError}</p>
+          <EmptyState icon="⚠️" title="Couldn't load Janus state" variant="error" hint={janusError} />
         {:else}
           <!-- Regime Grid -->
           <div class="sub-label">Regime Detection</div>
@@ -526,7 +527,7 @@
               {/each}
             </div>
           {:else}
-            <p class="empty-msg">No regime data available</p>
+            <EmptyState icon="∅" title="No regime data" hint="The brain hasn't published a regime read yet." />
           {/if}
 
           <!-- Recent Signals Feed -->
@@ -548,7 +549,7 @@
               {/each}
             </div>
           {:else}
-            <p class="empty-msg">No recent signals</p>
+            <EmptyState icon="∅" title="No recent signals" hint="Signals appear here as the brain emits them." />
           {/if}
         {/if}
     </Panel>
@@ -558,7 +559,7 @@
         {#if affinityLoading && !affinity}
           <Skeleton lines={5} />
         {:else if affinityError && !affinity}
-          <p class="error-msg">⚠ {affinityError}</p>
+          <EmptyState icon="⚠️" title="Couldn't load affinity" variant="error" hint={affinityError} />
         {:else if affinityStrategies.length > 0}
           <div class="affinity-table-wrap">
             <table class="affinity-table">
@@ -593,7 +594,7 @@
             </table>
           </div>
         {:else}
-          <p class="empty-msg">No affinity data available</p>
+          <EmptyState icon="∅" title="No affinity data" hint="Strategy/asset weights populate once the brain learns them." />
         {/if}
     </Panel>
 
@@ -611,12 +612,13 @@
           {#if sessionsLoading && !sessionsData}
             <Skeleton lines={6} />
           {:else if sessionsError && !sessionsData}
-            <p class="error-msg">⚠ {sessionsError}</p>
+            <EmptyState icon="⚠️" title="Couldn't load sessions" variant="error" hint={sessionsError} />
           {:else if sessions.length === 0}
-            <div class="empty-state">
-              <p class="empty-msg">No sessions found</p>
-              <button class="btn btn-accent btn-sm" onclick={openModal}>+ Create Session</button>
-            </div>
+            <EmptyState icon="📭" title="No sessions found" hint="Create a session to start a focused analysis run.">
+              {#snippet action()}
+                <button class="btn btn-accent btn-sm" onclick={openModal}>+ Create Session</button>
+              {/snippet}
+            </EmptyState>
           {:else}
             <div class="sessions-list">
               {#each sessions as session (session.id)}
@@ -690,9 +692,9 @@
           {#if signalsLoading && liveSignals.length === 0}
             <Skeleton lines={6} />
           {:else if signalsError && liveSignals.length === 0}
-            <p class="error-msg">⚠ {signalsError}</p>
+            <EmptyState icon="⚠️" title="Couldn't load live signals" variant="error" hint={signalsError} />
           {:else if liveSignals.length === 0}
-            <p class="empty-msg">No live signals</p>
+            <EmptyState icon="∅" title="No live signals" hint="Live signals stream in as the brain generates them." />
           {:else}
             <div class="data-table-wrap">
               <table class="data-table">
@@ -761,9 +763,9 @@
           {#if memoriesLoading && !memoriesData}
             <Skeleton lines={6} />
           {:else if memoriesError && !memoriesData}
-            <p class="error-msg">⚠ {memoriesError}</p>
+            <EmptyState icon="⚠️" title="Couldn't load memories" variant="error" hint={memoriesError} />
           {:else if filteredMemories().length === 0}
-            <p class="empty-msg">No memories found</p>
+            <EmptyState icon="∅" title="No memories found" hint="Trade memories appear here once recorded." />
           {:else}
             <div class="data-table-wrap">
               <table class="data-table">
@@ -1322,28 +1324,6 @@
   .btn-red:hover {
     background: var(--red);
     color: #fff;
-  }
-
-  /* ── Empty / Error States ──────────────────────────────── */
-  .empty-msg {
-    font-size: 10px;
-    color: var(--t3);
-    padding: 12px;
-    text-align: center;
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    padding: 24px;
-  }
-
-  .error-msg {
-    font-size: 10px;
-    color: var(--red);
-    padding: 8px;
   }
 
   .dim {

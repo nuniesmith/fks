@@ -11,6 +11,7 @@
     <EmptyState icon="⚠️" title="Failed to load" variant="error" hint={msg} />
 -->
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   interface Props {
     /** Optional emoji / glyph shown above the title. */
     icon?: string;
@@ -20,14 +21,17 @@
     hint?: string;
     /** 'error' tints the title red; 'default' is neutral. */
     variant?: 'default' | 'error';
+    /** Optional call-to-action (e.g. a button) rendered below the hint. */
+    action?: Snippet;
   }
-  let { icon, title, hint, variant = 'default' }: Props = $props();
+  let { icon, title, hint, variant = 'default', action }: Props = $props();
 </script>
 
 <div class="empty-state" class:error={variant === 'error'} role="status">
   {#if icon}<span class="es-icon" aria-hidden="true">{icon}</span>{/if}
   <span class="es-title">{title}</span>
   {#if hint}<span class="es-hint">{hint}</span>{/if}
+  {#if action}<div class="es-action">{@render action()}</div>{/if}
 </div>
 
 <style>
@@ -58,5 +62,8 @@
     color: var(--t3);
     max-width: 320px;
     line-height: 1.5;
+  }
+  .es-action {
+    margin-top: 8px;
   }
 </style>

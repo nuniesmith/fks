@@ -142,12 +142,14 @@
   failure surfaced (502) instead of a fake success. *(If janus's actual contract
   differs, the GET reveals it and the adapter mapping is a one-line tweak.)*
 - [~] **G2** Error / empty / loading-state audit. Added a reusable **`EmptyState`**
-  primitive (`$components/ui/EmptyState.svelte`) and adopted it on **charts**
-  (no-data vs. fetch-error overlay — no more silent blank chart), **signals**
-  (signals + alerts panels) and **performance** (metrics + trade-history panels),
-  replacing the ad-hoc `.empty` / `.err-text` markup with a consistent icon +
-  title + hint, error-tinted on failures. *(Follow-up: janus-ai / monitoring /
-  overview panels next.)*
+  primitive (`$components/ui/EmptyState.svelte`, with an optional `action` snippet
+  for a CTA button) and adopted it on **charts** (no-data vs. fetch-error overlay),
+  **signals**, **performance**, and **janus-ai** (all 11 regime/affinity/sessions/
+  live-signals/memories empty + error states — the "No sessions" case keeps its
+  *Create Session* button via the action snippet). Each shows a consistent icon +
+  title + hint, error-tinted on failures; the old `.empty*` / `.err*` CSS is
+  pruned. *(Remaining: the `/` overview briefing line; monitoring's compact inline
+  cell placeholders are intentionally left — `EmptyState` is panel-sized.)*
 - [ ] **G3** Playwright E2E for the wired pages.
 - [ ] **G4** Final nginx comment cleanup; refresh docs; remove remaining dead surface.
 

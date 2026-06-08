@@ -175,6 +175,16 @@
   let activeOscillators = $state<OscMeta[]>([]);
   let indPickerOpen = $state(false);
 
+  // Crosshair OHLC readout (updated on hover)
+  let hoverBar = $state<{ o: number; h: number; l: number; c: number; chg: number } | null>(null);
+  const fmtP = (n: number): string =>
+    n >= 1000 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+    : n >= 1 ? n.toFixed(2)
+    : n.toFixed(5);
+
+  // Logarithmic vs linear price scale
+  let logScale = $state(false);
+
   // Loading state
   let loading = $state(true);
   let indicatorLoading = $state(false);
@@ -922,6 +932,21 @@
       wickUpColor: '#16c784', wickDownColor: '#ea3943',
     });
 
+    // Crosshair OHLC readout — reflect the hovered bar (cleared on leave).
+    const cs: any = candleSeries;
+    chart.subscribeCrosshairMove((param: any) => {
+      const d = cs ? param?.seriesData?.get(cs) : null;
+      if (d && typeof d.close === 'number') {
+        const chg = d.open ? ((d.close - d.open) / d.open) * 100 : 0;
+        hoverBar = { o: d.open, h: d.high, l: d.low, c: d.close, chg };
+      } else {
+        hoverBar = null;
+      }
+    });
+
+    // Keep the chosen price-scale mode across reloads.
+    if (logScale) chart.applyOptions({ rightPriceScale: { mode: 1 as any } });
+
     // Resolve asset data source
     await lookupAsset(symbol);
 
@@ -1120,28 +1145,44 @@
     if (e.key === 'Escape') showDropdown = false;
   }
 
+  // Persist symbol+timeframe to localStorage and reflect them in the URL (shareable).
+  function persistChartState() {
+    try {
+      localStorage.setItem('fks_chart_symbol', symbol);
+      localStorage.setItem('fks_chart_tf', interval);
+      history.replaceState(null, '', `?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(interval)}`);
+    } catch { /* unavailable */ }
+  }
+
   function setSymbol(s: string) {
     ignoreNextFocusChange = true;
     symbol = s;
-    try { localStorage.setItem('fks_chart_symbol', s); } catch { /* unavailable */ }
+    persistChartState();
     focusSymbol.set(s);
     loadChart();
   }
 
   function switchTimeframe(tf: string) {
     interval = tf;
-    try { localStorage.setItem('fks_chart_tf', tf); } catch { /* unavailable */ }
+    persistChartState();
     loadChart();
+  }
+
+  function toggleLogScale() {
+    logScale = !logScale;
+    chart?.applyOptions({ rightPriceScale: { mode: (logScale ? 1 : 0) as any } });
   }
 
   // ─── Lifecycle ─────────────────────────────────────────────────────────────
   onMount(() => {
-    // Restore the last-viewed symbol/timeframe before the first chart load.
+    // URL params (?symbol=&tf=) win for shareable links; else the last-viewed
+    // values (localStorage). Persist whatever we resolve.
     try {
-      const ss = localStorage.getItem('fks_chart_symbol');
-      const st = localStorage.getItem('fks_chart_tf');
-      if (ss) { symbol = ss; focusSymbol.set(ss); }
-      if (st) interval = st;
+      const params = new URLSearchParams(window.location.search);
+      const ss = params.get('symbol') || localStorage.getItem('fks_chart_symbol');
+      const st = params.get('tf') || params.get('interval') || localStorage.getItem('fks_chart_tf');
+      if (ss) { symbol = ss; focusSymbol.set(ss); localStorage.setItem('fks_chart_symbol', ss); }
+      if (st) { interval = st; localStorage.setItem('fks_chart_tf', st); }
     } catch { /* unavailable */ }
     loadChart();
     loadOscillatorCatalog();
@@ -1351,6 +1392,11 @@
         aria-pressed={drawingActive ? 'true' : 'false'}
       >✏️ Draw</button>
 
+      <!-- Log/linear price scale -->
+      <button class="ind-btn" class:active={logScale} onclick={toggleLogScale}
+        title="Toggle logarithmic price scale" aria-pressed={logScale ? 'true' : 'false'}
+      >{logScale ? 'Log' : 'Lin'}</button>
+
       <!-- Screenshot / export -->
       <button
         class="ind-btn"
@@ -1393,6 +1439,16 @@
           <div class="chart-overlay">
             <div class="spinner" role="status" aria-label="Loading chart"></div>
             <span>Loading {symbol} · {interval}…</span>
+          </div>
+        {/if}
+        {#if hoverBar}
+          <div class="ohlc-readout" aria-hidden="true">
+            <span class="k">O</span><span class="v">{fmtP(hoverBar.o)}</span>
+            <span class="k">H</span><span class="v">{fmtP(hoverBar.h)}</span>
+            <span class="k">L</span><span class="v">{fmtP(hoverBar.l)}</span>
+            <span class="k">C</span><span class="v">{fmtP(hoverBar.c)}</span>
+            <span class="chg" class:up={hoverBar.chg >= 0} class:down={hoverBar.chg < 0}
+              >{hoverBar.chg >= 0 ? '+' : ''}{hoverBar.chg.toFixed(2)}%</span>
           </div>
         {/if}
       </div>
@@ -1575,6 +1631,26 @@
     font-size: 10px;
     color: var(--t3, #8890b8);
   }
+  .ohlc-readout {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    font-size: 10px;
+    background: rgba(7, 7, 13, 0.72);
+    border: 1px solid var(--b1, #1a1a2e);
+    border-radius: var(--r, 4px);
+    pointer-events: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .ohlc-readout .k { color: var(--t3, #8890b8); }
+  .ohlc-readout .v { color: var(--t1, #e6e9f5); margin-right: 3px; }
+  .ohlc-readout .chg.up { color: var(--green, #16c784); }
+  .ohlc-readout .chg.down { color: var(--red, #ea3943); }
   .ind-btn {
     all: unset;
     display: flex;

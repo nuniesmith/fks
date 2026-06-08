@@ -78,8 +78,9 @@
   BB/RSI/MACD/ATR chart toggles server-side.
 - [x] **C1b** Expanded the engine: EMA/SMA/**WMA**/RSI/MACD/BBands/ATR/VWAP +
   **Stochastic, Williams %R, CCI, OBV, Donchian, Keltner** (`ema<N>`/`sma<N>`/`wma<N>`
-  accept any period). Serves the metadata at **`GET /api/indicators/catalog`**
-  (`INDICATOR_CATALOG`) for the picker. *(Follow-up: ADX + per-indicator params.)*
+  accept any period) + **ADX (+DI/−DI)**. Serves the metadata at
+  **`GET /api/indicators/catalog`** (`INDICATOR_CATALOG`) for the picker.
+  *(Follow-up: per-indicator params.)*
 - [~] **C2** Charts indicator UI. Added **SMA 20, VWAP, WMA 20, Donchian, Keltner**
   server-computed overlay toggles (matching the BB/ATR pattern). *(Remaining: a
   generic catalog dropdown/picker over `INDICATOR_CATALOG` (incl. the **sub-pane

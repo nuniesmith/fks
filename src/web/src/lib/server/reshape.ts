@@ -1,10 +1,10 @@
 // ════════════════════════════════════════════════════════════════════════════
-// Pure response reshapers for the adapter (hooks.server.ts)
+// Pure adapter helpers for hooks.server.ts (shape mapping + input sanitizing)
 // ════════════════════════════════════════════════════════════════════════════
-// Extracted from the SvelteKit hook so the shape-mapping logic is unit-testable
-// without fetch / `$env`. Each takes already-fetched upstream JSON and returns the
-// body the WebUI expects; the hook keeps the I/O (fetch, headers, Response) and
-// delegates the conversion here.
+// Extracted from the SvelteKit hook so the logic is unit-testable without fetch /
+// `$env`. The reshapers take already-fetched upstream JSON and return the body the
+// WebUI expects; the sanitizers guard the QuestDB query interpolation. The hook
+// keeps the I/O (fetch, headers, Response) and delegates the pure work here.
 
 /** Pass through only genuine numbers (janus already sends typed JSON). */
 const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
@@ -94,4 +94,20 @@ export function humanizeSince(iso?: string): string {
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   return `${Math.floor(s / 86400)}d`;
+}
+
+// ── Input sanitizers ─────────────────────────────────────────────────────────
+// QuestDB's HTTP /exec endpoint has no parameterized-query API, so symbol /
+// interval tokens are interpolated into the SQL string. These strip everything
+// that isn't a valid token character and cap the length — the injection guard
+// for those queries. Keep them strict.
+
+/** Strip non-symbol chars and cap length; the result is safe in a SQL literal. */
+export function sanitizeSymbol(raw: string | null | undefined, maxLen = 32): string {
+  return (raw ?? "").replace(/[^A-Za-z0-9._/-]/g, "").slice(0, maxLen);
+}
+
+/** Strip non-alphanumerics from an interval token; empty/all-stripped → "5m". */
+export function sanitizeInterval(raw: string | null | undefined): string {
+  return (raw ?? "5m").replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "5m";
 }

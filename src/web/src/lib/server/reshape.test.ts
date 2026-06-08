@@ -4,6 +4,8 @@ import {
   reshapeHealth,
   reshapePerformance,
   reshapeRiskConfig,
+  sanitizeInterval,
+  sanitizeSymbol,
   toRiskConfigPayload,
 } from "./reshape";
 
@@ -116,5 +118,43 @@ describe("humanizeSince", () => {
     expect(humanizeSince(ago(90_000))).toBe("1m");
     expect(humanizeSince(ago(2 * 3_600_000))).toBe("2h");
     expect(humanizeSince(ago(3 * 86_400_000))).toBe("3d");
+  });
+});
+
+describe("sanitizeSymbol", () => {
+  it("keeps valid symbol characters", () => {
+    expect(sanitizeSymbol("BTC/USD")).toBe("BTC/USD");
+    expect(sanitizeSymbol("XBTUSDTM")).toBe("XBTUSDTM");
+    expect(sanitizeSymbol("ETH-USD.PERP")).toBe("ETH-USD.PERP");
+  });
+
+  it("strips SQL-injection metacharacters (the QuestDB query guard)", () => {
+    // quotes, spaces, semicolons, parens, equals are all removed
+    expect(sanitizeSymbol("a b;c(d)='e'")).toBe("abcde");
+    expect(sanitizeSymbol("BTC'); DROP TABLE candles_crypto; --")).toBe(
+      "BTCDROPTABLEcandles_crypto--",
+    );
+  });
+
+  it("caps length and tolerates null / undefined", () => {
+    expect(sanitizeSymbol("A".repeat(50))).toHaveLength(32);
+    expect(sanitizeSymbol("A".repeat(50), 24)).toHaveLength(24);
+    expect(sanitizeSymbol(null)).toBe("");
+    expect(sanitizeSymbol(undefined)).toBe("");
+  });
+});
+
+describe("sanitizeInterval", () => {
+  it("keeps valid interval tokens", () => {
+    expect(sanitizeInterval("5m")).toBe("5m");
+    expect(sanitizeInterval("1h")).toBe("1h");
+    expect(sanitizeInterval("1D")).toBe("1D");
+  });
+
+  it("defaults to 5m for empty / fully-stripped input", () => {
+    expect(sanitizeInterval(null)).toBe("5m");
+    expect(sanitizeInterval("")).toBe("5m");
+    expect(sanitizeInterval("'; --")).toBe("5m"); // all chars stripped → fallback
+    expect(sanitizeInterval("5m'")).toBe("5m"); // trailing quote dropped
   });
 });

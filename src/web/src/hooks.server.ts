@@ -6,6 +6,8 @@ import {
   reshapeHealth,
   reshapePerformance,
   reshapeRiskConfig,
+  sanitizeInterval,
+  sanitizeSymbol,
   toRiskConfigPayload,
 } from "$lib/server/reshape";
 
@@ -269,10 +271,10 @@ async function fetchCandles(
 ): Promise<{ tsMs: number; open: number; high: number; low: number; close: number; volume: number }[]> {
   // Strip anything that isn't a symbol char — these go straight into a SQL
   // string literal, so this is also the injection guard.
-  const sym = symbolRaw.replace(/[^A-Za-z0-9._/-]/g, "").slice(0, 32);
+  const sym = sanitizeSymbol(symbolRaw, 32);
   if (!sym) return [];
   const p = event.url.searchParams;
-  const iv = (p.get("interval") ?? "5m").replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "5m";
+  const iv = sanitizeInterval(p.get("interval"));
   const days = Math.min(365, Math.max(1, parseInt(p.get("days_back") ?? "5", 10) || 5));
   const lim = Math.min(5000, Math.max(1, parseInt(p.get("limit") ?? "1000", 10) || 1000));
   const sql =
@@ -353,10 +355,7 @@ async function questdbRows(sql: string): Promise<any[]> {
 // from QuestDB `candles_crypto` (so you can only pick symbols that have data).
 async function symbolSearch(event: RequestEvent): Promise<Response> {
   // Sanitised + uppercased — goes into a SQL literal (injection guard).
-  const q = (event.url.searchParams.get("q") ?? "")
-    .replace(/[^A-Za-z0-9._/-]/g, "")
-    .toUpperCase()
-    .slice(0, 24);
+  const q = sanitizeSymbol(event.url.searchParams.get("q"), 24).toUpperCase();
   if (!q) return json({ results: [] });
   const rows = await questdbRows(
     `SELECT DISTINCT symbol, exchange FROM candles_crypto ` +
@@ -376,7 +375,7 @@ async function symbolSearch(event: RequestEvent): Promise<Response> {
 // the stored exchange to `source`/`source_chain` so the page picks the right
 // live-data path; unknown symbols → {} (page falls back to its slash heuristic).
 async function assetInfo(event: RequestEvent, shortRaw: string): Promise<Response> {
-  const sym = shortRaw.replace(/[^A-Za-z0-9._/-]/g, "").toUpperCase().slice(0, 24);
+  const sym = sanitizeSymbol(shortRaw, 24).toUpperCase();
   if (!sym) return json({});
   const rows = await questdbRows(
     `SELECT exchange FROM candles_crypto ` +

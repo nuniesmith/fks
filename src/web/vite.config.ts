@@ -3,46 +3,9 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [sveltekit()],
-  server: {
-    proxy: {
-      "/api": {
-        target: "http://fks_ruby:8000",
-        changeOrigin: true,
-      },
-      "/sse": {
-        target: "http://fks_ruby:8000",
-        changeOrigin: true,
-      },
-      "/bars": {
-        target: "http://fks_ruby:8000",
-        changeOrigin: true,
-      },
-      "/factory": {
-        target: "http://fks_ruby:8000",
-        changeOrigin: true,
-      },
-      "/kraken": {
-        target: "http://fks_ruby:8000",
-        changeOrigin: true,
-      },
-      "/health": {
-        target: "http://fks_ruby:8000",
-        changeOrigin: true,
-      },
-      // Futures FastAPI — proxy /fapi/* → http://fks_ruby:8080/*
-      // e.g. /fapi/api/dashboard → http://fks_ruby:8080/api/dashboard
-      "/fapi": {
-        target: "http://fks_ruby:8080",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/fapi/, ""),
-      },
-      // Bot Spawner — mirrors the nginx /api/spawner/* passthrough route.
-      // /api/spawner/<anything> → http://fks_bot_spawner:8090/<anything>
-      "/api/spawner": {
-        target: "http://fks_bot_spawner:8090",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/spawner/, ""),
-      },
-    },
-  },
+  // No dev proxies: the SvelteKit server hook (src/hooks.server.ts) is the single
+  // backend seam in both dev and prod — it proxies /api, /sse, /bars, /factory,
+  // /kraken, /fapi to janus / spawner / Prometheus / QuestDB (or stubs them).
+  // A Vite server.proxy here would shadow the hook and break that path. Override
+  // upstream hosts for non-Docker dev via *_INTERNAL_URL env vars (see the hook).
 });

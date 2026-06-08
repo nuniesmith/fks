@@ -142,10 +142,12 @@
   failure surfaced (502) instead of a fake success. *(If janus's actual contract
   differs, the GET reveals it and the adapter mapping is a one-line tweak.)*
 - [~] **G2** Error / empty / loading-state audit. Added a reusable **`EmptyState`**
-  primitive (`$components/ui/EmptyState.svelte`) and wired the chart's **no-data
-  vs. fetch-error** overlay — an empty/unknown symbol now shows a clear "No data"
-  (or "Failed to load data") message instead of a silent blank chart. *(Follow-up:
-  adopt `EmptyState` across signals / performance / janus-ai / monitoring panels.)*
+  primitive (`$components/ui/EmptyState.svelte`) and adopted it on **charts**
+  (no-data vs. fetch-error overlay — no more silent blank chart), **signals**
+  (signals + alerts panels) and **performance** (metrics + trade-history panels),
+  replacing the ad-hoc `.empty` / `.err-text` markup with a consistent icon +
+  title + hint, error-tinted on failures. *(Follow-up: janus-ai / monitoring /
+  overview panels next.)*
 - [ ] **G3** Playwright E2E for the wired pages.
 - [ ] **G4** Final nginx comment cleanup; refresh docs; remove remaining dead surface.
 

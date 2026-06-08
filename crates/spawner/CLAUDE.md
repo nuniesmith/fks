@@ -35,7 +35,7 @@ cargo build -p spawner
 cargo check -p spawner --no-default-features
 
 # Unit + HTTP integration tests
-cargo test -p spawner            # 11 unit + 10 integration = 21
+cargo test -p spawner            # unit (incl. stats math) + HTTP integration tests
 ```
 
 ## API surface
@@ -111,6 +111,11 @@ curl -N http://localhost:8090/container/<id>/logs?tail=100 \
 
 ## Status
 
-After PRs #11–#18 in `fks-full`: hardened (auth + integration tests),
-DB-backed (`bot_runs`), wired into the WebUI (`/bots` route), example bot
-image (`fks-bot-example`) demonstrates the contract end-to-end.
+Hardened (auth + HTTP integration tests) and DB-backed in `ruby_db`:
+- `bot_runs` history (`/runs`), `bot_configs` saved spawn templates
+  (`GET`/`POST /configs`, `DELETE /configs/{name}`), and `exchange_secrets`
+  credential storage (`POST /secrets`, `GET /secrets/status`) — all db-gated.
+- `/containers` enriches running bots with live CPU% + memory from the Docker
+  stats API (pure CPU%/mem math is unit-tested).
+- Wired into the WebUI `/bots` route; `fks-bot-example` / `crypto-demo` demo the
+  spawn contract end-to-end.

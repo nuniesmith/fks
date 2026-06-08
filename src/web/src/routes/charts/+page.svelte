@@ -136,6 +136,10 @@
   // ATR price overlay
   let atrSeries: any = null;
 
+  // Extra server-computed overlays
+  let sma20Series: any = null;
+  let vwapSeries: any = null;
+
   // Candle cache for client-side indicators
   let candles = $state<CandleData[]>([]);
 
@@ -150,6 +154,8 @@
   let showRSI = $state(false);
   let showMACD = $state(false);
   let showATR  = $state(false);
+  let showSMA20 = $state(false);
+  let showVWAP = $state(false);
   let drawingActive = $state(false);
 
   // Loading state
@@ -432,6 +438,57 @@
       }
     } catch (e) {
       console.warn('[charts] ATR load failed:', e);
+    } finally {
+      indicatorLoading = false;
+    }
+  }
+
+  // ─── SMA / VWAP overlays (server-side) ─────────────────────────────────────
+  async function loadSMA20() {
+    if (!chart) return;
+    if (sma20Series) { chart.removeSeries(sma20Series); sma20Series = null; }
+    if (!showSMA20) return;
+    indicatorLoading = true;
+    try {
+      const res = await api.get<{ indicators?: Record<string, IndicatorPoint[]> }>(
+        `/api/chart/${encodeURIComponent(apiSymbol)}/indicators?interval=${interval}&days_back=5&indicators=sma20`
+      );
+      const data = res.indicators?.sma20 ?? [];
+      if (data.length && chart) {
+        sma20Series = chart.addLineSeries({
+          color: '#eab308', lineWidth: 1,
+          priceLineVisible: false, lastValueVisible: false,
+          crosshairMarkerVisible: false, title: 'SMA 20',
+        });
+        sma20Series.setData(data);
+      }
+    } catch (e) {
+      console.warn('[charts] SMA load failed:', e);
+    } finally {
+      indicatorLoading = false;
+    }
+  }
+
+  async function loadVWAP() {
+    if (!chart) return;
+    if (vwapSeries) { chart.removeSeries(vwapSeries); vwapSeries = null; }
+    if (!showVWAP) return;
+    indicatorLoading = true;
+    try {
+      const res = await api.get<{ indicators?: Record<string, IndicatorPoint[]> }>(
+        `/api/chart/${encodeURIComponent(apiSymbol)}/indicators?interval=${interval}&days_back=5&indicators=vwap`
+      );
+      const data = res.indicators?.vwap ?? [];
+      if (data.length && chart) {
+        vwapSeries = chart.addLineSeries({
+          color: '#e879f9', lineWidth: 1,
+          priceLineVisible: false, lastValueVisible: false,
+          crosshairMarkerVisible: false, title: 'VWAP',
+        });
+        vwapSeries.setData(data);
+      }
+    } catch (e) {
+      console.warn('[charts] VWAP load failed:', e);
     } finally {
       indicatorLoading = false;
     }
@@ -748,7 +805,7 @@
     disconnectLiveData();
     ema9Series = null; ema21Series = null; volumeSeries = null;
     bbUpperSeries = null; bbMidSeries = null; bbLowSeries = null;
-    atrSeries = null;
+    atrSeries = null; sma20Series = null; vwapSeries = null;
     if (chart) chart.remove();
 
     chart = createChart(chartContainer, {
@@ -805,6 +862,8 @@
     if (showVolume) addVolume();
     if (showBB) await loadBBands();
     if (showATR) await loadATR();
+    if (showSMA20) await loadSMA20();
+    if (showVWAP) await loadVWAP();
 
     // Reconnect RSI if open
     if (showRSI) {
@@ -878,6 +937,14 @@
   async function toggleATR() {
     showATR = !showATR;
     await loadATR();
+  }
+  async function toggleSMA20() {
+    showSMA20 = !showSMA20;
+    await loadSMA20();
+  }
+  async function toggleVWAP() {
+    showVWAP = !showVWAP;
+    await loadVWAP();
   }
 
   // ─── Chart export / screenshot ─────────────────────────────────────────────
@@ -1059,6 +1126,16 @@
           title="Average True Range 14 — price overlay (server-computed)">
           <span class="ind-dot" style="background:#f59e0b"></span>ATR
           {#if indicatorLoading && showATR}<span class="ind-spin"></span>{/if}
+        </button>
+        <button class="ind-btn" class:active={showSMA20} onclick={toggleSMA20} aria-pressed={showSMA20 ? 'true' : 'false'}
+          title="Simple Moving Average 20 (server-computed)">
+          <span class="ind-dot" style="background:#eab308"></span>SMA
+          {#if indicatorLoading && showSMA20}<span class="ind-spin"></span>{/if}
+        </button>
+        <button class="ind-btn" class:active={showVWAP} onclick={toggleVWAP} aria-pressed={showVWAP ? 'true' : 'false'}
+          title="Volume-Weighted Average Price (server-computed)">
+          <span class="ind-dot" style="background:#e879f9"></span>VWAP
+          {#if indicatorLoading && showVWAP}<span class="ind-spin"></span>{/if}
         </button>
       </div>
 

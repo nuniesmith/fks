@@ -1,6 +1,13 @@
 import type { Handle, RequestEvent } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { computeIndicators, INDICATOR_CATALOG, type Candle } from "$lib/server/indicators";
+import {
+  humanizeSince,
+  reshapeHealth,
+  reshapePerformance,
+  reshapeRiskConfig,
+  toRiskConfigPayload,
+} from "$lib/server/reshape";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Backend proxy  (replaces the old vite/nginx → fks_ruby reverse proxy)
@@ -145,20 +152,7 @@ async function janusRecentSignals(
 // no longer hits `healthData.status` undefined).
 async function janusHealth(event: RequestEvent): Promise<Response> {
   const j = await janusJson(event, JANUS_URL, "/health");
-  const comp: Record<string, { status?: string; latency?: string }> = (j?.components ??
-    {}) as Record<string, { status?: string; latency?: string }>;
-  const overall = String(j?.status ?? "down");
-  return json({
-    // /settings System Info panel
-    status: overall,
-    version: j?.version,
-    uptime: j?.uptime,
-    components: comp,
-    // bottom StatusBar (flat)
-    janus: overall,
-    redis: String(comp.redis?.status ?? "—"),
-    feed: String(j?.forward_service ?? comp.data?.status ?? comp.questdb?.status ?? "—"),
-  });
+  return json(reshapeHealth(j));
 }
 
 // /api/janus/state → the /janus-ai "Janus State" panel's JanusStateResponse:
@@ -217,22 +211,7 @@ async function janusPerformance(event: RequestEvent): Promise<Response> {
     janusJson(event, JANUS_FORWARD_URL, "/api/v1/risk/performance"),
     janusJson(event, JANUS_URL, "/api/dashboard/performance"),
   ]);
-  const s: any = { ...(dash ?? {}), ...(risk ?? {}) };
-  const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
-  return json({
-    total_trades: num(s.total_trades ?? s.trades ?? s.num_trades),
-    win_rate: num(s.win_rate),
-    total_pnl: num(s.total_pnl ?? s.net_pnl ?? s.pnl),
-    profit_factor: num(s.profit_factor),
-    sharpe_ratio: num(s.sharpe_ratio ?? s.sharpe),
-    sortino_ratio: num(s.sortino_ratio ?? s.sortino),
-    max_drawdown: num(s.max_drawdown ?? s.max_dd),
-    recovery_factor: num(s.recovery_factor),
-    avg_win: num(s.avg_win),
-    avg_loss: num(s.avg_loss),
-    largest_win: num(s.largest_win),
-    largest_loss: num(s.largest_loss),
-  });
+  return json(reshapePerformance(risk, dash));
 }
 
 // ── /monitoring: Prometheus proxy ───────────────────────────────────────────
@@ -240,18 +219,6 @@ async function janusPerformance(event: RequestEvent): Promise<Response> {
 // data service, which queried Prometheus and reshaped). We reprise that role:
 // query/query_range/targets are a straight pass-through (identical shapes), and
 // alerts/layout get a light reshape.
-
-// "2026-06-08T12:00:00Z" → "5m" / "2h" / "3d" (compact age, for the alert feed).
-function humanizeSince(iso?: string): string {
-  if (!iso) return "—";
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "—";
-  const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
 
 // /api/metrics/alerts → reshape Prometheus /api/v1/alerts ({data:{alerts:[…]}})
 // into the page's { data: Alert[] } with an age_str derived from activeAt.
@@ -427,13 +394,7 @@ async function assetInfo(event: RequestEvent, shortRaw: string): Promise<Respons
 // flip the sign on write. The save is honest now (a real PUT) — no fake "Saved".
 async function riskConfigGet(event: RequestEvent): Promise<Response> {
   const c = await janusJson(event, JANUS_FORWARD_URL, "/api/v1/risk/config");
-  const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
-  const dl = num(c?.max_daily_loss ?? c?.daily_loss ?? c?.max_daily_loss_usd);
-  return json({
-    max_daily_loss_usd: dl != null ? Math.abs(dl) : undefined,
-    max_positions: num(c?.max_concurrent_positions ?? c?.max_positions),
-    max_gross_exposure_usd: num(c?.max_gross_exposure ?? c?.max_gross_exposure_usd),
-  });
+  return json(reshapeRiskConfig(c));
 }
 
 async function riskConfigPost(event: RequestEvent): Promise<Response> {
@@ -443,16 +404,7 @@ async function riskConfigPost(event: RequestEvent): Promise<Response> {
   } catch {
     /* empty / non-JSON body */
   }
-  const num = (v: unknown): number | undefined => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  };
-  const dl = num(body?.max_daily_loss_usd);
-  const payload = {
-    max_daily_loss: dl != null ? -Math.abs(dl) : undefined, // rustrade: halt threshold ≤ 0
-    max_concurrent_positions: num(body?.max_positions),
-    max_gross_exposure: num(body?.max_gross_exposure_usd),
-  };
+  const payload = toRiskConfigPayload(body);
   try {
     const headers = upstreamHeaders(event.request.headers);
     headers.set("content-type", "application/json");

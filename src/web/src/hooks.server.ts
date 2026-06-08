@@ -369,6 +369,58 @@ async function chartIndicators(event: RequestEvent, symbolRaw: string): Promise<
   return json({ indicators: computeIndicators(candles, names) });
 }
 
+// Run a QuestDB /exec query and return its dataset rows ([] on any failure).
+async function questdbRows(sql: string): Promise<any[]> {
+  try {
+    const r = await fetch(`${QUESTDB_URL}/exec?query=${encodeURIComponent(sql)}`, {
+      headers: { accept: "application/json" },
+    });
+    const j: any = await r.json();
+    return Array.isArray(j?.dataset) ? j.dataset : [];
+  } catch {
+    return [];
+  }
+}
+
+// GET /api/assets/search?q= → the chart's symbol picker. Real symbols straight
+// from QuestDB `candles_crypto` (so you can only pick symbols that have data).
+async function symbolSearch(event: RequestEvent): Promise<Response> {
+  // Sanitised + uppercased — goes into a SQL literal (injection guard).
+  const q = (event.url.searchParams.get("q") ?? "")
+    .replace(/[^A-Za-z0-9._/-]/g, "")
+    .toUpperCase()
+    .slice(0, 24);
+  if (!q) return json({ results: [] });
+  const rows = await questdbRows(
+    `SELECT DISTINCT symbol, exchange FROM candles_crypto ` +
+      `WHERE upper(symbol) LIKE '%${q}%' ORDER BY symbol LIMIT 30`,
+  );
+  return json({
+    results: rows.map((row) => ({
+      symbol: String(row[0]),
+      name: String(row[0]),
+      type: "crypto",
+      exchange: row[1] != null ? String(row[1]) : undefined,
+    })),
+  });
+}
+
+// GET /api/assets/:short → the chart's asset-routing lookup (AssetInfo). We map
+// the stored exchange to `source`/`source_chain` so the page picks the right
+// live-data path; unknown symbols → {} (page falls back to its slash heuristic).
+async function assetInfo(event: RequestEvent, shortRaw: string): Promise<Response> {
+  const sym = shortRaw.replace(/[^A-Za-z0-9._/-]/g, "").toUpperCase().slice(0, 24);
+  if (!sym) return json({});
+  const rows = await questdbRows(
+    `SELECT exchange FROM candles_crypto ` +
+      `WHERE upper(symbol) = '${sym}' OR upper(symbol) LIKE '${sym}/%' ` +
+      `OR upper(symbol) LIKE '${sym}-%' LIMIT 1`,
+  );
+  const ex = rows[0]?.[0] != null ? String(rows[0][0]) : "";
+  if (!ex) return json({});
+  return json({ type: "crypto", source: ex, source_chain: [ex] });
+}
+
 async function proxyBackend(event: RequestEvent): Promise<Response> {
   const { pathname, search } = event.url;
 
@@ -477,6 +529,21 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
       /* malformed %-encoding — fall back to the raw segment */
     }
     return chartIndicators(event, sym);
+  }
+
+  // ── /charts symbol catalog → QuestDB candles_crypto ─────────────────────────
+  if (pathname === "/api/assets/search") {
+    return symbolSearch(event);
+  }
+  const assetMatch = /^\/api\/assets\/([^/]+)$/.exec(pathname);
+  if (assetMatch) {
+    let sym = assetMatch[1];
+    try {
+      sym = decodeURIComponent(sym);
+    } catch {
+      /* malformed %-encoding — fall back to the raw segment */
+    }
+    return assetInfo(event, sym);
   }
 
   // More janus panels (overview aggregate / performance) land here next —

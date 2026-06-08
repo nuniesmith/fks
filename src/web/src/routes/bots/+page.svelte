@@ -113,6 +113,46 @@
         }
     }
 
+    // Spawn presets — accurate, editable starting points (verified against the
+    // compose `crypto-demo` service). They only pre-fill the form; you review +
+    // submit. Both are paper / synthetic / mock — no exchange keys, no real orders.
+    const SPAWN_PRESETS = [
+        {
+            id: "demo-janus",
+            label: "Crypto Demo · janus brain",
+            image: "fks-bot-crypto-demo:latest",
+            mode: "paper",
+            env: [
+                "DEMO_BRAIN=janus",
+                "DEMO_SOURCE=synthetic",
+                "DEMO_EXCHANGE=mock",
+                "JANUS_HTTP_URL=http://fks_janus:8080",
+                "DEMO_SYMBOLS=XBTUSDTM,ETHUSDTM,SOLUSDTM",
+                "RUST_LOG=info,crypto_demo=debug",
+            ].join("\n"),
+        },
+        {
+            id: "demo-local",
+            label: "Crypto Demo · local (ema-cross)",
+            image: "fks-bot-crypto-demo:latest",
+            mode: "paper",
+            env: [
+                "DEMO_BRAIN=ema-cross",
+                "DEMO_SOURCE=synthetic",
+                "DEMO_EXCHANGE=mock",
+                "DEMO_SYMBOLS=XBTUSDTM,ETHUSDTM,SOLUSDTM",
+                "RUST_LOG=info,crypto_demo=debug",
+            ].join("\n"),
+        },
+    ];
+
+    function applyPreset(p: (typeof SPAWN_PRESETS)[number]) {
+        spawnImage = p.image;
+        spawnMode = p.mode;
+        spawnEnvText = p.env;
+        feedback = null;
+    }
+
     // ─── Lifecycle actions ────────────────────────────────────────────────
 
     let actingOn = $state<string | null>(null); // container_id currently being acted on
@@ -301,6 +341,18 @@
     <div class="left-col">
         <Panel title="Spawn Bot">
             <form class="spawn-form" onsubmit={submitSpawn}>
+                <div class="presets">
+                    <span class="presets-lbl">Presets</span>
+                    {#each SPAWN_PRESETS as p (p.id)}
+                        <button
+                            type="button"
+                            class="preset-btn"
+                            onclick={() => applyPreset(p)}
+                            title="Pre-fill the form (paper · synthetic · mock) — review, then Spawn"
+                            >{p.label}</button
+                        >
+                    {/each}
+                </div>
                 <label class="field">
                     <span class="lbl">Image</span>
                     <input
@@ -609,6 +661,36 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+    }
+    .presets {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding-bottom: 4px;
+        border-bottom: 1px solid var(--b1);
+        margin-bottom: 2px;
+    }
+    .presets-lbl {
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--t3);
+    }
+    .preset-btn {
+        all: unset;
+        cursor: pointer;
+        padding: 3px 8px;
+        font-size: 10px;
+        color: var(--cyan, #00e5ff);
+        background: var(--bg2);
+        border: 1px solid var(--b2);
+        border-radius: var(--r, 4px);
+        white-space: nowrap;
+    }
+    .preset-btn:hover {
+        background: var(--bg3);
+        border-color: var(--cyan, #00e5ff);
     }
     .field {
         display: flex;

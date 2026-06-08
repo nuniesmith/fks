@@ -421,6 +421,53 @@ async function assetInfo(event: RequestEvent, shortRaw: string): Promise<Respons
   return json({ type: "crypto", source: ex, source_chain: [ex] });
 }
 
+// /settings risk panel ↔ janus forward /api/v1/risk/config (rustrade
+// PortfolioRiskConfig: max_daily_loss ≤ 0, max_concurrent_positions,
+// max_gross_exposure). The UI works in positive USD for the daily-loss limit; we
+// flip the sign on write. The save is honest now (a real PUT) — no fake "Saved".
+async function riskConfigGet(event: RequestEvent): Promise<Response> {
+  const c = await janusJson(event, JANUS_FORWARD_URL, "/api/v1/risk/config");
+  const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
+  const dl = num(c?.max_daily_loss ?? c?.daily_loss ?? c?.max_daily_loss_usd);
+  return json({
+    max_daily_loss_usd: dl != null ? Math.abs(dl) : undefined,
+    max_positions: num(c?.max_concurrent_positions ?? c?.max_positions),
+    max_gross_exposure_usd: num(c?.max_gross_exposure ?? c?.max_gross_exposure_usd),
+  });
+}
+
+async function riskConfigPost(event: RequestEvent): Promise<Response> {
+  let body: any = {};
+  try {
+    body = await event.request.json();
+  } catch {
+    /* empty / non-JSON body */
+  }
+  const num = (v: unknown): number | undefined => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const dl = num(body?.max_daily_loss_usd);
+  const payload = {
+    max_daily_loss: dl != null ? -Math.abs(dl) : undefined, // rustrade: halt threshold ≤ 0
+    max_concurrent_positions: num(body?.max_positions),
+    max_gross_exposure: num(body?.max_gross_exposure_usd),
+  };
+  try {
+    const headers = upstreamHeaders(event.request.headers);
+    headers.set("content-type", "application/json");
+    const r = await fetch(`${JANUS_FORWARD_URL}/api/v1/risk/config`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) return json({ ok: false, message: `risk update rejected (${r.status})` }, 502);
+    return json({ ok: true });
+  } catch {
+    return json({ ok: false, message: "risk service unreachable" }, 502);
+  }
+}
+
 async function proxyBackend(event: RequestEvent): Promise<Response> {
   const { pathname, search } = event.url;
 
@@ -482,6 +529,11 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
   // /performance metrics grid → forward risk/performance (+ dashboard).
   if (pathname === "/api/performance") {
     return janusPerformance(event);
+  }
+
+  // /settings risk panel — load (GET) / save (POST→PUT) janus risk config.
+  if (pathname === "/api/settings/risk") {
+    return event.request.method === "POST" ? riskConfigPost(event) : riskConfigGet(event);
   }
   // /performance trade history — janus has no closed-trade ledger here; the
   // demo bot keeps fills on its MockExchange. Honest empty until that's exposed.

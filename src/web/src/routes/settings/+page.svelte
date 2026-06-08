@@ -79,11 +79,12 @@
   let rithmicFeedback = $state('');
   let rithmicFeedbackVariant = $state<'green' | 'red' | 'default'>('default');
 
-  // ─── Risk Controls State ───────────────────────────────────────────
-  let riskDailyLoss = $state(5000);
-  let riskMaxContracts = $state(10);
-  let riskHardStop = $state(2500);
+  // ─── Risk Controls State (rustrade PortfolioRiskConfig) ─────────────
+  let riskDailyLoss = $state(5000);          // max daily loss (USD; shown positive, stored ≤0)
+  let riskMaxPositions = $state(10);         // max concurrent positions
+  let riskGrossExposure = $state(5_000_000); // max gross exposure (USD)
   let riskSaving = $state(false);
+  let riskLoading = $state(false);
   let riskFeedback = $state('');
 
   // ─── Analysis Preferences State ────────────────────────────────────
@@ -241,14 +242,30 @@
 
   // ─── API: Risk Controls ────────────────────────────────────────────
 
+  async function loadRisk() {
+    riskLoading = true;
+    try {
+      const c = await api.get<{ max_daily_loss_usd?: number; max_positions?: number; max_gross_exposure_usd?: number }>(
+        '/api/settings/risk'
+      );
+      if (c?.max_daily_loss_usd != null) riskDailyLoss = c.max_daily_loss_usd;
+      if (c?.max_positions != null) riskMaxPositions = c.max_positions;
+      if (c?.max_gross_exposure_usd != null) riskGrossExposure = c.max_gross_exposure_usd;
+    } catch {
+      // keep defaults if the risk service isn't reachable
+    } finally {
+      riskLoading = false;
+    }
+  }
+
   async function saveRisk() {
     riskSaving = true;
     riskFeedback = '';
     try {
       await api.post('/api/settings/risk', {
-        daily_loss_limit: riskDailyLoss,
-        max_contracts: riskMaxContracts,
-        hard_stop: riskHardStop,
+        max_daily_loss_usd: riskDailyLoss,
+        max_positions: riskMaxPositions,
+        max_gross_exposure_usd: riskGrossExposure,
       });
       riskFeedback = 'Saved ✓';
       clearFeedbackAfter(v => riskFeedback = v);
@@ -372,6 +389,7 @@
     loadDataSource();
     fetchHealth();
     loadJanusConfig();
+    loadRisk();
     healthTimer = setInterval(fetchHealth, 15_000);
   });
 
@@ -504,7 +522,7 @@
     <Panel title="Risk Controls">
       <div class="form-row">
         <div class="form-group form-grow">
-          <label class="form-label" for="risk-daily-loss">Daily Loss Limit ($)</label>
+          <label class="form-label" for="risk-daily-loss">Max Daily Loss ($)</label>
           <input
             id="risk-daily-loss"
             class="form-input"
@@ -515,31 +533,31 @@
           />
         </div>
         <div class="form-group form-grow">
-          <label class="form-label" for="risk-max-contracts">Max Contracts</label>
+          <label class="form-label" for="risk-max-positions">Max Positions</label>
           <input
-            id="risk-max-contracts"
+            id="risk-max-positions"
             class="form-input"
             type="number"
             min="1"
             step="1"
-            bind:value={riskMaxContracts}
+            bind:value={riskMaxPositions}
           />
         </div>
         <div class="form-group form-grow">
-          <label class="form-label" for="risk-hard-stop">Hard Stop ($)</label>
+          <label class="form-label" for="risk-gross-exposure">Max Gross Exposure ($)</label>
           <input
-            id="risk-hard-stop"
+            id="risk-gross-exposure"
             class="form-input"
             type="number"
             min="0"
-            step="100"
-            bind:value={riskHardStop}
+            step="1000"
+            bind:value={riskGrossExposure}
           />
         </div>
       </div>
       <div class="form-actions">
-        <button class="btn-primary" onclick={saveRisk} disabled={riskSaving}>
-          {riskSaving ? 'Saving…' : 'Save'}
+        <button class="btn-primary" onclick={saveRisk} disabled={riskSaving || riskLoading}>
+          {riskSaving ? 'Saving…' : riskLoading ? 'Loading…' : 'Save'}
         </button>
         {#if riskFeedback}
           <span class="feedback" class:feedback-ok={riskFeedback.startsWith('Saved')} class:feedback-err={riskFeedback.startsWith('Error')}>

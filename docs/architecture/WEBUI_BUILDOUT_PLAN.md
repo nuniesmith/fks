@@ -118,9 +118,13 @@
 - [ ] **F2** Spawn a paper crypto bot end-to-end from the UI on the keyless path.
 
 ### Phase G — Robustness & finish
-- [ ] **G1** `/settings` risk-config **write** aligned to janus's real schema
-  (`max_daily_loss≤0`, `max_positions`, `max_gross_exposure_usd`,
-  `daily_loss_limit_pct`) + a GET to load current limits.
+- [x] **G1** `/settings` risk panel **now actually saves** (was a fake "Saved ✓"
+  no-op). Restructured to the rustrade `PortfolioRiskConfig` shape — **Max Daily
+  Loss ($) · Max Positions · Max Gross Exposure ($)** — with `GET /api/settings/risk`
+  ← forward `/api/v1/risk/config` (load current) and `POST` → real **PUT** with
+  `{ max_daily_loss: -usd, max_concurrent_positions, max_gross_exposure }`. Honest
+  failure surfaced (502) instead of a fake success. *(If janus's actual contract
+  differs, the GET reveals it and the adapter mapping is a one-line tweak.)*
 - [ ] **G2** Error / empty / loading-state audit across every panel.
 - [ ] **G3** Playwright E2E for the wired pages.
 - [ ] **G4** Final nginx comment cleanup; refresh docs; remove remaining dead surface.

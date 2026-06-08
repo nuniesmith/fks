@@ -33,6 +33,7 @@
   let series: any[] = [];
   let loading = $state(true);
   let empty = $state(false);
+  let chartReady = $state(false);
   let rangeHandler: ((r: any) => void) | null = null;
   let ro: ResizeObserver | null = null;
 
@@ -57,7 +58,7 @@
           priceLineVisible: false, lastValueVisible: true, crosshairMarkerVisible: false,
           title: key,
         });
-        s.setData(data);
+        s.setData(data as any);
         series.push(s);
         if (data.length) any = true;
       });
@@ -86,7 +87,6 @@
       handleScale: false,
       handleScroll: false,
     });
-    await load();
     // Follow the main chart's visible range (one-directional → no feedback loops
     // between multiple panes).
     if (mainChart && chart) {
@@ -101,6 +101,7 @@
       });
       ro.observe(el);
     }
+    chartReady = true;
   });
 
   onDestroy(() => {
@@ -111,11 +112,13 @@
     if (chart) { try { chart.remove(); } catch { /* gone */ } chart = null; }
   });
 
-  // Reload when the symbol/interval changes (after the initial mount load).
-  let lastKey = `${symbol}|${interval}`;
+  // Load once the chart exists, then reload whenever symbol/interval change.
   $effect(() => {
-    const key = `${symbol}|${interval}`;
-    if (chart && key !== lastKey) { lastKey = key; load(); }
+    const _key = `${symbol}|${interval}`; // track symbol + interval
+    if (chartReady) {
+      void _key;
+      load();
+    }
   });
 </script>
 

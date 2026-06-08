@@ -39,16 +39,23 @@ export interface WorkspaceConfig {
     color: string;
 }
 
-/** Registry of all configured trading workspaces. */
+/**
+ * Registry of all configured trading workspaces.
+ *
+ * Empty for now: the only former workspace ("Futures") was backed by the Ruby
+ * `/fapi/*` FastAPI, which was removed in the janus migration. Re-add an entry
+ * here (and an nginx route) once a janus-backed workspace API exists — the
+ * TabBar will regenerate its nav group automatically.
+ */
 export const WORKSPACES: Record<string, WorkspaceConfig> = {
-    // ── KuCoin Futures ───────────────────────────────────────────────
-    futures: {
-        label: "Futures",
-        apiBase: "/fapi/api",
-        tasksBase: "/fapi/tasks",
-        hasCnn: true,
-        color: "var(--amber)",
-    },
+    // ── KuCoin Futures (retired — Ruby /fapi/* removed; pending janus port) ──
+    // futures: {
+    //     label: "Futures",
+    //     apiBase: "/fapi/api",
+    //     tasksBase: "/fapi/tasks",
+    //     hasCnn: true,
+    //     color: "var(--amber)",
+    // },
 
     // ── Kraken Crypto Spot ─────────────────────────────────────────
     // Uncomment when fks_crypto service is running.

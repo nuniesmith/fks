@@ -128,9 +128,21 @@ The adapter lives in `src/web/src/hooks.server.ts` (the strangler seam). Landed:
   live ticks from the page's own Kraken/Binance WS). Empty in the paper demo until
   janus ingestion populates `candles_crypto`.
 
-Remaining: the `/settings` risk-config write (needs janus schema + UI alignment),
-`/charts` server indicators + live SSE bars, then the Phase 4 cleanup. Risk/
-performance/candles data is empty in the paper demo until live ingestion/orders.
+- **Phase 4a (prune):** dropped the dead Ruby-only tabs from the nav
+  (`TabBar.svelte`: news, crypto, dom, paper, sims, positions, journal, analysis,
+  chains, data, db, backup) and the entire **Futures** workspace group
+  (`workspaces.ts` — `/fapi/*` is gone), so the UI only surfaces wired pages.
+  Removed the dead `vite.config.ts` dev proxies (all → `fks_ruby`/spawner) — the
+  `hooks.server.ts` hook is now the single backend seam in dev **and** prod.
+
+Remaining Phase 4: **delete** the pruned route dirs (still reachable by URL) and
+**rewrite the nginx confs** — today they route `/`, `/charts`, `/sse/*` at the
+dead `fks_ruby`, and `/api/*` straight at `fks_janus` (bypassing the adapter's
+reshaping), so the Tailscale-fronted path is broken; it should route page +
+backend-prefix traffic to `fks_webui` (the adapter) and keep only direct
+`/grafana|/prometheus|/questdb|/jaeger` proxies. Plus the `/settings` risk-config
+write and `/charts` indicators + live SSE bars. (Risk/performance/candles data is
+empty in the paper demo until live ingestion/orders.)
 
 ## Notes
 - nginx `conf.d/*.conf` still routes `/api/*`/`/factory/*`/`/trading*` at

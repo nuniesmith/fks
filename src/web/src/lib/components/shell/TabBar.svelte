@@ -20,6 +20,10 @@
 
     // ── Static nav groups ─────────────────────────────────────────────────
 
+    // Only janus/Prometheus/QuestDB-backed pages are listed; the Ruby-only tabs
+    // (news, crypto, dom, paper, sims, positions, journal, analysis, chains, data,
+    // db, backup) were pruned in the WebUI→janus repoint (Phase 4). Their route
+    // dirs still exist (reachable by URL) until a later cleanup slice removes them.
     const staticGroups: Group[] = [
         {
             label: "Markets",
@@ -33,14 +37,6 @@
                     href: "/",
                 },
                 { id: "charts", label: "Charts", key: "2", href: "/charts" },
-                { id: "news", label: "News", key: "3", href: "/news" },
-                {
-                    id: "crypto",
-                    label: "Crypto",
-                    dot: "var(--amber)",
-                    key: "4",
-                    href: "/crypto",
-                },
             ],
         },
         {
@@ -51,45 +47,17 @@
                     id: "trading",
                     label: "Trading",
                     dot: "var(--green)",
-                    key: "5",
+                    key: "3",
                     href: "/trading",
                 },
-                {
-                    id: "dom",
-                    label: "DOM",
-                    dot: "var(--amber)",
-                    key: "6",
-                    href: "/dom",
-                },
-                {
-                    id: "paper",
-                    label: "Paper",
-                    dot: "var(--cyan)",
-                    key: "7",
-                    href: "/paper",
-                },
-                {
-                    id: "simulations",
-                    label: "Sims",
-                    dot: "var(--teal)",
-                    key: "8",
-                    href: "/simulations",
-                },
-                {
-                    id: "positions",
-                    label: "Positions",
-                    dot: "var(--green)",
-                    key: "9",
-                    href: "/positions",
-                },
-                { id: "journal", label: "Journal", key: "0", href: "/journal" },
                 {
                     id: "signals",
                     label: "Signals",
                     dot: "var(--amber)",
+                    key: "4",
                     href: "/signals",
                 },
-                { id: "performance", label: "Perf", href: "/performance" },
+                { id: "performance", label: "Perf", key: "5", href: "/performance" },
             ],
         },
         {
@@ -97,27 +65,13 @@
             color: "var(--purple, #b388ff)",
             tabs: [
                 {
-                    id: "analysis",
-                    label: "Analysis",
-                    dot: "var(--purple)",
-                    shiftKey: "1",
-                    href: "/analysis",
-                },
-                {
-                    id: "chains",
-                    label: "Chains",
-                    dot: "var(--purple)",
-                    shiftKey: "2",
-                    href: "/chains",
-                },
-                {
                     id: "janus-ai",
                     label: "Janus AI",
                     dot: "var(--green)",
-                    shiftKey: "3",
+                    key: "6",
                     href: "/janus-ai",
                 },
-                { id: "docs", label: "Docs", shiftKey: "4", href: "/docs" },
+                { id: "docs", label: "Docs", shiftKey: "1", href: "/docs" },
             ],
         },
     ];
@@ -170,17 +124,21 @@
         label: "System",
         color: "var(--t3, #555)",
         tabs: [
-            { id: "settings", label: "Settings", href: "/settings" },
-            { id: "data", label: "Data", href: "/data" },
-            { id: "db", label: "DB", dot: "var(--purple)", href: "/db" },
+            { id: "settings", label: "Settings", key: "7", href: "/settings" },
             {
                 id: "monitoring",
                 label: "Monitoring",
                 dot: "var(--purple)",
+                key: "8",
                 href: "/monitoring",
             },
-            { id: "bots", label: "Bots", dot: "var(--cyan)", href: "/bots" },
-            { id: "backup", label: "Backup", href: "/backup" },
+            {
+                id: "bots",
+                label: "Bots",
+                dot: "var(--cyan)",
+                key: "9",
+                href: "/bots",
+            },
         ],
     };
 

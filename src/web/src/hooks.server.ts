@@ -137,20 +137,25 @@ async function janusRecentSignals(
 
 // /api/health → reshape janus /health into the StatusBar's flat {redis,janus,feed}.
 // janus /health: { status, forward_service, components: Record<string,{status}> }.
+// Two consumers share /api/health: the bottom StatusBar wants a flat
+// {redis,janus,feed}; the /settings "System Info" panel wants {status,components,
+// version,uptime}. We return a superset so both render (and the settings panel
+// no longer hits `healthData.status` undefined).
 async function janusHealth(event: RequestEvent): Promise<Response> {
   const j = await janusJson(event, JANUS_URL, "/health");
-  const comp: Record<string, { status?: string }> = (j?.components ?? {}) as Record<
-    string,
-    { status?: string }
-  >;
-  const body = {
-    janus: String(j?.status ?? "down"),
+  const comp: Record<string, { status?: string; latency?: string }> = (j?.components ??
+    {}) as Record<string, { status?: string; latency?: string }>;
+  const overall = String(j?.status ?? "down");
+  return json({
+    // /settings System Info panel
+    status: overall,
+    version: j?.version,
+    uptime: j?.uptime,
+    components: comp,
+    // bottom StatusBar (flat)
+    janus: overall,
     redis: String(comp.redis?.status ?? "—"),
     feed: String(j?.forward_service ?? comp.data?.status ?? comp.questdb?.status ?? "—"),
-  };
-  return new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "content-type": "application/json" },
   });
 }
 
@@ -199,6 +204,33 @@ async function janusAffinity(event: RequestEvent): Promise<Response> {
   const a = await janusJson(event, JANUS_FORWARD_URL, "/api/v1/brain/affinity");
   const weights = a && typeof a.weights === "object" && a.weights ? a.weights : {};
   return json({ status: String(a?.status ?? "ok"), weights });
+}
+
+// /api/performance → the /performance metrics grid (Performance shape).
+// Merges forward /api/v1/risk/performance (preferred) with /api/dashboard/
+// performance, mapping fields defensively. Empty in the paper demo (no closed
+// trades through janus) → every card shows "—"; populates once trades flow.
+async function janusPerformance(event: RequestEvent): Promise<Response> {
+  const [risk, dash] = await Promise.all([
+    janusJson(event, JANUS_FORWARD_URL, "/api/v1/risk/performance"),
+    janusJson(event, JANUS_URL, "/api/dashboard/performance"),
+  ]);
+  const s: any = { ...(dash ?? {}), ...(risk ?? {}) };
+  const num = (v: unknown): number | undefined => (typeof v === "number" ? v : undefined);
+  return json({
+    total_trades: num(s.total_trades ?? s.trades ?? s.num_trades),
+    win_rate: num(s.win_rate),
+    total_pnl: num(s.total_pnl ?? s.net_pnl ?? s.pnl),
+    profit_factor: num(s.profit_factor),
+    sharpe_ratio: num(s.sharpe_ratio ?? s.sharpe),
+    sortino_ratio: num(s.sortino_ratio ?? s.sortino),
+    max_drawdown: num(s.max_drawdown ?? s.max_dd),
+    recovery_factor: num(s.recovery_factor),
+    avg_win: num(s.avg_win),
+    avg_loss: num(s.avg_loss),
+    largest_win: num(s.largest_win),
+    largest_loss: num(s.largest_loss),
+  });
 }
 
 // ── /monitoring: Prometheus proxy ───────────────────────────────────────────
@@ -309,6 +341,16 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
   // janus-ai "Strategy Affinity" matrix → forward brain affinity.
   if (pathname === "/api/janus/affinity") {
     return janusAffinity(event);
+  }
+
+  // /performance metrics grid → forward risk/performance (+ dashboard).
+  if (pathname === "/api/performance") {
+    return janusPerformance(event);
+  }
+  // /performance trade history — janus has no closed-trade ledger here; the
+  // demo bot keeps fills on its MockExchange. Honest empty until that's exposed.
+  if (pathname === "/api/trades") {
+    return json({ trades: [] });
   }
 
   // ── /monitoring → Prometheus (fks_prometheus:9090) ──────────────────────────

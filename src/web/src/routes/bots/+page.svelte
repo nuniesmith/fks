@@ -27,6 +27,7 @@
     import ProgressBar from "$components/ui/ProgressBar.svelte";
     import { fmtDateTime, fmtInt } from "$lib/utils/format";
     import type {
+        BotConfig,
         ContainerInfo,
         ContainersResponse,
         BotRun,
@@ -151,6 +152,77 @@
         spawnMode = p.mode;
         spawnEnvText = p.env;
         feedback = null;
+    }
+
+    // ─── Saved configs (persisted spawn templates, db feature) ─────────────
+
+    let savedConfigs = $state<BotConfig[]>([]);
+    let configName = $state("");
+    let configSaving = $state(false);
+
+    async function loadConfigs() {
+        try {
+            const res = await spawner.listConfigs();
+            savedConfigs = res.configs ?? [];
+        } catch {
+            savedConfigs = [];
+        }
+    }
+
+    /// Inverse of parseEnv: an env object → "KEY=value" lines for the textarea.
+    function envToText(env: Record<string, string>): string {
+        return Object.entries(env ?? {})
+            .map(([k, v]) => `${k}=${v}`)
+            .join("\n");
+    }
+
+    function applyConfig(c: BotConfig) {
+        spawnImage = c.image;
+        spawnMode = c.mode || "paper";
+        spawnCpu = c.cpu_limit != null ? String(c.cpu_limit) : "";
+        spawnMem = c.memory_mb != null ? String(c.memory_mb) : "";
+        spawnEnvText = envToText(c.env);
+        configName = c.name;
+        feedback = null;
+    }
+
+    async function saveCurrentConfig() {
+        const name = configName.trim();
+        if (!name || !spawnImage.trim()) {
+            feedback = { msg: "Config needs a name and an image", ok: false };
+            return;
+        }
+        configSaving = true;
+        try {
+            const cpu = spawnCpu.trim() ? Number(spawnCpu) : undefined;
+            const mem = spawnMem.trim() ? Number(spawnMem) : undefined;
+            await spawner.saveConfig({
+                name,
+                image: spawnImage.trim(),
+                mode: spawnMode,
+                cpu_limit: Number.isFinite(cpu) ? cpu : undefined,
+                memory_mb: Number.isFinite(mem) ? mem : undefined,
+                env: parseEnv(spawnEnvText),
+            });
+            feedback = { msg: `Saved config "${name}"`, ok: true };
+            loadConfigs();
+        } catch (e) {
+            const detail =
+                e instanceof ApiError ? `${e.status} ${e.statusText}` : String(e);
+            feedback = { msg: `Save config failed: ${detail}`, ok: false };
+        } finally {
+            configSaving = false;
+        }
+    }
+
+    async function deleteConfig(name: string) {
+        if (!confirm(`Delete saved config "${name}"?`)) return;
+        try {
+            await spawner.deleteConfig(name);
+            loadConfigs();
+        } catch {
+            /* ignore — the list refresh reflects the real state */
+        }
     }
 
     // ─── Lifecycle actions ────────────────────────────────────────────────
@@ -328,6 +400,7 @@
     onMount(() => {
         containersPoll.start();
         runsPoll.start();
+        loadConfigs();
         return () => {
             containersPoll.stop();
             runsPoll.stop();
@@ -353,6 +426,29 @@
                         >
                     {/each}
                 </div>
+                {#if savedConfigs.length > 0}
+                    <div class="presets saved-cfgs">
+                        <span class="presets-lbl">Saved</span>
+                        {#each savedConfigs as c (c.id)}
+                            <span class="cfg-chip">
+                                <button
+                                    type="button"
+                                    class="preset-btn"
+                                    onclick={() => applyConfig(c)}
+                                    title={`Apply "${c.name}" (${c.image} · ${c.mode})`}
+                                    >{c.name}</button
+                                >
+                                <button
+                                    type="button"
+                                    class="cfg-del"
+                                    onclick={() => deleteConfig(c.name)}
+                                    title="Delete saved config"
+                                    aria-label={`Delete config ${c.name}`}>✕</button
+                                >
+                            </span>
+                        {/each}
+                    </div>
+                {/if}
                 <label class="field">
                     <span class="lbl">Image</span>
                     <input
@@ -430,6 +526,27 @@
                 >
                     {submitting ? "Spawning…" : "▶ Spawn"}
                 </button>
+
+                <div class="save-cfg-row">
+                    <input
+                        class="inp"
+                        type="text"
+                        bind:value={configName}
+                        placeholder="name to save this config as…"
+                        aria-label="Config name"
+                    />
+                    <button
+                        type="button"
+                        class="btn"
+                        onclick={saveCurrentConfig}
+                        disabled={configSaving ||
+                            !configName.trim() ||
+                            !spawnImage.trim()}
+                        title="Persist the current form as a reusable config"
+                    >
+                        {configSaving ? "Saving…" : "Save config"}
+                    </button>
+                </div>
 
                 {#if feedback}
                     <p class="feedback" class:ok={feedback.ok}>
@@ -691,6 +808,32 @@
     .preset-btn:hover {
         background: var(--bg3);
         border-color: var(--cyan, #00e5ff);
+    }
+    .cfg-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 1px;
+    }
+    .cfg-del {
+        all: unset;
+        cursor: pointer;
+        color: var(--t3);
+        font-size: 9px;
+        padding: 0 3px;
+        border-radius: var(--r);
+    }
+    .cfg-del:hover {
+        color: var(--red, #ea3943);
+        background: var(--bg3);
+    }
+    .save-cfg-row {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+    }
+    .save-cfg-row .inp {
+        flex: 1;
+        min-width: 0;
     }
     .field {
         display: flex;

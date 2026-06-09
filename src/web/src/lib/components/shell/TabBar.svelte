@@ -20,10 +20,11 @@
 
     // ── Static nav groups ─────────────────────────────────────────────────
 
-    // Only janus/Prometheus/QuestDB-backed pages are listed; the Ruby-only tabs
-    // (news, crypto, dom, paper, sims, positions, journal, analysis, chains, data,
-    // db, backup) were pruned in the WebUI→janus repoint (Phase 4). Their route
-    // dirs still exist (reachable by URL) until a later cleanup slice removes them.
+    // Only janus/Prometheus/QuestDB-backed pages are listed. The Ruby-only tabs
+    // (news, crypto, dom, paper, sims, positions, analysis, chains, data, backup)
+    // were pruned from the nav in the WebUI→janus repoint (Phase 4) and their
+    // route dirs have since been removed. `journal` + `db` are the exception —
+    // kept as URL-routable shells (decision A1) but deliberately off the nav.
     const staticGroups: Group[] = [
         {
             label: "Markets",
@@ -77,9 +78,13 @@
     ];
 
     /**
-     * Build one tab list per registered workspace.
-     * CNN and Tasks tabs are always included; the page itself shows a
-     * "not configured" message when the workspace doesn't support them.
+     * Build the tab list for a registered workspace.
+     *
+     * Seed scaffold only — Dashboard + Signals. The PnL / Trades / CNN / Logs /
+     * Tasks / Assets / Reports sub-tabs were dropped when the Ruby
+     * `/[workspace]/*` routes were removed in the janus migration; re-add each
+     * here as the matching janus-backed `/[workspace]/<view>` route lands.
+     * (Dead today — `WORKSPACES` is empty, so this never runs.)
      */
     function workspaceTabs(id: string): Tab[] {
         return [
@@ -94,22 +99,6 @@
                 label: "Signals",
                 dot: "var(--green)",
                 href: `/${id}/signals`,
-            },
-            { id: `${id}-pnl`, label: "PnL", href: `/${id}/pnl` },
-            { id: `${id}-trades`, label: "Trades", href: `/${id}/trades` },
-            {
-                id: `${id}-cnn`,
-                label: "CNN",
-                dot: "var(--purple)",
-                href: `/${id}/cnn`,
-            },
-            { id: `${id}-logging`, label: "Logs", href: `/${id}/logging` },
-            { id: `${id}-tasks`, label: "Tasks", href: `/${id}/tasks` },
-            { id: `${id}-assets`, label: "Assets", href: `/${id}/assets` },
-            {
-                id: `${id}-reporting`,
-                label: "Reports",
-                href: `/${id}/reporting`,
             },
         ];
     }

@@ -152,3 +152,44 @@ const ARRAY_PATH_RE =
 export function wantsArrayResponse(pathname: string): boolean {
   return ARRAY_PATH_RE.test(pathname);
 }
+
+// ── Timeframe resampling (B3) ────────────────────────────────────────────────
+
+// "5m" → 300, "1h" → 3600, "1D" → 86400, "1W" → 604800 (seconds). null for
+// tokens we don't recognise. Case-insensitive on the unit (the app uses 1D/1W).
+export function intervalToSeconds(iv: string): number | null {
+  const m = /^(\d+)\s*([mhdw])$/i.exec((iv ?? "").trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unit = m[2].toLowerCase();
+  const per = unit === "m" ? 60 : unit === "h" ? 3600 : unit === "d" ? 86400 : 604800;
+  return n * per;
+}
+
+// Aggregate ascending fine-grained candles into `bucketSec`-second OHLCV buckets:
+// open = first, high = max, low = min, close = last, volume = sum; bucket time =
+// floor(t / bucket) (bucket-start, ms). Used to synthesize a coarser interval from
+// 1m bars when the exact interval isn't stored natively.
+export function resampleCandles(rows: CandleRow[], bucketSec: number): CandleRow[] {
+  if (bucketSec <= 0 || rows.length === 0) return [];
+  const bucketMs = bucketSec * 1000;
+  const out: CandleRow[] = [];
+  let cur: CandleRow | null = null;
+  let curBucket = Number.NaN;
+  for (const r of rows) {
+    const bucket = Math.floor(r.tsMs / bucketMs) * bucketMs;
+    if (cur === null || bucket !== curBucket) {
+      if (cur) out.push(cur);
+      cur = { tsMs: bucket, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume };
+      curBucket = bucket;
+    } else {
+      cur.high = Math.max(cur.high, r.high);
+      cur.low = Math.min(cur.low, r.low);
+      cur.close = r.close;
+      cur.volume += r.volume;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}

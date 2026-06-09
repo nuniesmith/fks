@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
+  type CandleRow,
   humanizeSince,
+  intervalToSeconds,
   mapCandleRows,
   reshapeHealth,
   reshapePerformance,
   reshapeRiskConfig,
+  resampleCandles,
   sanitizeInterval,
   sanitizeSymbol,
   toRiskConfigPayload,
@@ -193,5 +196,62 @@ describe("wantsArrayResponse", () => {
     for (const p of ["/api/health", "/api/janus/state", "/api/settings/risk"]) {
       expect(wantsArrayResponse(p)).toBe(false);
     }
+  });
+});
+
+describe("intervalToSeconds", () => {
+  it("parses the chart's interval tokens", () => {
+    expect(intervalToSeconds("1m")).toBe(60);
+    expect(intervalToSeconds("5m")).toBe(300);
+    expect(intervalToSeconds("15m")).toBe(900);
+    expect(intervalToSeconds("1h")).toBe(3600);
+    expect(intervalToSeconds("4h")).toBe(14400);
+    expect(intervalToSeconds("1D")).toBe(86400);
+    expect(intervalToSeconds("1W")).toBe(604800);
+  });
+
+  it("returns null for unknown / invalid tokens", () => {
+    expect(intervalToSeconds("")).toBeNull();
+    expect(intervalToSeconds("0m")).toBeNull();
+    expect(intervalToSeconds("abc")).toBeNull();
+    expect(intervalToSeconds("5x")).toBeNull();
+  });
+});
+
+describe("resampleCandles", () => {
+  // Five ascending 1m bars in one 5m bucket, then one bar in the next bucket.
+  const m = (i: number, o: number, h: number, l: number, c: number, v: number): CandleRow => ({
+    tsMs: i * 60_000,
+    open: o,
+    high: h,
+    low: l,
+    close: c,
+    volume: v,
+  });
+
+  it("aggregates 1m bars into a 5m OHLCV bucket", () => {
+    const bars = [
+      m(0, 10, 12, 9, 11, 5),
+      m(1, 11, 13, 10, 12, 6),
+      m(2, 12, 12.5, 11, 11.5, 7),
+      m(3, 11.5, 14, 11, 13, 8),
+      m(4, 13, 13.5, 12, 12.5, 9),
+    ];
+    expect(resampleCandles(bars, 300)).toEqual([
+      { tsMs: 0, open: 10, high: 14, low: 9, close: 12.5, volume: 35 },
+    ]);
+  });
+
+  it("splits across bucket boundaries", () => {
+    const bars = [m(0, 1, 2, 1, 2, 1), m(4, 2, 3, 2, 3, 1), m(5, 3, 4, 3, 4, 1)];
+    const out = resampleCandles(bars, 300); // 5-minute buckets
+    expect(out).toHaveLength(2);
+    expect(out[0]).toEqual({ tsMs: 0, open: 1, high: 3, low: 1, close: 3, volume: 2 });
+    expect(out[1]).toEqual({ tsMs: 300_000, open: 3, high: 4, low: 3, close: 4, volume: 1 });
+  });
+
+  it("returns [] for empty input or a non-positive bucket", () => {
+    expect(resampleCandles([], 300)).toEqual([]);
+    expect(resampleCandles([m(0, 1, 1, 1, 1, 1)], 0)).toEqual([]);
   });
 });

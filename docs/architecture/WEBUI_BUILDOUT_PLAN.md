@@ -68,8 +68,12 @@
   `/api/assets/search?q=` (`SELECT DISTINCT symbol …`) powers the chart's symbol
   search with real symbols; `/api/assets/:short` maps the stored exchange →
   `source`/`source_chain` so the page picks the right live-data path.
-- [ ] **B3** Interval coverage: ensure 1m/5m/15m/1h/4h/1D exist, or resample higher
-  TFs from 1m in the adapter.
+- [x] **B3** Interval coverage: the candles adapter now **resamples from 1m** when
+  an interval isn't stored natively — if the direct `interval = '<tf>'` query is
+  empty, it fetches 1m bars and aggregates them into the requested bucket
+  (`resampleCandles` / `intervalToSeconds`, unit-tested). Fires only on the
+  otherwise-"no data" path, so it can't change a populated chart. *(Which
+  intervals janus stores natively is still a live-stack check — B1.)*
 - *Done = charts show live Binance data for the available symbols; search works.*
 
 ### Phase C — Indicators everywhere  *(webui adapter + charts UI)*

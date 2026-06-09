@@ -1,7 +1,7 @@
 # fks-full — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks-full`
-> **Last synced:** 2026-06-02
+> **Last synced:** 2026-06-09
 >
 > This file covers **cross-cutting** orchestration work — consuming the
 > external repos/crates, docker-compose, Dockerfiles, CI/CD, Postgres
@@ -45,6 +45,49 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
 
 **Next:** turn the demo wiring into a real risk-aware multi-asset brain — see
 [`docs/MULTI_ASSET_BRAIN_ROADMAP.md`](docs/MULTI_ASSET_BRAIN_ROADMAP.md).
+
+---
+
+## WebUI buildout — status (2026-06-09)
+
+The `src/web` SvelteKit dashboard buildout (plan:
+[`docs/architecture/WEBUI_BUILDOUT_PLAN.md`](docs/architecture/WEBUI_BUILDOUT_PLAN.md),
+Phases A–G) is **substantially shipped**. Every data-bearing page is
+janus / Prometheus / QuestDB-backed through the `src/web/src/hooks.server.ts`
+adapter; the web CI gates (`svelte-check` 0/0 · `vitest` · `vite build`) are green.
+
+**Shipped:** route/nav cleanup + prod log-stream nginx block (A); symbol catalog +
+1m→N resample fallback (B2/B3); full server-side indicator engine + `/api/indicators/catalog`
++ charts picker/presets/persistence (C); charting polish — crosshair OHLC readout,
+log/linear scale, shareable `?symbol=&tf=` URLs, client crypto WS (D2); exchange
+API-key entry (submit-only → spawner Postgres) + connection badge (E); `/bots` spawn
+presets, saved configs, per-bot CPU/mem/uptime, SSE log viewer (F1); risk panel real
+save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
+
+**Remaining — live-stack / janus-side (not runnable in the CI sandbox):**
+- [ ] **B1** — verify janus writes Binance candles → QuestDB `candles_crypto`
+      (which symbols / intervals) and that `/bars/:sym/candles` returns real bars.
+- [ ] **D1 activate** — set `JANUS_BARS_SSE_URL` once janus exposes a bars SSE
+      stream; the adapter bridge is already wired + env-gated (no-op until then).
+- [ ] **F2 run** — `scripts/testing/f2-keyless-spawn-smoke.sh` against a running
+      stack (needs the Docker daemon, absent in CI).
+- [ ] **G3 run** — run the reconciled Playwright suite vs. a dev/preview server
+      (needs the browser download, blocked in CI; `--list` enumerates 84 clean).
+
+**Remaining — local (G4 finish-line cleanup):**
+- [ ] **G4** — remove the Ruby/futures-era `/settings` dead panels (**Data Sources**
+      `/api/settings/data-source`, **Rithmic** `/api/rithmic/status`, **Analysis
+      Preferences** `/api/settings/analysis` — fake-saves to endpoints with no
+      in-tree janus backend; the wired Kraken-keys / Risk / Janus-Optimizer /
+      System / Observability panels stay); trim `TabBar.workspaceTabs()` sub-tabs
+      for deleted routes (`pnl/cnn/trades/logging/tasks/assets/reporting` — dead
+      today, `WORKSPACES` is empty); final nginx comment sweep. *(Outward-facing —
+      verify against janus, then remove vs. stub for a janus rebuild.)*
+
+**Deferred polish (non-blocking follow-ups):** per-indicator params; fold RSI/MACD
+into the generic `IndicatorPane`; dedicated volume pane; wire `exchange-apiws`
+authenticated account/balance behind the key-status badge; pgcrypto-encrypt stored
+secrets; per-bot Prometheus scrape so `bot-alerts.yml` goes live.
 
 ---
 

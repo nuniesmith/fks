@@ -1,6 +1,7 @@
 # WebUI Buildout Plan
 
-> **Status:** active — 2026-06-08
+> **Status:** near-complete — 2026-06-09 (gap review at the foot; remaining items
+> are live-stack / janus-side + the G4 settings cleanup)
 > **Predecessor:** [`WEBUI_JANUS_REPOINT.md`](WEBUI_JANUS_REPOINT.md) (the migration
 > that repaired the dashboard). That work is **done**: every data-bearing page is
 > janus / Prometheus / QuestDB-backed via the `src/web/src/hooks.server.ts` adapter,
@@ -184,13 +185,56 @@
   janus pages, and gave `/bots` the `<title>` it was missing. `playwright test
   --list` enumerates 84 tests clean. *(Full run needs the dev/preview server +
   browsers, which the CI sandbox can't download — runs via `paper-trading-test`.)*
-- [ ] **G4** Final nginx comment cleanup; refresh docs; remove remaining dead surface.
+- [ ] **G4** Final cleanup. *Docs refreshed (this pass — see the Gap review below).*
+  Remaining code work: remove the Ruby/futures-era `/settings` dead panels
+  (**Data Sources** `/api/settings/data-source`, **Rithmic** `/api/rithmic/status`,
+  **Analysis Preferences** `/api/settings/analysis` — fake-saves with no in-tree
+  janus backend); trim `TabBar.workspaceTabs()` sub-tabs for deleted routes; final
+  nginx comment sweep.
 
 ---
 
-## Open decisions
-1. **A1:** `journal` + `db` kept for now — delete them too, or keep for a janus rebuild?
-2. **E:** API-key storage target + confirmation that the browser only submits (never holds) secrets.
+## Resolved decisions
+1. **A1 — keep `journal` + `db`.** Both stay as URL-routable shells for a later
+   janus-backed rebuild; neither carries a dead Ruby backend call. *(Confirmed 2026-06-09.)*
+2. **E — API-key storage = the spawner's Postgres `ruby_db`.** The browser only
+   *submits* keys (`POST /api/settings/kraken-keys` → spawner `POST /secrets`,
+   behind `X-Internal-Token`); the secret is never returned. Plaintext-at-rest for
+   now (internal / Tailscale-only); pgcrypto column encryption is a tracked follow-up.
+
+## Gap review — 2026-06-09
+
+A full pass over the buildout after Phases A–G landed. **Substantially complete:**
+A1–A3, B2–B3, C1–C3, D2, E1–E3, F1, G1–G2 are shipped; D1/F2/G3 are wired/proxied
+as far as the CI sandbox allows (below). No `TODO`/`FIXME` markers remain in
+`src/web/src`; `npm run check` (0/0), `npm run test:unit`, and `npm run build` are green.
+
+**Remaining — needs the live stack or janus-side work (not runnable in CI):**
+- **B1** — verify janus actually writes Binance candles → QuestDB `candles_crypto`
+  (which symbols / intervals) and that `/bars/:sym/candles` returns real bars.
+- **D1 (activate)** — set `JANUS_BARS_SSE_URL` once janus exposes a bars SSE stream;
+  the adapter bridge is wired + env-gated (no behaviour change until then).
+- **F2 (run)** — execute `scripts/testing/f2-keyless-spawn-smoke.sh` against a
+  running stack (needs the Docker daemon, absent in CI).
+- **G3 (run)** — run the reconciled Playwright suite vs. a dev/preview server (needs
+  the browser download, blocked in CI). Specs parse clean (`--list` → 84 tests).
+
+**Remaining — local, but an outward-facing product call (this is G4):**
+- `/settings` still carries three Ruby/futures-era panels whose saves POST to
+  endpoints with **no in-tree janus backend** — **Data Sources**
+  (`/api/settings/data-source`), **Rithmic** (`/api/rithmic/status`), and **Analysis
+  Preferences** (`/api/settings/analysis`, futures instruments MES/MNQ/…). They are
+  fake-saves (the G1 defect class). Resolution: verify against janus, then **remove**
+  the dead panels (the wired Kraken-keys / Risk / Janus-Optimizer / System /
+  Observability panels stay) or stub them for a janus rebuild.
+- `TabBar.workspaceTabs()` still lists sub-tabs for deleted routes
+  (`pnl/cnn/trades/logging/tasks/assets/reporting`) — dead/unreachable today
+  (`WORKSPACES` is empty) but should be trimmed when a workspace is re-added.
+
+**Deferred polish (non-blocking; mirrored in the root `TODO.md`):** per-indicator
+params; fold RSI/MACD into the generic `IndicatorPane`; a dedicated volume pane;
+wire `exchange-apiws` authenticated account/balance behind the key-status badge;
+pgcrypto-encrypt stored secrets; per-bot Prometheus scrape so `bot-alerts.yml` goes live.
 
 ## Cross-repo note
 Most tasks live in **this repo** (`src/web` + the adapter + nginx). Items touching

@@ -420,6 +420,10 @@
     });
 </script>
 
+<svelte:head>
+    <title>Bots — FKS Terminal</title>
+</svelte:head>
+
 <div class="page">
     <!-- Left column: spawn form + run history -->
     <div class="left-col">

@@ -1,21 +1,21 @@
 import { test, expect } from "@playwright/test";
 
-// All workspace routes to smoke test
+// All workspace routes to smoke-test, with the <title> each should render.
+// (The de-navved Ruby routes — analysis/news/data/chains/crypto/simulations —
+// were removed in Phase A1; the wired janus pages replace them.)
 const routes = [
-  { path: "/", name: "Overview", marker: "Overview" },
-  { path: "/trading", name: "Trading", marker: "Chart" },
-  { path: "/analysis", name: "Analysis", marker: "Analysis" },
-  { path: "/charts", name: "Charts", marker: "SYMBOL" },
-  { path: "/charts/grid", name: "Multi-Chart", marker: "MULTI-CHART" },
-  { path: "/news", name: "News", marker: "News" },
-  { path: "/data", name: "Data Factory", marker: "Data" },
-  { path: "/journal", name: "Journal", marker: "Journal" },
-  { path: "/settings", name: "Settings", marker: "Settings" },
-  { path: "/monitoring", name: "Monitoring", marker: "Monitoring" },
-  { path: "/chains", name: "Chains", marker: "Chains" },
-  { path: "/crypto", name: "Crypto", marker: "Crypto" },
-  { path: "/simulations", name: "Simulations", marker: "Sim" },
-  { path: "/db", name: "DB Explorer", marker: "DB" },
+  { path: "/", title: "Overview — FKS Terminal" },
+  { path: "/charts", title: "Charts — FKS Terminal" },
+  { path: "/trading", title: "Trading — FKS Terminal" },
+  { path: "/signals", title: "Signals — FKS Terminal" },
+  { path: "/performance", title: "Performance — FKS Terminal" },
+  { path: "/janus-ai", title: "Janus AI — FKS Terminal" },
+  { path: "/docs", title: "Docs — FKS Terminal" },
+  { path: "/bots", title: "Bots — FKS Terminal" },
+  { path: "/journal", title: "Journal — FKS Terminal" },
+  { path: "/monitoring", title: "Monitoring — FKS Terminal" },
+  { path: "/db", title: "DB Explorer — FKS Terminal" },
+  { path: "/settings", title: "Settings — FKS Terminal" },
 ];
 
 test.describe("Shell", () => {
@@ -60,7 +60,7 @@ test.describe("Shell", () => {
     await expect(page).toHaveURL(/\/charts/, { timeout: 10_000 });
   });
 
-  test("keyboard shortcut 5 navigates to trading", async ({ page }) => {
+  test("keyboard shortcut 5 navigates to performance", async ({ page }) => {
     await page.goto("/");
 
     const tabbar = page.getByRole("navigation", {
@@ -73,10 +73,10 @@ test.describe("Shell", () => {
     await page.locator("body").click();
 
     await page.keyboard.press("5");
-    await expect(page).toHaveURL(/\/trading/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/performance/, { timeout: 10_000 });
   });
 
-  test("Shift+1 navigates to analysis (Analysis group shortcut)", async ({
+  test("Shift+1 navigates to docs (Analysis group shortcut)", async ({
     page,
   }) => {
     await page.goto("/");
@@ -91,29 +91,28 @@ test.describe("Shell", () => {
     await page.locator("body").click();
 
     await page.keyboard.press("Shift+1");
-    await expect(page).toHaveURL(/\/analysis/, { timeout: 10_000 });
+    await expect(page).toHaveURL(/\/docs/, { timeout: 10_000 });
   });
 });
 
 test.describe("Workspace Smoke Tests", () => {
   for (const route of routes) {
-    test(`${route.name} (${route.path}) loads without errors`, async ({
+    test(`${route.path} loads with its title + shell, no crash`, async ({
       page,
     }) => {
       const errors: string[] = [];
       page.on("pageerror", (err) => errors.push(err.message));
 
       await page.goto(route.path);
-
-      // Wait for page to be interactive
       await page.waitForLoadState("networkidle");
 
-      // The page should contain some text related to the workspace
-      const body = page.locator("body");
-      await expect(body).toContainText(route.marker, { timeout: 10_000 });
+      // Correct page rendered (a login redirect would change the title).
+      await expect(page).toHaveTitle(route.title);
+      // Shell chrome renders on every workspace page.
+      await expect(page.getByRole("banner")).toBeVisible();
 
-      // No uncaught JS errors (network errors from missing backend are OK,
-      // as are Svelte effect depth errors from pages that haven't been fixed yet)
+      // No uncaught JS errors (missing-backend network errors + Svelte effect
+      // depth warnings are expected without the live stack).
       const criticalErrors = errors.filter(
         (e) =>
           !e.includes("fetch") &&
@@ -140,9 +139,9 @@ test.describe("Navigation", () => {
     await nav.getByRole("link", { name: /^Trading$/ }).click();
     await expect(page).toHaveURL(/\/trading/);
 
-    // Click on Analysis tab (Analysis group)
-    await nav.getByRole("link", { name: /^Analysis$/ }).click();
-    await expect(page).toHaveURL(/\/analysis/);
+    // Click on Janus AI tab (Analysis group)
+    await nav.getByRole("link", { name: /Janus AI/ }).click();
+    await expect(page).toHaveURL(/\/janus-ai/);
   });
 
   test("tab groups are rendered with group labels", async ({ page }) => {

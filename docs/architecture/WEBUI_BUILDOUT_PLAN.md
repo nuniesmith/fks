@@ -164,7 +164,15 @@
   title + hint, error-tinted on failures; the old `.empty*` / `.err*` / `.error-*`
   CSS is pruned. *(Monitoring's compact inline cell placeholders are intentionally
   left — `EmptyState` is panel-sized.)*
-- [ ] **G3** Playwright E2E for the wired pages.
+- [~] **G3** Playwright E2E. The suite existed but had gone **stale against the
+  Phase-A1 deletions** — `smoke.spec.ts` + `workspaces.spec.ts` tested removed
+  routes (`analysis`/`news`/`data`/`chains`/`crypto`/`simulations`/`dom`/`paper`/
+  `positions`) and the wrong keyboard map, so it would have failed wholesale.
+  Reconciled to the **actual** routes + nav (titles verified from source; `5`→
+  `/performance`, `⇧1`→`/docs` per TabBar; nav click → Janus AI), added the wired
+  janus pages, and gave `/bots` the `<title>` it was missing. `playwright test
+  --list` enumerates 84 tests clean. *(Full run needs the dev/preview server +
+  browsers, which the CI sandbox can't download — runs via `paper-trading-test`.)*
 - [ ] **G4** Final nginx comment cleanup; refresh docs; remove remaining dead surface.
 
 ---

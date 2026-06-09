@@ -122,12 +122,25 @@ Use `lightweight-charts`. Pattern: `routes/charts/+page.svelte`. Bars come from 
   authenticated `exchange-apiws` order path, which remains behind the execution
   gate. (Plaintext-at-rest for now — internal/Tailscale-only; pgcrypto is a
   tracked follow-up.)
-- **29 pre-existing type errors** in `npm run check` (`analysis/`, `chains/`, `news/`, `cnn/`, `pnl/`, +layout.ts) — small `any`/`unknown` gaps unrelated to the dual-script bug we already fixed in PR #14. Cleanup is in `TODO.md`.
+- **`npm run check` is clean (0 errors / 0 warnings).** The de-navved Ruby
+  routes that held the original type errors were deleted; the dashboard is now
+  janus / Prometheus / QuestDB-backed via `hooks.server.ts`. Keep it at 0 — the
+  web CI gates on `svelte-check` + `vitest` (`npm run test:unit`) + `vite build`.
 
 ## Status
 
-After PRs #13, #14, #19 in `fks-full`:
-- `/bots` route fully functional (spawn form + container list + SSE log viewer with follow-tail + run history).
-- Build is green (`npm run build` succeeds after the dual-script repair).
-- 29 of the original 59 `npm run check` errors fixed; the rest are
-  tracked in `TODO.md`.
+The dashboard is fully repointed to janus / Prometheus / QuestDB via the
+`hooks.server.ts` adapter (the old Python "Ruby" backend is gone). Current state:
+
+- **Green gates:** `npm run check` is 0/0, `npm run build` succeeds, and
+  `npm run test:unit` (vitest) passes — all three run in the web CI.
+- **Unit tests** cover the pure logic + plumbing: the indicator engine, the
+  adapter reshapers + QuestDB input sanitizers, the formatters, and the
+  poll / SSE stores + the api client.
+- **Pages wired:** charts (full indicator set + presets/persistence, crosshair
+  readout, log scale), `/bots` (spawn presets, saved configs, per-bot CPU/mem +
+  uptime, SSE log viewer, run history), signals, performance, janus-ai, settings
+  (risk controls + exchange API-key entry), monitoring — all with consistent
+  `EmptyState` empty/error states.
+- Phase-by-phase detail lives in
+  [`docs/architecture/WEBUI_BUILDOUT_PLAN.md`](../../docs/architecture/WEBUI_BUILDOUT_PLAN.md).

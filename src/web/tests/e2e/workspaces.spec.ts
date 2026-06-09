@@ -22,23 +22,17 @@ function isCritical(msg: string): boolean {
 
 const PAGE_TITLES: { path: string; title: RegExp }[] = [
   { path: "/", title: /Overview.*FKS Terminal/ },
-  { path: "/trading", title: /Trading.*FKS Terminal/ },
-  { path: "/analysis", title: /Analysis.*FKS Terminal/ },
   { path: "/charts", title: /Charts.*FKS Terminal/ },
-  { path: "/news", title: /News.*FKS Terminal/ },
-  { path: "/data", title: /Data Factory.*FKS Terminal/ },
-  { path: "/journal", title: /Journal.*FKS Terminal/ },
-  { path: "/settings", title: /Settings.*FKS Terminal/ },
-  { path: "/monitoring", title: /Monitoring.*FKS Terminal/ },
-  { path: "/chains", title: /Chains.*FKS Terminal/ },
-  { path: "/crypto", title: /Crypto Portfolio.*FKS Terminal/ },
-  { path: "/simulations", title: /Simulations.*FKS Terminal/ },
-  { path: "/db", title: /DB Explorer.*FKS Terminal/ },
+  { path: "/trading", title: /Trading.*FKS Terminal/ },
+  { path: "/signals", title: /Signals.*FKS Terminal/ },
+  { path: "/performance", title: /Performance.*FKS Terminal/ },
   { path: "/janus-ai", title: /Janus AI.*FKS Terminal/ },
-  { path: "/dom", title: /DOM.*FKS Terminal/ },
-  { path: "/paper", title: /Paper Trading.*FKS Terminal/ },
-  { path: "/positions", title: /Positions.*FKS Terminal/ },
   { path: "/docs", title: /Docs.*FKS Terminal/ },
+  { path: "/bots", title: /Bots.*FKS Terminal/ },
+  { path: "/journal", title: /Journal.*FKS Terminal/ },
+  { path: "/monitoring", title: /Monitoring.*FKS Terminal/ },
+  { path: "/db", title: /DB Explorer.*FKS Terminal/ },
+  { path: "/settings", title: /Settings.*FKS Terminal/ },
   { path: "/login", title: /FKS Terminal.*Login/ },
 ];
 
@@ -198,28 +192,11 @@ test.describe("Janus AI workspace (/janus-ai)", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. EmbedPage routes — DOM, Paper, Positions, Docs
+// 3. EmbedPage routes — Docs
+// (DOM / Paper / Positions were de-navved Ruby routes, removed in Phase A1.)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMBED_ROUTES = [
-  {
-    path: "/dom",
-    name: "DOM",
-    docTitle: /DOM.*FKS Terminal/i,
-    iframeTitle: "Depth of Market — DOM Ladder",
-  },
-  {
-    path: "/paper",
-    name: "Paper Trading",
-    docTitle: /Paper Trading.*FKS Terminal/i,
-    iframeTitle: "Paper Trading Manager",
-  },
-  {
-    path: "/positions",
-    name: "Positions",
-    docTitle: /Positions.*FKS Terminal/i,
-    iframeTitle: "Position Intelligence — Risk Monitor",
-  },
   {
     path: "/docs",
     name: "Docs",

@@ -37,6 +37,10 @@ const JANUS_URL = env.JANUS_INTERNAL_URL ?? "http://fks_janus:8080"; // janus-ap
 const JANUS_FORWARD_URL = env.JANUS_FORWARD_INTERNAL_URL ?? "http://fks_janus:8180"; // forward (brain/risk)
 const PROMETHEUS_URL = env.PROMETHEUS_INTERNAL_URL ?? "http://fks_prometheus:9090"; // /monitoring
 const QUESTDB_URL = env.QUESTDB_INTERNAL_URL ?? "http://fks_questdb:9000"; // /charts OHLC (HTTP query API)
+// Futures live-bars SSE bridge (D1). Empty by default → /sse/bars/:sym serves the
+// graceful idle stub (unchanged). Set to a janus SSE base (the symbol is appended
+// as "/<sym>", emitting `event: bar` frames) to pipe futures bars to the chart.
+const JANUS_BARS_SSE_URL = env.JANUS_BARS_SSE_URL ?? "";
 
 const BACKEND_PREFIXES = ["/api/", "/sse/", "/bars/", "/factory/", "/kraken/", "/fapi/"];
 
@@ -633,6 +637,17 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
 
   // More janus panels (overview aggregate / performance) land here next —
   // see docs/architecture/WEBUI_JANUS_REPOINT.md for the per-panel mapping.
+
+  // ── /sse/bars/:sym → futures live bars (D1) ─────────────────────────────────
+  // Crypto charts get live ticks client-side (Kraken/Binance WS, reconnect +
+  // backoff). Futures have no client WS, so the chart reads this SSE bridge.
+  // Until janus exposes a bars stream it stays the graceful idle stub below;
+  // once it does, set JANUS_BARS_SSE_URL and the upstream is piped straight
+  // through (text/event-stream, `event: bar` frames).
+  const barsSseMatch = /^\/sse\/bars\/([^/]+)$/.exec(pathname);
+  if (barsSseMatch && JANUS_BARS_SSE_URL) {
+    return forward(event, JANUS_BARS_SSE_URL, `/${barsSseMatch[1]}${search}`);
+  }
 
   // ── Everything else under a backend prefix → degrade quietly ────────────────
   return gracefulEmpty(pathname);

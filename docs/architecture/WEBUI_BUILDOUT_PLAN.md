@@ -101,8 +101,13 @@
 - *Done = full indicator set renders, parameterized, aligned to candles.*
 
 ### Phase D — Charting polish  *(webui)*
-- [ ] **D1** Harden live updates: client Binance/Kraken WS (reconnect/backoff,
-  multi-symbol) + an adapter `/sse/bars/:sym` bridge for futures.
+- [~] **D1** Harden live updates. **Client crypto WS is done** — the chart runs
+  Kraken→Binance with reconnect + exponential backoff (and a per-chart WS in the
+  grid). The **adapter `/sse/bars/:sym` futures bridge** is now wired but
+  **env-gated**: empty `JANUS_BARS_SSE_URL` keeps today's graceful idle stub
+  (no behaviour change); set it to a janus SSE base and the upstream is piped
+  straight through (`event: bar` frames). *(Activating it is janus-side work —
+  janus doesn't expose a bars stream yet; the bridge is ready for when it does.)*
 - [x] **D2** Charts polish: **symbol/timeframe persistence** (localStorage),
   **crosshair OHLC readout** (hover → bar O/H/L/C + change%), **shareable URLs**
   (`?symbol=&tf=` — URL wins over localStorage, synced via `replaceState`), and a

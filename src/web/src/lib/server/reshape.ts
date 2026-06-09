@@ -111,3 +111,44 @@ export function sanitizeSymbol(raw: string | null | undefined, maxLen = 32): str
 export function sanitizeInterval(raw: string | null | undefined): string {
   return (raw ?? "5m").replace(/[^A-Za-z0-9]/g, "").slice(0, 8) || "5m";
 }
+
+// ── QuestDB candle mapping ───────────────────────────────────────────────────
+
+export interface CandleRow {
+  tsMs: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+// QuestDB `candles_crypto` dataset rows are [t_µs, open, high, low, close,
+// volume], newest-first. Map → ascending OHLCV with the timestamp in ms (what
+// lightweight-charts' setData expects). Non-arrays → []; missing volume → 0.
+export function mapCandleRows(dataset: unknown): CandleRow[] {
+  const rows: unknown[] = Array.isArray(dataset) ? dataset : [];
+  return rows
+    .map((r) => {
+      const row = r as unknown[];
+      return {
+        tsMs: Math.round(Number(row[0]) / 1000),
+        open: Number(row[1]),
+        high: Number(row[2]),
+        low: Number(row[3]),
+        close: Number(row[4]),
+        volume: Number(row[5] ?? 0),
+      };
+    })
+    .reverse();
+}
+
+// gracefulEmpty's REST heuristic: list-ish paths degrade to `[]` (so array
+// consumers don't throw), singular/status paths to `{}`. Cheap but good enough
+// while a panel is unmapped.
+const ARRAY_PATH_RE =
+  /(list|recent|open|trades|signals|alerts|sessions|containers|runs|notes|providers|gaps|news|quotes|feed|history|scores)/;
+
+export function wantsArrayResponse(pathname: string): boolean {
+  return ARRAY_PATH_RE.test(pathname);
+}

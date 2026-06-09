@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   humanizeSince,
+  mapCandleRows,
   reshapeHealth,
   reshapePerformance,
   reshapeRiskConfig,
   sanitizeInterval,
   sanitizeSymbol,
   toRiskConfigPayload,
+  wantsArrayResponse,
 } from "./reshape";
 
 describe("reshapeHealth", () => {
@@ -156,5 +158,40 @@ describe("sanitizeInterval", () => {
     expect(sanitizeInterval("")).toBe("5m");
     expect(sanitizeInterval("'; --")).toBe("5m"); // all chars stripped → fallback
     expect(sanitizeInterval("5m'")).toBe("5m"); // trailing quote dropped
+  });
+});
+
+describe("mapCandleRows", () => {
+  it("maps newest-first QuestDB rows to ascending ms OHLCV", () => {
+    const dataset = [
+      [2_000_000, 11, 12, 10, 11.5, 100], // newer (µs)
+      [1_000_000, 10, 11, 9, 10.5, 50], // older
+    ];
+    expect(mapCandleRows(dataset)).toEqual([
+      { tsMs: 1000, open: 10, high: 11, low: 9, close: 10.5, volume: 50 },
+      { tsMs: 2000, open: 11, high: 12, low: 10, close: 11.5, volume: 100 },
+    ]);
+  });
+
+  it("defaults missing volume to 0 and tolerates non-arrays", () => {
+    expect(mapCandleRows([[1_000_000, 1, 2, 0.5, 1.5]])).toEqual([
+      { tsMs: 1000, open: 1, high: 2, low: 0.5, close: 1.5, volume: 0 },
+    ]);
+    expect(mapCandleRows(null)).toEqual([]);
+    expect(mapCandleRows(undefined)).toEqual([]);
+  });
+});
+
+describe("wantsArrayResponse", () => {
+  it("returns true for list-ish endpoints", () => {
+    for (const p of ["/api/signals", "/api/trades", "/api/x/runs", "/api/alerts", "/api/containers"]) {
+      expect(wantsArrayResponse(p)).toBe(true);
+    }
+  });
+
+  it("returns false for singular / status endpoints", () => {
+    for (const p of ["/api/health", "/api/janus/state", "/api/settings/risk"]) {
+      expect(wantsArrayResponse(p)).toBe(false);
+    }
   });
 });

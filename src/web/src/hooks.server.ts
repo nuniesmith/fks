@@ -3,12 +3,14 @@ import { env } from "$env/dynamic/private";
 import { computeIndicators, INDICATOR_CATALOG, type Candle } from "$lib/server/indicators";
 import {
   humanizeSince,
+  mapCandleRows,
   reshapeHealth,
   reshapePerformance,
   reshapeRiskConfig,
   sanitizeInterval,
   sanitizeSymbol,
   toRiskConfigPayload,
+  wantsArrayResponse,
 } from "$lib/server/reshape";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -115,9 +117,7 @@ function gracefulEmpty(pathname: string): Response {
   // REST: return an empty list or object. Most polled endpoints want an array;
   // singular/status-ish ones want an object — cheap heuristic, good enough to
   // keep components from throwing while the panel is unmapped.
-  const wantsArray = /(list|recent|open|trades|signals|alerts|sessions|containers|runs|notes|providers|gaps|news|quotes|feed|history|scores)/.test(
-    pathname,
-  );
+  const wantsArray = wantsArrayResponse(pathname);
   return new Response(wantsArray ? "[]" : "{}", {
     status: 200,
     headers: { "content-type": "application/json", "x-fks-unmapped": "1" },
@@ -287,19 +287,7 @@ async function fetchCandles(
       headers: { accept: "application/json" },
     });
     const j: any = await r.json();
-    const rows: any[] = Array.isArray(j?.dataset) ? j.dataset : [];
-    // Row order matches the SELECT: [t_µs, open, high, low, close, volume].
-    // QuestDB returns newest-first; reverse → ascending for setData().
-    return rows
-      .map((row) => ({
-        tsMs: Math.round(Number(row[0]) / 1000), // µs → ms
-        open: Number(row[1]),
-        high: Number(row[2]),
-        low: Number(row[3]),
-        close: Number(row[4]),
-        volume: Number(row[5] ?? 0),
-      }))
-      .reverse();
+    return mapCandleRows(j?.dataset);
   } catch {
     return [];
   }

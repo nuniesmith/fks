@@ -144,7 +144,13 @@
   clearer too: each running container shows live **uptime** (↑ from start time,
   refreshed on the 3s poll) and **memory used / limit** (the spawner now carries
   `memory_limit_bytes` alongside the usage stat). F1 done.
-- [ ] **F2** Spawn a paper crypto bot end-to-end from the UI on the keyless path.
+- [~] **F2** Spawn a paper crypto bot end-to-end from the UI on the keyless path.
+  Delivered the **runbook + automated smoke test** that encode the exact path
+  (`scripts/testing/F2-KEYLESS-SPAWN-RUNBOOK.md` + `f2-keyless-spawn-smoke.sh`):
+  spawner `POST /spawn` (crypto-demo · paper · synthetic · mock) → janus brain over
+  HTTP → MockExchange (no keys, no real orders), with a **paper-safety assertion**
+  that the logs never show a live-order path. *(The actual run is a live-stack
+  check — no Docker daemon in the CI sandbox; the script is the repeatable proof.)*
 
 ### Phase G — Robustness & finish
 - [x] **G1** `/settings` risk panel **now actually saves** (was a fake "Saved ✓"

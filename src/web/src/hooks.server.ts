@@ -2,11 +2,14 @@ import type { Handle, RequestEvent } from "@sveltejs/kit";
 import { env } from "$env/dynamic/private";
 import { computeIndicators, INDICATOR_CATALOG, type Candle } from "$lib/server/indicators";
 import {
+  type CandleRow,
   humanizeSince,
+  intervalToSeconds,
   mapCandleRows,
   reshapeHealth,
   reshapePerformance,
   reshapeRiskConfig,
+  resampleCandles,
   sanitizeInterval,
   sanitizeSymbol,
   toRiskConfigPayload,
@@ -265,18 +268,14 @@ const METRICS_LAYOUT = {
 
 // Query candles_crypto → ascending rows { tsMs, o,h,l,c,v }. Shared by the
 // candles endpoint and the indicators endpoint.
-async function fetchCandles(
-  event: RequestEvent,
-  symbolRaw: string,
-): Promise<{ tsMs: number; open: number; high: number; low: number; close: number; volume: number }[]> {
-  // Strip anything that isn't a symbol char — these go straight into a SQL
-  // string literal, so this is also the injection guard.
-  const sym = sanitizeSymbol(symbolRaw, 32);
-  if (!sym) return [];
-  const p = event.url.searchParams;
-  const iv = sanitizeInterval(p.get("interval"));
-  const days = Math.min(365, Math.max(1, parseInt(p.get("days_back") ?? "5", 10) || 5));
-  const lim = Math.min(5000, Math.max(1, parseInt(p.get("limit") ?? "1000", 10) || 1000));
+// One QuestDB candles_crypto query. `sym`/`iv` are already sanitized (they go
+// into the SQL string literal). Returns ascending OHLCV rows ([] on any failure).
+async function queryCandles(
+  sym: string,
+  iv: string,
+  days: number,
+  lim: number,
+): Promise<CandleRow[]> {
   const sql =
     `SELECT cast(ts as long) t, open, high, low, close, volume FROM candles_crypto ` +
     `WHERE (symbol = '${sym}' OR symbol LIKE '${sym}/%' OR symbol LIKE '${sym}-%') ` +
@@ -291,6 +290,29 @@ async function fetchCandles(
   } catch {
     return [];
   }
+}
+
+async function fetchCandles(event: RequestEvent, symbolRaw: string): Promise<CandleRow[]> {
+  // Strip anything that isn't a symbol char — these go straight into a SQL string
+  // literal, so this is also the injection guard.
+  const sym = sanitizeSymbol(symbolRaw, 32);
+  if (!sym) return [];
+  const p = event.url.searchParams;
+  const iv = sanitizeInterval(p.get("interval"));
+  const days = Math.min(365, Math.max(1, parseInt(p.get("days_back") ?? "5", 10) || 5));
+  const lim = Math.min(5000, Math.max(1, parseInt(p.get("limit") ?? "1000", 10) || 1000));
+
+  let rows = await queryCandles(sym, iv, days, lim);
+
+  // B3: if nothing is stored natively at this interval, synthesize it by
+  // resampling 1m bars. Only fires when the direct query came back empty, so it
+  // can only improve on the "no data" case — it never changes a populated chart.
+  const sec = intervalToSeconds(iv);
+  if (rows.length === 0 && iv !== "1m" && sec !== null && sec % 60 === 0) {
+    const oneMin = await queryCandles(sym, "1m", days, Math.min(5000, Math.ceil((sec / 60) * lim)));
+    if (oneMin.length > 0) rows = resampleCandles(oneMin, sec);
+  }
+  return rows;
 }
 
 // GET /bars/:symbol/candles → { candles: [{ timestamp /*ms*/, o,h,l,c,v }] }.

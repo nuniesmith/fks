@@ -6,11 +6,6 @@
   import Panel from '$components/ui/Panel.svelte';
 
   // ─── Types ──────────────────────────────────────────────────────────
-  interface DataSourceResponse {
-    source: 'kraken' | 'rithmic' | 'both';
-    connected?: boolean;
-  }
-
   interface HealthResponse {
     status: string;
     version?: string;
@@ -22,13 +17,6 @@
     daily_loss_limit: number;
     max_contracts: number;
     hard_stop: number;
-  }
-
-  interface AnalysisSettings {
-    primary_tf: string;
-    htf_bias: string;
-    autorun_time: string;
-    instruments: string[];
   }
 
   interface JanusConfig {
@@ -58,13 +46,6 @@
     message: string;
   }
 
-  // ─── Data Source State ──────────────────────────────────────────────
-  let dsSource = $state<'kraken' | 'rithmic' | 'both'>('both');
-  let dsConnected = $state<boolean | null>(null);
-  let dsLoading = $state(true);
-  let dsSaving = $state(false);
-  let dsFeedback = $state('');
-
   // ─── Kraken Keys State ─────────────────────────────────────────────
   let krakenKey = $state('');
   let krakenSecret = $state('');
@@ -76,12 +57,6 @@
   // The browser only submits keys; it never reads the secret back.
   let krakenConfigured = $state<boolean | null>(null);
 
-  // ─── Rithmic State ─────────────────────────────────────────────────
-  let rithmicStatus = $state('Unknown');
-  let rithmicTesting = $state(false);
-  let rithmicFeedback = $state('');
-  let rithmicFeedbackVariant = $state<'green' | 'red' | 'default'>('default');
-
   // ─── Risk Controls State (rustrade PortfolioRiskConfig) ─────────────
   let riskDailyLoss = $state(5000);          // max daily loss (USD; shown positive, stored ≤0)
   let riskMaxPositions = $state(10);         // max concurrent positions
@@ -89,18 +64,6 @@
   let riskSaving = $state(false);
   let riskLoading = $state(false);
   let riskFeedback = $state('');
-
-  // ─── Analysis Preferences State ────────────────────────────────────
-  let primaryTf = $state('5m');
-  let htfBias = $state('1h');
-  let autorunTime = $state('06:30');
-  let selectedInstruments = $state<string[]>(['MES', 'MNQ', 'MGC']);
-  let analysisSaving = $state(false);
-  let analysisFeedback = $state('');
-
-  const timeframes = ['1m', '5m', '15m', '1h', '4h', '1D'];
-  const htfTimeframes = ['15m', '1h', '4h', '1D'];
-  const allInstruments = ['MES', 'MNQ', 'MGC', 'MYM', 'M2K', 'BTC', 'ETH', 'SOL'];
 
   // ─── System Health State ───────────────────────────────────────────
   let healthData = $state<HealthResponse | null>(null);
@@ -158,36 +121,6 @@
     return 'default';
   }
 
-  // ─── API: Data Sources ─────────────────────────────────────────────
-
-  async function loadDataSource() {
-    dsLoading = true;
-    try {
-      const res = await api.get<DataSourceResponse>('/api/settings/data-source');
-      dsSource = res.source;
-      dsConnected = res.connected ?? null;
-    } catch {
-      dsConnected = null;
-    } finally {
-      dsLoading = false;
-    }
-  }
-
-  async function saveDataSource() {
-    dsSaving = true;
-    dsFeedback = '';
-    try {
-      await api.post('/api/settings/data-source', { source: dsSource });
-      dsFeedback = 'Saved ✓';
-      clearFeedbackAfter(v => dsFeedback = v);
-    } catch (err: any) {
-      dsFeedback = `Error: ${err.message ?? 'Failed to save'}`;
-      clearFeedbackAfter(v => dsFeedback = v, 5000);
-    } finally {
-      dsSaving = false;
-    }
-  }
-
   // ─── API: Kraken Keys ─────────────────────────────────────────────
 
   async function loadKrakenStatus() {
@@ -236,26 +169,6 @@
     }
   }
 
-  // ─── API: Rithmic ──────────────────────────────────────────────────
-
-  async function testRithmic() {
-    rithmicTesting = true;
-    rithmicFeedback = '';
-    try {
-      const res = await api.post<{ status?: string; message?: string; connected?: boolean }>('/api/rithmic/status');
-      rithmicStatus = res.status ?? (res.connected ? 'Connected' : 'Disconnected');
-      rithmicFeedback = `✓ ${res.status ?? res.message ?? 'OK'}`;
-      rithmicFeedbackVariant = 'green';
-    } catch (err: any) {
-      rithmicStatus = 'Error';
-      rithmicFeedback = `✗ ${err.message ?? 'Connection failed'}`;
-      rithmicFeedbackVariant = 'red';
-    } finally {
-      rithmicTesting = false;
-      clearFeedbackAfter(v => rithmicFeedback = v, 5000);
-    }
-  }
-
   // ─── API: Risk Controls ────────────────────────────────────────────
 
   async function loadRisk() {
@@ -290,36 +203,6 @@
       clearFeedbackAfter(v => riskFeedback = v, 5000);
     } finally {
       riskSaving = false;
-    }
-  }
-
-  // ─── API: Analysis Preferences ─────────────────────────────────────
-
-  async function saveAnalysis() {
-    analysisSaving = true;
-    analysisFeedback = '';
-    try {
-      await api.post('/api/settings/analysis', {
-        primary_tf: primaryTf,
-        htf_bias: htfBias,
-        autorun_time: autorunTime,
-        instruments: selectedInstruments,
-      });
-      analysisFeedback = 'Saved ✓';
-      clearFeedbackAfter(v => analysisFeedback = v);
-    } catch (err: any) {
-      analysisFeedback = `Error: ${err.message ?? 'Failed to save'}`;
-      clearFeedbackAfter(v => analysisFeedback = v, 5000);
-    } finally {
-      analysisSaving = false;
-    }
-  }
-
-  function toggleInstrument(sym: string) {
-    if (selectedInstruments.includes(sym)) {
-      selectedInstruments = selectedInstruments.filter(s => s !== sym);
-    } else {
-      selectedInstruments = [...selectedInstruments, sym];
     }
   }
 
@@ -402,7 +285,6 @@
   // ─── Lifecycle ─────────────────────────────────────────────────────
 
   onMount(() => {
-    loadDataSource();
     fetchHealth();
     loadJanusConfig();
     loadRisk();
@@ -425,50 +307,7 @@
        ════════════════════════════════════════════════════════════════════ -->
   <div class="pane pane-left">
 
-    <!-- ── Panel 1: Data Sources ──────────────────────────────────── -->
-    <Panel title="Data Sources">
-      {#snippet header()}
-        {#if dsConnected !== null}
-          <span class="status-dot" class:dot-green={dsConnected} class:dot-red={!dsConnected}></span>
-          <span class="status-text" class:connected={dsConnected} class:disconnected={!dsConnected}>
-            {dsConnected ? 'Connected' : 'Disconnected'}
-          </span>
-        {/if}
-      {/snippet}
-      {#if dsLoading}
-        <Skeleton lines={3} height="14px" />
-      {:else}
-        <div class="form-group">
-          <span class="form-label">Active Source</span>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" bind:group={dsSource} value="kraken" />
-              <span class="radio-label">Kraken</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" bind:group={dsSource} value="rithmic" />
-              <span class="radio-label">Rithmic</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" bind:group={dsSource} value="both" />
-              <span class="radio-label">Both</span>
-            </label>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn-primary" onclick={saveDataSource} disabled={dsSaving}>
-            {dsSaving ? 'Saving…' : 'Save'}
-          </button>
-          {#if dsFeedback}
-            <span class="feedback" class:feedback-ok={dsFeedback.startsWith('Saved')} class:feedback-err={dsFeedback.startsWith('Error')}>
-              {dsFeedback}
-            </span>
-          {/if}
-        </div>
-      {/if}
-    </Panel>
-
-    <!-- ── Panel 2: API Connections ───────────────────────────────── -->
+    <!-- ── Panel: API Connections ─────────────────────────────────── -->
     <Panel title="API Connections">
       <!-- Kraken -->
       <div class="connection-block">
@@ -513,30 +352,6 @@
           {#if krakenFeedback}
             <span class="feedback" class:feedback-ok={krakenFeedbackVariant === 'green'} class:feedback-err={krakenFeedbackVariant === 'red'}>
               {krakenFeedback}
-            </span>
-          {/if}
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
-      <!-- Rithmic -->
-      <div class="connection-block">
-        <div class="connection-title">Rithmic</div>
-        <div class="form-group">
-          <span class="form-label">Status</span>
-          <div class="status-display">
-            <span class="status-dot" class:dot-green={rithmicStatus === 'Connected'} class:dot-red={rithmicStatus !== 'Connected' && rithmicStatus !== 'Unknown'} class:dot-amber={rithmicStatus === 'Unknown'}></span>
-            <span class="mono">{rithmicStatus}</span>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn-ghost" onclick={testRithmic} disabled={rithmicTesting}>
-            {rithmicTesting ? '⏳ Testing…' : '🔌 Test Connection'}
-          </button>
-          {#if rithmicFeedback}
-            <span class="feedback" class:feedback-ok={rithmicFeedbackVariant === 'green'} class:feedback-err={rithmicFeedbackVariant === 'red'}>
-              {rithmicFeedback}
             </span>
           {/if}
         </div>
@@ -598,64 +413,7 @@
        ════════════════════════════════════════════════════════════════════ -->
   <div class="pane pane-right">
 
-    <!-- ── Panel 1: Analysis Preferences ──────────────────────────── -->
-    <Panel title="Analysis Preferences">
-      <div class="form-row">
-        <div class="form-group form-grow">
-          <label class="form-label" for="pref-primary-tf">Primary Timeframe</label>
-          <select id="pref-primary-tf" class="form-select" bind:value={primaryTf}>
-            {#each timeframes as tf}
-              <option value={tf}>{tf}</option>
-            {/each}
-          </select>
-        </div>
-        <div class="form-group form-grow">
-          <label class="form-label" for="pref-htf-bias">HTF Bias Timeframe</label>
-          <select id="pref-htf-bias" class="form-select" bind:value={htfBias}>
-            {#each htfTimeframes as tf}
-              <option value={tf}>{tf}</option>
-            {/each}
-          </select>
-        </div>
-        <div class="form-group form-grow">
-          <label class="form-label" for="pref-autorun-time">Auto-run Time</label>
-          <input
-            id="pref-autorun-time"
-            class="form-input"
-            type="time"
-            bind:value={autorunTime}
-          />
-        </div>
-      </div>
-
-      <div class="form-group">
-        <span class="form-label">Watched Instruments</span>
-        <div class="chip-row">
-          {#each allInstruments as sym}
-            <button
-              class="chip"
-              class:chip-active={selectedInstruments.includes(sym)}
-              onclick={() => toggleInstrument(sym)}
-            >
-              {sym}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button class="btn-primary" onclick={saveAnalysis} disabled={analysisSaving}>
-          {analysisSaving ? 'Saving…' : 'Save'}
-        </button>
-        {#if analysisFeedback}
-          <span class="feedback" class:feedback-ok={analysisFeedback.startsWith('Saved')} class:feedback-err={analysisFeedback.startsWith('Error')}>
-            {analysisFeedback}
-          </span>
-        {/if}
-      </div>
-    </Panel>
-
-    <!-- ── Panel 2: System Info ───────────────────────────────────── -->
+    <!-- ── Panel: System Info ─────────────────────────────────────── -->
     <Panel title="System Info" badge="15s">
       {#if healthLoading && !healthData}
         <Skeleton lines={4} height="14px" />
@@ -922,16 +680,6 @@
   .dot-red    { background: var(--red);    box-shadow: 0 0 4px var(--red); }
   .dot-amber  { background: var(--amber);  box-shadow: 0 0 4px var(--amber); }
 
-  .status-text {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .connected    { color: var(--green); }
-  .disconnected { color: var(--red); }
-
   .status-display {
     display: flex;
     align-items: center;
@@ -1018,55 +766,6 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════════
-     Radio Group
-     ═══════════════════════════════════════════════════════════════════ */
-  .radio-group {
-    display: flex;
-    gap: 2px;
-    background: var(--bg0);
-    border: 1px solid var(--b1);
-    border-radius: var(--r);
-    padding: 2px;
-  }
-
-  .radio-option {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  .radio-option input[type="radio"] {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
-  .radio-label {
-    display: block;
-    width: 100%;
-    text-align: center;
-    padding: 5px 12px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--t3);
-    border-radius: var(--r);
-    transition: background 0.15s, color 0.15s;
-    user-select: none;
-  }
-
-  .radio-option input[type="radio"]:checked + .radio-label {
-    background: var(--bg3);
-    color: var(--t1);
-  }
-
-  .radio-option:hover .radio-label {
-    color: var(--t2);
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════
      Buttons
      ═══════════════════════════════════════════════════════════════════ */
   .btn-primary {
@@ -1139,45 +838,6 @@
     height: 1px;
     background: var(--b1);
     margin: 8px 0;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════
-     Chips (Instrument Selection)
-     ═══════════════════════════════════════════════════════════════════ */
-  .chip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .chip {
-    all: unset;
-    padding: 4px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--t3);
-    background: var(--bg2);
-    border: 1px solid var(--b1);
-    border-radius: var(--r);
-    cursor: pointer;
-    transition: all 0.15s;
-    user-select: none;
-  }
-
-  .chip:hover {
-    color: var(--t2);
-    border-color: var(--t3);
-  }
-
-  .chip-active {
-    color: var(--cyan);
-    background: var(--bg3);
-    border-color: var(--cyan);
-  }
-
-  .chip-active:hover {
-    color: var(--cyan);
-    border-color: var(--cyan);
   }
 
   /* ═══════════════════════════════════════════════════════════════════

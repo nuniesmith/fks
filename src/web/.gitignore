@@ -4,3 +4,7 @@ build
 .env
 .env.*
 !.env.example
+
+# Playwright generated artifacts
+playwright-report/
+test-results/

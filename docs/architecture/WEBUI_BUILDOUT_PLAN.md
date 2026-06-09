@@ -185,12 +185,12 @@
   janus pages, and gave `/bots` the `<title>` it was missing. `playwright test
   --list` enumerates 84 tests clean. *(Full run needs the dev/preview server +
   browsers, which the CI sandbox can't download — runs via `paper-trading-test`.)*
-- [ ] **G4** Final cleanup. *Docs refreshed (this pass — see the Gap review below).*
-  Remaining code work: remove the Ruby/futures-era `/settings` dead panels
-  (**Data Sources** `/api/settings/data-source`, **Rithmic** `/api/rithmic/status`,
-  **Analysis Preferences** `/api/settings/analysis` — fake-saves with no in-tree
-  janus backend); trim `TabBar.workspaceTabs()` sub-tabs for deleted routes; final
-  nginx comment sweep.
+- [~] **G4** Final cleanup. *Docs refreshed + the three Ruby/futures-era `/settings`
+  fake-save panels removed* (**Data Sources**, **Rithmic**, **Analysis Preferences** —
+  they POSTed to endpoints with no in-tree janus backend; orphaned radio/chip/status
+  CSS pruned, `check` 0/0). The wired Kraken-keys / Risk / Janus-Optimizer / System /
+  Observability panels stay. Residual (minor): trim `TabBar.workspaceTabs()` sub-tabs
+  for deleted routes (dead today — `WORKSPACES` is empty) + a final nginx comment sweep.
 
 ---
 
@@ -219,14 +219,13 @@ as far as the CI sandbox allows (below). No `TODO`/`FIXME` markers remain in
 - **G3 (run)** — run the reconciled Playwright suite vs. a dev/preview server (needs
   the browser download, blocked in CI). Specs parse clean (`--list` → 84 tests).
 
-**Remaining — local, but an outward-facing product call (this is G4):**
-- `/settings` still carries three Ruby/futures-era panels whose saves POST to
-  endpoints with **no in-tree janus backend** — **Data Sources**
-  (`/api/settings/data-source`), **Rithmic** (`/api/rithmic/status`), and **Analysis
-  Preferences** (`/api/settings/analysis`, futures instruments MES/MNQ/…). They are
-  fake-saves (the G1 defect class). Resolution: verify against janus, then **remove**
-  the dead panels (the wired Kraken-keys / Risk / Janus-Optimizer / System /
-  Observability panels stay) or stub them for a janus rebuild.
+**G4 — local cleanup (mostly done):**
+- ✅ **Removed** the three Ruby/futures-era `/settings` fake-save panels — **Data
+  Sources** (`/api/settings/data-source`), **Rithmic** (`/api/rithmic/status`), and
+  **Analysis Preferences** (`/api/settings/analysis`, futures instruments) — that
+  POSTed to endpoints with no in-tree janus backend (the G1 defect class). The wired
+  Kraken-keys / Risk / Janus-Optimizer / System / Observability panels stay; the
+  orphaned radio/chip/status CSS was pruned (`check` 0/0, build green).
 - `TabBar.workspaceTabs()` still lists sub-tabs for deleted routes
   (`pnl/cnn/trades/logging/tasks/assets/reporting`) — dead/unreachable today
   (`WORKSPACES` is empty) but should be trimmed when a workspace is re-added.

@@ -74,15 +74,15 @@ save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
 - [ ] **G3 run** — run the reconciled Playwright suite vs. a dev/preview server
       (needs the browser download, blocked in CI; `--list` enumerates 84 clean).
 
-**Remaining — local (G4 finish-line cleanup):**
-- [ ] **G4** — remove the Ruby/futures-era `/settings` dead panels (**Data Sources**
-      `/api/settings/data-source`, **Rithmic** `/api/rithmic/status`, **Analysis
-      Preferences** `/api/settings/analysis` — fake-saves to endpoints with no
-      in-tree janus backend; the wired Kraken-keys / Risk / Janus-Optimizer /
-      System / Observability panels stay); trim `TabBar.workspaceTabs()` sub-tabs
-      for deleted routes (`pnl/cnn/trades/logging/tasks/assets/reporting` — dead
-      today, `WORKSPACES` is empty); final nginx comment sweep. *(Outward-facing —
-      verify against janus, then remove vs. stub for a janus rebuild.)*
+**G4 — local finish-line cleanup (mostly done):**
+- [x] **G4 (panels)** — removed the Ruby/futures-era `/settings` fake-save panels
+      (**Data Sources**, **Rithmic**, **Analysis Preferences** — POSTed to endpoints
+      with no in-tree janus backend; orphaned radio/chip/status CSS pruned, `check`
+      0/0). The wired Kraken-keys / Risk / Janus-Optimizer / System / Observability
+      panels stay.
+- [ ] **G4 (residual)** — trim `TabBar.workspaceTabs()` sub-tabs for deleted routes
+      (`pnl/cnn/trades/logging/tasks/assets/reporting` — dead today, `WORKSPACES` is
+      empty); final nginx comment sweep.
 
 **Deferred polish (non-blocking follow-ups):** per-indicator params; fold RSI/MACD
 into the generic `IndicatorPane`; dedicated volume pane; wire `exchange-apiws`

@@ -71,7 +71,10 @@ save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
       the standalone factory binary the container doesn't run). Fixed janus-side:
       janus PR #106 adds a bus-subscribed candle sink (`DATA_PERSIST_CANDLES`,
       default on). Remaining: rebuild at a `JANUS_REF` with #106, confirm rows +
-      `/bars/:sym/candles` end-to-end.*
+      `/bars/:sym/candles` end-to-end. ⚠️ janus boots in STANDBY — ingestion
+      (and therefore the sink) only runs after `POST /api/services/start`
+      (`scripts/testing/paper-trading/deploy.sh` issues it) or with
+      `JANUS_AUTO_START=true`.*
 - [~] **D1 activate** — the janus bars SSE endpoint now exists
       (`GET /sse/bars/{symbol}?interval=1m`, `event: bar` frames — janus PR #106)
       and compose passes `JANUS_BARS_SSE_URL` through to the webui (empty default

@@ -335,6 +335,10 @@ services:
             - DATA_RECONNECT_DELAY_SECS=${DATA_RECONNECT_DELAY_SECS:-5}
             - DATA_MAX_RECONNECT_ATTEMPTS=${DATA_MAX_RECONNECT_ATTEMPTS:-50}
             - DATA_HEALTH_POLL_SECS=${DATA_HEALTH_POLL_SECS:-10}
+            # Closed klines → QuestDB candles_crypto (WebUI chart history).
+            # Default on; off-switch for stacks that run the standalone
+            # data-factory writer instead (avoid double-writing).
+            - DATA_PERSIST_CANDLES=${DATA_PERSIST_CANDLES:-true}
             - ENABLE_BRAIN_RUNTIME=${ENABLE_BRAIN_RUNTIME:-true}
             - BRAIN_WIRE_KILL_SWITCH=${BRAIN_WIRE_KILL_SWITCH:-false}
             - BRAIN_AUTO_START_WATCHDOG=${BRAIN_AUTO_START_WATCHDOG:-true}

@@ -487,14 +487,23 @@ test.describe("Panel component rendering", () => {
     await page.goto("/settings");
     await page.waitForLoadState("networkidle");
 
+    // The Ruby/futures-era panels (Data Sources, Rithmic, Analysis
+    // Preferences) were removed in the G4 cleanup — only the wired panels
+    // remain.
     await expect(
-      page.locator(".panel-title", { hasText: "Data Sources" }),
+      page.locator(".panel-title", { hasText: "API Connections" }),
     ).toBeVisible();
     await expect(
       page.locator(".panel-title", { hasText: "Risk Controls" }),
     ).toBeVisible();
     await expect(
+      page.locator(".panel-title", { hasText: "System Info" }),
+    ).toBeVisible();
+    await expect(
       page.locator(".panel-title", { hasText: "Observability" }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".panel-title", { hasText: "Janus Optimizer" }),
     ).toBeVisible();
   });
 

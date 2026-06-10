@@ -442,6 +442,11 @@ services:
             # tracked in docs/architecture/RUST_MIGRATION.md (WebUI repoint).
             - PUBLIC_API_URL=${PUBLIC_API_URL:-http://fks_janus:7000}
             - PUBLIC_JANUS_URL=http://fks_janus:7000
+            # D1 live-bars bridge: empty (default) keeps /sse/bars/:sym on the
+            # graceful idle stub. Once the janus image includes the
+            # /sse/bars/{symbol} endpoint (janus PR #106), set in .env:
+            #   JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars
+            - JANUS_BARS_SSE_URL=${JANUS_BARS_SSE_URL:-}
             - ORIGIN=http://localhost:3001
         networks:
             - fks-network

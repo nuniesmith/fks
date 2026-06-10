@@ -63,8 +63,11 @@
 - *Done = no dead nav/URLs of value, `npm run check` near-clean, prod log streaming.*
 
 ### Phase B — Solidify the keyless crypto data path  *(verify janus / webui)*
-- [ ] **B1** Verify janus writes Binance candles → `candles_crypto` (which symbols,
+- [~] **B1** Verify janus writes Binance candles → `candles_crypto` (which symbols,
   which intervals); confirm `/bars/:sym/candles` returns real bars end-to-end.
+  *Code-traced: the deployed binary didn't write candles at all — fixed janus-side
+  (janus PR #106 candle sink). Remaining: live-stack confirmation after the
+  `JANUS_REF` image rebuild (see the gap review at the foot).*
 - [x] **B2** **Symbol catalog**: adapter endpoints over QuestDB —
   `/api/assets/search?q=` (`SELECT DISTINCT symbol …`) powers the chart's symbol
   search with real symbols; `/api/assets/:short` maps the stored exchange →
@@ -107,8 +110,10 @@
   grid). The **adapter `/sse/bars/:sym` futures bridge** is now wired but
   **env-gated**: empty `JANUS_BARS_SSE_URL` keeps today's graceful idle stub
   (no behaviour change); set it to a janus SSE base and the upstream is piped
-  straight through (`event: bar` frames). *(Activating it is janus-side work —
-  janus doesn't expose a bars stream yet; the bridge is ready for when it does.)*
+  straight through (`event: bar` frames). *(The janus side now exists — janus
+  PR #106 adds `GET /sse/bars/{symbol}` — and compose passes the env through;
+  activation = `JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars` in `.env`
+  once the image includes it.)*
 - [x] **D2** Charts polish: **symbol/timeframe persistence** (localStorage),
   **crosshair OHLC readout** (hover → bar O/H/L/C + change%), **shareable URLs**
   (`?symbol=&tf=` — URL wins over localStorage, synced via `replaceState`), and a
@@ -211,10 +216,22 @@ as far as the CI sandbox allows (below). No `TODO`/`FIXME` markers remain in
 `src/web/src`; `npm run check` (0/0), `npm run test:unit`, and `npm run build` are green.
 
 **Remaining — needs the live stack or janus-side work (not runnable in CI):**
-- **B1** — verify janus actually writes Binance candles → QuestDB `candles_crypto`
-  (which symbols / intervals) and that `/bars/:sym/candles` returns real bars.
-- **D1 (activate)** — set `JANUS_BARS_SSE_URL` once janus exposes a bars SSE stream;
-  the adapter bridge is wired + env-gated (no behaviour change until then).
+- **B1** — *code-traced 2026-06-10:* the deployed unified janus binary
+  (`DATA_SOURCE=live`) published closed klines **only to the in-process
+  MarketDataBus** (Forward-module consumption); the `candles_crypto` writer lived
+  only in the standalone data-factory binary, which the `fks_janus` container
+  doesn't run — so the deployed stack wrote **no** candle history. **Fixed
+  janus-side (janus PR #106):** a bus-subscribed candle sink persists every closed
+  kline to `candles_crypto` (`DATA_PERSIST_CANDLES`, default on; targets the
+  mounted `janus.toml`'s `questdb:9009`). Symbols = configured assets ×
+  `default_quote` (e.g. `BTCUSDT`); intervals = `DATA_KLINE_INTERVALS`
+  (compose default `1m,5m`). *Still live-stack:* rebuild at a `JANUS_REF`
+  containing #106, then confirm rows land and `/bars/:sym/candles` returns them.
+- **D1 (activate)** — janus now exposes `GET /sse/bars/{symbol}?interval=1m`
+  (`event: bar` frames, WebUI `BarUpdate` shape — same janus PR #106), and the
+  webui compose entry passes `JANUS_BARS_SSE_URL` through (empty default = idle
+  stub, unchanged). After the image rebuild, activate with one `.env` line:
+  `JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars`.
 - **F2 (run)** — execute `scripts/testing/f2-keyless-spawn-smoke.sh` against a
   running stack (needs the Docker daemon, absent in CI).
 - **G3 (run)** — run the reconciled Playwright suite vs. a dev/preview server (needs

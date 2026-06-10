@@ -65,10 +65,18 @@ presets, saved configs, per-bot CPU/mem/uptime, SSE log viewer (F1); risk panel 
 save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
 
 **Remaining — live-stack / janus-side (not runnable in the CI sandbox):**
-- [ ] **B1** — verify janus writes Binance candles → QuestDB `candles_crypto`
-      (which symbols / intervals) and that `/bars/:sym/candles` returns real bars.
-- [ ] **D1 activate** — set `JANUS_BARS_SSE_URL` once janus exposes a bars SSE
-      stream; the adapter bridge is already wired + env-gated (no-op until then).
+- [~] **B1** — verify janus writes Binance candles → QuestDB `candles_crypto`.
+      *Code-traced 2026-06-10: the deployed unified binary published klines only
+      to the in-process bus — nothing wrote `candles_crypto` (the writer lived in
+      the standalone factory binary the container doesn't run). Fixed janus-side:
+      janus PR #106 adds a bus-subscribed candle sink (`DATA_PERSIST_CANDLES`,
+      default on). Remaining: rebuild at a `JANUS_REF` with #106, confirm rows +
+      `/bars/:sym/candles` end-to-end.*
+- [~] **D1 activate** — the janus bars SSE endpoint now exists
+      (`GET /sse/bars/{symbol}?interval=1m`, `event: bar` frames — janus PR #106)
+      and compose passes `JANUS_BARS_SSE_URL` through to the webui (empty default
+      = idle stub). After the image rebuild, activate with
+      `JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars` in `.env`.
 - [ ] **F2 run** — `scripts/testing/f2-keyless-spawn-smoke.sh` against a running
       stack (needs the Docker daemon, absent in CI).
 - [ ] **G3 run** — run the reconciled Playwright suite vs. a dev/preview server

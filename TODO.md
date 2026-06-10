@@ -74,15 +74,18 @@ save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
 - [ ] **G3 run** — run the reconciled Playwright suite vs. a dev/preview server
       (needs the browser download, blocked in CI; `--list` enumerates 84 clean).
 
-**G4 — local finish-line cleanup (mostly done):**
+**G4 — local finish-line cleanup (done):**
 - [x] **G4 (panels)** — removed the Ruby/futures-era `/settings` fake-save panels
       (**Data Sources**, **Rithmic**, **Analysis Preferences** — POSTed to endpoints
       with no in-tree janus backend; orphaned radio/chip/status CSS pruned, `check`
       0/0). The wired Kraken-keys / Risk / Janus-Optimizer / System / Observability
       panels stay.
-- [ ] **G4 (residual)** — trim `TabBar.workspaceTabs()` sub-tabs for deleted routes
-      (`pnl/cnn/trades/logging/tasks/assets/reporting` — dead today, `WORKSPACES` is
-      empty); final nginx comment sweep.
+- [x] **G4 (residual)** — trimmed `TabBar.workspaceTabs()` to the Dashboard+Signals
+      seed (dropped `pnl/cnn/trades/logging/tasks/assets/reporting`, which pointed at
+      deleted routes; dead today — `WORKSPACES` is empty), and swept the stale
+      `fks_ruby` comments out of both nginx confs (`dev.conf` + `fkstrading.xyz.conf`)
+      — the `proxy_pass` targets already pointed at `fks_webui`, only the comments
+      lagged. Comment/scaffold-only; no routing or runtime change.
 
 **Deferred polish (non-blocking follow-ups):** per-indicator params; fold RSI/MACD
 into the generic `IndicatorPane`; dedicated volume pane; wire `exchange-apiws`

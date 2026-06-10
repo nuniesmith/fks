@@ -185,12 +185,13 @@
   janus pages, and gave `/bots` the `<title>` it was missing. `playwright test
   --list` enumerates 84 tests clean. *(Full run needs the dev/preview server +
   browsers, which the CI sandbox can't download — runs via `paper-trading-test`.)*
-- [~] **G4** Final cleanup. *Docs refreshed + the three Ruby/futures-era `/settings`
+- [x] **G4** Final cleanup. *Docs refreshed + the three Ruby/futures-era `/settings`
   fake-save panels removed* (**Data Sources**, **Rithmic**, **Analysis Preferences** —
   they POSTed to endpoints with no in-tree janus backend; orphaned radio/chip/status
   CSS pruned, `check` 0/0). The wired Kraken-keys / Risk / Janus-Optimizer / System /
-  Observability panels stay. Residual (minor): trim `TabBar.workspaceTabs()` sub-tabs
-  for deleted routes (dead today — `WORKSPACES` is empty) + a final nginx comment sweep.
+  Observability panels stay. Residual cleared: `TabBar.workspaceTabs()` trimmed to the
+  Dashboard+Signals seed (deleted-route sub-tabs dropped; dead today — `WORKSPACES` is
+  empty) + the stale `fks_ruby` comments swept from both nginx confs.
 
 ---
 
@@ -219,16 +220,20 @@ as far as the CI sandbox allows (below). No `TODO`/`FIXME` markers remain in
 - **G3 (run)** — run the reconciled Playwright suite vs. a dev/preview server (needs
   the browser download, blocked in CI). Specs parse clean (`--list` → 84 tests).
 
-**G4 — local cleanup (mostly done):**
+**G4 — local cleanup (done):**
 - ✅ **Removed** the three Ruby/futures-era `/settings` fake-save panels — **Data
   Sources** (`/api/settings/data-source`), **Rithmic** (`/api/rithmic/status`), and
   **Analysis Preferences** (`/api/settings/analysis`, futures instruments) — that
   POSTed to endpoints with no in-tree janus backend (the G1 defect class). The wired
   Kraken-keys / Risk / Janus-Optimizer / System / Observability panels stay; the
   orphaned radio/chip/status CSS was pruned (`check` 0/0, build green).
-- `TabBar.workspaceTabs()` still lists sub-tabs for deleted routes
-  (`pnl/cnn/trades/logging/tasks/assets/reporting`) — dead/unreachable today
-  (`WORKSPACES` is empty) but should be trimmed when a workspace is re-added.
+- ✅ **Trimmed** `TabBar.workspaceTabs()` to the Dashboard+Signals seed — the
+  `pnl/cnn/trades/logging/tasks/assets/reporting` sub-tabs pointed at deleted routes
+  (dead today; `WORKSPACES` is empty). Re-add each as a janus-backed
+  `/[workspace]/<view>` route lands.
+- ✅ **Swept** the stale `fks_ruby` comments out of both nginx confs (`dev.conf` +
+  `fkstrading.xyz.conf`) — the `proxy_pass` targets already pointed at `fks_webui`,
+  only the explanatory comments + access map lagged. Comment-only; no routing change.
 
 **Deferred polish (non-blocking; mirrored in the root `TODO.md`):** per-indicator
 params; fold RSI/MACD into the generic `IndicatorPane`; a dedicated volume pane;

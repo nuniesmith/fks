@@ -164,25 +164,9 @@ impl DockerClient {
             EndpointSettings::default(),
         );
 
-        // ── Host config ───────────────────────────────────────────────────────
-        let host_config = HostConfig {
-            memory: Some(memory_bytes),
-            memory_swap: Some(memory_bytes), // disable swap
-            cpu_period: Some(100_000),
-            cpu_quota: Some(cpu_quota_us),
-            cpu_shares: Some(self.config.default_cpu_shares),
-            // Log config: json-file driver with 50 MB cap, 3 rotations
-            log_config: Some(bollard::models::HostConfigLogConfig {
-                typ: Some("json-file".to_string()),
-                config: Some(HashMap::from([
-                    ("max-size".to_string(), "50m".to_string()),
-                    ("max-file".to_string(), "3".to_string()),
-                ])),
-            }),
-            // Security: no privilege escalation
-            security_opt: Some(vec!["no-new-privileges:true".to_string()]),
-            ..Default::default()
-        };
+        // ── Host config (hardened — see build_bot_host_config) ─────────────────
+        let host_config =
+            build_bot_host_config(memory_bytes, cpu_quota_us, self.config.default_cpu_shares);
 
         let networking_config = NetworkingConfig {
             endpoints_config: Some(endpoints),
@@ -652,6 +636,38 @@ fn mem_used_bytes(usage: u64, cache: u64) -> i64 {
     usage.saturating_sub(cache) as i64
 }
 
+/// Build the hardened `HostConfig` every spawned bot runs under.
+///
+/// Security contract (also stated in `crates/spawner/CLAUDE.md`): unconditional
+/// `cap_drop: ALL` + `no-new-privileges:true`, swap disabled (`memory_swap ==
+/// memory`, so a bot can't escape its RAM cap into swap), and the json-file log
+/// driver capped at 50 MB × 3. Bots only need outbound TCP + a high (>1024)
+/// metrics port — neither requires a Linux capability — so dropping every
+/// capability is safe with no `cap_add`. Extracted as a pure fn so the posture
+/// is unit-tested without a Docker daemon (the spawn path itself is exercised
+/// via `MockDockerClient`, which doesn't build a `HostConfig`).
+fn build_bot_host_config(memory_bytes: i64, cpu_quota_us: i64, cpu_shares: i64) -> HostConfig {
+    HostConfig {
+        memory: Some(memory_bytes),
+        memory_swap: Some(memory_bytes), // disable swap
+        cpu_period: Some(100_000),
+        cpu_quota: Some(cpu_quota_us),
+        cpu_shares: Some(cpu_shares),
+        // Log config: json-file driver with 50 MB cap, 3 rotations
+        log_config: Some(bollard::models::HostConfigLogConfig {
+            typ: Some("json-file".to_string()),
+            config: Some(HashMap::from([
+                ("max-size".to_string(), "50m".to_string()),
+                ("max-file".to_string(), "3".to_string()),
+            ])),
+        }),
+        // Security: drop ALL Linux capabilities + block privilege escalation.
+        cap_drop: Some(vec!["ALL".to_string()]),
+        security_opt: Some(vec!["no-new-privileges:true".to_string()]),
+        ..Default::default()
+    }
+}
+
 /// Reduce a Docker stats frame to the CPU%/memory figures we surface.
 fn stats_from_response(r: bollard::models::ContainerStatsResponse) -> ContainerStats {
     let cpu = r.cpu_stats.as_ref();
@@ -705,7 +721,7 @@ fn stats_from_response(r: bollard::models::ContainerStatsResponse) -> ContainerS
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_cpu_percent, mem_used_bytes};
+    use super::{build_bot_host_config, compute_cpu_percent, mem_used_bytes};
 
     #[test]
     fn cpu_percent_basic_delta() {
@@ -746,5 +762,30 @@ mod tests {
     #[test]
     fn mem_used_saturates_when_cache_exceeds_usage() {
         assert_eq!(mem_used_bytes(10, 50), 0);
+    }
+
+    #[test]
+    fn bot_host_config_enforces_security_contract() {
+        let hc = build_bot_host_config(512 * 1024 * 1024, 100_000, 1024);
+        // The hardening that was missing: drop every Linux capability.
+        assert_eq!(hc.cap_drop, Some(vec!["ALL".to_string()]));
+        // No capabilities are added back — bots need none.
+        assert!(
+            hc.cap_add.is_none(),
+            "bots must not be granted capabilities"
+        );
+        // Block setuid / privilege escalation.
+        assert_eq!(
+            hc.security_opt,
+            Some(vec!["no-new-privileges:true".to_string()])
+        );
+        // Never privileged.
+        assert_ne!(hc.privileged, Some(true));
+        // Swap disabled (memory_swap == memory) so the RAM cap can't be escaped.
+        assert_eq!(hc.memory, Some(512 * 1024 * 1024));
+        assert_eq!(hc.memory_swap, hc.memory);
+        // CPU limits propagate.
+        assert_eq!(hc.cpu_quota, Some(100_000));
+        assert_eq!(hc.cpu_shares, Some(1024));
     }
 }

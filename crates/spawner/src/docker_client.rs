@@ -98,6 +98,78 @@ pub struct DockerClient {
     config: Arc<Config>,
 }
 
+/// Max number of caller-supplied env vars / labels accepted on a spawn request.
+const MAX_SPAWN_ENV_VARS: usize = 100;
+const MAX_SPAWN_LABELS: usize = 50;
+
+/// Validate a caller-supplied identifier (`bot_id`, `mode`) that ends up in the
+/// container name and labels. Allows the Docker container-name charset
+/// (`[A-Za-z0-9._-]`, 1..=max_len) so a token holder can't inject control
+/// characters, forge a colliding container name, or smuggle separators into a
+/// label query.
+fn validate_identifier(value: &str, field: &str, max_len: usize) -> SpawnerResult<()> {
+    if value.is_empty() || value.len() > max_len {
+        return Err(SpawnerError::InvalidRequest(format!(
+            "{field} must be 1..={max_len} characters (got {})",
+            value.len()
+        )));
+    }
+    if !value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+    {
+        return Err(SpawnerError::InvalidRequest(format!(
+            "{field} may only contain ASCII letters, digits, '.', '_' or '-'"
+        )));
+    }
+    Ok(())
+}
+
+/// Validate the operator-controlled fields of a spawn request before any Docker
+/// call: identifier charset (`bot_id`/`mode`), resource-limit bounds, and
+/// env/label cardinality. The image-prefix + concurrency guards stay in
+/// [`DockerClient::spawn`]; this rejects malformed or abusive *input* — forged
+/// names, absurd CPU/RAM requests that could starve the host, oversized
+/// env/label maps. Kept pure so it's unit-tested without a Docker daemon.
+fn validate_spawn_request(req: &SpawnRequest, max_cpu: f64, max_mem_mb: i64) -> SpawnerResult<()> {
+    // An empty/omitted bot_id is replaced by a generated UUID in `spawn`, so
+    // only validate a caller-supplied non-empty one.
+    if let Some(bot_id) = req.bot_id.as_deref()
+        && !bot_id.is_empty()
+    {
+        validate_identifier(bot_id, "bot_id", 64)?;
+    }
+    validate_identifier(&req.mode, "mode", 32)?;
+
+    if let Some(cpu) = req.cpu_limit
+        && !(cpu.is_finite() && cpu > 0.0 && cpu <= max_cpu)
+    {
+        return Err(SpawnerError::InvalidRequest(format!(
+            "cpu_limit must be in (0, {max_cpu}] cores (got {cpu})"
+        )));
+    }
+    if let Some(mem) = req.memory_limit_mb
+        && !(mem > 0 && mem <= max_mem_mb)
+    {
+        return Err(SpawnerError::InvalidRequest(format!(
+            "memory_limit_mb must be in 1..={max_mem_mb} (got {mem})"
+        )));
+    }
+    if req.env.len() > MAX_SPAWN_ENV_VARS {
+        return Err(SpawnerError::InvalidRequest(format!(
+            "too many env vars ({} > {MAX_SPAWN_ENV_VARS})",
+            req.env.len()
+        )));
+    }
+    if req.labels.len() > MAX_SPAWN_LABELS {
+        return Err(SpawnerError::InvalidRequest(format!(
+            "too many labels ({} > {MAX_SPAWN_LABELS})",
+            req.labels.len()
+        )));
+    }
+    Ok(())
+}
+
 impl DockerClient {
     /// Connect to the Docker daemon via the Unix socket (default path).
     pub fn new(config: Arc<Config>) -> SpawnerResult<Self> {
@@ -114,6 +186,9 @@ impl DockerClient {
         if !req.image.starts_with(&self.config.allowed_image_prefix) {
             return Err(SpawnerError::InvalidImage(req.image));
         }
+
+        // ── Safety guard: validate operator-controlled input ──────────────────
+        validate_spawn_request(&req, self.config.max_cpu_limit, self.config.max_memory_mb)?;
 
         // ── Safety guard: concurrent bot cap ──────────────────────────────────
         let running = self.list_bots().await?.len();
@@ -721,7 +796,10 @@ fn stats_from_response(r: bollard::models::ContainerStatsResponse) -> ContainerS
 
 #[cfg(test)]
 mod tests {
-    use super::{build_bot_host_config, compute_cpu_percent, mem_used_bytes};
+    use super::{
+        SpawnRequest, SpawnerError, build_bot_host_config, compute_cpu_percent, mem_used_bytes,
+        validate_spawn_request,
+    };
 
     #[test]
     fn cpu_percent_basic_delta() {
@@ -787,5 +865,108 @@ mod tests {
         // CPU limits propagate.
         assert_eq!(hc.cpu_quota, Some(100_000));
         assert_eq!(hc.cpu_shares, Some(1024));
+    }
+
+    fn valid_spawn_req() -> SpawnRequest {
+        SpawnRequest {
+            image: "fks-bot-example:latest".to_string(),
+            bot_id: Some("bot-1".to_string()),
+            mode: "paper".to_string(),
+            env: std::collections::HashMap::new(),
+            labels: std::collections::HashMap::new(),
+            cpu_limit: None,
+            memory_limit_mb: None,
+            cmd: None,
+            entrypoint: None,
+        }
+    }
+
+    #[test]
+    fn valid_spawn_request_passes() {
+        assert!(validate_spawn_request(&valid_spawn_req(), 8.0, 16384).is_ok());
+    }
+
+    #[test]
+    fn empty_or_absent_bot_id_is_allowed() {
+        // Replaced by a generated UUID in spawn(), so validation skips it.
+        let mut r = valid_spawn_req();
+        r.bot_id = None;
+        assert!(validate_spawn_request(&r, 8.0, 16384).is_ok());
+        r.bot_id = Some(String::new());
+        assert!(validate_spawn_request(&r, 8.0, 16384).is_ok());
+    }
+
+    #[test]
+    fn rejects_bad_bot_id_and_mode() {
+        let long = "x".repeat(65);
+        for bad in ["bad id", "../etc", "a/b", "name;rm", "naïve", long.as_str()] {
+            let mut r = valid_spawn_req();
+            r.bot_id = Some(bad.to_string());
+            assert!(
+                matches!(
+                    validate_spawn_request(&r, 8.0, 16384),
+                    Err(SpawnerError::InvalidRequest(_))
+                ),
+                "bot_id {bad:?} should be rejected"
+            );
+        }
+        let mut r = valid_spawn_req();
+        r.mode = "paper trading!".to_string();
+        assert!(matches!(
+            validate_spawn_request(&r, 8.0, 16384),
+            Err(SpawnerError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_out_of_range_resources() {
+        for cpu in [0.0, -1.0, f64::NAN, f64::INFINITY, 9.0] {
+            let mut r = valid_spawn_req();
+            r.cpu_limit = Some(cpu);
+            assert!(
+                matches!(
+                    validate_spawn_request(&r, 8.0, 16384),
+                    Err(SpawnerError::InvalidRequest(_))
+                ),
+                "cpu_limit {cpu} should be rejected"
+            );
+        }
+        for mem in [0_i64, -1, 16385, i64::MAX] {
+            let mut r = valid_spawn_req();
+            r.memory_limit_mb = Some(mem);
+            assert!(
+                matches!(
+                    validate_spawn_request(&r, 8.0, 16384),
+                    Err(SpawnerError::InvalidRequest(_))
+                ),
+                "memory_limit_mb {mem} should be rejected"
+            );
+        }
+        // In-range values pass.
+        let mut r = valid_spawn_req();
+        r.cpu_limit = Some(2.0);
+        r.memory_limit_mb = Some(2048);
+        assert!(validate_spawn_request(&r, 8.0, 16384).is_ok());
+    }
+
+    #[test]
+    fn rejects_oversized_env_and_labels() {
+        let mut r = valid_spawn_req();
+        r.env = (0..=super::MAX_SPAWN_ENV_VARS)
+            .map(|i| (format!("K{i}"), "v".to_string()))
+            .collect();
+        assert!(matches!(
+            validate_spawn_request(&r, 8.0, 16384),
+            Err(SpawnerError::InvalidRequest(_))
+        ));
+
+        let mut r = valid_spawn_req();
+        r.labels = (0..=super::MAX_SPAWN_LABELS)
+            .map(|i| (format!("l{i}"), "v".to_string()))
+            .collect();
+        assert!(matches!(
+            validate_spawn_request(&r, 8.0, 16384),
+            Err(SpawnerError::InvalidRequest(_))
+        ));
     }
 }

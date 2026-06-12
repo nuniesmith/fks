@@ -33,6 +33,14 @@ pub struct Config {
     /// Default CPU shares (relative weight; 1024 = normal priority).
     pub default_cpu_shares: i64,
 
+    /// Hard upper bound on a spawn request's `cpu_limit` (fractional cores).
+    /// Rejects absurd requests that could starve the host. Env: MAX_CPU_LIMIT.
+    pub max_cpu_limit: f64,
+
+    /// Hard upper bound on a spawn request's `memory_limit_mb`.
+    /// Env: MAX_MEMORY_LIMIT_MB.
+    pub max_memory_mb: i64,
+
     /// Path where the Prometheus file-based SD config is written.
     pub prometheus_sd_path: String,
 
@@ -71,6 +79,8 @@ impl Config {
             default_cpu_limit: env_parse_f64("DEFAULT_CPU_LIMIT", 1.0),
             default_memory_bytes: default_memory_mb * 1024 * 1024,
             default_cpu_shares: env_parse("DEFAULT_CPU_SHARES", 1024),
+            max_cpu_limit: env_parse_f64("MAX_CPU_LIMIT", 8.0),
+            max_memory_mb: env_parse("MAX_MEMORY_LIMIT_MB", 16384),
             prometheus_sd_path: env::var("PROMETHEUS_SD_PATH")
                 .unwrap_or_else(|_| "/prometheus-sd/bots.json".to_string()),
             bot_metrics_port: env_parse("BOT_METRICS_PORT", 9091),
@@ -122,6 +132,8 @@ mod tests {
             default_cpu_limit: 1.0,
             default_memory_bytes: 512 * 1024 * 1024,
             default_cpu_shares: 1024,
+            max_cpu_limit: 8.0,
+            max_memory_mb: 16384,
             prometheus_sd_path: "/prometheus-sd/bots.json".to_string(),
             bot_metrics_port: 9091,
             prune_after_secs: 300,
@@ -148,6 +160,8 @@ mod tests {
             default_cpu_limit: 0.5,
             default_memory_bytes: 1,
             default_cpu_shares: 1,
+            max_cpu_limit: 8.0,
+            max_memory_mb: 16384,
             prometheus_sd_path: "/x".into(),
             bot_metrics_port: 9091,
             prune_after_secs: 0,

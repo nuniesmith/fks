@@ -350,6 +350,10 @@ services:
             - JANUS_CONFIG_PATH=/app/config/janus.toml
             - JANUS_ENABLE_BACKWARD=${JANUS_ENABLE_BACKWARD:-true}
             - ENABLE_EXECUTION=${ENABLE_EXECUTION:-false}
+            # Portfolio risk enforcement (janus forward). Defaults ON: a
+            # RiskManager rejection blocks the order submit. Set to 0 only to
+            # make risk checks advisory (not recommended with live execution).
+            - JANUS_RISK_ENFORCE=${JANUS_RISK_ENFORCE:-1}
             - EXECUTION_ENDPOINT=${EXECUTION_ENDPOINT:-http://janus-execution:50052}
             - EXECUTION_CONNECT_TIMEOUT=${EXECUTION_CONNECT_TIMEOUT:-10}
             - EXECUTION_REQUEST_TIMEOUT=${EXECUTION_REQUEST_TIMEOUT:-30}

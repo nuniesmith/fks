@@ -75,6 +75,12 @@ Empty token = dev passthrough.
 - Every spawned container is forced onto `ALLOWED_NETWORK` (default `fks_network`).
 - `cap_drop: ALL` + `security_opt: no-new-privileges:true` are unconditional.
 - Every container gets `fks.bot=true`, `fks.bot_id=<uuid>`, `fks.mode=...` labels.
+- **Request input is validated** before any Docker call: `bot_id`/`mode` must
+  match the Docker name charset (`[A-Za-z0-9._-]`, ≤64/32 chars); `cpu_limit`
+  and `memory_limit_mb` are bounded by `MAX_CPU_LIMIT` (default 8 cores) and
+  `MAX_MEMORY_LIMIT_MB` (default 16384); `env`/`labels` are capped (100/50).
+  Anything out of range → `400 Bad Request`. (`cmd`/`entrypoint` overrides are
+  still accepted — restricting those is a separate, behaviour-changing decision.)
 
 ## Common workflows
 

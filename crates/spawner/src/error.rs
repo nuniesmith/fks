@@ -9,6 +9,9 @@ pub enum SpawnerError {
     #[error("image '{0}' is not allowed — must start with the configured prefix")]
     InvalidImage(String),
 
+    #[error("invalid spawn request: {0}")]
+    InvalidRequest(String),
+
     #[error("concurrent bot limit reached ({0} running)")]
     TooManyBots(usize),
 
@@ -33,6 +36,7 @@ impl SpawnerError {
         use axum::http::StatusCode;
         match self {
             SpawnerError::InvalidImage(_) => StatusCode::BAD_REQUEST,
+            SpawnerError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
             SpawnerError::TooManyBots(_) => StatusCode::TOO_MANY_REQUESTS,
             SpawnerError::NotFound(_) => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

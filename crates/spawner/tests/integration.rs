@@ -203,6 +203,8 @@ fn test_config(internal_token: &str) -> Config {
         default_cpu_limit: 1.0,
         default_memory_bytes: 256 * 1024 * 1024,
         default_cpu_shares: 1024,
+        max_cpu_limit: 8.0,
+        max_memory_mb: 16384,
         prometheus_sd_path: "/tmp/spawner-test-sd.json".to_string(),
         bot_metrics_port: 9091,
         prune_after_secs: 300,

@@ -573,6 +573,21 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
     return json({ trades: [] });
   }
 
+  // ── PHASE 2: front-page panels janus now serves natively ────────────────────
+  // janus PRs #107/#111 added these in the exact shapes the overview parses
+  // (`{assets}` / `{trades}` / factory status). Forward straight through —
+  // janus self-degrades to empty-but-valid, so a backend hiccup never errors the
+  // page. Replaces the previous gracefulEmpty fall-through for these paths.
+  if (pathname === "/api/pipeline/scores/json") {
+    return forward(event, JANUS_URL, "/api/pipeline/scores/json");
+  }
+  if (pathname === "/api/trades/open") {
+    return forward(event, JANUS_URL, "/api/trades/open");
+  }
+  if (pathname === "/factory/status") {
+    return forward(event, JANUS_URL, "/factory/status");
+  }
+
   // ── /monitoring → Prometheus (fks_prometheus:9090) ──────────────────────────
   // Instant/range queries + targets are identical in shape → straight proxy.
   if (pathname === "/api/metrics/query") {

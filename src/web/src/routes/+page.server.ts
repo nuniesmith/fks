@@ -25,7 +25,6 @@ interface MarketAsset {
   price: number;
   score: number;
   cnn_signal?: string;
-  ruby_signal?: string;
   asset_class?: string;
   age?: number;
   change_pct?: number;

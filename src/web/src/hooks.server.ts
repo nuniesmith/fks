@@ -15,6 +15,7 @@ import {
   toRiskConfigPayload,
   wantsArrayResponse,
 } from "$lib/server/reshape";
+import { routeRequest, upstreamHeaders } from "$lib/server/adapter";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Backend proxy  (replaces the old vite/nginx → fks_ruby reverse proxy)
@@ -46,19 +47,6 @@ const QUESTDB_URL = env.QUESTDB_INTERNAL_URL ?? "http://fks_questdb:9000"; // /c
 // as "/<sym>", emitting `event: bar` frames) to pipe futures bars to the chart.
 const JANUS_BARS_SSE_URL = env.JANUS_BARS_SSE_URL ?? "";
 
-const BACKEND_PREFIXES = ["/api/", "/sse/", "/bars/", "/factory/", "/kraken/", "/fapi/"];
-
-const isBackend = (p: string): boolean => BACKEND_PREFIXES.some((x) => p.startsWith(x));
-
-// Headers we must not forward upstream (hop-by-hop / connection-specific).
-const HOP = new Set(["host", "connection", "content-length", "transfer-encoding", "keep-alive"]);
-
-function upstreamHeaders(src: Headers): Headers {
-  const h = new Headers();
-  for (const [k, v] of src) if (!HOP.has(k.toLowerCase())) h.set(k, v);
-  return h;
-}
-
 // Forward a request to `base + path`, streaming the response straight back.
 async function forward(
   event: RequestEvent,
@@ -76,8 +64,7 @@ async function forward(
   }
   try {
     const res = await fetch(base + path, init);
-    const headers = new Headers();
-    for (const [k, v] of res.headers) if (!HOP.has(k.toLowerCase())) headers.set(k, v);
+    const headers = upstreamHeaders(res.headers);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   } catch {
     return new Response(JSON.stringify({ error: "upstream_unreachable", upstream: base }), {
@@ -673,52 +660,28 @@ async function proxyBackend(event: RequestEvent): Promise<Response> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Auth  (unchanged) — pages only; API calls are handled by the proxy above
+// Auth — pages only; backend (/api, /sse, …) calls are proxied above, never
+// auth-redirected. The routing + auth decision lives in `$lib/server/adapter`
+// (pure + unit-tested); this hook reads env/cookies and runs the side effects.
 // ════════════════════════════════════════════════════════════════════════════
 
-const PUBLIC_PREFIXES = ["/login", "/logout"];
-const PUBLIC_EXACT = ["/api/health", "/healthz"];
-
-function isPublic(pathname: string): boolean {
-  if (PUBLIC_EXACT.includes(pathname)) return true;
-  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
 export const handle: Handle = async ({ event, resolve }) => {
-  // Backend API/SSE calls: proxy or stub them. Never run an API call through the
-  // page-auth redirect (a 302→/login would corrupt JSON/SSE consumers).
-  if (isBackend(event.url.pathname)) {
-    return proxyBackend(event);
+  const route = routeRequest(
+    event.url.pathname,
+    event.url.search,
+    env.WEBUI_SESSION_SECRET ?? "",
+    event.cookies.get("fks_session") ?? "",
+  );
+
+  // Backend (/api, /sse, …) calls are proxied — never auth-redirected (a 302
+  // would corrupt a JSON/SSE consumer).
+  if (route.kind === "backend") return proxyBackend(event);
+
+  // Invalid/missing session — bounce to login, preserving the intended URL.
+  if (route.kind === "redirect") {
+    return new Response(null, { status: 302, headers: { Location: route.location } });
   }
 
-  // Always pass through login/logout pages and health endpoints.
-  if (isPublic(event.url.pathname)) {
-    return resolve(event);
-  }
-
-  const secret = env.WEBUI_SESSION_SECRET ?? "";
-
-  // Dev-mode bypass: if no secret is configured, let every request through.
-  // This keeps local development friction-free.
-  if (!secret) {
-    return resolve(event);
-  }
-
-  // Validate the session cookie.
-  const session = event.cookies.get("fks_session") ?? "";
-
-  if (session === secret) {
-    // Valid session — continue to the requested route.
-    return resolve(event);
-  }
-
-  // Invalid or missing session — redirect to login, preserving the intended URL
-  // as a `next` query param so the login page can bounce the user back.
-  const next = encodeURIComponent(event.url.pathname + event.url.search);
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: `/login?next=${next}`,
-    },
-  });
+  // "pass": public page, dev bypass (no secret), or a valid session.
+  return resolve(event);
 };

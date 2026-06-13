@@ -21,13 +21,17 @@ import {
 // ════════════════════════════════════════════════════════════════════════════
 // The dashboard makes same-origin calls to /api, /sse, /bars, /factory, /kraken,
 // /fapi. Those used to be proxied to the Python "Ruby" service, which is gone.
-// Until the janus repoint lands (docs/architecture/WEBUI_JANUS_REPOINT.md), this
-// hook proxies what we can and gracefully absorbs the rest, so panels degrade
-// quietly (empty data) instead of flooding the console with 404s.
+// This hook is the single backend seam: it maps each path to janus
+// (fks_janus:8080 api / :8180 forward), Prometheus, QuestDB, or the spawner —
+// reshaping where the WebUI's shape differs — and gracefully absorbs anything
+// not yet mapped (empty REST / idle SSE) so panels degrade quietly instead of
+// flooding the console with 404s.
 //
-// PHASE 1 (this): /api/spawner/* → the spawner (real); everything else under a
-//                 backend prefix → graceful empty (REST) or an idle SSE stream.
-// PHASE 2 (next): map specific paths to janus (see JANUS_MAP below) + reshape.
+// Mapped today: /api/spawner/* (spawner); the dashboard / signals / health /
+// performance / janus-ai / risk paths + the front-page scores / trades / factory
+// panels (janus); /api/metrics/* (Prometheus); /bars + /charts candles (QuestDB);
+// /sse/bars (janus live tail when JANUS_BARS_SSE_URL is set). Unmapped backend
+// paths → graceful empty. See docs/architecture/WEBUI_JANUS_REPOINT.md.
 //
 // Upstreams use in-container Docker-network addresses (overridable via env).
 // NB: from inside the webui container, janus is fks_janus:8080 (api) /

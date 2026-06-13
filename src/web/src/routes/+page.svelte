@@ -38,7 +38,6 @@
     price: number;
     score: number;
     cnn_signal?: string;
-    ruby_signal?: string;
     asset_class?: string;
     age?: number;
     change_pct?: number;
@@ -295,9 +294,9 @@
                       />
                     </td>
                     <td>
-                      {#if asset.ruby_signal || asset.cnn_signal}
-                        <Badge variant={signalVariant(asset.ruby_signal ?? asset.cnn_signal)}>
-                          {asset.ruby_signal ?? asset.cnn_signal}
+                      {#if asset.cnn_signal}
+                        <Badge variant={signalVariant(asset.cnn_signal)}>
+                          {asset.cnn_signal}
                         </Badge>
                       {:else}
                         <span class="muted">—</span>

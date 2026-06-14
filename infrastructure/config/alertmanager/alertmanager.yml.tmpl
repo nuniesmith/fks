@@ -132,18 +132,12 @@ route:
           repeat_interval: 12h
 
         # ========================================================================
-        # Trade Signal Alerts — route to Python signal monitor
-        # Must come BEFORE severity: info catch-all since trade signals also
-        # carry severity=info. continue: true ensures they also reach discord-signals.
+        # Trade Signal Alerts → Discord.
+        # (The former python-signal-webhook leg POSTed to fks_ruby:8000, which was
+        # removed when the Python "Ruby" service was retired — that left these
+        # alerts hitting a dead endpoint. The unused receiver below is kept for now
+        # but no route references it.)
         # ========================================================================
-        - match:
-              category: trade-signal
-          receiver: "python-signal-webhook"
-          group_wait: 0s
-          group_interval: 5m
-          repeat_interval: 1h
-          continue: true
-
         - match:
               category: trade-signal
           receiver: "discord-signals"

@@ -138,9 +138,9 @@ groups:
           # Only fires when execution is enabled (target has reported up=1 at least once in the last hour)
           - alert: ExecutionUnhealthy
             expr: |
-                up{job="fks-execution"} == 0
+                up{job="fks-janus"} == 0
                 and
-                max_over_time(up{job="fks-execution"}[1h]) == 1
+                max_over_time(up{job="fks-janus"}[1h]) == 1
             for: 2m
             labels:
                 severity: critical

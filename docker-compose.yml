@@ -340,6 +340,11 @@ services:
             # data-factory writer instead (avoid double-writing).
             - DATA_PERSIST_CANDLES=${DATA_PERSIST_CANDLES:-true}
             - ENABLE_BRAIN_RUNTIME=${ENABLE_BRAIN_RUNTIME:-true}
+            # Start processing services (ingestion/forward/backward) on boot;
+            # otherwise janus idles in STANDBY until POST /api/services/start.
+            # Read by bin/janus/src/main.rs. (Was documented in .env.example but
+            # never forwarded here — setting it in .env previously did nothing.)
+            - JANUS_AUTO_START=${JANUS_AUTO_START:-false}
             - BRAIN_WIRE_KILL_SWITCH=${BRAIN_WIRE_KILL_SWITCH:-false}
             - BRAIN_AUTO_START_WATCHDOG=${BRAIN_AUTO_START_WATCHDOG:-true}
             - BRAIN_HEARTBEAT_MS=${BRAIN_HEARTBEAT_MS:-5000}
@@ -978,9 +983,9 @@ services:
                 labels: "service=redis-exporter,environment=dev"
 
     questdb-exporter:
-        # nginx reverse proxy — rewrites GET /metrics → http://questdb:9003
-        # Config baked into image via infrastructure/docker/services/questdb-exporter/Dockerfile.
-        # Source: infrastructure/config/questdb-exporter/nginx.conf
+        # Python Prometheus exporter — queries QuestDB's REST API (/exec) and
+        # exposes questdb_* gauges (row counts, partition/WAL/storage) on :9191.
+        # Source: infrastructure/config/questdb-exporter/exporter.py
         # Rebuild with: docker compose build questdb-exporter
         build:
             context: .
@@ -1008,10 +1013,15 @@ services:
                 condition: service_healthy
         restart: unless-stopped
         healthcheck:
+            # python:slim has no wget/curl — probe with urllib (matches the
+            # Dockerfile HEALTHCHECK). The old wget command always failed →
+            # the container reported unhealthy despite serving fine.
             test:
                 [
-                    "CMD-SHELL",
-                    "wget -qO- http://127.0.0.1:9191/health || exit 1",
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9191/health')",
                 ]
             interval: 30s
             timeout: 5s
@@ -1044,6 +1054,13 @@ services:
         image: nuniesmith/fks:spawner
         container_name: fks_bot_spawner
         restart: unless-stopped
+        # Grant access to the bind-mounted /var/run/docker.sock. On the host the
+        # socket is 0660 root:docker; "981" is the host 'docker' group GID, so the
+        # in-container appuser (uid 1000) can reach the Docker daemon. Without this
+        # the spawner 500s every request with "Docker API error ... client error
+        # (Connect)". If the host docker GID differs, update this value.
+        group_add:
+            - "981"
         ports:
             - "127.0.0.1:8090:8090"
         environment:

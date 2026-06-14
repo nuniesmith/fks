@@ -1,7 +1,7 @@
 # fks-full — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks-full`
-> **Last synced:** 2026-06-09
+> **Last synced:** 2026-06-14 — see **🗺️ NEXT PHASES** below for the current plan
 >
 > This file covers **cross-cutting** orchestration work — consuming the
 > external repos/crates, docker-compose, Dockerfiles, CI/CD, Postgres
@@ -22,6 +22,128 @@
 > being rebuilt natively in janus. The plan + remaining follow-ups are in
 > [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).
 > The spawner's `ruby_db` schema now lives in `src/sql/spawner/`.
+
+---
+
+# 🗺️ NEXT PHASES — prioritized plan (synced 2026-06-14)
+
+> **Read this section first.** It's the master roadmap written after a large
+> live-stack session. Everything *below the next `---`* (the older "Status
+> snapshot" etc.) predates it and contains stale items (esp. `fks_ruby` refs) —
+> trust THIS section for current priorities. Deep per-item notes live in the
+> Claude memories: `fks-demo-live-data-blockers`, `janus-forward-warmup-gap`,
+> `fks-releases-pending-publish`, `fks-stack-live-ops`.
+
+### ✅ Shipped 2026-06-14 — do NOT redo
+- **fks-full:** cred passthrough + `KUCOIN_API_* → KC_*` bridge (#134/#135) ·
+  reqwest TLS backend for the demo (#136) · IPv4-preference `gai.conf` so KuCoin
+  is reachable from containers (#137) · env-configurable position sizing
+  (`DEMO_MARGIN_PER_TRADE_USD`/`DEMO_MAX_CONTRACTS`, #138) · working default
+  `synthetic`+`ema-cross` and `JANUS_HTTP_URL→8180` (#139) · bump exchange-apiws
+  0.8.1 + drop the TLS workaround (#140) · adapter lockfile (#141) · rustrade
+  **0.4** + indicators-ta **0.2.2** (#142).
+- **exchange-apiws:** reqwest shipped with NO TLS backend → fixed + **published
+  0.8.1** (#50). *(main has 2 UNRELEASED commits beyond 0.8.1: `set_margin_mode`
+  + a futures-ws price fix — publish 0.8.2 to use them.)*
+- **janus:** forward REST (signals + risk) mounted on 8180 for `DEMO_BRAIN=janus`
+  (#117) · stamp `entry_price` so the RiskManager can size live entries — the
+  execution path was silently disabled (#118) · warm analyzers from Binance
+  history on first sight, ~1 min vs hours after restart (#119 + rustfmt #120).
+- **Net:** crypto-demo runs live (Kraken spot + KuCoin futures) → signals → paper
+  fills; janus warms fast, sizes entries, gate built + flag-gated; all crates on
+  latest. `EXECUTION_MODE=paper_trading` invariant intact throughout.
+
+### Phase A — Live trading real & safe  · *mostly DONE*
+- [x] 9-gate execution gate wired + flag-gated (`JANUS_GATE_ENFORCE`), 37 tests.
+- [x] `entry_price` producer gap (janus #118); warmup-from-history (#119/#120).
+- [ ] **A2 — exchange-apiws instrument typing** (robustness; **P1**). Type the
+      untyped `serde_json::Value` returns so callers get tick/lot/min-notional +
+      precision for order validation & quantity rounding:
+      - `exchange-apiws/src/binance/rest.rs:519 get_exchange_info` → typed.
+      - `exchange-apiws/src/cryptocom/private.rs` (10 methods) → type numeric
+        fields **as `String`** to preserve wire precision (B3/D2).
+      - then feed real specs into `bots/rustrade-exchange-apiws/src/kraken.rs`
+        (today hardcodes `tick_size/lot_size/min_notional = 0.0` at ~:300).
+      - Chain: exchange-apiws code → publish 0.8.2 → bump bot/adapter.
+      - *DoD:* adapters report real instrument specs; orders rounded to lot/tick
+        + checked vs min-notional. *Effort M · Risk low.*
+- [ ] **Gate-enforce end-to-end check** (do during the live-order test): with a
+      sandbox/sub-account execution service connected, set `JANUS_GATE_ENFORCE=1`
+      + `ENABLE_EXECUTION=true` and confirm a blocking verdict suppresses the
+      submit. Can't be fully exercised today (no execution service connected).
+- [ ] **Live KuCoin-futures order test** (the headline — **needs key rotation
+      first**). Ready: `DEMO_SYMBOLS=SOLUSDTM DEMO_MARGIN_PER_TRADE_USD=7
+      DEMO_LEVERAGE=1 DEMO_MAX_CONTRACTS=1 DEMO_MAX_POSITIONS=1
+      DEMO_EXCHANGE=kucoin` → ~1 contract (~$6.74). Arm → **human confirm** the
+      order → watch the fill → stop + flatten. Account had 38.76 USDT (verified).
+
+### Phase B — Activate the ML brain  · *BLOCKED ON YOU*
+- [ ] **(you)** Dump CNN champion goldens (~1,000 `(20×60 → logits)` pairs) +
+      the champion `.pt` weights from your local Python env into
+      `janus/crates/ml/tests/golden/`. *Only you can — needs the Python model.*
+      (RUST_MIGRATION §12-A.)
+- [ ] Then janus: run the GAF go/no-go probe (**needs GPU**) → train a burn
+      champion from scratch → shadow-run → flip `ENABLE_CNN_INFERENCE` /
+      `ENABLE_BRAIN_RUNTIME` only if it shows edge. (janus TODO Track B; #59–62
+      merged.) *Effort L · Risk M.*
+
+### Phase C — Finish the Ruby-removal cutover  · *fixes today's 502s · P1*
+- [ ] **nginx** still routes ~74 `fks_ruby` refs (`infrastructure/config/nginx/
+      conf.d/*.conf`) → `/`, `/api/*`, `/trading*` **502 now**. Rewrite to janus
+      routes (RUST_MIGRATION §12-C).
+- [ ] **WebUI ↔ janus data contract** — `PUBLIC_API_URL`→janus:7000 but janus
+      doesn't serve the old Ruby API shape; shape it on janus or adapt the WebUI.
+      Test scripts still probe `fks_ruby`.
+- [ ] **Retire `python_data_client.rs`** (janus `services/data`) so janus is the
+      sole QuestDB/Postgres/Redis writer — closes the two-data-paths divergence.
+      *Effort M–L · Risk M (routing). DoD: no 502s; WebUI reads janus; one data path.*
+
+### Phase D — Split-to-private orchestrator  · *structural · lower urgency*
+- [ ] `SPLIT_PLAN.md` Phase 5: make fks-full **private**; add top-level
+      `strategies/` for trading IP; all images → git-clone external / private
+      registry.
+- [ ] Carve out `crates/spawner` → own repo/crate (crates.io `spawner` is taken →
+      use **`fks-spawner`**; add Cargo metadata + `LICENSE`). See
+      `crates/spawner/TODO.md`.
+- [ ] Flip `src/web` → `fks-web` repo "when ready". *Effort L · Risk M–H.*
+
+### Phase E — CI / supply-chain / hygiene  · *cheap, parallelizable*
+- [ ] **rustcode CI-B (security, do first):** add `cargo-audit` + `cargo-deny`
+      (+ optional `gitleaks`) — it clones arbitrary repos and holds
+      `GITHUB_TOKEN`/`ANTHROPIC_API_KEY`/DB creds. (rustcode TODO.)
+- [ ] **rustcode AUDIT-CACHE:** implement the one real stub `src/audit/cache.rs`
+      `RedisAuditCache` (`todo!()`) so audit "skip unchanged files" dedup works.
+- [ ] **rustcode ort/ONNX build block:** `ort-sys` CDN 403s cloud/sandbox IPs →
+      `rustcode`+`rag` can't build in CI; biggest CI-health lever (vendor/proxy
+      the ONNX runtime).
+- [ ] exchange-apiws: refresh stale `todo.md` (header v0.5 → actual 0.8.1); add
+      `cargo-deny` / `cargo-semver-checks` / Dependabot (F1/F2/F6).
+- [ ] Commit `Cargo.lock` where binaries ship (rustcode); keep the janus/bot
+      `--locked` discipline (every dep bump needs a lock refresh in **each**
+      workspace — the adapter has its own lock, see #141).
+- [ ] Refresh stale docs: the `fks_ruby` items in the old sections of THIS file. *Effort S–M each.*
+
+### ⚠️ Standing — your action
+- [ ] **Rotate the KuCoin + Kraken API keys** — they were printed in the
+      2026-06-14 session transcript. After rotating, put new ones in
+      `fks-full/.env`: `KUCOIN_API_KEY/SECRET/PASSPHRASE` + `KRAKEN_API_KEY/SECRET`
+      (compose bridges KuCoin → the bot's `KC_*`).
+
+### Recommended order for a fresh session
+**E** (quick security/hygiene, esp. rustcode CI-B) ‖ **A2** (finish Phase A) →
+**C** (kill the 502s, user-visible) → **B** (when goldens exist) → **D** (last).
+Live KuCoin order test whenever ready (**rotate keys first**).
+
+### Ops quick-reference
+- Rebuild janus from local source (no push): `docker build --target workspace -f
+  infrastructure/docker/base/rust/Dockerfile --build-arg SERVICE_NAME=janus
+  --build-arg RUST_VERSION=1.94.1 -t nuniesmith/fks:janus ~/github/janus` then
+  `docker compose up -d --no-deps janus`. **`cargo fmt` before pushing janus Rust**
+  (the `rust check` gate is rustfmt; #119 merged red, fixed by #120).
+- Rebuild the demo bot: `docker compose build crypto-demo`.
+- Run the demo: `docker compose --profile demo up -d`. Health: `./run.sh health`.
+- janus default is **operator-start** (`JANUS_AUTO_START=false`); set `=true` to
+  auto-run the brain for verification.
 
 ---
 

@@ -1070,9 +1070,9 @@ dependencies = [
 
 [[package]]
 name = "rustrade-core"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6767ca93087e96ecd607acf90d7c03c6dd24e8eb54dd6f6db113b05eb13ba5eb"
+checksum = "fa3300d84ced0081b8ff77322d20ee1d0af5d8c2d3975eb8e7cc9fcc5fa9e703"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1098,9 +1098,9 @@ dependencies = [
 
 [[package]]
 name = "rustrade-framework"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "493a40533e7112f20a1c37ff2e005012a22ebb8fc5d11941936c4ff28e4a53d0"
+checksum = "17c318c6be3a69f17ead651770f93b9d523fbb76aad6bb3fdd3f099d6e414701"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1119,9 +1119,9 @@ dependencies = [
 
 [[package]]
 name = "rustrade-risk"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31e70abe0581ea825171e22eeb604c4d523c5cb8472064609b9558b4b067e5be"
+checksum = "cd4e73bea151e4aa04114875d91f600bd9fb3d9d4ed3b7ce4b7972f8d2a0d095"
 dependencies = [
  "rustrade-core",
  "serde",
@@ -1131,9 +1131,9 @@ dependencies = [
 
 [[package]]
 name = "rustrade-supervisor"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "604363efd42d8945727ce9aa1c6940374ca3a6cea0483f6252a9f2e2a8bfbd04"
+checksum = "2c0e100461a605b606efaa4b620f9c662a821c3befb6da4452f93ae4eacf213a"
 dependencies = [
  "anyhow",
  "async-trait",

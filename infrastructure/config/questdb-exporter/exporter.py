@@ -6,6 +6,12 @@ Exposes internal QuestDB metrics for Prometheus scraping.
 Endpoints:
   GET /metrics  — Prometheus text format
   GET /health   — liveness probe (used by Docker HEALTHCHECK)
+
+Schema note: the system-function columns target QuestDB 8.x —
+  tables()           → table_name, maxUncommittedRows, o3MaxLag, walEnabled, …
+  table_partitions() → name, numRows, diskSize, …   (NOT `size`)
+  wal_tables()       → name, sequencerTxn, writerTxn, …  (sequencerTxn lives here,
+                       not in tables(); keyed by `name`, not `tableName`)
 """
 
 from __future__ import annotations
@@ -108,6 +114,18 @@ class QuestDBCollector:
             return result["dataset"]
         return []
 
+    def _existing_tables(self) -> set[str]:
+        """Subset of MONITORED_TABLES that currently exist in QuestDB.
+
+        Querying table_partitions()/count() for a table that doesn't exist yet
+        returns HTTP 400, so callers use this to skip absent tables (e.g.
+        candles_crypto before janus has ingested anything). Without it the
+        exporter logs a 400 for every monitored-but-absent table on each scrape.
+        """
+        rows = self._rows(self._query("SELECT table_name FROM tables()"))
+        present = {r[0] for r in rows}
+        return {t for t in MONITORED_TABLES if t in present}
+
     # ------------------------------------------------------------------
     # Prometheus collector protocol
     # ------------------------------------------------------------------
@@ -126,12 +144,12 @@ class QuestDBCollector:
     def _table_metrics(self):
         sql = f"""
             SELECT
-                name            AS table_name,
+                table_name,
                 maxUncommittedRows,
                 o3MaxLag,
                 walEnabled
             FROM tables()
-            WHERE name IN ({", ".join(f"'{t}'" for t in MONITORED_TABLES)})
+            WHERE table_name IN ({", ".join(f"'{t}'" for t in MONITORED_TABLES)})
         """
         rows = self._rows(self._query(sql))
         if not rows:
@@ -170,7 +188,7 @@ class QuestDBCollector:
                 row_count_mf.add_metric([table_name], count_rows[0][0] or 0)
 
             # Partition-sum size
-            size_rows = self._rows(self._query(f"SELECT sum(size) FROM table_partitions('{table_name}')"))
+            size_rows = self._rows(self._query(f"SELECT sum(diskSize) FROM table_partitions('{table_name}')"))
             if size_rows:
                 size_mf.add_metric([table_name], size_rows[0][0] or 0)
 
@@ -189,13 +207,18 @@ class QuestDBCollector:
     # ------------------------------------------------------------------
 
     def _partition_metrics(self):
-        partition_tables = [t for t in MONITORED_TABLES if t in {"trades_crypto", "candles_crypto"}]
+        existing = self._existing_tables()
+        partition_tables = [
+            t
+            for t in MONITORED_TABLES
+            if t in {"trades_crypto", "candles_crypto"} and t in existing
+        ]
 
         for table in partition_tables:
             sql = f"""
                 SELECT
-                    name     AS partition,
-                    size     AS size_bytes,
+                    name     AS partition_name,
+                    diskSize AS size_bytes,
                     numRows  AS row_count
                 FROM table_partitions('{table}')
                 ORDER BY name DESC
@@ -228,12 +251,15 @@ class QuestDBCollector:
     # ------------------------------------------------------------------
 
     def _wal_metrics(self):
+        # wal_tables() carries the sequencer + writer transaction numbers directly,
+        # keyed by `name`. (tables() has neither column in QuestDB 8.x.) It lists
+        # only WAL-enabled tables, so no walEnabled filter is needed.
         sql = """
             SELECT
-                name            AS table_name,
-                sequencerTxn
-            FROM tables()
-            WHERE walEnabled = true
+                name AS table_name,
+                sequencerTxn,
+                writerTxn
+            FROM wal_tables()
         """
         rows = self._rows(self._query(sql))
         if not rows:
@@ -250,15 +276,10 @@ class QuestDBCollector:
             labels=["table"],
         )
 
-        for table_name, sequencer_txn in rows:
-            txn_mf.add_metric([table_name], sequencer_txn or 0)
-
-            # WAL writer status — applied_txn available in wal_tables()
-            wal_rows = self._rows(self._query(f"SELECT writerTxn FROM wal_tables() WHERE tableName = '{table_name}'"))
-            if wal_rows and wal_rows[0][0] is not None:
-                lag = max(0, (sequencer_txn or 0) - wal_rows[0][0])
-            else:
-                lag = 0
+        for table_name, sequencer_txn, writer_txn in rows:
+            seq = sequencer_txn or 0
+            txn_mf.add_metric([table_name], seq)
+            lag = max(0, seq - writer_txn) if writer_txn is not None else 0
             lag_mf.add_metric([table_name], lag)
 
         yield txn_mf
@@ -269,10 +290,16 @@ class QuestDBCollector:
     # ------------------------------------------------------------------
 
     def _storage_metrics(self):
+        existing = self._existing_tables()
+        tables = [
+            t for t in MONITORED_TABLES if t != "system_health" and t in existing
+        ]
+        if not tables:
+            return
+
         union_parts = "\n        UNION ALL\n        ".join(
-            f"SELECT sum(size) AS size FROM table_partitions('{t}')"
-            for t in MONITORED_TABLES
-            if t != "system_health"  # skip tiny meta table from storage sum
+            f"SELECT sum(diskSize) AS size FROM table_partitions('{t}')"
+            for t in tables  # skip tiny meta table + absent tables from storage sum
         )
         sql = f"SELECT sum(size) FROM ({union_parts})"
 

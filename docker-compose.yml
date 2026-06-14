@@ -1150,6 +1150,19 @@ services:
             - DEMO_EXCHANGE=${DEMO_EXCHANGE:-mock} # mock = paper; never places real orders
             - JANUS_HTTP_URL=${JANUS_HTTP_URL:-http://fks_janus:8080}
             - DEMO_SYMBOLS=${DEMO_SYMBOLS:-XBTUSDTM,ETHUSDTM,SOLUSDTM}
+            # Live-venue credentials — EMPTY by default (paper/mock). To trade a
+            # real (sub-)account: set these in .env AND flip DEMO_EXCHANGE to
+            # kucoin | kraken | multi. Left empty, the bot stays on MockExchange.
+            - KC_KEY=${KC_KEY:-}
+            - KC_SECRET=${KC_SECRET:-}
+            - KC_PASSPHRASE=${KC_PASSPHRASE:-}
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            # Optional per-venue symbol/asset + durable-state overrides
+            - DEMO_KUCOIN_SYMBOLS=${DEMO_KUCOIN_SYMBOLS:-}
+            - DEMO_KRAKEN_SYMBOLS=${DEMO_KRAKEN_SYMBOLS:-}
+            - DEMO_KRAKEN_BASE_ASSETS=${DEMO_KRAKEN_BASE_ASSETS:-}
+            - DEMO_STATE_FILE=${DEMO_STATE_FILE:-}
             - RUST_LOG=${BOT_RUST_LOG:-info,crypto_demo=debug}
             - RUST_BACKTRACE=1
         ports:

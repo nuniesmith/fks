@@ -51,8 +51,16 @@ axum       = "0.8"
 prometheus = "0.14"
 once_cell  = "1"
 
-# ── HTTP client (JanusBrain → janus /api/v1/signals/generate) ─────────────────
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# ── HTTP client (JanusBrain → janus + the live-venue path via exchange-apiws) ──
+# reqwest 0.13 to feature-unify with exchange-apiws's client, which ships
+# `features = ["json"]` only — i.e. NO TLS backend, so its HTTPS calls fail
+# instantly. `rustls-no-provider` turns on the rustls backend + platform cert
+# verifier WITHOUT pulling aws-lc-rs (its C toolchain breaks the slim Docker
+# build); the `ring` crypto provider is installed in main().
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+
+# Crypto provider for reqwest's rustls-no-provider backend (installed in main()).
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 tracing            = "0.1"

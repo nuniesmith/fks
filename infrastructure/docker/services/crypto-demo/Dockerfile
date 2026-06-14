@@ -70,6 +70,14 @@ RUN apt-get update && \
       apt-get install -y --no-install-recommends libssl3t64 ) && \
     rm -rf /var/lib/apt/lists/*
 
+# Prefer IPv4 in getaddrinfo. The fks Docker network has no IPv6, but some
+# venues are IPv6-first in DNS (e.g. api-futures.kucoin.com is dual-stack) —
+# the default RFC 6724 ordering then makes reqwest attempt an unroutable IPv6
+# address and fail with "error sending request for url". Bumping the
+# IPv4-mapped precedence makes IPv4 win. (This is Debian's documented
+# "prefer IPv4" toggle from the stock /etc/gai.conf.)
+RUN printf 'precedence ::ffff:0:0/96  100\n' > /etc/gai.conf
+
 RUN useradd -u 1000 -m -s /bin/bash ${APP_USER}
 
 WORKDIR /app

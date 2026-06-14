@@ -74,14 +74,6 @@ fn env_u64(key: &str, default: u64) -> u64 {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // TLS for the live-venue HTTP path. exchange-apiws's reqwest dependency ships
-    // `features = ["json"]` only — no TLS backend — so we enable reqwest's
-    // `rustls-no-provider` backend in Cargo.toml (it feature-unifies into
-    // exchange-apiws's client) and install the `ring` crypto provider here. rustls
-    // 0.23 needs a process-default provider; without this, every HTTPS call fails
-    // instantly with "error sending request for url" (curl works only via OpenSSL).
-    let _ = rustls::crypto::ring::default_provider().install_default();
-
     rustrade::logging::init_tracing();
 
     // ── Config from env ───────────────────────────────────────────────────

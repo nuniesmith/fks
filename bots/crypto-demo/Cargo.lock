@@ -557,7 +557,6 @@ dependencies = [
  "prometheus",
  "rand 0.10.1",
  "reqwest 0.13.4",
- "rustls",
  "rustrade-exchange-apiws",
  "rustrade-framework",
  "serde",
@@ -668,9 +667,9 @@ dependencies = [
 
 [[package]]
 name = "exchange-apiws"
-version = "0.7.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70619082fa917e2afe06e1eac288cafa5ec69b950b3a512a3704c5ec8949b2d7"
+checksum = "b966641c82f4d0318fc2058c188f15bf5d4bef8e55537e2bf36cf5c5099a2fc3"
 dependencies = [
  "anyhow",
  "base64",
@@ -678,6 +677,7 @@ dependencies = [
  "futures-util",
  "hmac",
  "reqwest 0.13.4",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -2715,7 +2715,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -1165,6 +1165,16 @@ services:
             - DEMO_KRAKEN_SYMBOLS=${DEMO_KRAKEN_SYMBOLS:-}
             - DEMO_KRAKEN_BASE_ASSETS=${DEMO_KRAKEN_BASE_ASSETS:-}
             - DEMO_STATE_FILE=${DEMO_STATE_FILE:-}
+            # Position sizing + risk caps — empty = paper-safe defaults (50k
+            # margin, 100 max contracts). For a REAL venue set tiny in .env, e.g.
+            # DEMO_MARGIN_PER_TRADE_USD=7 DEMO_LEVERAGE=1 DEMO_MAX_CONTRACTS=1
+            # DEMO_MAX_POSITIONS=1 → ~1 SOLUSDTM contract (~$6.74 notional).
+            - DEMO_LEVERAGE=${DEMO_LEVERAGE:-}
+            - DEMO_MARGIN_PER_TRADE_USD=${DEMO_MARGIN_PER_TRADE_USD:-}
+            - DEMO_MAX_CONTRACTS=${DEMO_MAX_CONTRACTS:-}
+            - DEMO_MAX_POSITIONS=${DEMO_MAX_POSITIONS:-}
+            - DEMO_MAX_DAILY_LOSS_USD=${DEMO_MAX_DAILY_LOSS_USD:-}
+            - DEMO_MAX_GROSS_EXPOSURE_USD=${DEMO_MAX_GROSS_EXPOSURE_USD:-}
             - RUST_LOG=${BOT_RUST_LOG:-info,crypto_demo=debug}
             - RUST_BACKTRACE=1
         ports:

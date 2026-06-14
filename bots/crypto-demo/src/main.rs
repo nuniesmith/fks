@@ -150,9 +150,14 @@ async fn main() -> anyhow::Result<()> {
         // contracts. Against a real KuCoin adapter (XBTUSDTM contract_value
         // = 0.001 BTC) far smaller margin would suffice — tune per deployment.
         .sizing_config(SizingConfig {
-            margin_per_trade: 50_000.0,
+            // Default 50k suits the paper MockExchange (contract_value = 1.0).
+            // For a real venue adapter (KuCoin XBTUSDTM contract_value = 0.001
+            // BTC) set DEMO_MARGIN_PER_TRADE_USD tiny: e.g. 7 at DEMO_LEVERAGE=1
+            // sizes ~1 SOLUSDTM contract (~$6.74). DEMO_MAX_CONTRACTS is a hard
+            // ceiling on contracts/trade regardless of the margin×leverage math.
+            margin_per_trade: env_u64("DEMO_MARGIN_PER_TRADE_USD", 50_000) as f64,
             leverage: DEMO_LEVERAGE,
-            max_contracts: 100,
+            max_contracts: env_u64("DEMO_MAX_CONTRACTS", 100) as u32,
         })
         // Stop the session if paper PnL drops past this (per UTC day).
         .session_pnl_config(SessionPnlConfig::default())

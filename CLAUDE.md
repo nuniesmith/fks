@@ -22,10 +22,10 @@ data/engine/trainer service was removed — janus is the platform now. See
 
 | Repo | Role | Consumed as |
 |------|------|-------------|
-| [`rustrade`](https://github.com/nuniesmith/rustrade) | trading framework | crates.io `rustrade-framework` 0.3 (imports as `rustrade`) |
+| [`rustrade`](https://github.com/nuniesmith/rustrade) | trading framework | crates.io `rustrade-framework` 0.4 (imports as `rustrade`) |
 | [`janus`](https://github.com/nuniesmith/janus) | trading brain | Docker image (`git clone` at `JANUS_REF`) + `jflow-*` crates |
-| [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | TA math | crates.io `indicators-ta` 0.1 (imports as `indicators`) |
-| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.7 |
+| [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | TA math | crates.io `indicators-ta` 0.2 (imports as `indicators`) |
+| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.8 |
 | [`fks-web`](https://github.com/nuniesmith/fks-web) | SvelteKit UI | Docker image (`git clone` at `WEB_REF`) |
 
 ### Lives in this repo
@@ -160,9 +160,9 @@ When `janus` or a `bots/*` crate needs the framework, TA, or exchange code,
 depend on crates.io — never re-vendor:
 
 ```toml
-rustrade       = { package = "rustrade-framework", version = "0.3" }  # import as `rustrade`
-indicators-ta  = "0.1"                                                # import as `indicators` (0.1.5)
-exchange-apiws = "0.7"
+rustrade       = { package = "rustrade-framework", version = "0.4" }  # import as `rustrade`
+indicators-ta  = "0.2"                                                # import as `indicators` (0.2.2)
+exchange-apiws = "0.8"
 ```
 
 ### Rust

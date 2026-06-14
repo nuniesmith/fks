@@ -1145,10 +1145,12 @@ services:
         cap_drop:
             - ALL
         environment:
-            - DEMO_BRAIN=${DEMO_BRAIN:-janus} # janus brain over HTTP (ema-cross = local)
-            - DEMO_SOURCE=${DEMO_SOURCE:-synthetic} # synthetic = no exchange creds/network
+            - DEMO_BRAIN=${DEMO_BRAIN:-ema-cross} # local indicators-ta brain — works offline, no janus dep, trades actively. =janus uses the janus REST brain (needs janus STARTED + JANUS_HTTP_URL below)
+            - DEMO_SOURCE=${DEMO_SOURCE:-synthetic} # offline random-walk demo (lively, no network/creds). =kucoin (live KuCoin futures) | =kraken (live Kraken spot) for real data
             - DEMO_EXCHANGE=${DEMO_EXCHANGE:-mock} # mock = paper; never places real orders
-            - JANUS_HTTP_URL=${JANUS_HTTP_URL:-http://fks_janus:8080}
+            # Forward REST (8180) — serves /api/v1/signals/generate + /api/v1/risk/*
+            # for DEMO_BRAIN=janus. (8080 is janus_api, which lacks those routes.)
+            - JANUS_HTTP_URL=${JANUS_HTTP_URL:-http://fks_janus:8180}
             - DEMO_SYMBOLS=${DEMO_SYMBOLS:-XBTUSDTM,ETHUSDTM,SOLUSDTM}
             # Live-venue credentials — EMPTY by default (paper/mock). To trade a
             # real (sub-)account: set these in .env AND flip DEMO_EXCHANGE to

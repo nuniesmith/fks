@@ -1153,9 +1153,11 @@ services:
             # Live-venue credentials — EMPTY by default (paper/mock). To trade a
             # real (sub-)account: set these in .env AND flip DEMO_EXCHANGE to
             # kucoin | kraken | multi. Left empty, the bot stays on MockExchange.
-            - KC_KEY=${KC_KEY:-}
-            - KC_SECRET=${KC_SECRET:-}
-            - KC_PASSPHRASE=${KC_PASSPHRASE:-}
+            # The bot reads KuCoin creds as KC_*; we bridge them from the
+            # platform-standard KUCOIN_API_* vars so .env keeps one convention.
+            - KC_KEY=${KUCOIN_API_KEY:-}
+            - KC_SECRET=${KUCOIN_API_SECRET:-}
+            - KC_PASSPHRASE=${KUCOIN_API_PASSPHRASE:-}
             - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
             - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
             # Optional per-venue symbol/asset + durable-state overrides

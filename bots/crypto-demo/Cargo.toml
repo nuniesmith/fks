@@ -36,7 +36,8 @@ rustrade       = { package = "rustrade-framework", version = "0.3" }
 # TA math — crate `indicators-ta`, library imports as `indicators`.
 indicators-ta  = "0.1"        # 0.1.3 on crates.io; 0.1.4 (Incremental*) pending publish
 # Exchange REST/WS clients (KuCoin kline polling for market data).
-exchange-apiws = { version = "0.7", default-features = false }
+# >=0.8.1 ships its own rustls TLS backend + ring provider (self-contained HTTPS).
+exchange-apiws = { version = "0.8.1", default-features = false }
 # rustrade `ExchangeClient` over exchange-apiws — the live KuCoin order path,
 # selected with DEMO_EXCHANGE=kucoin (default is the paper MockExchange).
 rustrade-exchange-apiws = { path = "../rustrade-exchange-apiws" }
@@ -51,16 +52,11 @@ axum       = "0.8"
 prometheus = "0.14"
 once_cell  = "1"
 
-# ── HTTP client (JanusBrain → janus + the live-venue path via exchange-apiws) ──
-# reqwest 0.13 to feature-unify with exchange-apiws's client, which ships
-# `features = ["json"]` only — i.e. NO TLS backend, so its HTTPS calls fail
-# instantly. `rustls-no-provider` turns on the rustls backend + platform cert
-# verifier WITHOUT pulling aws-lc-rs (its C toolchain breaks the slim Docker
-# build); the `ring` crypto provider is installed in main().
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
-
-# Crypto provider for reqwest's rustls-no-provider backend (installed in main()).
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# ── HTTP client (JanusBrain → janus over plain HTTP) ──────────────────────────
+# The live-venue HTTPS path is fully handled by exchange-apiws >=0.8.1 (its own
+# rustls backend + ring provider). This client only reaches janus over HTTP, so
+# it needs nothing beyond JSON.
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 tracing            = "0.1"

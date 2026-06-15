@@ -255,7 +255,7 @@ const METRICS_LAYOUT = {
 };
 
 // ── /charts: historical OHLC + indicators from QuestDB ──────────────────────
-// Candles come from QuestDB's `candles_crypto` (ts µs, symbol, exchange,
+// Candles come from QuestDB's `candles_crypto` (timestamp µs, symbol, exchange,
 // interval, o/h/l/c/v) via the HTTP /exec query API. The page strips the quote
 // currency (BTC/USD → BTC), so we match the symbol loosely (exact, or
 // `SYM/…`/`SYM-…`). Live updates are client-side (crypto: Kraken/Binance WS) or
@@ -272,10 +272,10 @@ async function queryCandles(
   lim: number,
 ): Promise<CandleRow[]> {
   const sql =
-    `SELECT cast(ts as long) t, open, high, low, close, volume FROM candles_crypto ` +
+    `SELECT cast(timestamp as long) t, open, high, low, close, volume FROM candles_crypto ` +
     `WHERE (symbol = '${sym}' OR symbol LIKE '${sym}/%' OR symbol LIKE '${sym}-%') ` +
-    `AND interval = '${iv}' AND ts >= dateadd('d', -${days}, now()) ` +
-    `ORDER BY ts DESC LIMIT ${lim}`;
+    `AND interval = '${iv}' AND timestamp >= dateadd('d', -${days}, now()) ` +
+    `ORDER BY timestamp DESC LIMIT ${lim}`;
   try {
     const r = await fetch(`${QUESTDB_URL}/exec?query=${encodeURIComponent(sql)}`, {
       headers: { accept: "application/json" },

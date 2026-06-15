@@ -187,23 +187,31 @@ presets, saved configs, per-bot CPU/mem/uptime, SSE log viewer (F1); risk panel 
 save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
 
 **Remaining — live-stack / janus-side (not runnable in the CI sandbox):**
-- [~] **B1** — verify janus writes Binance candles → QuestDB `candles_crypto`.
+- [x] **B1** — janus writes Binance candles → QuestDB `candles_crypto`.
       *Code-traced 2026-06-10: the deployed unified binary published klines only
       to the in-process bus — nothing wrote `candles_crypto` (the writer lived in
       the standalone factory binary the container doesn't run). Fixed janus-side:
       janus PR #106 adds a bus-subscribed candle sink (`DATA_PERSIST_CANDLES`,
-      default on). Remaining: rebuild at a `JANUS_REF` with #106, confirm rows +
-      `/bars/:sym/candles` end-to-end. ⚠️ janus boots in STANDBY — ingestion
-      (and therefore the sink) only runs after `POST /api/services/start`
-      (`scripts/testing/paper-trading/deploy.sh` issues it) or with
-      `JANUS_AUTO_START=true`.*
-- [~] **D1 activate** — the janus bars SSE endpoint now exists
+      default on).* **✅ Verified 2026-06-14** on a full local stack built from
+      `janus@main`: with `JANUS_AUTO_START=true` the data module connects 10 Binance
+      kline WS streams and the sink flushes each closed 1m candle to QuestDB over ILP
+      — `candles_crypto` confirmed growing (1k+ rows, real OHLCV). janus still boots
+      in STANDBY by default; ingestion (and the sink) run only after
+      `POST /api/services/start` or `JANUS_AUTO_START=true` (now set in `.env`).
+- [x] **D1 activate** — the janus bars SSE endpoint now exists
       (`GET /sse/bars/{symbol}?interval=1m`, `event: bar` frames — janus PR #106)
       and compose passes `JANUS_BARS_SSE_URL` through to the webui (empty default
-      = idle stub). After the image rebuild, activate with
-      `JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars` in `.env`.
-- [ ] **F2 run** — `scripts/testing/f2-keyless-spawn-smoke.sh` against a running
-      stack (needs the Docker daemon, absent in CI).
+      = idle stub). **✅ Activated 2026-06-14**: set
+      `JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars` in `.env`; the endpoint
+      serves `content-type: text/event-stream` (HTTP 200) and the webui is wired to it.
+- [x] **F2 run** — `scripts/testing/f2-keyless-spawn-smoke.sh` against a running
+      stack. **✅ Passed 2026-06-14**: keyless paper bot spawned on `fks_fks-network`,
+      reached `running`, connected to the janus brain, ran rustrade candle-pollers +
+      emitted `fks_bot_*` (paper/mock — no live-order path). Fixed two latent bugs en
+      route: the spawner's `ALLOWED_NETWORK` resolved to a non-existent `fks_network`
+      (real name is `fks_fks-network`), and the webui candle query selected a
+      non-existent `ts` column (janus's sink writes `timestamp`) → charts were
+      silently empty despite B1 data.
 - [ ] **G3 run** — run the reconciled Playwright suite vs. a dev/preview server
       (needs the browser download, blocked in CI; `--list` enumerates 84 clean).
 

@@ -271,9 +271,13 @@ async function queryCandles(
   days: number,
   lim: number,
 ): Promise<CandleRow[]> {
+  // Match the UI symbol against the ingested candles_crypto names. Exchange feeds
+  // store concatenated pairs (e.g. BTCUSDT), but the UI often carries a bare base
+  // ('BTC' from a 'BTC/USD' quick-pick) — so also try <base>USDT/USD/USDC.
   const sql =
     `SELECT cast(timestamp as long) t, open, high, low, close, volume FROM candles_crypto ` +
-    `WHERE (symbol = '${sym}' OR symbol LIKE '${sym}/%' OR symbol LIKE '${sym}-%') ` +
+    `WHERE (symbol = '${sym}' OR symbol LIKE '${sym}/%' OR symbol LIKE '${sym}-%' ` +
+    `       OR symbol = '${sym}USDT' OR symbol = '${sym}USD' OR symbol = '${sym}USDC') ` +
     `AND interval = '${iv}' AND timestamp >= dateadd('d', -${days}, now()) ` +
     `ORDER BY timestamp DESC LIMIT ${lim}`;
   try {

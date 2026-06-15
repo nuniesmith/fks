@@ -1072,7 +1072,10 @@ services:
             - SPAWNER_PORT=8090
             - ALLOWED_IMAGE_PREFIX=${ALLOWED_BOT_IMAGE_PREFIX:-fks-bot-}
             - MAX_CONCURRENT_BOTS=${MAX_CONCURRENT_BOTS:-20}
-            - ALLOWED_NETWORK=${COMPOSE_PROJECT_NAME:-fks}_network
+            # Bots must join the same Docker network as janus/etc. Compose names a
+            # non-external network <project>_<network-key>; the key here is
+            # `fks-network`, so the real name is fks_fks-network — NOT <project>_network.
+            - ALLOWED_NETWORK=${COMPOSE_PROJECT_NAME:-fks}_fks-network
             - DEFAULT_CPU_LIMIT=${BOT_CPU_LIMIT:-1.0}
             - DEFAULT_MEMORY_LIMIT_MB=${BOT_MEMORY_MB:-512}
             - PROMETHEUS_SD_PATH=/prometheus-sd/bots.json

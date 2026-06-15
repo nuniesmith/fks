@@ -446,6 +446,10 @@ services:
                 REPO_REF: ${WEB_REF:-main}
         container_name: fks_webui
         restart: unless-stopped
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
         ports:
             - "127.0.0.1:3001:3000"
         environment:
@@ -1142,11 +1146,38 @@ services:
         cap_drop:
             - ALL
         environment:
-            - DEMO_BRAIN=${DEMO_BRAIN:-janus} # janus brain over HTTP (ema-cross = local)
-            - DEMO_SOURCE=${DEMO_SOURCE:-synthetic} # synthetic = no exchange creds/network
+            - DEMO_BRAIN=${DEMO_BRAIN:-ema-cross} # local indicators-ta brain — works offline, no janus dep, trades actively. =janus uses the janus REST brain (needs janus STARTED + JANUS_HTTP_URL below)
+            - DEMO_SOURCE=${DEMO_SOURCE:-synthetic} # offline random-walk demo (lively, no network/creds). =kucoin (live KuCoin futures) | =kraken (live Kraken spot) for real data
             - DEMO_EXCHANGE=${DEMO_EXCHANGE:-mock} # mock = paper; never places real orders
-            - JANUS_HTTP_URL=${JANUS_HTTP_URL:-http://fks_janus:8080}
+            # Forward REST (8180) — serves /api/v1/signals/generate + /api/v1/risk/*
+            # for DEMO_BRAIN=janus. (8080 is janus_api, which lacks those routes.)
+            - JANUS_HTTP_URL=${JANUS_HTTP_URL:-http://fks_janus:8180}
             - DEMO_SYMBOLS=${DEMO_SYMBOLS:-XBTUSDTM,ETHUSDTM,SOLUSDTM}
+            # Live-venue credentials — EMPTY by default (paper/mock). To trade a
+            # real (sub-)account: set these in .env AND flip DEMO_EXCHANGE to
+            # kucoin | kraken | multi. Left empty, the bot stays on MockExchange.
+            # The bot reads KuCoin creds as KC_*; we bridge them from the
+            # platform-standard KUCOIN_API_* vars so .env keeps one convention.
+            - KC_KEY=${KUCOIN_API_KEY:-}
+            - KC_SECRET=${KUCOIN_API_SECRET:-}
+            - KC_PASSPHRASE=${KUCOIN_API_PASSPHRASE:-}
+            - KRAKEN_API_KEY=${KRAKEN_API_KEY:-}
+            - KRAKEN_API_SECRET=${KRAKEN_API_SECRET:-}
+            # Optional per-venue symbol/asset + durable-state overrides
+            - DEMO_KUCOIN_SYMBOLS=${DEMO_KUCOIN_SYMBOLS:-}
+            - DEMO_KRAKEN_SYMBOLS=${DEMO_KRAKEN_SYMBOLS:-}
+            - DEMO_KRAKEN_BASE_ASSETS=${DEMO_KRAKEN_BASE_ASSETS:-}
+            - DEMO_STATE_FILE=${DEMO_STATE_FILE:-}
+            # Position sizing + risk caps — empty = paper-safe defaults (50k
+            # margin, 100 max contracts). For a REAL venue set tiny in .env, e.g.
+            # DEMO_MARGIN_PER_TRADE_USD=7 DEMO_LEVERAGE=1 DEMO_MAX_CONTRACTS=1
+            # DEMO_MAX_POSITIONS=1 → ~1 SOLUSDTM contract (~$6.74 notional).
+            - DEMO_LEVERAGE=${DEMO_LEVERAGE:-}
+            - DEMO_MARGIN_PER_TRADE_USD=${DEMO_MARGIN_PER_TRADE_USD:-}
+            - DEMO_MAX_CONTRACTS=${DEMO_MAX_CONTRACTS:-}
+            - DEMO_MAX_POSITIONS=${DEMO_MAX_POSITIONS:-}
+            - DEMO_MAX_DAILY_LOSS_USD=${DEMO_MAX_DAILY_LOSS_USD:-}
+            - DEMO_MAX_GROSS_EXPOSURE_USD=${DEMO_MAX_GROSS_EXPOSURE_USD:-}
             - RUST_LOG=${BOT_RUST_LOG:-info,crypto_demo=debug}
             - RUST_BACKTRACE=1
         ports:

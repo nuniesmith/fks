@@ -1013,20 +1013,22 @@ services:
                 condition: service_healthy
         restart: unless-stopped
         healthcheck:
-            # python:slim has no wget/curl — probe with urllib (matches the
-            # Dockerfile HEALTHCHECK). The old wget command always failed →
-            # the container reported unhealthy despite serving fine.
+            # python:slim has no wget/curl, so the probe must use python. Under the
+            # 0.1-CPU limit below, spawning python + `import urllib.request` (which
+            # drags in ssl/http.client/email) takes 6–8s and blew the old 5s timeout
+            # → spurious "unhealthy" despite /health serving fine. A bare socket
+            # connect (no urllib/ssl import) is ~3.5s under throttling; 10s for headroom.
             test:
                 [
                     "CMD",
                     "python",
                     "-c",
-                    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9191/health')",
+                    "import socket; socket.create_connection(('127.0.0.1', 9191), timeout=4).close()",
                 ]
             interval: 30s
-            timeout: 5s
+            timeout: 10s
             retries: 3
-            start_period: 10s
+            start_period: 30s
         deploy:
             resources:
                 limits:
@@ -1055,12 +1057,14 @@ services:
         container_name: fks_bot_spawner
         restart: unless-stopped
         # Grant access to the bind-mounted /var/run/docker.sock. On the host the
-        # socket is 0660 root:docker; "981" is the host 'docker' group GID, so the
-        # in-container appuser (uid 1000) can reach the Docker daemon. Without this
+        # socket is 0660 root:docker, so the in-container appuser (uid 1000) must
+        # join the host 'docker' group GID to reach the Docker daemon. Without this
         # the spawner 500s every request with "Docker API error ... client error
-        # (Connect)". If the host docker GID differs, update this value.
+        # (Connect)". The GID is host-specific — set DOCKER_GID in .env to your
+        # host's `getent group docker` GID (this host: 987, also the default). `id`
+        # inside the container should then list it as a supplementary group.
         group_add:
-            - "981"
+            - "${DOCKER_GID:-987}"
         ports:
             - "127.0.0.1:8090:8090"
         environment:

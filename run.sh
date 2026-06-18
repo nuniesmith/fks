@@ -327,14 +327,19 @@ TAILSCALE_IP=${ts_ip}
 # SECTION 2 — JANUS (Rust trading engine)
 # =============================================================================
 
-EXECUTION_MODE=paper_trading
+EXECUTION_MODE=paper_trading     # paper_trading | live  — NEVER set live without full review
 DATA_SOURCE=live
 DATA_EXCHANGE=binance
 DATA_WS_URL=wss://stream.binance.com:9443/ws
 DATA_KLINE_INTERVALS=1m,5m
 
 JANUS_ENABLE_BACKWARD=true
-ENABLE_EXECUTION=true
+# NEVER autonomous: signals terminate at a human decision point. Keep this
+# false unless you fully understand the live order path. This is the deliberate
+# second gate, separate from EXECUTION_MODE (paper_trading force-dry-runs in
+# code, so live orders need BOTH EXECUTION_MODE=live AND this =true). Matches
+# .env.example.
+ENABLE_EXECUTION=false
 
 OPTIMIZER_ENABLED=true
 OPTIMIZE_ASSETS=BTC,ETH,SOL

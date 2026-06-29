@@ -48,8 +48,12 @@ Other service repos built via `git clone` at a pinned ref:
 | `src/sql/` | Postgres bootstrap baked into the image (`janus/`, `spawner/`) |
 | `scripts/` + `run.sh` | Operational tooling (DB bootstrap, build, health, …) |
 | `crates/spawner/` | Bot-container lifecycle service (until it splits out) |
-| `src/web/` | SvelteKit UI (until it splits) |
 | `bots/`, `strategies/` | Thin bots / private trading IP that consume the published crates *(planned)* |
+
+> The SvelteKit UI moved to its own repo —
+> [`nuniesmith/fks-web`](https://github.com/nuniesmith/fks-web). The `webui`
+> image git-clones it at build time (`WEB_REPO` / `WEB_REF` in `.env`); set
+> `WEB_REPO=` empty only for local bind-mount dev against a manual checkout.
 
 > The dependency graph and exact crates.io coordinates are in
 > [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md).
@@ -203,7 +207,7 @@ fks-full/
 - Working on the brain? → [`nuniesmith/janus`](https://github.com/nuniesmith/janus)
 - Working on bot lifecycles? → [`crates/spawner/CLAUDE.md`](crates/spawner/CLAUDE.md)
 - Finishing the Python→Rust port? → [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md)
-- Working on the frontend? → [`src/web/CLAUDE.md`](src/web/CLAUDE.md)
+- Working on the frontend? → [`nuniesmith/fks-web`](https://github.com/nuniesmith/fks-web)
 - Remaining split moves? → [`SPLIT_PLAN.md`](SPLIT_PLAN.md)
 - AI-assistant rules for this repo? → [`CLAUDE.md`](CLAUDE.md)
 - Current roadmap? → [`TODO.md`](TODO.md)

@@ -409,6 +409,13 @@ futures_journal.db
 *.tar.gz
 *.rar
 
+# --- fks-state: private backup/import (scripts/fks-state.sh) ---
+# Only the .example template + the tool are public; the real manifest, age
+# keys, and any encrypted snapshot that lands here stay out of the repo.
+state.manifest
+*.age
+.fks-state-stage/
+
 # ============================================================================
 # Keep Empty Directories
 # ============================================================================

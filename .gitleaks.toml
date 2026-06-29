@@ -1,0 +1,18 @@
+# gitleaks config for the pre-publish gate.  `gitleaks detect --source . --log-opts="--all"`
+# Extends the default ruleset; allowlists only the known synthetic test fixtures
+# so the scan can come back genuinely 0-findings before flipping visibility.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic values in tests + template placeholders — not real secrets."
+regexes = [
+  '''sk-1234567890abcdef1234567890abcdef12''',   # dummy OpenAI-style key in a redaction test
+  '''super_secret_password_123''',                # dummy password in the same test
+]
+paths = [
+  '''.*\.example$''',
+  '''.*\.example\..*''',
+  '''\.env\.example''',
+  '''state\.manifest\.example''',
+]

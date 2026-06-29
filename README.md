@@ -82,7 +82,7 @@ file_sd config the spawner writes).
 
 ## Access
 
-All access via **Tailscale HTTPS** — `https://desktop.tailfef10.ts.net`.
+All access via **Tailscale HTTPS** — `https://<your-tailnet-host>.ts.net`.
 No external ports. Nginx terminates TLS using Tailscale-issued certs.
 No Authelia, no Let's Encrypt.
 

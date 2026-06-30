@@ -524,6 +524,16 @@ EOF
         fi
     done
 
+    # --- Strip inline comments so `docker compose --env-file` sees clean values ---
+    # docker compose's env-file parser does NOT strip "KEY=value  # comment" inline
+    # comments (bash `source` does — which is why this script itself was unaffected).
+    # Left in, the comment text leaks into the value: e.g. an empty `SPAWNER_REPO=
+    # # e.g. https://…` becomes the literal git URL "# e.g. https://…" and breaks the
+    # spawner/web image build, and empty broker keys become their literal hint text.
+    # Secrets are single tokens (no spaces), so "whitespace then #" only ever matches
+    # the comment convention — never a value.
+    sed -i -E '/^[A-Za-z_][A-Za-z0-9_]*=/ s/[[:space:]]+#.*$//' "$env_file"
+
     # --- Render alertmanager.yml from template ---
     local tmpl="infrastructure/config/alertmanager/alertmanager.yml.tmpl"
     local dest="infrastructure/config/alertmanager/alertmanager.yml"

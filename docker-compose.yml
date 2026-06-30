@@ -1227,4 +1227,9 @@ volumes:
 # =============================================================================
 networks:
     fks-network:
+        # Pin the Docker network name so it matches the spawner's ALLOWED_NETWORK
+        # (`${COMPOSE_PROJECT_NAME:-fks}_network`). Without this, compose derives the
+        # name from the key as `<project>_fks-network` (e.g. `fks_fks-network`), which
+        # never matches `fks_network`, so spawned bots fail with "network not found".
+        name: ${COMPOSE_PROJECT_NAME:-fks}_network
         driver: bridge

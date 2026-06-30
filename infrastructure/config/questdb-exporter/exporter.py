@@ -22,7 +22,7 @@ import signal
 import sys
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import requests
 from prometheus_client import CONTENT_TYPE_LATEST, REGISTRY, generate_latest
@@ -63,6 +63,11 @@ MONITORED_TABLES: list[str] = [
 # Graceful shutdown
 # ---------------------------------------------------------------------------
 _shutdown = threading.Event()
+
+# Serialises concurrent /metrics scrapes — the collector's requests.Session is not
+# thread-safe. /health never takes this lock, so the liveness probe stays instant
+# even while a /metrics scrape is mid-flight against a slow QuestDB.
+_metrics_lock = threading.Lock()
 
 
 def _handle_signal(sig: int, _frame) -> None:  # noqa: ANN001
@@ -323,7 +328,8 @@ class MetricsHandler(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._respond(200, "text/plain", b"ok\n")
         elif self.path in ("/metrics", "/metrics/"):
-            output = generate_latest(REGISTRY)
+            with _metrics_lock:
+                output = generate_latest(REGISTRY)
             self._respond(200, CONTENT_TYPE_LATEST, output)
         else:
             self._respond(404, "text/plain", b"Not Found\n")
@@ -351,7 +357,10 @@ def main() -> None:
     # Register the collector once
     REGISTRY.register(QuestDBCollector())
 
-    server = HTTPServer(("0.0.0.0", EXPORTER_PORT), MetricsHandler)
+    # Threaded so a slow /metrics scrape (many serial QuestDB queries) never blocks
+    # the /health liveness probe — the cause of spurious Docker "unhealthy" flips.
+    server = ThreadingHTTPServer(("0.0.0.0", EXPORTER_PORT), MetricsHandler)
+    server.daemon_threads = True  # don't let in-flight scrapes block shutdown
     server.timeout = 1  # allows the loop below to check _shutdown regularly
 
     logger.info("Listening — GET :%d/metrics  GET :%d/health", EXPORTER_PORT, EXPORTER_PORT)

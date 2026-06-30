@@ -25,7 +25,7 @@
 
 ---
 
-# 🗺️ NEXT PHASES — prioritized plan (synced 2026-06-14)
+# 🗺️ NEXT PHASES — prioritized plan (synced 2026-06-14 · verified 2026-06-18)
 
 > **Read this section first.** It's the master roadmap written after a large
 > live-stack session. Everything *below the next `---`* (the older "Status
@@ -43,8 +43,10 @@
   0.8.1 + drop the TLS workaround (#140) · adapter lockfile (#141) · rustrade
   **0.4** + indicators-ta **0.2.2** (#142).
 - **exchange-apiws:** reqwest shipped with NO TLS backend → fixed + **published
-  0.8.1** (#50). *(main has 2 UNRELEASED commits beyond 0.8.1: `set_margin_mode`
-  + a futures-ws price fix — publish 0.8.2 to use them.)*
+  0.8.1** (#50). *(2026-06-18: `main` now has ~12 UNRELEASED commits beyond 0.8.1 —
+  `set_margin_mode`, a futures-ws price fix, binance + cryptocom typing (#51/#61),
+  and the CI restore (#59). The cryptocom change is breaking → cut **0.9.0**, not
+  0.8.2, to use them downstream.)*
 - **janus:** forward REST (signals + risk) mounted on 8180 for `DEMO_BRAIN=janus`
   (#117) · stamp `entry_price` so the RiskManager can size live entries — the
   execution path was silently disabled (#118) · warm analyzers from Binance
@@ -53,18 +55,51 @@
   fills; janus warms fast, sizes entries, gate built + flag-gated; all crates on
   latest. `EXECUTION_MODE=paper_trading` invariant intact throughout.
 
+### ✅ Verified / shipped 2026-06-18 — do NOT redo
+A verification pass confirmed several items below were already shipped (the
+roadmap had drifted). Confirmed against current `main`:
+- **exchange-apiws CI restored** (#59): hmac 0.13 needed `KeyInit` in scope; the
+  `msrv` job had been Dependabot-bumped to a nonexistent toolchain `1.100.0` →
+  reverted to `1.94.1` + Dependabot `ignore` for `dtolnay/rust-toolchain`.
+- **A2 typing — binance + cryptocom DONE on `main`:** `get_exchange_info` typed
+  (#51); all 10 `cryptocom/private.rs` methods typed off real Exchange-v1 schemas
+  (#61, breaking — numeric fields kept as `String`).
+- **Phase C nginx — DONE, NOT 502:** the `proxy_pass` targets already point at
+  `fks_webui`; only ~11 explanatory *comments* still mention `fks_ruby`. No live
+  route hits a dead service (matches the G4 note far below). The "~74 refs / 502
+  now" claim in Phase C was stale.
+- **Phase E — mostly DONE:** rustcode has `cargo-audit` + `cargo-deny` jobs +
+  `deny.toml`; rustcode `RedisAuditCache` is implemented (the `todo!()` is only a
+  stale comment); exchange-apiws has Dependabot + `cargo-deny` (#53).
+- **fks-full safety (#146):** `run.sh setup-env` no longer generates
+  `ENABLE_EXECUTION=true` against the documented `=false` default.
+- **Still genuinely open (non-blocked):** finish A2 — (a) feed real specs into
+  `bots/rustrade-exchange-apiws/src/kraken.rs` (still hardcodes
+  `tick/lot/min_notional = 0.0` at ~:301); (b) type the 9 remaining untyped
+  `Result<Value>` methods (KuCoin cancels, bybit `get_instruments`/`get_wallet_balance`,
+  kraken `get_ohlc`/`get_recent_trades`/`get_spread`); (c) **publish a release** —
+  `main` now has ~12 unreleased commits beyond 0.8.1 and the cryptocom change is
+  breaking, so cut **0.9.0** (not 0.8.2) → then bump the bot/adapter.
+- **Still blocked on you:** live KuCoin-futures order test (rotate keys first);
+  Phase B ML brain (GPU + champion goldens).
+
 ### Phase A — Live trading real & safe  · *mostly DONE*
 - [x] 9-gate execution gate wired + flag-gated (`JANUS_GATE_ENFORCE`), 37 tests.
 - [x] `entry_price` producer gap (janus #118); warmup-from-history (#119/#120).
-- [ ] **A2 — exchange-apiws instrument typing** (robustness; **P1**). Type the
-      untyped `serde_json::Value` returns so callers get tick/lot/min-notional +
-      precision for order validation & quantity rounding:
-      - `exchange-apiws/src/binance/rest.rs:519 get_exchange_info` → typed.
-      - `exchange-apiws/src/cryptocom/private.rs` (10 methods) → type numeric
-        fields **as `String`** to preserve wire precision (B3/D2).
-      - then feed real specs into `bots/rustrade-exchange-apiws/src/kraken.rs`
-        (today hardcodes `tick_size/lot_size/min_notional = 0.0` at ~:300).
-      - Chain: exchange-apiws code → publish 0.8.2 → bump bot/adapter.
+- [ ] **A2 — exchange-apiws instrument typing** (robustness; **P1**) · *exchange-apiws
+      code mostly DONE; adapter + publish remain*. Type the untyped
+      `serde_json::Value` returns so callers get tick/lot/min-notional + precision
+      for order validation & quantity rounding:
+      - [x] `exchange-apiws/src/binance/rest.rs get_exchange_info` → typed (#51).
+      - [x] `exchange-apiws/src/cryptocom/private.rs` (10 methods) → typed off real
+        Exchange-v1 schemas, numeric fields kept **as `String`** (#61, breaking).
+      - [ ] **9 stragglers still untyped** (`Result<Value>`): KuCoin
+        `cancel_order`/`cancel_all_orders`/`cancel_stop_order`/`cancel_all_stop_orders`,
+        bybit `get_instruments`/`get_wallet_balance`, kraken
+        `get_ohlc`/`get_recent_trades`/`get_spread`.
+      - [ ] then feed real specs into `bots/rustrade-exchange-apiws/src/kraken.rs`
+        (still hardcodes `tick_size/lot_size/min_notional = 0.0` at :301-303).
+      - [ ] Chain: exchange-apiws code → **publish 0.9.0** (breaking) → bump bot/adapter.
       - *DoD:* adapters report real instrument specs; orders rounded to lot/tick
         + checked vs min-notional. *Effort M · Risk low.*
 - [ ] **Gate-enforce end-to-end check** (do during the live-order test): with a
@@ -87,10 +122,12 @@
       `ENABLE_BRAIN_RUNTIME` only if it shows edge. (janus TODO Track B; #59–62
       merged.) *Effort L · Risk M.*
 
-### Phase C — Finish the Ruby-removal cutover  · *fixes today's 502s · P1*
-- [ ] **nginx** still routes ~74 `fks_ruby` refs (`infrastructure/config/nginx/
-      conf.d/*.conf`) → `/`, `/api/*`, `/trading*` **502 now**. Rewrite to janus
-      routes (RUST_MIGRATION §12-C).
+### Phase C — Finish the Ruby-removal cutover  · *P1 (nginx part done)*
+- [x] **nginx** — DONE (verified 2026-06-18). The `proxy_pass` targets already point
+      at `fks_webui`/spawner; only ~11 explanatory *comments* still name `fks_ruby`
+      in `conf.d/*.conf`. No live route hits a dead service → **no 502 from this**.
+      (The earlier "~74 refs / 502 now" was stale; the G4 note far below already
+      recorded the comment-only sweep.)
 - [ ] **WebUI ↔ janus data contract** — `PUBLIC_API_URL`→janus:7000 but janus
       doesn't serve the old Ruby API shape; shape it on janus or adapt the WebUI.
       Test scripts still probe `fks_ruby`.
@@ -108,20 +145,23 @@
 - [ ] Flip `src/web` → `fks-web` repo "when ready". *Effort L · Risk M–H.*
 
 ### Phase E — CI / supply-chain / hygiene  · *cheap, parallelizable*
-- [ ] **rustcode CI-B (security, do first):** add `cargo-audit` + `cargo-deny`
-      (+ optional `gitleaks`) — it clones arbitrary repos and holds
-      `GITHUB_TOKEN`/`ANTHROPIC_API_KEY`/DB creds. (rustcode TODO.)
-- [ ] **rustcode AUDIT-CACHE:** implement the one real stub `src/audit/cache.rs`
-      `RedisAuditCache` (`todo!()`) so audit "skip unchanged files" dedup works.
+- [x] **rustcode CI-B (security):** DONE — `cargo-audit` + `cargo-deny` jobs +
+      `deny.toml` present in rustcode (verified 2026-06-18).
+- [x] **rustcode AUDIT-CACHE:** DONE — `src/audit/cache.rs` `RedisAuditCache` is
+      implemented (#77); the remaining `todo!()` is only a stale *comment* at :18
+      (a 1-line rustcode doc fix, not a real stub).
 - [ ] **rustcode ort/ONNX build block:** `ort-sys` CDN 403s cloud/sandbox IPs →
       `rustcode`+`rag` can't build in CI; biggest CI-health lever (vendor/proxy
-      the ONNX runtime).
-- [ ] exchange-apiws: refresh stale `todo.md` (header v0.5 → actual 0.8.1); add
-      `cargo-deny` / `cargo-semver-checks` / Dependabot (F1/F2/F6).
+      the ONNX runtime). *(still open; the `build`/`docker-build` jobs are
+      `continue-on-error` for this.)*
+- [ ] exchange-apiws: [x] `cargo-deny` + Dependabot added (#53); [ ] refresh stale
+      `todo.md` header + add `cargo-semver-checks` (F2/F6).
 - [ ] Commit `Cargo.lock` where binaries ship (rustcode); keep the janus/bot
       `--locked` discipline (every dep bump needs a lock refresh in **each**
       workspace — the adapter has its own lock, see #141).
-- [ ] Refresh stale docs: the `fks_ruby` items in the old sections of THIS file. *Effort S–M each.*
+- [x] Refresh stale docs: this NEXT-PHASES section reconciled 2026-06-18. *(The
+      older sections below still carry stale `fks_ruby` refs — superseded by this
+      section; low priority.)*
 
 ### ⚠️ Standing — your action
 - [ ] **Rotate the KuCoin + Kraken API keys** — they were printed in the
@@ -129,10 +169,13 @@
       `fks-full/.env`: `KUCOIN_API_KEY/SECRET/PASSPHRASE` + `KRAKEN_API_KEY/SECRET`
       (compose bridges KuCoin → the bot's `KC_*`).
 
-### Recommended order for a fresh session
-**E** (quick security/hygiene, esp. rustcode CI-B) ‖ **A2** (finish Phase A) →
-**C** (kill the 502s, user-visible) → **B** (when goldens exist) → **D** (last).
-Live KuCoin order test whenever ready (**rotate keys first**).
+### Recommended order for a fresh session  *(updated 2026-06-18)*
+Most of **C** and **E** are now done (see the verified-2026-06-18 block above).
+The genuinely-remaining non-blocked work: **finish A2** — type the 9 straggler
+`Result<Value>` methods, feed real specs into the kraken adapter, then **cut
+exchange-apiws 0.9.0** (breaking) and bump the bot. Then **B** (when goldens +
+GPU exist, your action) → **D** (split-to-private, last). Live KuCoin order test
+whenever ready (**rotate keys first**).
 
 ### Ops quick-reference
 - Rebuild janus from local source (no push): `docker build --target workspace -f
@@ -187,23 +230,31 @@ presets, saved configs, per-bot CPU/mem/uptime, SSE log viewer (F1); risk panel 
 save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
 
 **Remaining — live-stack / janus-side (not runnable in the CI sandbox):**
-- [~] **B1** — verify janus writes Binance candles → QuestDB `candles_crypto`.
+- [x] **B1** — janus writes Binance candles → QuestDB `candles_crypto`.
       *Code-traced 2026-06-10: the deployed unified binary published klines only
       to the in-process bus — nothing wrote `candles_crypto` (the writer lived in
       the standalone factory binary the container doesn't run). Fixed janus-side:
       janus PR #106 adds a bus-subscribed candle sink (`DATA_PERSIST_CANDLES`,
-      default on). Remaining: rebuild at a `JANUS_REF` with #106, confirm rows +
-      `/bars/:sym/candles` end-to-end. ⚠️ janus boots in STANDBY — ingestion
-      (and therefore the sink) only runs after `POST /api/services/start`
-      (`scripts/testing/paper-trading/deploy.sh` issues it) or with
-      `JANUS_AUTO_START=true`.*
-- [~] **D1 activate** — the janus bars SSE endpoint now exists
+      default on).* **✅ Verified 2026-06-14** on a full local stack built from
+      `janus@main`: with `JANUS_AUTO_START=true` the data module connects 10 Binance
+      kline WS streams and the sink flushes each closed 1m candle to QuestDB over ILP
+      — `candles_crypto` confirmed growing (1k+ rows, real OHLCV). janus still boots
+      in STANDBY by default; ingestion (and the sink) run only after
+      `POST /api/services/start` or `JANUS_AUTO_START=true` (now set in `.env`).
+- [x] **D1 activate** — the janus bars SSE endpoint now exists
       (`GET /sse/bars/{symbol}?interval=1m`, `event: bar` frames — janus PR #106)
       and compose passes `JANUS_BARS_SSE_URL` through to the webui (empty default
-      = idle stub). After the image rebuild, activate with
-      `JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars` in `.env`.
-- [ ] **F2 run** — `scripts/testing/f2-keyless-spawn-smoke.sh` against a running
-      stack (needs the Docker daemon, absent in CI).
+      = idle stub). **✅ Activated 2026-06-14**: set
+      `JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars` in `.env`; the endpoint
+      serves `content-type: text/event-stream` (HTTP 200) and the webui is wired to it.
+- [x] **F2 run** — `scripts/testing/f2-keyless-spawn-smoke.sh` against a running
+      stack. **✅ Passed 2026-06-14**: keyless paper bot spawned on `fks_fks-network`,
+      reached `running`, connected to the janus brain, ran rustrade candle-pollers +
+      emitted `fks_bot_*` (paper/mock — no live-order path). Fixed two latent bugs en
+      route: the spawner's `ALLOWED_NETWORK` resolved to a non-existent `fks_network`
+      (real name is `fks_fks-network`), and the webui candle query selected a
+      non-existent `ts` column (janus's sink writes `timestamp`) → charts were
+      silently empty despite B1 data.
 - [ ] **G3 run** — run the reconciled Playwright suite vs. a dev/preview server
       (needs the browser download, blocked in CI; `--list` enumerates 84 clean).
 

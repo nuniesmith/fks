@@ -9,7 +9,7 @@
 |---|---|
 | **Container** | `fks_bot_spawner` (image `nuniesmith/fks:spawner`) |
 | **Port (host)** | `127.0.0.1:8090` |
-| **Reverse proxy** | `https://desktop.tailfef10.ts.net/api/bots/*` |
+| **Reverse proxy** | `https://<your-tailnet-host>.ts.net/api/bots/*` |
 | **Status** | 0.1 — HTTP API + DB persistence + Prometheus SD complete |
 
 ---

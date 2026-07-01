@@ -350,6 +350,11 @@ services:
             - BRAIN_HEARTBEAT_MS=${BRAIN_HEARTBEAT_MS:-5000}
             - BRAIN_WATCHDOG_CHECK_INTERVAL_MS=${BRAIN_WATCHDOG_CHECK_INTERVAL_MS:-5000}
             - BRAIN_WATCHDOG_DEAD_THRESHOLD=${BRAIN_WATCHDOG_DEAD_THRESHOLD:-10}
+            # Bearer token protecting the brain kill-switch / affinity-reset
+            # endpoints. UNSET = fail-OPEN (those endpoints are unauthenticated).
+            # Set BRAIN_API_TOKEN in .env to require auth. Empty default keeps
+            # current behaviour so this passthrough is a no-op until you opt in.
+            - BRAIN_API_TOKEN=${BRAIN_API_TOKEN:-}
             - RUST_LOG=info,janus=debug,sqlx=debug,janus_backward=debug
             - RUST_BACKTRACE=1
             - JANUS_CONFIG_PATH=/app/config/janus.toml
@@ -396,7 +401,7 @@ services:
             - "127.0.0.1:7000:8080" # HTTP API (main janus_api)
             - "127.0.0.1:7001:8180" # Forward REST API (brain health, affinity endpoints)
             - "127.0.0.1:7002:50052" # PositionFeedback gRPC
-            - "127.0.0.1:9092:9092" # Optimizer metrics
+            - "127.0.0.1:9092:9090" # Unified /metrics (brain+signals+optimizer live on container :9090; Prometheus scrapes janus:9090)
         tmpfs:
             - /tmp
             - /var/tmp

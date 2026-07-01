@@ -521,6 +521,18 @@ EOF
         needs_update=true
     fi
 
+    # --- Docker group GID auto-detect (the spawner's group_add uses it to reach
+    #     /var/run/docker.sock; the compose default is host-specific and often wrong) ---
+    if [ -z "$(_env_get DOCKER_GID)" ]; then
+        local detected_gid=""
+        detected_gid=$(getent group docker 2>/dev/null | cut -d: -f3 || true)
+        if [ -n "$detected_gid" ]; then
+            _env_set DOCKER_GID "$detected_gid"
+            warn "Set DOCKER_GID=$detected_gid (host docker group gid — spawner group_add)"
+            needs_update=true
+        fi
+    fi
+
     for webhook_key in DISCORD_WEBHOOK_ANALYSIS DISCORD_WEBHOOK_GENERAL DISCORD_WEBHOOK_SIGNALS DISCORD_BOT_TOKEN; do
         if ! grep -q "^${webhook_key}=" "$env_file"; then
             echo "${webhook_key}=" >> "$env_file"

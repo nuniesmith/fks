@@ -207,12 +207,19 @@ groups:
           description: "Redis has evicted {{ $value }} keys in the last 5 minutes due to memory pressure"
 
       - alert: RedisLowHitRatio
+        # $value must bind to the ratio, not the request count: PromQL `A and B`
+        # returns A's value, so the percentage has to be the LEFT operand. The old
+        # expr put the count-guard first, so the description rendered "3104%" (the
+        # raw lifetime request count) instead of a ratio. rate() over the counters
+        # also reflects recent behaviour rather than a since-boot average that
+        # never dips on a long-lived Redis.
         expr: |
-          (redis_keyspace_hits_total + redis_keyspace_misses_total) > 1000
+          100 * (
+            rate(redis_keyspace_hits_total[5m])
+            / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
+          ) < 80
           and
-          redis_keyspace_hits_total
-          / (redis_keyspace_hits_total + redis_keyspace_misses_total + 1)
-          < 0.8
+          (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) > 1
         for: 15m
         labels:
           severity: warning

@@ -80,8 +80,16 @@ groups:
                 runbook_url: "https://docs.fks.io/runbooks/indicator-rate-drop"
 
           - alert: NoIndicatorPairsTracked
+            # `and max_over_time(...) > 0` guard: the IndicatorActor is not
+            # instantiated in the unified janus binary's live path (services/data
+            # run_live_mode spawns ingestion only; the Router→IndicatorActor
+            # pipeline that sets this gauge is legacy standalone-binary code), so
+            # data_factory_indicator_pairs_tracked is a hard zero here. Only alert
+            # on a genuine drop-to-zero (was tracking pairs in the last hour, now
+            # 0); this stays dormant until the actor is wired into the live path.
             expr: |
                 data_factory_indicator_pairs_tracked == 0
+                and max_over_time(data_factory_indicator_pairs_tracked[1h]) > 0
             for: 5m
             labels:
                 severity: warning

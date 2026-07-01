@@ -3,11 +3,16 @@ groups:
     interval: 30s
     rules:
       - alert: DataCompletenessLow
-        expr: data_completeness_percent < 99.9
-        # Extended from 5m → 1h: this metric starts at 0 on every Janus
-        # restart and rises as the backward module persists signal data.
-        # A 5m window fires immediately on every restart; 1h gives the
-        # system time to accumulate historical data before alerting.
+        # `> 0 and` guard: data_completeness_percent is currently UNWIRED in the
+        # unified janus binary — the SLI producer (services/data completeness /
+        # gap-detection calc) is not active in the live ingestion path, so the
+        # gauge sits at its hard-zero default (a `set()` exists but has no
+        # production caller: services/data/src/metrics/prometheus_exporter.rs
+        # update_data_completeness). The guard suppresses that false zero while
+        # still catching a genuine dip once the metric is wired. (The earlier
+        # "rises as the backward module persists" note was wrong — this is a
+        # services/data ingestion SLI, unrelated to the backward module.)
+        expr: data_completeness_percent > 0 and data_completeness_percent < 99.9
         for: 1h
         labels:
           severity: critical
@@ -121,7 +126,12 @@ groups:
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-rate-limiter"
 
       - alert: GapDetectionAccuracyLow
-        expr: gap_detection_accuracy_percent < 99.0
+        # `> 0 and` guard: gap_detection_accuracy_percent is UNWIRED — no producer
+        # computes an accuracy figure in the live path (the gap-detection crate
+        # has no false-positive/ground-truth concept; the gauge's setter has only
+        # example callers), so it stays at its hard-zero default. Guard suppresses
+        # the false zero; a real accuracy value would still trip this once wired.
+        expr: gap_detection_accuracy_percent > 0 and gap_detection_accuracy_percent < 99.0
         for: 10m
         labels:
           severity: warning

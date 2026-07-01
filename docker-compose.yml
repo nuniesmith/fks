@@ -442,7 +442,10 @@ services:
             dockerfile: infrastructure/docker/base/nodejs/Dockerfile
             args:
                 APP_SRC: src/web
-                REPO_URL: ${WEB_REPO:-}
+                # Default to cloning the standalone fks-web repo (same pattern as
+                # janus's JANUS_REPO). The in-tree src/web copy is only used when
+                # WEB_REPO is overridden to empty (dev convenience).
+                REPO_URL: ${WEB_REPO:-https://github.com/nuniesmith/fks-web}
                 REPO_REF: ${WEB_REF:-main}
         container_name: fks_webui
         restart: unless-stopped

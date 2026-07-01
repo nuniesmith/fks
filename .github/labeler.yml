@@ -343,7 +343,6 @@ kmp:
 frontend:
   - changed-files:
       - any-glob-to-any-file:
-          - "src/web/**/*"
           - "src/kotlin/composeApp/**/*"
           - "src/kotlin/shared/**/*"
 

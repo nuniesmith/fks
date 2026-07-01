@@ -921,6 +921,13 @@ services:
             - PG_EXPORTER_DISABLE_DEFAULT_METRICS=false
             - PG_EXPORTER_DISABLE_SETTINGS_METRICS=false
             - PG_EXPORTER_AUTO_DISCOVER_DATABASES=false
+        # Override the image's default CMD (--extend.query-path=queries.yaml). That
+        # DEPRECATED custom-queries file redefines pg_stat_user_tables / pg_locks with
+        # different help text than the always-on built-in collectors, so /metrics 500s
+        # with 100+ "help text collision" errors and the Prometheus `postgres` target
+        # goes DOWN. The built-in collectors cover the standard pg_stat_* metrics; this
+        # flag is a harmless explicit default that just drops the --extend.query-path.
+        command: ["--web.listen-address=:9187"]
         ports:
             - "127.0.0.1:9187:9187"
         networks:

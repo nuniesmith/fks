@@ -162,6 +162,71 @@ async fn spawn_handler(
         .unwrap_or(&req.image)
         .to_string();
 
+    // ── Spawn-time secrets injection ────────────────────────────────────────
+    // `secrets: ["kraken", …]` injects that exchange's stored credentials as
+    // {EXCHANGE}_API_KEY / _API_SECRET (+ _API_PASSPHRASE when stored) — the
+    // env names the crypto bots read. Fails the spawn loudly when the DB is
+    // unavailable or an exchange has no stored credentials: a bot that asked
+    // for keys must never silently start keyless. Explicit request `env`
+    // entries win over injected ones (documented on SpawnRequest).
+    #[cfg(not(feature = "db"))]
+    if !req.secrets.is_empty() {
+        return Err(SpawnerError::InvalidRequest(
+            "secrets injection requires the db feature (stateless build)".to_string(),
+        ));
+    }
+    #[cfg(feature = "db")]
+    let req = {
+        let mut req = req;
+        if !req.secrets.is_empty() {
+            if req.secrets.len() > 10 {
+                return Err(SpawnerError::InvalidRequest(
+                    "too many secrets requested (max 10 exchanges)".to_string(),
+                ));
+            }
+            let Some(store) = state.store.as_ref() else {
+                return Err(SpawnerError::InvalidRequest(
+                    "secrets injection requires the spawner Postgres DB (not configured)"
+                        .to_string(),
+                ));
+            };
+            for exchange in &req.secrets {
+                let ex = exchange.trim().to_lowercase();
+                if ex.is_empty()
+                    || ex.len() > 32
+                    || !ex
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+                {
+                    return Err(SpawnerError::InvalidRequest(format!(
+                        "invalid exchange name in secrets: '{exchange}'"
+                    )));
+                }
+                let Some(creds) = store.get_secret(&ex).await? else {
+                    return Err(SpawnerError::InvalidRequest(format!(
+                        "no stored credentials for exchange '{ex}' — submit them via \
+                         POST /secrets first"
+                    )));
+                };
+                let prefix = ex.to_uppercase().replace('-', "_");
+                req.env
+                    .entry(format!("{prefix}_API_KEY"))
+                    .or_insert(creds.api_key);
+                req.env
+                    .entry(format!("{prefix}_API_SECRET"))
+                    .or_insert(creds.api_secret);
+                if let Some(passphrase) = creds.api_passphrase {
+                    req.env
+                        .entry(format!("{prefix}_API_PASSPHRASE"))
+                        .or_insert(passphrase);
+                }
+                // Log only the exchange — never the credential values.
+                info!(exchange = %ex, "injecting stored exchange credentials into spawn env");
+            }
+        }
+        req
+    };
+
     let resp = state.docker.spawn(req).await.map_err(|e| {
         metrics::SPAWN_ERRORS_TOTAL.inc();
         warn!(error = %e, "spawn failed");

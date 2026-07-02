@@ -42,6 +42,15 @@ use crate::error::SpawnerError;
 use crate::models::ConfigRequest;
 use crate::secrets_crypto::SecretsCipher;
 
+/// One exchange's decrypted API credentials, as fetched by
+/// [`BotRunStore::get_secret`] for spawn-time env injection. Never serialized
+/// or logged — values flow only into the spawned container's env.
+pub struct ExchangeCredentials {
+    pub api_key: String,
+    pub api_secret: String,
+    pub api_passphrase: Option<String>,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // BotRunStore — thin wrapper around a sqlx PgPool. Scoped to bot_runs ops plus
 // the exchange_secrets credential store (003_secrets.sql); both share the pool.
@@ -289,15 +298,42 @@ impl BotRunStore {
         Ok(())
     }
 
-    /// Decrypt one stored credential value (for the future spawn-time env
-    /// injection path). Legacy plaintext rows pass through unchanged; an
-    /// encrypted value with a missing/wrong key is an error, never returned
-    /// as-is.
-    #[allow(dead_code)] // consumed by the Phase-2 spawn-time injection path
+    /// Decrypt one stored credential value. Legacy plaintext rows pass
+    /// through unchanged; an encrypted value with a missing/wrong key is an
+    /// error, never returned as-is.
     pub fn decrypt_secret(&self, stored: &str) -> Result<String, SpawnerError> {
         self.cipher
             .decrypt(stored)
             .map_err(|e| SpawnerError::Other(format!("secret decryption failed: {e}")))
+    }
+
+    /// Fetch + decrypt one exchange's stored credentials for spawn-time env
+    /// injection. `Ok(None)` = no row stored for that exchange.
+    pub async fn get_secret(
+        &self,
+        exchange: &str,
+    ) -> Result<Option<ExchangeCredentials>, SpawnerError> {
+        let row = sqlx::query(
+            "SELECT api_key, api_secret, api_passphrase \
+             FROM exchange_secrets WHERE exchange = $1",
+        )
+        .bind(exchange)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        let Some(row) = row else { return Ok(None) };
+        let api_key: String = row.get("api_key");
+        let api_secret: String = row.get("api_secret");
+        let api_passphrase: Option<String> = row.get("api_passphrase");
+
+        Ok(Some(ExchangeCredentials {
+            api_key: self.decrypt_secret(&api_key)?,
+            api_secret: self.decrypt_secret(&api_secret)?,
+            api_passphrase: api_passphrase
+                .map(|p| self.decrypt_secret(&p))
+                .transpose()?,
+        }))
     }
 
     /// Which exchanges have credentials stored — newest update first. Returns

@@ -878,6 +878,7 @@ mod tests {
             memory_limit_mb: None,
             cmd: None,
             entrypoint: None,
+            secrets: vec![],
         }
     }
 

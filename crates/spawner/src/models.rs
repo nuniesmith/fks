@@ -43,6 +43,15 @@ pub struct SpawnRequest {
 
     /// Optional entrypoint override.
     pub entrypoint: Option<Vec<String>>,
+
+    /// Exchanges whose stored credentials (POST /secrets) are injected into
+    /// the container env as `{EXCHANGE}_API_KEY` / `{EXCHANGE}_API_SECRET`
+    /// (+ `_API_PASSPHRASE` when stored) — the names the crypto bots read.
+    /// Requires the spawner DB; the spawn FAILS if any requested exchange has
+    /// no stored credentials (never silently start a keyless bot that asked
+    /// for keys). Explicit `env` entries win over injected ones.
+    #[serde(default)]
+    pub secrets: Vec<String>,
 }
 
 fn default_mode() -> String {

@@ -518,7 +518,7 @@
           "refId": "A"
         }
       ],
-      "title": "Messages by Exchange",
+      "title": "WebSocket Reconnections by Exchange",
       "type": "timeseries"
     },
     {
@@ -676,7 +676,7 @@
           "refId": "A"
         },
         {
-          "expr": "rate(questdb_write_errors_total[5m])",
+          "expr": "rate(questdb_unhandled_errors_total[5m])",
           "legendFormat": "Write Errors",
           "refId": "B"
         }

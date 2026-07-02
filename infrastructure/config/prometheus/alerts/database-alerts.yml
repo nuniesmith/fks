@@ -23,10 +23,12 @@ groups:
           description: "PostgreSQL instance {{ $labels.instance }} has been down for more than 3 minutes."
 
       - alert: PostgresHighConnections
+        # Scaled to a real percentage (*100, threshold 0.8 -> 80) so $value
+        # renders as "80.0%" instead of "0.8%".
         expr: |
           sum by (instance) (pg_stat_activity_count{state="active"})
           / on (instance)
-          pg_settings_max_connections > 0.8
+          pg_settings_max_connections * 100 > 80
         for: 5m
         labels:
           severity: warning
@@ -36,10 +38,12 @@ groups:
           description: 'PostgreSQL connection usage is above 80% (current: {{ $value | printf "%.1f" }}%)'
 
       - alert: PostgresTooManyConnections
+        # Scaled to a real percentage (*100, threshold 0.95 -> 95) so $value
+        # renders as a percent.
         expr: |
           sum by (instance) (pg_stat_activity_count)
           / on (instance)
-          pg_settings_max_connections > 0.95
+          pg_settings_max_connections * 100 > 95
         for: 2m
         labels:
           severity: critical
@@ -69,7 +73,10 @@ groups:
           description: 'A query has been running for more than 5 minutes ({{ $value | printf "%.0f" }}s)'
 
       - alert: PostgresReplicationLag
-        expr: pg_replication_lag > 30
+        # Repointed: pg_replication_lag is not an exported name; the exporter
+        # emits pg_replication_lag_seconds. (Single-node today, so this stays
+        # silent until a replica exists — but now it CAN fire.)
+        expr: pg_replication_lag_seconds > 30
         for: 2m
         labels:
           severity: warning
@@ -127,8 +134,11 @@ groups:
           description: "{{ $value }} connections are idle in transaction for more than 5 minutes"
 
       - alert: PostgresNoSignalsPersisted
+        # Repointed: fks_signals_total was never exported; the live signal
+        # counter is janus_signals_generated_total (summed across its
+        # signal_type/symbol labels so one quiet symbol can't false-fire).
         expr: |
-          increase(fks_signals_total[1h]) == 0
+          sum(increase(janus_signals_generated_total[1h])) == 0
           and
           up{job="postgres"} == 1
         for: 1h
@@ -155,8 +165,12 @@ groups:
           description: "Redis instance {{ $labels.instance }} has been down for more than 3 minutes."
 
       - alert: RedisHighMemoryUsage
+        # Guard: with maxmemory unset, redis_memory_max_bytes is 0 and the
+        # ratio is +Inf — a permanent false-fire. (Percentage stays the left
+        # operand of `and` so $value renders as the percent.)
         expr: |
           redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+          and redis_memory_max_bytes > 0
         for: 5m
         labels:
           severity: warning
@@ -166,8 +180,10 @@ groups:
           description: 'Redis is using {{ $value | printf "%.1f" }}% of maximum configured memory'
 
       - alert: RedisCriticalMemoryUsage
+        # Guard: same maxmemory=0 -> +Inf false-fire protection as above.
         expr: |
           redis_memory_used_bytes / redis_memory_max_bytes * 100 > 95
+          and redis_memory_max_bytes > 0
         for: 2m
         labels:
           severity: critical
@@ -283,21 +299,16 @@ groups:
           summary: "QuestDB is down"
           description: "QuestDB instance {{ $labels.instance }} has been down for more than 3 minutes."
 
-      - alert: QuestDBHighQueryLatency
-        expr: |
-          rate(questdb_query_duration_seconds_sum[5m])
-          / rate(questdb_query_duration_seconds_count[5m])
-          > 1
-        for: 5m
-        labels:
-          severity: warning
-          service: questdb
-        annotations:
-          summary: "QuestDB high query latency"
-          description: 'QuestDB average query latency is {{ $value | printf "%.2f" }}s'
+      # Removed QuestDBHighQueryLatency (2026-07-01): QuestDB exports no
+      # query-duration histogram under any name — the expr could never
+      # evaluate. Restore if/when a latency histogram exists.
 
       - alert: QuestDBHighMemoryUsage
-        expr: questdb_memory_jvm_used_bytes / questdb_memory_jvm_max_bytes * 100 > 85
+        # Repointed: questdb_memory_jvm_used_bytes/_max_bytes are not exported
+        # names; compute usage from the real questdb_memory_jvm_free/total/max.
+        expr: |
+          (questdb_memory_jvm_total - questdb_memory_jvm_free)
+          / questdb_memory_jvm_max * 100 > 85
         for: 10m
         labels:
           severity: warning
@@ -307,10 +318,12 @@ groups:
           description: 'QuestDB JVM memory usage is {{ $value | printf "%.1f" }}%'
 
       - alert: QuestDBIngestionStalled
+        # Repointed: questdb_line_tcp_messages_total is not an exported name;
+        # questdb_committed_rows_total is the live ingest counter.
         expr: |
-          rate(questdb_line_tcp_messages_total[5m]) == 0
+          rate(questdb_committed_rows_total[5m]) == 0
           and
-          questdb_line_tcp_messages_total > 0
+          questdb_committed_rows_total > 0
         for: 10m
         labels:
           severity: warning
@@ -320,7 +333,9 @@ groups:
           description: "No data has been ingested via line protocol in the last 10 minutes"
 
       - alert: QuestDBHttpErrors
-        expr: increase(questdb_http_errors_total[5m]) > 10
+        # Repointed: questdb_http_errors_total is not an exported name;
+        # questdb_unhandled_errors_total is the live error counter.
+        expr: increase(questdb_unhandled_errors_total[5m]) > 10
         for: 5m
         labels:
           severity: warning

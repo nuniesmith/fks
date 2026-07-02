@@ -37,17 +37,10 @@ groups:
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-latency-high.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-slo-error-budget"
 
-      - alert: CircuitBreakerOpen
-        expr: circuit_breaker_state == 1
-        for: 1m
-        labels:
-          severity: critical
-          component: rate-limiter
-        annotations:
-          summary: "Circuit breaker is OPEN - traffic blocked"
-          description: "The circuit breaker has opened due to repeated failures. All requests are being rejected to prevent cascading failures."
-          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/circuit-breaker-open.md"
-          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-rate-limiter"
+      # Removed CircuitBreakerOpen (2026-07-01): circuit_breaker_state is
+      # never exported — the rate-limiter/circuit-breaker subsystem is not
+      # wired in the unified janus binary (the only sibling metric,
+      # janus_supervisor_circuit_breaker_trips_total, is unrelated).
 
       - alert: DiskUsageHigh
         expr: questdb_disk_usage_percent > 80
@@ -113,17 +106,8 @@ groups:
           description: "Data completeness is {{ $value | humanizePercentage }} (warning: <99.95%). Investigate potential gaps."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
 
-      - alert: HighRateLimitRejectionRate
-        expr: 100 * rate(rate_limiter_rejected_requests[5m]) / rate(rate_limiter_total_requests[5m]) > 10
-        for: 5m
-        labels:
-          severity: warning
-          component: rate-limiter
-        annotations:
-          summary: "High rate of rate-limited requests"
-          description: "{{ $value | humanizePercentage }} of requests are being rate-limited (threshold: 10%). Consider adjusting limits or investigating traffic patterns."
-          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-rate-limit-rejection.md"
-          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-rate-limiter"
+      # Removed HighRateLimitRejectionRate (2026-07-01): no rate_limiter_*
+      # metrics are exported (subsystem not wired in the unified binary).
 
       - alert: GapDetectionAccuracyLow
         # `> 0 and` guard: gap_detection_accuracy_percent is UNWIRED — no producer
@@ -190,7 +174,9 @@ groups:
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
 
       - alert: QuestDBWriteErrors
-        expr: rate(questdb_write_errors_total[5m]) > 0.1
+        # Repointed: questdb_write_errors_total is not an exported name;
+        # questdb_unhandled_errors_total is the live error counter.
+        expr: rate(questdb_unhandled_errors_total[5m]) > 0.1
         for: 5m
         labels:
           severity: warning
@@ -204,19 +190,13 @@ groups:
   - name: data_factory_info
     interval: 1m
     rules:
-      - alert: CircuitBreakerHalfOpen
-        expr: circuit_breaker_state == 2
-        for: 30s
-        labels:
-          severity: info
-          component: rate-limiter
-        annotations:
-          summary: "Circuit breaker is HALF-OPEN - testing recovery"
-          description: "The circuit breaker is in half-open state, allowing test traffic to check if the issue has resolved."
-          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-rate-limiter"
+      # Removed CircuitBreakerHalfOpen (2026-07-01): same unwired
+      # circuit_breaker_state metric as CircuitBreakerOpen above.
 
       - alert: DataFactoryRestarted
-        expr: changes(up{job="data-factory"}[5m]) > 0
+        # Repointed: job="data-factory" matched no scrape target (the Python
+        # data service was removed; janus is the data factory now).
+        expr: changes(up{job="fks-janus"}[5m]) > 0
         for: 30s
         labels:
           severity: info
@@ -288,17 +268,10 @@ groups:
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/backfill-max-retries.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
 
-      - alert: BackfillDurationHigh
-        expr: histogram_quantile(0.95, rate(backfill_duration_seconds_bucket[10m])) > 300
-        for: 10m
-        labels:
-          severity: warning
-          component: backfill
-        annotations:
-          summary: "Backfill duration p95 elevated"
-          description: "p95 backfill duration is {{ $value | humanizeDuration }} (threshold: 5m). Backfills taking longer than expected."
-          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/slow-backfills.md"
-          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+      # Removed BackfillDurationHigh (2026-07-01): the
+      # backfill_duration_seconds histogram is never instrumented (histograms
+      # need explicit registration, unlike lazy counters) — no data to
+      # evaluate. Restore once the histogram is wired.
 
       - alert: BackfillThrottleRejectionHigh
         expr: rate(backfill_throttle_rejections_total[5m]) > 1
@@ -311,17 +284,9 @@ groups:
           description: "{{ $value }} backfills/sec are being throttled due to {{ $labels.reason }}. Resources may be constrained."
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
 
-      - alert: BackfillLockContentionHigh
-        expr: 100 * (rate(backfill_lock_failed_total[5m]) / rate(backfill_lock_acquired_total[5m])) > 30
-        for: 10m
-        labels:
-          severity: warning
-          component: backfill
-        annotations:
-          summary: "High backfill lock contention"
-          description: "{{ $value | humanizePercentage }} of lock attempts are failing (threshold: 30%). Multiple instances may be competing for same gaps."
-          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/lock-contention.md"
-          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
+      # Removed BackfillLockContentionHigh (2026-07-01): neither
+      # backfill_lock_failed_total nor backfill_lock_acquired_total is
+      # exported — the distributed-lock counters are not instrumented.
 
   - name: performance_slo
     interval: 30s
@@ -351,20 +316,14 @@ groups:
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/low-throughput.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
 
-      - alert: QuestDBWriteLatencyHigh
-        expr: histogram_quantile(0.95, rate(questdb_write_latency_seconds_bucket[5m])) > 1
-        for: 10m
-        labels:
-          severity: warning
-          component: questdb
-        annotations:
-          summary: "QuestDB write latency elevated"
-          description: "p95 QuestDB write latency is {{ $value | humanizeDuration }} (threshold: 1s). Database may be slow."
-          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/questdb-slow-writes.md"
-          dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
+      # Removed QuestDBWriteLatencyHigh (2026-07-01): the
+      # questdb_write_latency_seconds histogram is never instrumented
+      # (questdb_writes_total exists, but no latency buckets).
 
       - alert: QuestDBWriteErrorRateHigh
-        expr: 100 * (rate(questdb_write_errors_total[5m]) / rate(questdb_writes_total[5m])) > 1
+        # Repointed numerator: questdb_write_errors_total is not an exported
+        # name; questdb_unhandled_errors_total is the live error counter.
+        expr: 100 * (rate(questdb_unhandled_errors_total[5m]) / rate(questdb_writes_total[5m])) > 1
         for: 5m
         labels:
           severity: critical

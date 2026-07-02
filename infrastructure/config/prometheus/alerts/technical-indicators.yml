@@ -7,31 +7,12 @@ groups:
           # ========================================================================
           # CRITICAL - Indicator calculation failures
           # ========================================================================
-
-          - alert: IndicatorCalculationHalted
-            expr: |
-                sum(rate(data_factory_indicators_calculated_total[5m])) == 0
-                and sum(rate(data_factory_trades_ingested_total[5m])) > 0
-            for: 5m
-            labels:
-                severity: critical
-                component: indicator-actor
-            annotations:
-                summary: "Indicator calculations have stopped"
-                description: "No indicator calculations in the last 5 minutes despite active trade ingestion. The IndicatorActor may have crashed or the Router is not forwarding candles."
-                runbook_url: "https://docs.fks.io/runbooks/indicator-calculation-halted"
-
-          - alert: IndicatorCalculationLatencyHigh
-            expr: |
-                histogram_quantile(0.99, rate(data_factory_indicator_calculation_duration_seconds_bucket[5m])) > 0.1
-            for: 5m
-            labels:
-                severity: critical
-                component: indicator-actor
-            annotations:
-                summary: "Indicator calculation latency is critically high"
-                description: 'p99 indicator calculation latency is {{ $value | printf "%.3f" }}s, exceeding 100ms threshold. This may cause signal delays.'
-                runbook_url: "https://docs.fks.io/runbooks/indicator-latency-high"
+          # Removed IndicatorCalculationHalted + IndicatorCalculationLatencyHigh
+          # (2026-07-01): data_factory_indicators_calculated_total /
+          # data_factory_trades_ingested_total / the calculation-duration
+          # histogram are set only by the IndicatorActor pipeline, which is not
+          # instantiated in the unified janus binary's live path — the metrics
+          # are never exported, so these alerts could never evaluate.
 
           # ========================================================================
           # WARNING - Performance degradation
@@ -51,33 +32,9 @@ groups:
                 description: "Indicator warmup has {{ $value }} candles but hasn't progressed in 30 minutes. Indicators require 200 candles for full warmup (EMA-200)."
                 runbook_url: "https://docs.fks.io/runbooks/indicator-warmup-stalled"
 
-          - alert: IndicatorCalculationLatencyElevated
-            expr: |
-                histogram_quantile(0.95, rate(data_factory_indicator_calculation_duration_seconds_bucket[5m])) > 0.01
-            for: 10m
-            labels:
-                severity: warning
-                component: indicator-actor
-            annotations:
-                summary: "Indicator calculation latency is elevated"
-                description: 'p95 indicator calculation latency is {{ $value | printf "%.4f" }}s, exceeding 10ms threshold.'
-                runbook_url: "https://docs.fks.io/runbooks/indicator-latency-elevated"
-
-          - alert: IndicatorCalculationRateDrop
-            expr: |
-                (
-                  rate(data_factory_indicators_calculated_total[5m])
-                  / rate(data_factory_indicators_calculated_total[1h] offset 5m)
-                ) < 0.5
-                and rate(data_factory_indicators_calculated_total[1h] offset 5m) > 0
-            for: 10m
-            labels:
-                severity: warning
-                component: indicator-actor
-            annotations:
-                summary: "Indicator calculation rate has dropped significantly"
-                description: 'Indicator calculations have dropped to {{ $value | printf "%.0f" }}% of the hourly baseline. Check for candle forwarding issues.'
-                runbook_url: "https://docs.fks.io/runbooks/indicator-rate-drop"
+          # Removed IndicatorCalculationLatencyElevated +
+          # IndicatorCalculationRateDrop (2026-07-01): same never-exported
+          # IndicatorActor metrics as the critical group above.
 
           - alert: NoIndicatorPairsTracked
             # `and max_over_time(...) > 0` guard: the IndicatorActor is not
@@ -142,42 +99,10 @@ groups:
           # ========================================================================
           # SLO / Error Budget Alerts
           # ========================================================================
-
-          - alert: IndicatorSLOBurnRateCritical
-            expr: |
-                (
-                  1 - (
-                    sum(rate(data_factory_indicator_calculation_duration_seconds_bucket{le="0.01"}[5m]))
-                    / sum(rate(data_factory_indicator_calculation_duration_seconds_count[5m]))
-                  )
-                ) > 0.1
-            for: 5m
-            labels:
-                severity: critical
-                component: indicator-actor
-                slo: indicator-latency
-            annotations:
-                summary: "Indicator latency SLO burn rate is critical"
-                description: 'More than 10% of indicator calculations are exceeding the 10ms latency SLO target. Current error rate: {{ $value | printf "%.2f" }}%.'
-                runbook_url: "https://docs.fks.io/runbooks/indicator-slo-burn"
-
-          - alert: IndicatorSLOBurnRateWarning
-            expr: |
-                (
-                  1 - (
-                    sum(rate(data_factory_indicator_calculation_duration_seconds_bucket{le="0.01"}[30m]))
-                    / sum(rate(data_factory_indicator_calculation_duration_seconds_count[30m]))
-                  )
-                ) > 0.05
-            for: 15m
-            labels:
-                severity: warning
-                component: indicator-actor
-                slo: indicator-latency
-            annotations:
-                summary: "Indicator latency SLO burn rate is elevated"
-                description: "More than 5% of indicator calculations are exceeding the 10ms latency SLO target over 30 minutes."
-                runbook_url: "https://docs.fks.io/runbooks/indicator-slo-burn"
+          # Removed IndicatorSLOBurnRateCritical + IndicatorSLOBurnRateWarning
+          # (2026-07-01): the indicator calculation-duration histogram is never
+          # exported in the live path (IndicatorActor not instantiated), so the
+          # burn-rate expressions had no data to evaluate.
 
           # ========================================================================
           # Trading Signal Alerts (from QuestDB indicator values)
@@ -220,17 +145,23 @@ groups:
           # CRITICAL - Signal generation failures
           # ========================================================================
 
+          # Repointed (2026-07-01): data_factory_signals_generated_total was
+          # never exported (SignalActor not instantiated in the live path);
+          # janus_signals_generated_total is the live counter, with labels
+          # signal_type ∈ buy|sell|hold|close, symbol, module. Gated on
+          # trades_ingested_total so standby mode (no data flowing) doesn't
+          # false-fire.
           - alert: SignalGenerationHalted
             expr: |
-                sum(rate(data_factory_signals_generated_total[5m])) == 0
-                and sum(rate(data_factory_indicators_calculated_total[5m])) > 0
+                sum(rate(janus_signals_generated_total[10m])) == 0
+                and sum(rate(trades_ingested_total[10m])) > 0
             for: 10m
             labels:
                 severity: critical
                 component: signal-actor
             annotations:
                 summary: "Signal generation has stopped"
-                description: "No signals generated in the last 10 minutes despite active indicator calculations. The SignalActor may have crashed or failed to subscribe to indicator updates."
+                description: "No signals generated in the last 10 minutes despite active market-data ingestion. The forward signal loop may have crashed or stalled."
                 runbook_url: "https://docs.fks.io/runbooks/signal-generation-halted"
 
           # ========================================================================
@@ -238,8 +169,9 @@ groups:
           # ========================================================================
 
           - alert: UnusuallyHighSignalRate
+            # Repointed to the live janus counter (see note above).
             expr: |
-                sum(rate(data_factory_signals_generated_total[5m])) > 10
+                sum(rate(janus_signals_generated_total[5m])) > 10
             for: 5m
             labels:
                 severity: warning
@@ -249,109 +181,48 @@ groups:
                 description: 'Generating {{ $value | printf "%.1f" }} signals/sec. This may indicate volatile market conditions or a detection bug.'
                 runbook_url: "https://docs.fks.io/runbooks/high-signal-rate"
 
-          - alert: BullishConfluenceDetected
+          # The 8 pattern-specific notification alerts (Bullish/Bearish
+          # confluence, EMA golden/death cross, RSI overbought/oversold, MACD
+          # crosses) were removed 2026-07-01: they matched signal_type values
+          # ("bullish_confluence", "ema_golden_cross", …) that only the
+          # never-instantiated SignalActor emitted. The live counter's
+          # signal_type values are buy|sell|hold|close, so they are collapsed
+          # into the two honest direction notifications below. Restore the
+          # pattern alerts from git history if per-pattern signal metrics ship.
+          - alert: BuySignalGenerated
             expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="bullish_confluence"}[5m])) > 0
-            for: 1m
+                sum by (symbol) (increase(janus_signals_generated_total{signal_type="buy"}[5m])) > 0
+            for: 0m
             labels:
                 severity: info
                 component: signal-actor
                 signal_direction: bullish
             annotations:
-                summary: "Bullish confluence signal detected"
-                description: "Multiple bullish indicators aligned for {{ $labels.symbol }} on {{ $labels.timeframe }} timeframe. Consider long positions."
+                summary: "Buy signal generated for {{ $labels.symbol }}"
+                description: "The janus forward loop generated a buy signal for {{ $labels.symbol }} in the last 5 minutes."
 
-          - alert: BearishConfluenceDetected
+          - alert: SellSignalGenerated
             expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="bearish_confluence"}[5m])) > 0
-            for: 1m
+                sum by (symbol) (increase(janus_signals_generated_total{signal_type="sell"}[5m])) > 0
+            for: 0m
             labels:
                 severity: info
                 component: signal-actor
                 signal_direction: bearish
             annotations:
-                summary: "Bearish confluence signal detected"
-                description: "Multiple bearish indicators aligned for {{ $labels.symbol }} on {{ $labels.timeframe }} timeframe. Consider short positions or exit longs."
-
-          - alert: EmaGoldenCross
-            expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="ema_golden_cross"}[5m])) > 0
-            for: 1m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bullish
-            annotations:
-                summary: "EMA Golden Cross detected"
-                description: "{{ $labels.symbol }} EMA-8 crossed above EMA-21 on {{ $labels.timeframe }} - bullish trend signal."
-
-          - alert: EmaDeathCross
-            expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="ema_death_cross"}[5m])) > 0
-            for: 1m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bearish
-            annotations:
-                summary: "EMA Death Cross detected"
-                description: "{{ $labels.symbol }} EMA-8 crossed below EMA-21 on {{ $labels.timeframe }} - bearish trend signal."
-
-          - alert: RSIOverbought
-            expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="rsi_overbought"}[5m])) > 0
-            for: 1m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bearish
-            annotations:
-                summary: "RSI overbought condition"
-                description: "{{ $labels.symbol }} RSI entered overbought territory (>70) on {{ $labels.timeframe }}."
-
-          - alert: RSIOversold
-            expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="rsi_oversold"}[5m])) > 0
-            for: 1m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bullish
-            annotations:
-                summary: "RSI oversold condition"
-                description: "{{ $labels.symbol }} RSI entered oversold territory (<30) on {{ $labels.timeframe }} - potential bounce opportunity."
-
-          - alert: MacdBullishCross
-            expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="macd_bullish_cross"}[5m])) > 0
-            for: 1m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bullish
-            annotations:
-                summary: "MACD bullish crossover"
-                description: "{{ $labels.symbol }} MACD crossed above signal line on {{ $labels.timeframe }} - momentum turning bullish."
-
-          - alert: MacdBearishCross
-            expr: |
-                sum(rate(data_factory_signals_generated_total{signal_type="macd_bearish_cross"}[5m])) > 0
-            for: 1m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bearish
-            annotations:
-                summary: "MACD bearish crossover"
-                description: "{{ $labels.symbol }} MACD crossed below signal line on {{ $labels.timeframe }} - momentum turning bearish."
+                summary: "Sell signal generated for {{ $labels.symbol }}"
+                description: "The janus forward loop generated a sell signal for {{ $labels.symbol }} in the last 5 minutes."
 
           # ========================================================================
           # Performance / Health
           # ========================================================================
 
           - alert: SignalStorageErrors
+            # Repointed: questdb_write_errors_total{table=...} is not an
+            # exported metric/label; questdb_unhandled_errors_total is the live
+            # error counter (no per-table label available).
             expr: |
-                increase(questdb_write_errors_total{table="signals_crypto"}[5m]) > 0
+                increase(questdb_unhandled_errors_total[5m]) > 0
             for: 5m
             labels:
                 severity: warning

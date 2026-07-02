@@ -958,6 +958,44 @@ services:
                 max-file: "3"
                 labels: "service=postgres-exporter,environment=dev"
 
+    node-exporter:
+        # Host-level metrics (disk/CPU/mem). Added 2026-07-01: the
+        # HostDiskSpaceCritical/Warning alerts key on node_filesystem_* but no
+        # node-exporter was deployed, so the disk-full safety net (which saved
+        # the box on 2026-03-26) could never fire. The host rootfs is mounted
+        # read-only at /host so mountpoint="/" reports the real host disk.
+        image: prom/node-exporter:v1.8.2
+        container_name: fks_node_exporter
+        user: "65534:65534"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        command:
+            - "--path.rootfs=/host"
+            - "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|run/.+)($|/)"
+        volumes:
+            - /:/host:ro,rslave
+        ports:
+            - "127.0.0.1:9100:9100"
+        networks:
+            - fks-network
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.25"
+                    memory: 128m
+                reservations:
+                    cpus: "0.05"
+                    memory: 32m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=node-exporter,environment=dev"
+
     redis-exporter:
         # Binary baked into image via infrastructure/docker/services/redis-exporter/Dockerfile.
         # Rebuild with: docker compose build redis-exporter

@@ -1,0 +1,132 @@
+{
+  "uid": "fks-crypto-bots",
+  "title": "FKS Crypto Bots — Net Worth & PnL",
+  "description": "The crypto bots' fks_bot_* contract metrics (spot portfolio + futures funding). Sources: spawner-managed containers (job=fks-bots) and the transitional systemd bots (job=fks-bots-transitional). Panels stay empty until a bot serves :9091/metrics.",
+  "tags": ["fks", "crypto-bots", "trading"],
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Net worth (all bots)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 }, "overrides": [] },
+      "targets": [{ "expr": "sum(fks_bot_net_worth_usd)", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "PnL since start (all bots)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 2,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0 }] }
+        },
+        "overrides": []
+      },
+      "targets": [{ "expr": "sum(fks_bot_pnl_dollars)", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Avg win rate",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 1 }, "overrides": [] },
+      "targets": [{ "expr": "avg(fks_bot_win_rate)", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Bots reporting",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0 }, "overrides": [] },
+      "targets": [{ "expr": "count(up{job=~\"fks-bots|fks-bots-transitional\"} == 1) OR on() vector(0)", "refId": "A" }]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Net worth over time",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [{ "expr": "fks_bot_net_worth_usd", "legendFormat": "{{bot}}{{container_name}}", "refId": "A" }]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "PnL over time",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [{ "expr": "fks_bot_pnl_dollars", "legendFormat": "{{bot}}{{container_name}}", "refId": "A" }]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Per-exchange total value",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [{ "expr": "sum by (exchange) (fks_bot_exchange_total_usd)", "legendFormat": "{{exchange}}", "refId": "A" }]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Per-exchange cash reserve",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [{ "expr": "sum by (exchange) (fks_bot_exchange_cash_usd)", "legendFormat": "{{exchange}}", "refId": "A" }]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Holdings value by exchange / asset",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [{ "expr": "sum by (exchange, asset) (fks_bot_asset_value_usd)", "legendFormat": "{{exchange}}/{{asset}}", "refId": "A" }]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Open position returns (%)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [{ "expr": "fks_bot_position_return_pct", "legendFormat": "{{symbol}}", "refId": "A" }]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Signals & trades (1h windows)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(increase(fks_bot_signals_total[1h]))", "legendFormat": "signals (1h)", "refId": "A" },
+        { "expr": "sum(increase(fks_bot_trades_total[1h]))", "legendFormat": "trades (1h)", "refId": "B" }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Win rate by bot",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1 }, "overrides": [] },
+      "targets": [{ "expr": "fks_bot_win_rate", "legendFormat": "{{bot}}{{container_name}}", "refId": "A" }]
+    }
+  ]
+}

@@ -49,49 +49,19 @@ groups:
                 runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-halted.md"
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
-          # ------------------------------------------------------------------
-          # ILP Buffer Overflow Imminent
-          # ------------------------------------------------------------------
-          - alert: ILPBufferOverflowImminent
-            expr: data_factory_ilp_buffer_size > 900
-            for: 30s
-            labels:
-                severity: critical
-                component: questdb
-                pipeline: market-data
-            annotations:
-                summary: "ILP buffer near capacity - data loss imminent"
-                description: |
-                    ILP buffer is at {{ $value }} lines (max ~1000). Buffer overflow will cause data loss.
-                    QuestDB writes may be blocked or slow. Check QuestDB health immediately.
-                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ilp-buffer-overflow.md"
-                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
-
-          # ------------------------------------------------------------------
-          # High Error Rate
-          # ------------------------------------------------------------------
-          - alert: HighIngestionErrorRate
-            expr: |
-                100 * rate(data_factory_errors_total[5m]) /
-                (rate(trades_ingested_total[5m]) + rate(data_factory_errors_total[5m]) + 0.001) > 5
-            for: 3m
-            labels:
-                severity: critical
-                component: data-factory
-                pipeline: market-data
-            annotations:
-                summary: "High ingestion error rate detected"
-                description: |
-                    {{ $value | printf "%.1f" }}% of ingestion operations are failing.
-                    This may indicate connection issues, malformed data, or infrastructure problems.
-                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/high-error-rate.md"
-                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+          # Removed ILPBufferOverflowImminent + HighIngestionErrorRate
+          # (2026-07-01): data_factory_ilp_buffer_size and
+          # data_factory_errors_total are never exported by the unified janus
+          # binary's live path and have no live equivalent — the alerts could
+          # never fire. Restore from git history if those gauges get wired.
 
           # ------------------------------------------------------------------
           # QuestDB Write Failures Sustained
           # ------------------------------------------------------------------
           - alert: QuestDBWriteFailuresSustained
-            expr: rate(questdb_write_errors_total[5m]) > 1
+            # Repointed: questdb_write_errors_total is not an exported metric
+            # name; questdb_unhandled_errors_total is the live error counter.
+            expr: rate(questdb_unhandled_errors_total[5m]) > 1
             for: 2m
             labels:
                 severity: critical
@@ -132,23 +102,8 @@ groups:
                 runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-gap-warning.md"
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
-          # ------------------------------------------------------------------
-          # ILP Buffer High
-          # ------------------------------------------------------------------
-          - alert: ILPBufferHigh
-            expr: data_factory_ilp_buffer_size > 500 and data_factory_ilp_buffer_size <= 900
-            for: 2m
-            labels:
-                severity: warning
-                component: questdb
-                pipeline: market-data
-            annotations:
-                summary: "ILP buffer usage elevated"
-                description: |
-                    ILP buffer is at {{ $value }} lines (warning threshold: 500).
-                    QuestDB may be slow to flush. Monitor for continued growth.
-                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ilp-buffer-high.md"
-                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+          # Removed ILPBufferHigh (2026-07-01): data_factory_ilp_buffer_size is
+          # never exported (see the critical-group note above).
 
           # ------------------------------------------------------------------
           # Ingestion Rate Drop
@@ -172,25 +127,11 @@ groups:
                 runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-rate-dropped.md"
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
-          # ------------------------------------------------------------------
-          # Backfill Stalled
-          # ------------------------------------------------------------------
-          - alert: BackfillStalled
-            expr: |
-                backfills_running > 0
-                and rate(backfills_completed_total[10m]) == 0
-            for: 10m
-            labels:
-                severity: warning
-                component: backfill
-                pipeline: market-data
-            annotations:
-                summary: "Backfill operations appear stalled"
-                description: |
-                    {{ $value }} backfills are marked as running but none have completed in 10 minutes.
-                    Backfills may be stuck due to rate limiting, API issues, or lock contention.
-                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/backfill-stalled.md"
-                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+          # Removed BackfillStalled (2026-07-01): backfills_completed_total is
+          # not exported, and the rate(...)==0 form is structurally silent in
+          # exactly the stall case (rate over an absent/never-incremented
+          # counter yields an empty vector, not 0), so the alert could never
+          # fire. Needs the counter wired + an `or vector(0)` guard to work.
 
           # ------------------------------------------------------------------
           # Latency Spike
@@ -279,22 +220,9 @@ groups:
                     May indicate recent connectivity issues being resolved.
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
-          # ------------------------------------------------------------------
-          # Rate Limiter Tokens Low
-          # ------------------------------------------------------------------
-          - alert: RateLimiterTokensLow
-            expr: rate_limiter_tokens_available < 10
-            for: 5m
-            labels:
-                severity: info
-                component: rate-limiter
-                pipeline: market-data
-            annotations:
-                summary: "Rate limiter tokens running low for {{ $labels.exchange }}"
-                description: |
-                    Only {{ $value | printf "%.0f" }} tokens available for {{ $labels.exchange }}.
-                    API requests may start being throttled soon.
-                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+          # Removed RateLimiterTokensLow (2026-07-01): no rate_limiter_*
+          # metrics are exported (the rate-limiter subsystem is not wired in
+          # the unified janus binary).
 
           # ------------------------------------------------------------------
           # WebSocket Reconnection Event
@@ -337,53 +265,10 @@ groups:
     # ========================================================================
     # SLO Burn Rate Alerts (Multi-Window)
     # ========================================================================
-    - name: market_data_slo_burn_rate
-      interval: 30s
-      rules:
-          # ------------------------------------------------------------------
-          # Fast Burn - 2% budget consumed in 1 hour (will exhaust in 2 days)
-          # ------------------------------------------------------------------
-          - alert: DataCompletenessFastBurn
-            expr: |
-                (
-                    1 - (sum(rate(trades_ingested_total[1h])) / (sum(rate(trades_ingested_total[1h])) + sum(rate(gaps_detected_total[1h])) + 0.001))
-                ) > 0.02
-            for: 5m
-            labels:
-                severity: critical
-                component: data-factory
-                pipeline: market-data
-                slo: completeness
-                burn_rate: fast
-            annotations:
-                summary: "Data completeness SLO burning fast - will exhaust budget in ~2 days"
-                description: |
-                    Error budget is being consumed at a rate that will exhaust the monthly budget in ~2 days.
-                    Current 1h error rate: {{ $value | humanizePercentage }}.
-                    Immediate action required to prevent SLO breach.
-                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/slo-burn-rate.md"
-                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
-
-          # ------------------------------------------------------------------
-          # Slow Burn - 0.5% budget consumed in 6 hours
-          # ------------------------------------------------------------------
-          - alert: DataCompletenessSlowBurn
-            expr: |
-                (
-                    1 - (sum(rate(trades_ingested_total[6h])) / (sum(rate(trades_ingested_total[6h])) + sum(rate(gaps_detected_total[6h])) + 0.001))
-                ) > 0.005
-            for: 30m
-            labels:
-                severity: warning
-                component: data-factory
-                pipeline: market-data
-                slo: completeness
-                burn_rate: slow
-            annotations:
-                summary: "Data completeness SLO burning slowly - investigate"
-                description: |
-                    Error budget is being consumed at an elevated rate over 6 hours.
-                    Current 6h error rate: {{ $value | humanizePercentage }}.
-                    Investigate to prevent gradual SLO degradation.
-                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/slo-burn-rate.md"
-                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+    # Removed DataCompletenessFastBurn + DataCompletenessSlowBurn (2026-07-01):
+    # both depend on gaps_detected_total, which is never exported (the gap
+    # counter has no production caller), and sum(rate()) over the absent
+    # series returns an empty vector — collapsing the whole burn expression so
+    # neither alert could ever evaluate. Restore from git history once
+    # gaps_detected_total is wired, adding `or vector(0)` around the gap term
+    # so a legitimately-zero gap rate still evaluates.

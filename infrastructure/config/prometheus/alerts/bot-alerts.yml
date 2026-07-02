@@ -61,7 +61,11 @@ groups:
           runbook: "Stop bot: curl -X POST http://spawner:8090/container/{{ $labels.container_name }}/stop"
 
       - alert: BotLowWinRate
-        expr: fks_bot_win_rate{job="fks-bots"} < 0.3
+        # Guard: a bot with no trades reports win_rate=0.0 and would false-fire;
+        # only evaluate bots that have actually traded.
+        expr: |
+          fks_bot_win_rate{job="fks-bots"} < 0.3
+          and fks_bot_trades_total{job="fks-bots"} > 10
         for: 30m
         labels:
           severity: warning
@@ -89,7 +93,7 @@ groups:
           summary: "Bot {{ $labels.container_name }} has produced no signals in 15 min"
           description: >
             Bot {{ $labels.bot_id }} (mode: {{ $labels.mode }}) has been running for
-            {{ $labels.__meta_fks_image }} but emitted no signals in the last 15 minutes.
+            over 5 minutes but emitted no signals in the last 15 minutes.
             The bot may be stalled, waiting for data, or have a configuration issue.
 
       - alert: BotNoTrades
@@ -124,14 +128,7 @@ groups:
             The fks_bot_spawner service has not responded to scrapes for 1 minute.
             Bot lifecycle management (spawn/stop/restart) is unavailable.
 
-      - alert: SpawnerAtBotCapacity
-        expr: fks_spawner_running_bots >= fks_spawner_max_bots_limit * 0.9
-        for: 5m
-        labels:
-          severity: warning
-          team: infra
-        annotations:
-          summary: "Bot spawner is near capacity ({{ $value }} / max)"
-          description: >
-            The spawner is running {{ $value }} bots, which is 90%+ of the
-            configured maximum. New spawn requests may be rejected.
+      # Removed SpawnerAtBotCapacity: its RHS metric fks_spawner_max_bots_limit
+      # is never exported by the spawner (siblings fks_spawner_running_bots etc.
+      # are), so the >= comparison matched nothing and the alert could never
+      # fire. Restore once the spawner exports its max-bots limit.

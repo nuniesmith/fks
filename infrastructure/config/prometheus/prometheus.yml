@@ -76,6 +76,18 @@ scrape_configs:
                 component: "cache"
 
     # ============================================================================
+    # Node Exporter - Host disk/CPU/memory (backs HostDiskSpace* alerts)
+    # ============================================================================
+    - job_name: "node-exporter"
+      scrape_interval: 30s
+      scrape_timeout: 10s
+      static_configs:
+          - targets: ["node-exporter:9100"]
+            labels:
+                service: "node-exporter"
+                component: "host"
+
+    # ============================================================================
     # QuestDB Direct - Native metrics endpoint
     # NOTE: The questdb-exporter sidecar (port 9191) is not deployed.  QuestDB
     # exposes Prometheus-compatible metrics natively at :9003/metrics.

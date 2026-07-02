@@ -20,3 +20,5 @@ pub mod error;
 pub mod metrics;
 pub mod models;
 pub mod prometheus_sd;
+#[cfg(feature = "db")]
+pub mod secrets_crypto;

@@ -67,10 +67,15 @@ sqlx = { version = "0.8", default-features = false, optional = true, features = 
     "migrate",
 ] }
 
+# exchange_secrets encryption-at-rest (pure-Rust AEAD) — db-only.
+chacha20poly1305 = { version = "0.10", optional = true }
+base64 = { version = "0.22", optional = true }
+hex = { version = "0.4", optional = true }
+
 [features]
 default = ["db"]
 # Enables Postgres persistence of spawn/stop events into bot_runs.
-db = ["dep:sqlx"]
+db = ["dep:sqlx", "dep:chacha20poly1305", "dep:base64", "dep:hex"]
 
 [dev-dependencies]
 tokio        = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }

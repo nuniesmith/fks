@@ -31,10 +31,14 @@ WORKDIR /app
 
 RUN apk add --no-cache git
 
-# Source acquisition: git clone or copy from local context
+# Source acquisition: git clone or copy from local context.
+# `set -e` so a failed clone fails the BUILD — previously the trailing
+# `rm -rf` returned 0 after a clone failure, letting the build continue into
+# an empty directory and die confusingly at `npm ci` (missing lockfile).
 RUN --mount=type=bind,source=.,target=/ctx \
+    set -e; \
     if [ -n "${REPO_URL}" ]; then \
-        git clone --depth=1 --branch "${REPO_REF}" "${REPO_URL}" /tmp/_repo && \
+        git clone --depth=1 --branch "${REPO_REF}" "${REPO_URL}" /tmp/_repo; \
         cp -r /tmp/_repo/. .; \
         rm -rf /tmp/_repo; \
     else \

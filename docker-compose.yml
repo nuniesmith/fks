@@ -458,6 +458,10 @@ services:
             - no-new-privileges:true
         cap_drop:
             - ALL
+        # host-gateway makes host.docker.internal resolve on Linux — needed for
+        # the transitional CRYPTO_*_INTERNAL_URL bridge to the systemd bots.
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
         ports:
             - "127.0.0.1:3001:3000"
         environment:
@@ -466,6 +470,16 @@ services:
             # janus. The SvelteKit app still needs a janus-native data contract —
             # tracked in docs/architecture/RUST_MIGRATION.md (WebUI repoint).
             - PUBLIC_API_URL=${PUBLIC_API_URL:-http://fks_janus:7000}
+            # Crypto bot status servers for the /exchanges page. Empty default
+            # = the adapter falls back to the Phase-2 container DNS names
+            # (http://fks-bot-crypto-*:9091). During the transitional systemd
+            # phase set these in .env to the host bridge, e.g.
+            #   CRYPTO_SPOT_INTERNAL_URL=http://host.docker.internal:9091
+            #   CRYPTO_FUNDING_INTERNAL_URL=http://host.docker.internal:9095
+            # (funding uses 9095 on the host — 9092/9093 are taken by the
+            # janus metrics remap and alertmanager).
+            - CRYPTO_SPOT_INTERNAL_URL=${CRYPTO_SPOT_INTERNAL_URL:-}
+            - CRYPTO_FUNDING_INTERNAL_URL=${CRYPTO_FUNDING_INTERNAL_URL:-}
             - PUBLIC_JANUS_URL=http://fks_janus:7000
             # D1 live-bars bridge: empty (default) keeps /sse/bars/:sym on the
             # graceful idle stub. Once the janus image includes the

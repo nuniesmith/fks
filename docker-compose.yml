@@ -591,6 +591,10 @@ services:
             - no-new-privileges:true
         cap_drop:
             - ALL
+        # host-gateway makes host.docker.internal resolve on Linux — needed by
+        # the fks-bots-transitional scrape job (systemd crypto bots on the host).
+        extra_hosts:
+            - "host.docker.internal:host-gateway"
         ports:
             - "127.0.0.1:9090:9090"
         volumes:

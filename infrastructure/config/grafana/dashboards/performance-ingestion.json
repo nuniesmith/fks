@@ -920,12 +920,12 @@
       },
       "targets": [
         {
-          "expr": "rate(questdb_write_errors_total[5m]) by (error_type)",
+          "expr": "rate(questdb_unhandled_errors_total[5m])",
           "legendFormat": "{{error_type}}",
           "refId": "A"
         }
       ],
-      "title": "QuestDB Write Errors",
+      "title": "QuestDB Unhandled Errors",
       "type": "timeseries"
     },
     {
@@ -979,11 +979,11 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "100 * (rate(questdb_write_errors_total[5m]) / rate(questdb_writes_total[5m]))",
+          "expr": "100 * (rate(questdb_unhandled_errors_total[5m]) / rate(questdb_writes_total[5m]))",
           "refId": "A"
         }
       ],
-      "title": "QuestDB Write Error Rate (%)",
+      "title": "QuestDB Unhandled Error Rate (%)",
       "type": "gauge"
     },
     {

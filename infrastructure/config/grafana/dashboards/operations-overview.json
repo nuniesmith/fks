@@ -576,7 +576,7 @@
           "refId": "A"
         },
         {
-          "expr": "rate(questdb_write_errors_total[1m])",
+          "expr": "rate(questdb_unhandled_errors_total[1m])",
           "legendFormat": "Write Errors",
           "refId": "B"
         }

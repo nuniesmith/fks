@@ -1147,6 +1147,10 @@ services:
             - SPAWNER_PORT=8090
             - ALLOWED_IMAGE_PREFIX=${ALLOWED_BOT_IMAGE_PREFIX:-fks-bot-}
             - MAX_CONCURRENT_BOTS=${MAX_CONCURRENT_BOTS:-20}
+            # exchange_secrets encryption-at-rest. 64 hex chars (openssl rand
+            # -hex 32). Unset = legacy plaintext storage (warned at startup);
+            # an invalid value disables the spawner DB entirely (fail-safe).
+            - SPAWNER_SECRETS_KEY=${SPAWNER_SECRETS_KEY:-}
             # Bots must join the same Docker network as janus/etc. The network is
             # pinned to `name: ${COMPOSE_PROJECT_NAME:-fks}_network` (see the networks:
             # block below), so ALLOWED_NETWORK must match that pinned name — otherwise

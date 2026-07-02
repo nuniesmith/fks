@@ -35,11 +35,12 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{PgPool, Row};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::error::SpawnerError;
 use crate::models::ConfigRequest;
+use crate::secrets_crypto::SecretsCipher;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BotRunStore — thin wrapper around a sqlx PgPool. Scoped to bot_runs ops plus
@@ -49,16 +50,39 @@ use crate::models::ConfigRequest;
 #[derive(Clone)]
 pub struct BotRunStore {
     pool: PgPool,
+    /// At-rest cipher for `exchange_secrets` (SPAWNER_SECRETS_KEY). The store
+    /// is the encryption boundary: values are encrypted in `upsert_secret`,
+    /// and a future spawn-time injection path decrypts here too.
+    cipher: SecretsCipher,
 }
 
 impl BotRunStore {
     /// Connect to Postgres. Returns `Ok(None)` when `database_url` is empty
     /// or the connection fails — callers treat that as "stateless mode" and
     /// continue running.
+    ///
+    /// A present-but-INVALID `SPAWNER_SECRETS_KEY` also disables the DB
+    /// (fail-safe): the operator configured encryption, so we refuse to fall
+    /// back to plaintext secret writes.
     pub async fn try_connect(database_url: &str) -> Option<Self> {
         if database_url.is_empty() {
             info!("spawner DB disabled (DATABASE_URL not set) — running stateless");
             return None;
+        }
+
+        let cipher = match SecretsCipher::from_env() {
+            Ok(c) => c,
+            Err(e) => {
+                error!(
+                    error = %e,
+                    "SPAWNER_SECRETS_KEY invalid — refusing to enable the spawner DB \
+                     (would risk plaintext secret writes); running stateless"
+                );
+                return None;
+            }
+        };
+        if cipher.is_encrypting() {
+            info!("exchange_secrets encryption-at-rest ENABLED (SPAWNER_SECRETS_KEY set)");
         }
 
         let pool = PgPoolOptions::new()
@@ -70,7 +94,7 @@ impl BotRunStore {
         match pool {
             Ok(pool) => {
                 info!(url_host = %sanitize_url(database_url), "spawner connected to Postgres");
-                Some(Self { pool })
+                Some(Self { pool, cipher })
             }
             Err(e) => {
                 warn!(
@@ -219,10 +243,13 @@ impl BotRunStore {
     // The WebUI submits exchange API credentials here; they are stored
     // server-side and never returned. `upsert_secret` writes them (overwriting
     // any prior row for that exchange); `configured_exchanges` reports only
-    // which exchanges are set — never the key/secret material.
+    // which exchanges are set — never the key/secret material. With
+    // SPAWNER_SECRETS_KEY set, values are ChaCha20-Poly1305-encrypted at rest
+    // (enc:v1:… wire format; legacy plaintext rows still decrypt/pass through).
 
     /// Store (UPSERT) API credentials for one exchange. `exchange` is the
     /// primary key, so re-submitting overwrites rather than duplicating.
+    /// Values are encrypted at rest when SPAWNER_SECRETS_KEY is configured.
     pub async fn upsert_secret(
         &self,
         exchange: &str,
@@ -230,6 +257,13 @@ impl BotRunStore {
         api_secret: &str,
         api_passphrase: Option<&str>,
     ) -> Result<(), SpawnerError> {
+        let map_crypto = |e: String| SpawnerError::Other(format!("secret encryption failed: {e}"));
+        let api_key = self.cipher.encrypt(api_key).map_err(map_crypto)?;
+        let api_secret = self.cipher.encrypt(api_secret).map_err(map_crypto)?;
+        let api_passphrase = api_passphrase
+            .map(|p| self.cipher.encrypt(p).map_err(map_crypto))
+            .transpose()?;
+
         sqlx::query(
             "INSERT INTO exchange_secrets (exchange, api_key, api_secret, api_passphrase) \
              VALUES ($1, $2, $3, $4) \
@@ -240,15 +274,30 @@ impl BotRunStore {
                  updated_at = NOW()",
         )
         .bind(exchange)
-        .bind(api_key)
-        .bind(api_secret)
-        .bind(api_passphrase)
+        .bind(&api_key)
+        .bind(&api_secret)
+        .bind(api_passphrase.as_deref())
         .execute(&self.pool)
         .await
         .map_err(map_sqlx)?;
 
-        debug!(exchange = %exchange, "exchange_secrets row upserted");
+        debug!(
+            exchange = %exchange,
+            encrypted = self.cipher.is_encrypting(),
+            "exchange_secrets row upserted"
+        );
         Ok(())
+    }
+
+    /// Decrypt one stored credential value (for the future spawn-time env
+    /// injection path). Legacy plaintext rows pass through unchanged; an
+    /// encrypted value with a missing/wrong key is an error, never returned
+    /// as-is.
+    #[allow(dead_code)] // consumed by the Phase-2 spawn-time injection path
+    pub fn decrypt_secret(&self, stored: &str) -> Result<String, SpawnerError> {
+        self.cipher
+            .decrypt(stored)
+            .map_err(|e| SpawnerError::Other(format!("secret decryption failed: {e}")))
     }
 
     /// Which exchanges have credentials stored — newest update first. Returns

@@ -411,9 +411,10 @@ async fn runs_handler(
 //
 // SECURITY: the WebUI browser only ever SUBMITS credentials here; they are
 // never returned. POST stores (UPSERT by exchange); GET /secrets/status reports
-// only which exchanges are configured (never the key/secret material). Storage
-// is plaintext-at-rest for now — the whole stack is internal / Tailscale-only
-// and every route here is gated by X-Internal-Token. Encryption is a follow-up.
+// only which exchanges are configured (never the key/secret material). With
+// SPAWNER_SECRETS_KEY set, values are encrypted at rest (ChaCha20-Poly1305,
+// see secrets_crypto.rs); unset falls back to the legacy plaintext storage.
+// Every route here is additionally gated by X-Internal-Token.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(feature = "db")]

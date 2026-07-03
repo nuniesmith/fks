@@ -41,6 +41,7 @@ use uuid::Uuid;
 use crate::error::SpawnerError;
 use crate::models::ConfigRequest;
 use crate::secrets_crypto::SecretsCipher;
+<<<<<<< HEAD
 
 /// One exchange's decrypted API credentials, as fetched by
 /// [`BotRunStore::get_secret`] for spawn-time env injection. Never serialized
@@ -50,6 +51,8 @@ pub struct ExchangeCredentials {
     pub api_secret: String,
     pub api_passphrase: Option<String>,
 }
+=======
+>>>>>>> main
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BotRunStore — thin wrapper around a sqlx PgPool. Scoped to bot_runs ops plus
@@ -298,15 +301,24 @@ impl BotRunStore {
         Ok(())
     }
 
+<<<<<<< HEAD
     /// Decrypt one stored credential value. Legacy plaintext rows pass
     /// through unchanged; an encrypted value with a missing/wrong key is an
     /// error, never returned as-is.
+=======
+    /// Decrypt one stored credential value (for the future spawn-time env
+    /// injection path). Legacy plaintext rows pass through unchanged; an
+    /// encrypted value with a missing/wrong key is an error, never returned
+    /// as-is.
+    #[allow(dead_code)] // consumed by the Phase-2 spawn-time injection path
+>>>>>>> main
     pub fn decrypt_secret(&self, stored: &str) -> Result<String, SpawnerError> {
         self.cipher
             .decrypt(stored)
             .map_err(|e| SpawnerError::Other(format!("secret decryption failed: {e}")))
     }
 
+<<<<<<< HEAD
     /// Fetch + decrypt one exchange's stored credentials for spawn-time env
     /// injection. `Ok(None)` = no row stored for that exchange.
     pub async fn get_secret(
@@ -336,6 +348,8 @@ impl BotRunStore {
         }))
     }
 
+=======
+>>>>>>> main
     /// Which exchanges have credentials stored — newest update first. Returns
     /// only metadata (exchange, whether a passphrase is set, last update); the
     /// key/secret values are deliberately never selected.

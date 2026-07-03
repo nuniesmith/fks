@@ -1758,7 +1758,7 @@
                     "refId": "A"
                 },
                 {
-                    "expr": "increase(questdb_write_errors_total[1m])",
+                    "expr": "increase(questdb_unhandled_errors_total[1m])",
                     "legendFormat": "QuestDB Write Errors",
                     "refId": "B"
                 }

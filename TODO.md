@@ -273,8 +273,11 @@ save + `EmptyState` empty/error audit (G1/G2); reconciled Playwright suite (G3).
 
 **Deferred polish (non-blocking follow-ups):** per-indicator params; fold RSI/MACD
 into the generic `IndicatorPane`; dedicated volume pane; wire `exchange-apiws`
-authenticated account/balance behind the key-status badge; pgcrypto-encrypt stored
-secrets; per-bot Prometheus scrape so `bot-alerts.yml` goes live.
+authenticated account/balance behind the key-status badge; ~~pgcrypto-encrypt
+stored secrets~~ (done 2026-07: spawner-side ChaCha20-Poly1305 encryption-at-rest
+via `SPAWNER_SECRETS_KEY`, #161, + spawn-time injection #162); per-bot Prometheus
+scrape so `bot-alerts.yml` goes live (spawned bots get file-SD automatically; the
+transitional systemd crypto bots are scraped by the static job added in #160).
 
 ---
 

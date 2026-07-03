@@ -382,7 +382,7 @@ primary = "5m"
 
 [assets]
 # List of enabled trading assets (base currency)
-enabled = ["BTC", "ETH", "SOL", "AVAX", "LINK", "MATIC", "ARB", "OP", "DOGE", "XRP"]
+enabled = ["BTC", "ETH", "SOL", "AVAX", "LINK", "POL", "ARB", "OP", "DOGE", "XRP"]
 
 # Default quote currency
 default_quote = "USDT"
@@ -472,18 +472,23 @@ kraken = { pair = "LINKUSD", min_order = 0.1 }
 bybit = { pair = "LINKUSDT", min_order = 0.1, category = "linear" }
 binance = { pair = "LINKUSDT", min_order = 0.1 }
 
-[assets.MATIC]
-symbol = "MATIC/USDT"
+# Renamed MATIC → POL (2026-07-03): Polygon migrated MATIC to POL and Binance
+# delisted MATICUSDT — the combined-stream subscription accepted the dead
+# stream name and silently delivered nothing, so 1 of 10 configured assets had
+# no market data. Caught by the data_completeness_percent SLI reading ~88.6%
+# (≈9/10) and the DataCompletenessLow alert firing on its first armed day.
+[assets.POL]
+symbol = "POL/USDT"
 enabled = true
 max_position_size_pct = 0.01
 max_leverage = 2.0
 min_order_size = 1.0
 max_order_size = 10000.0
 atr_multiplier = 3.0
-[assets.MATIC.exchanges]
-kraken = { pair = "MATICUSD", min_order = 1.0 }
-bybit = { pair = "MATICUSDT", min_order = 1.0, category = "linear" }
-binance = { pair = "MATICUSDT", min_order = 1.0 }
+[assets.POL.exchanges]
+kraken = { pair = "POLUSD", min_order = 1.0 }
+bybit = { pair = "POLUSDT", min_order = 1.0, category = "linear" }
+binance = { pair = "POLUSDT", min_order = 1.0 }
 
 [assets.ARB]
 symbol = "ARB/USDT"

@@ -41,7 +41,6 @@ use uuid::Uuid;
 use crate::error::SpawnerError;
 use crate::models::ConfigRequest;
 use crate::secrets_crypto::SecretsCipher;
-<<<<<<< HEAD
 
 /// One exchange's decrypted API credentials, as fetched by
 /// [`BotRunStore::get_secret`] for spawn-time env injection. Never serialized
@@ -51,8 +50,6 @@ pub struct ExchangeCredentials {
     pub api_secret: String,
     pub api_passphrase: Option<String>,
 }
-=======
->>>>>>> main
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BotRunStore — thin wrapper around a sqlx PgPool. Scoped to bot_runs ops plus
@@ -301,24 +298,15 @@ impl BotRunStore {
         Ok(())
     }
 
-<<<<<<< HEAD
     /// Decrypt one stored credential value. Legacy plaintext rows pass
     /// through unchanged; an encrypted value with a missing/wrong key is an
     /// error, never returned as-is.
-=======
-    /// Decrypt one stored credential value (for the future spawn-time env
-    /// injection path). Legacy plaintext rows pass through unchanged; an
-    /// encrypted value with a missing/wrong key is an error, never returned
-    /// as-is.
-    #[allow(dead_code)] // consumed by the Phase-2 spawn-time injection path
->>>>>>> main
     pub fn decrypt_secret(&self, stored: &str) -> Result<String, SpawnerError> {
         self.cipher
             .decrypt(stored)
             .map_err(|e| SpawnerError::Other(format!("secret decryption failed: {e}")))
     }
 
-<<<<<<< HEAD
     /// Fetch + decrypt one exchange's stored credentials for spawn-time env
     /// injection. `Ok(None)` = no row stored for that exchange.
     pub async fn get_secret(
@@ -348,8 +336,6 @@ impl BotRunStore {
         }))
     }
 
-=======
->>>>>>> main
     /// Which exchanges have credentials stored — newest update first. Returns
     /// only metadata (exchange, whether a passphrase is set, last update); the
     /// key/secret values are deliberately never selected.
@@ -377,6 +363,7 @@ impl BotRunStore {
             "cpu_limit": req.cpu_limit,
             "memory_mb": req.memory_mb,
             "env": req.env,
+            "secrets": req.secrets,
         });
         let row = sqlx::query(
             "INSERT INTO bot_configs (name, image, mode, config_json) \
@@ -507,6 +494,8 @@ pub struct BotConfigRow {
     pub cpu_limit: Option<f64>,
     pub memory_mb: Option<i32>,
     pub env: HashMap<String, String>,
+    /// Exchanges whose stored credentials the template injects at spawn time.
+    pub secrets: Vec<String>,
 }
 
 impl BotConfigRow {
@@ -526,6 +515,15 @@ impl BotConfigRow {
                     .collect()
             })
             .unwrap_or_default();
+        let secrets = cfg
+            .get("secrets")
+            .and_then(serde_json::Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
             id: r.try_get("id").unwrap_or_else(|_| Uuid::nil()),
             name: r.try_get("name").unwrap_or_default(),
@@ -534,6 +532,7 @@ impl BotConfigRow {
             cpu_limit,
             memory_mb,
             env,
+            secrets,
         }
     }
 }

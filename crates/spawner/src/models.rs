@@ -107,6 +107,11 @@ pub struct ConfigRequest {
     /// Environment variables for the spawn.
     #[serde(default)]
     pub env: HashMap<String, String>,
+    /// Exchanges whose stored credentials should be injected at spawn time
+    /// (mirrors `SpawnRequest.secrets`), so a saved template is fully
+    /// self-contained: image + env + which keys the bot needs.
+    #[serde(default)]
+    pub secrets: Vec<String>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

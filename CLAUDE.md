@@ -243,7 +243,8 @@ the published `rustrade` + `indicators-ta` + `exchange-apiws`. Implement a
 
 ## Where to dig deeper
 
-- **The repo map:** [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md) — roles, graph, crates.io coordinates.
+- **The platform map (canonical):** [`docs/architecture/PLATFORM_ARCHITECTURE.md`](docs/architecture/PLATFORM_ARCHITECTURE.md) — all nine repos, per-repo deep dives, contracts (bot/signal/secrets/observability paths), ports, security model, integration status.
+- **The repo map (historical):** [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md) — superseded by the above.
 - **Remaining split moves:** [`SPLIT_PLAN.md`](SPLIT_PLAN.md).
 - **The cross-cutting roadmap:** [`TODO.md`](TODO.md).
 - **Per-sub-codebase CLAUDE.md files** — read these *first* when working in that directory.

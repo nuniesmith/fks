@@ -35,15 +35,15 @@
 #   5432       postgres (janus_db + ruby_db)
 #   6379       redis (shared — janus / ruby pub-sub + state)
 #   7000       janus HTTP API
-#   8000       Ruby API (FastAPI REST + SSE)
 #   8200       trainer
 #   8812       questdb postgres wire
 #   9000       questdb HTTP console
 #   9009       questdb ILP ingestion
 #   9051       janus gRPC
 #   9090       prometheus
-#   9092       janus optimizer metrics
+#   9092       janus unified /metrics (container :9090 — brain/signals/optimizer)
 #   9093       alertmanager
+#   9100       node-exporter (host disk/CPU/mem — backs HostDiskSpace* alerts)
 #   3001       webui (SvelteKit frontend)
 #   3000       grafana (served at /grafana/ subpath via nginx)
 #   3100       loki

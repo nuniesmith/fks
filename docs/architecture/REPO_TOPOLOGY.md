@@ -1,11 +1,17 @@
 # FKS Repo Topology
 
+> **Superseded:** the canonical, current map is
+> [`PLATFORM_ARCHITECTURE.md`](PLATFORM_ARCHITECTURE.md) — all nine repos
+> (incl. fks-web, crypto, fks-kotlin, technical_papers) plus contracts and
+> data flows. This file predates the web split and the fks-full → fks
+> rename; kept for history.
+>
 > How the five repos fit together, what each owns, and how `fks-full`
 > consumes the rest from crates.io / Docker.
 >
 > **Last updated:** 2026-05-31
 
-This is the canonical map of the multi-repo split. The split has
+This was the canonical map of the multi-repo split. The split has
 **already happened** — `rustrade`, `janus`, `indicators-ta`, and
 `exchange-apiws` are independent GitHub repos, and the libraries are
 published on crates.io. `fks-full` is the orchestrator that wires them

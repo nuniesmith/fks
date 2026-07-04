@@ -137,9 +137,12 @@ groups:
         # Repointed: fks_signals_total was never exported; the live signal
         # counter is janus_signals_generated_total (summed across its
         # signal_type/symbol labels so one quiet symbol can't false-fire).
+        # `on()` is required: sum() strips all labels from the left side, so a
+        # bare `and up{job="postgres"}` (4 labels) never vector-matches and the
+        # rule could never fire. `on()` matches on the empty label set.
         expr: |
           sum(increase(janus_signals_generated_total[1h])) == 0
-          and
+          and on()
           up{job="postgres"} == 1
         for: 1h
         labels:

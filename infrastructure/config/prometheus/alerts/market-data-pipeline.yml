@@ -14,9 +14,13 @@ groups:
           # ------------------------------------------------------------------
           # Data Gap Duration - Critical if gap persists > 5 minutes
           # ------------------------------------------------------------------
+          # `timestamp(trades_ingested_total)` returns the QUERY eval time, not the
+          # sample's last-change time, so `time() - timestamp(...)` is always ~0 and
+          # the old expr could never fire. Detect the gap directly: no increment to
+          # the per-series counter over the window (per exchange/symbol).
           - alert: DataGapDurationCritical
             expr: |
-                (time() - max by (exchange, symbol) (timestamp(trades_ingested_total))) > 300
+                increase(trades_ingested_total[5m]) == 0
             for: 1m
             labels:
                 severity: critical
@@ -26,8 +30,7 @@ groups:
                 summary: "No trades received for {{ $labels.exchange }}/{{ $labels.symbol }} for >5 minutes"
                 description: |
                     No new trades have been ingested for {{ $labels.exchange }}/{{ $labels.symbol }}
-                    in over 5 minutes. Last trade was {{ $value | humanizeDuration }} ago.
-                    This indicates a critical data gap that needs immediate attention.
+                    in over 5 minutes. This indicates a critical data gap that needs immediate attention.
                 runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-gap-critical.md"
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
@@ -84,11 +87,15 @@ groups:
           # ------------------------------------------------------------------
           # Data Gap Duration Warning (> 2 minutes)
           # ------------------------------------------------------------------
+          # Fresh 2–5 min gap (escalates to DataGapDurationCritical at 5 min): no
+          # trades in the last 2 min, but there WERE some in the last 5 min. Same
+          # counter-increment approach as the critical rule (the old timestamp()
+          # expr was structurally dead — see above).
           - alert: DataGapDurationWarning
             expr: |
-                (time() - max by (exchange, symbol) (timestamp(trades_ingested_total))) > 120
+                increase(trades_ingested_total[2m]) == 0
                 and
-                (time() - max by (exchange, symbol) (timestamp(trades_ingested_total))) <= 300
+                increase(trades_ingested_total[5m]) > 0
             for: 1m
             labels:
                 severity: warning
@@ -98,7 +105,7 @@ groups:
                 summary: "No trades received for {{ $labels.exchange }}/{{ $labels.symbol }} for >2 minutes"
                 description: |
                     No new trades have been ingested for {{ $labels.exchange }}/{{ $labels.symbol }}
-                    in {{ $value | humanizeDuration }}. Monitor closely - may escalate to critical.
+                    in over 2 minutes. Monitor closely - may escalate to critical.
                 runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-gap-warning.md"
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 

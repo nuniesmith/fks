@@ -229,11 +229,19 @@ groups:
         # raw lifetime request count) instead of a ratio. rate() over the counters
         # also reflects recent behaviour rather than a since-boot average that
         # never dips on a long-lived Redis.
+        #
+        # Threshold is 50%, not 80%: janus uses this Redis as a persistence +
+        # pub/sub + coordination store, NOT primarily a cache. A large share of
+        # the "misses" are legitimate existence-checks (kill-switch key before
+        # it is set, signal/param GETs on keys not yet written, pubsub), so a
+        # steady ~75-80% ratio is healthy and "consider cache tuning" is not an
+        # actionable response. Only a genuinely low ratio (<50% — half of all
+        # reads missing) indicates real thrashing/misconfiguration worth paging.
         expr: |
           100 * (
             rate(redis_keyspace_hits_total[5m])
             / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
-          ) < 80
+          ) < 50
           and
           (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) > 1
         for: 15m
@@ -241,8 +249,8 @@ groups:
           severity: warning
           service: redis
         annotations:
-          summary: "Redis low cache hit ratio"
-          description: 'Redis cache hit ratio is {{ $value | printf "%.1f" }}% - consider cache tuning'
+          summary: "Redis hit ratio unexpectedly low"
+          description: 'Redis hit ratio is {{ $value | printf "%.1f" }}% (janus uses Redis for persistence + pub/sub, not just caching; <50% suggests genuine thrashing/misconfig, not routine existence-checks)'
 
       - alert: RedisBlockedClients
         expr: redis_blocked_clients > 10

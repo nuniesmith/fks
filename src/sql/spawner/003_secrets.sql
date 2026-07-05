@@ -10,10 +10,13 @@
 --   • The WebUI browser only ever SUBMITS credentials; they are never read back.
 --   • Every spawner route is gated by X-Internal-Token (set by nginx); the whole
 --     stack is internal / Tailscale-only with no external ports.
---   • Storage is plaintext-at-rest for now — column-level encryption (pgcrypto)
---     is a tracked follow-up. Keys unlock the authenticated/live order path
---     (exchange-apiws), which stays behind the manual execution gate. Default
---     operation is keyless/public.
+--   • Values are ENCRYPTED at rest (app-layer ChaCha20-Poly1305, fks #161) when
+--     SPAWNER_SECRETS_KEY (64 hex chars) is set: the stored form is
+--     `enc:v1:<base64 nonce+ciphertext>`; legacy plaintext rows are read back
+--     transparently. An invalid/missing key disables the secrets DB (fail-safe)
+--     rather than falling back to plaintext. Keys unlock the authenticated/live
+--     order path (exchange-apiws), which stays behind the manual execution gate.
+--     Default operation is keyless/public.
 --
 -- Prerequisites:
 --   • 001_init.sql     — creates the database + uuid-ossp.

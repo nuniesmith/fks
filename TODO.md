@@ -464,20 +464,26 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
       exporter for *raw* GPU utilisation / temp / power. (The `trainer` job
       already scrapes the trainer's self-reported `trainer_gpu_available` /
       `trainer_gpu_memory_total_bytes`.)
-- [x] **Trainer / GPU alert rules** — `trainer-alerts.yml`:
-      `TrainerGpuUnavailable`, `TrainerNoChampionModel` (ties to the live Burn
-      inference path — fires when training has produced no champion to serve),
-      and `TrainerLastRunLowAccuracy`. All gated on `trainer_up == 1`, so the
-      optional GPU service stays quiet when it isn't deployed; loaded via the
-      existing `alerts/*.yml` glob.
+- [ ] **Trainer / GPU alert rules** — NOT SHIPPED (this item was a false
+      completion claim). There is no `trainer-alerts.yml` in
+      `infrastructure/config/prometheus/alerts/`, the prometheus Dockerfile
+      COPYs each alert file individually (a new file would need adding there —
+      the runtime `alerts/*.yml` glob does not pick it up at build), and
+      `prometheus.yml` defines no `trainer` scrape job, so `trainer_up` /
+      `trainer_gpu_*` are never scraped. Note: CNN training now runs via the
+      `train_cnn_champion` binary in the janus repo (GPU backend, walk-forward,
+      backtest), not a long-lived trainer service — so these alerts would need
+      a real scrape target before they mean anything.
 - [ ] **Alertmanager Discord bridge** — container occasionally not running,
       causing noise in Alertmanager logs. Either fix or remove.
 - [x] **`bot-alerts.yml`** under `infrastructure/config/prometheus/alerts/` —
       present with `BotStopped` / `BotHighDrawdown` / `BotNoSignals` plus
       `BotUptimeTooShort`, `BotLowWinRate`, `BotNoTrades`, and the spawner-health
-      rules (`SpawnerDown`, `SpawnerAtBotCapacity`). The rules go live once a real
-      `fks-bot-*` image emits the `fks_bot_*` gauges at `:9091/metrics` — the only
-      remaining (runtime) dependency.
+      rule `SpawnerDown`. (`SpawnerAtBotCapacity` was pruned — its metric
+      `fks_spawner_max_bots_limit` is never exported.) The bot rules go live once
+      a real `fks-bot-*` image emits the `fks_bot_*` gauges at `:9091/metrics`.
+      The crypto bots now emit that contract (spot :9091 / funding :9095, scraped
+      via the transitional `fks-bots-transitional` job).
 
 ---
 

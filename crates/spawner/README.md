@@ -49,6 +49,10 @@
 | `POST` | `/container/:id/restart` | — | `ActionResponse` |
 | `GET` | `/container/:id/logs` | `?tail=N` | SSE stream of `event: log` |
 | `GET` | `/runs` *(db only)* | `?limit=N` | `{runs: [...], total, db_enabled}` |
+| `POST` | `/secrets` *(db only)* | `{exchange, api_key, api_secret, api_passphrase?}` | Stores encrypted exchange creds (never read back) |
+| `GET` | `/secrets/status` *(db only)* | — | Which exchanges have keys configured (booleans, no values) |
+| `GET` / `POST` | `/configs` *(db only)* | `ConfigRequest` JSON on POST | List / UPSERT reusable spawn templates (image + env + `secrets`) |
+| `DELETE` | `/configs/:name` *(db only)* | — | Soft-delete a saved config |
 
 ### `SpawnRequest`
 
@@ -96,6 +100,7 @@ All settings come from environment variables; defaults are baked into the
 | `PRUNE_AFTER_SECS` | `300` | Stopped-container retention |
 | `PRUNE_INTERVAL_SECS` | `60` | Auto-prune sweep interval |
 | `SPAWNER_DATABASE_URL` / `DATABASE_URL` | *(empty)* | Postgres URL — empty = stateless mode |
+| `SPAWNER_SECRETS_KEY` | *(empty)* | 64 hex chars (32 bytes). Enables ChaCha20-Poly1305 encryption of `exchange_secrets` at rest (`enc:v1:` wire format). Empty = stored as legacy plaintext; invalid = secrets DB disabled (fail-safe, never plaintext fallback). |
 | `NGINX_INTERNAL_TOKEN` | *(empty)* | Shared secret validated on every protected route. Empty = dev mode (auth disabled). |
 | `RUST_LOG` | `info,spawner=debug` | tracing-subscriber filter |
 
@@ -183,7 +188,7 @@ byte-by-byte timing leak isn't possible.
 
 ```bash
 # Unit + HTTP integration tests
-cargo test -p spawner          # 11 unit + 10 integration = 21 tests
+cargo test -p spawner          # ~32 unit (incl. 7 secrets_crypto) + 20 integration
 
 # Stateless-mode build
 cargo check -p spawner --no-default-features
@@ -212,16 +217,6 @@ The integration suite covers:
 
 ## Known limitations / future work
 
-- **bollard 0.19 deprecation drift**: `bollard::container::*Options` are
-  deprecated in favour of `bollard::query_parameters::*Options` builders.
-  The current code uses the legacy types and silences deprecation warnings
-  in `docker_client.rs` — every method needs a small rewrite when we
-  migrate. Not blocking; the deprecated types still work.
-
-- **`bot_configs` table is unused**: the schema models reusable bot
-  configuration profiles (templates), but the spawner doesn't read or
-  write them yet. The WebUI is expected to manage `bot_configs`
-  directly via Ruby's API; the spawner only manages `bot_runs`.
 - **No log persistence**: the SSE log endpoint streams from the live
   Docker socket. When a container is pruned, its logs are gone. If we
   need durable logs, mount Loki/Promtail at the bot level (the existing

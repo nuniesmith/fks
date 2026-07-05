@@ -3,10 +3,10 @@
 > **Superseded:** the canonical, current map is
 > [`PLATFORM_ARCHITECTURE.md`](PLATFORM_ARCHITECTURE.md) — all nine repos
 > (incl. fks-web, crypto, fks-kotlin, technical_papers) plus contracts and
-> data flows. This file predates the web split and the fks-full → fks
+> data flows. This file predates the web split and the fks → fks
 > rename; kept for history.
 >
-> How the five repos fit together, what each owns, and how `fks-full`
+> How the five repos fit together, what each owns, and how `fks`
 > consumes the rest from crates.io / Docker.
 >
 > **Last updated:** 2026-05-31
@@ -14,7 +14,7 @@
 This was the canonical map of the multi-repo split. The split has
 **already happened** — `rustrade`, `janus`, `indicators-ta`, and
 `exchange-apiws` are independent GitHub repos, and the libraries are
-published on crates.io. `fks-full` is the orchestrator that wires them
+published on crates.io. `fks` is the orchestrator that wires them
 together at runtime.
 
 ---
@@ -27,7 +27,7 @@ together at runtime.
 | [`nuniesmith/janus`](https://github.com/nuniesmith/janus) | **Trading brain** — neuromorphic + strategies + signal generation (the IP) | Rust workspace (libraries + service binary) | crates.io (`jflow-*` libs) + Docker image |
 | [`nuniesmith/indicators-ta`](https://github.com/nuniesmith/indicators-ta) | **TA math** — indicators + market-regime detection | Standalone crate | crates.io |
 | [`nuniesmith/exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange APIs/WS** — REST + WebSocket clients for 5 exchanges | Standalone crate | crates.io |
-| **`nuniesmith/fks-full`** (this repo) | **Orchestrator** — docker-compose, infra, proto, scripts; runs the whole stack | Compose + infra + thin Rust (`src/proto`, `crates/spawner`) | — (heading private) |
+| **`nuniesmith/fks`** (this repo) | **Orchestrator** — docker-compose, infra, proto, scripts; runs the whole stack | Compose + infra + thin Rust (`src/proto`, `crates/spawner`) | — (heading private) |
 
 ---
 
@@ -96,7 +96,7 @@ exchange-apiws = "0.7"
               └────────────────────────▲──────────────────────────┘
                                        │   orchestrated by
               ┌────────────────────────┴──────────────────────────┐
-              │  fks-full  (this repo)                             │
+              │  fks  (this repo)                             │
               │     • docker-compose + infrastructure              │
               │     • proto/  +  src/proto  (fks-proto)            │
               │     • scripts/ (run.sh)                            │
@@ -116,9 +116,9 @@ exchange-apiws = "0.7"
 
 ---
 
-## How `fks-full` consumes the others
+## How `fks` consumes the others
 
-`fks-full` does **not** depend on these repos as path/workspace crates. It
+`fks` does **not** depend on these repos as path/workspace crates. It
 consumes them two ways:
 
 ### 1. Service images — `git clone` at a pinned ref
@@ -150,12 +150,12 @@ Refs are wired in `docker-compose.yml` and configured in `.env`:
 
 `janus` and any bots under `bots/` depend on `rustrade-framework`,
 `indicators-ta`, and `exchange-apiws` from crates.io (see coordinates above).
-`fks-full` itself only ships `src/proto` (the `fks-proto` crate) and
+`fks` itself only ships `src/proto` (the `fks-proto` crate) and
 `crates/spawner` as Rust.
 
 ---
 
-## What stays in `fks-full`
+## What stays in `fks`
 
 - `docker-compose*.yml` — the ~14-service stack
 - `infrastructure/` — Dockerfiles + configs (nginx, prometheus, grafana, …)

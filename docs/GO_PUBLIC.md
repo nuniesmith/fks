@@ -1,6 +1,6 @@
-# Go-public checklist (fks-full)
+# Go-public checklist (fks)
 
-The plan flips `fks-full` from private to **public** as the open orchestrator,
+The plan flips `fks` from private to **public** as the open orchestrator,
 with every secret/strategy/state moved into the encrypted `fks-state` backup
 (see [`STATE_BACKUP.md`](STATE_BACKUP.md)). Work top-to-bottom; the flip is the
 last, one-way step.
@@ -23,18 +23,18 @@ last, one-way step.
 - [ ] `.env.example` carries **no real values** (it's a template — confirm). *(verified)*
 
 ## 4. Web split done (Phase C)
-- [ ] `fks-web` carries the canonical app; `fks-full`'s web build set to `WEB_REPO`/`WEB_REF` git-clone; `src/web` removed.
+- [ ] `fks-web` carries the canonical app; `fks`'s web build set to `WEB_REPO`/`WEB_REF` git-clone; `src/web` removed.
 
 ## 5. Decide the repo name
-- [ ] Keep `fks-full` public, **or** rename → `fks` for a clean public name and archive the drifted `fks` scaffold. *(your call)*
+- [ ] Keep `fks` public, **or** rename → `fks` for a clean public name and archive the drifted `fks` scaffold. *(your call)*
 
 ## 6. Flip  *(one-way — do this last)*
 ```bash
-gh repo edit nuniesmith/fks-full --visibility public --accept-visibility-change-consequences
+gh repo edit nuniesmith/fks --visibility public --accept-visibility-change-consequences
 ```
 - [ ] Immediately after: **rotate every exchange/API key** that was ever in the live `.env`. Going public is the moment to assume the old keys are burned, even though they were never committed — cheap insurance. Re-`export` the state after rotation.
 
 ## Already done
 - The 4 libraries (rustrade / indicators-ta / exchange-apiws / janus) are public + on crates.io, MIT, secret-free.
-- `fks-full` history is clean of committed secrets (blob + high-signal content scan).
+- `fks` history is clean of committed secrets (blob + high-signal content scan).
 - The `fks-state` private repo + the backup/import tooling exist (PR with `scripts/fks-state.sh`).

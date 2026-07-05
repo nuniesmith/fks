@@ -6,7 +6,7 @@
 > crates (`indicators-ta`, `exchange-apiws`).
 >
 > **Status:** the repo split + consolidation is **done** — janus consumes the
-> published crates, and `fks-full` has a working demo (`bots/crypto-demo`) that
+> published crates, and `fks` has a working demo (`bots/crypto-demo`) that
 > runs rustrade + indicators-ta + exchange-apiws together, optionally delegating
 > decisions to janus via `JanusBrain`. This document is the forward plan to turn
 > that wiring into the real thing.
@@ -36,7 +36,7 @@
                                     │ REST / gRPC  (signals + risk verdicts)
                                     ▼
                     ┌──────────────────────────────────────┐
-                    │  bots/* (fks-full)  — the consumers   │
+                    │  bots/* (fks)  — the consumers   │
                     │  JanusBrain : rustrade::Brain         │
                     │   asks janus, maps to a Decision      │
                     └───────────────┬──────────────────────┘
@@ -142,7 +142,7 @@ bot. `exchange-apiws` provides market data **and** order execution.
 Each track lists the owning repo(s). Granular, checkable items live in each
 repo's `TODO.md`; this is the cross-cutting sequence and the "why."
 
-### Track 1 — Make execution real (highest leverage) · `rustrade` + `fks-full`
+### Track 1 — Make execution real (highest leverage) · `rustrade` + `fks`
 Without a real exchange adapter, nothing trades. This unblocks everything else.
 1. ✅ **`exchange-apiws → rustrade::ExchangeClient` adapter.** Shipped as
    `bots/rustrade-exchange-apiws/` (`KucoinExchangeAdapter`) over `exchange-apiws`'s
@@ -205,7 +205,7 @@ The sophistication exists; it's just not in the running binary.
 4. **Unify the three prop-firm/risk implementations** (`crates/models::prop_firm`,
    `crates/compliance`, `crates/logic::risk_engine`) into one.
 
-### Track 4 — The janus↔rustrade contract · `fks-full` (`bots/`) + `janus` ✅ MOSTLY SHIPPED
+### Track 4 — The janus↔rustrade contract · `fks` (`bots/`) + `janus` ✅ MOSTLY SHIPPED
 Make `JanusBrain` consume janus's *risk verdicts*, not just signals.
 1. ✅ **Route entries through janus's risk API**: `JanusBrain` now calls
    `/api/v1/risk/validate` (a veto → `Hold`) then `/api/v1/risk/calculate/position-size`
@@ -269,10 +269,10 @@ deepens the brain and broadens the asset universe.
 
 ## Cross-references
 
-- `fks-full/TODO.md` — orchestration + the `bots/` consumer work (Tracks 1.3, 4).
+- `fks/TODO.md` — orchestration + the `bots/` consumer work (Tracks 1.3, 4).
 - `janus/TODO.md` — brain/risk wiring, multi-asset breadth (Tracks 3, 5).
 - `janus/CONSOLIDATION_PLAN.md` — the (now complete) crate-consumption history.
 - `rustrade/TODO.md` — exchange adapter, portfolio risk, durable store, backtest
   fidelity (Tracks 1, 2, 6).
 - `exchange-apiws/todo.md` — signed surfaces for more venues (Track 5.2).
-- `indicators-ta` — no TODO yet; see this repo's note in `fks-full/TODO.md`.
+- `indicators-ta` — no TODO yet; see this repo's note in `fks/TODO.md`.

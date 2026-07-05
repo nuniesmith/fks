@@ -61,7 +61,7 @@ ENV SQLX_OFFLINE=true \
     CARGO_TARGET_DIR=/build/target
 
 # The spawner is a self-contained crate with its own nested [workspace]
-# (crates/spawner/Cargo.toml) — it is NOT a member of the fks-full root
+# (crates/spawner/Cargo.toml) — it is NOT a member of the fks root
 # workspace (which only has src/proto). Building `--bin spawner` from /build
 # therefore fails with "no bin target named `spawner` in default-run packages".
 # Point cargo at the crate's own manifest; CARGO_TARGET_DIR pins the output to

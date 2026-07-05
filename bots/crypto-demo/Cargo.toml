@@ -70,5 +70,5 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Standalone crate — resolves its own deps from crates.io (own [workspace]
-# so it detaches from the fks-full root virtual workspace).
+# so it detaches from the fks root virtual workspace).
 [workspace]

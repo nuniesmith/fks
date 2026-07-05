@@ -1,6 +1,6 @@
-# fks-full — TODO (orchestration / cross-cutting)
+# fks — TODO (orchestration / cross-cutting)
 
-> **Repo:** `github.com/nuniesmith/fks-full`
+> **Repo:** `github.com/nuniesmith/fks`
 > **Last synced:** 2026-06-14 — see **🗺️ NEXT PHASES** below for the current plan
 >
 > This file covers **cross-cutting** orchestration work — consuming the
@@ -35,7 +35,7 @@
 > `fks-releases-pending-publish`, `fks-stack-live-ops`.
 
 ### ✅ Shipped 2026-06-14 — do NOT redo
-- **fks-full:** cred passthrough + `KUCOIN_API_* → KC_*` bridge (#134/#135) ·
+- **fks:** cred passthrough + `KUCOIN_API_* → KC_*` bridge (#134/#135) ·
   reqwest TLS backend for the demo (#136) · IPv4-preference `gai.conf` so KuCoin
   is reachable from containers (#137) · env-configurable position sizing
   (`DEMO_MARGIN_PER_TRADE_USD`/`DEMO_MAX_CONTRACTS`, #138) · working default
@@ -71,7 +71,7 @@ roadmap had drifted). Confirmed against current `main`:
 - **Phase E — mostly DONE:** rustcode has `cargo-audit` + `cargo-deny` jobs +
   `deny.toml`; rustcode `RedisAuditCache` is implemented (the `todo!()` is only a
   stale comment); exchange-apiws has Dependabot + `cargo-deny` (#53).
-- **fks-full safety (#146):** `run.sh setup-env` no longer generates
+- **fks safety (#146):** `run.sh setup-env` no longer generates
   `ENABLE_EXECUTION=true` against the documented `=false` default.
 - **Still genuinely open (non-blocked):** finish A2 — (a) feed real specs into
   `bots/rustrade-exchange-apiws/src/kraken.rs` (still hardcodes
@@ -136,7 +136,7 @@ roadmap had drifted). Confirmed against current `main`:
       *Effort M–L · Risk M (routing). DoD: no 502s; WebUI reads janus; one data path.*
 
 ### Phase D — Split-to-private orchestrator  · *structural · lower urgency*
-- [ ] `SPLIT_PLAN.md` Phase 5: make fks-full **private**; add top-level
+- [ ] `SPLIT_PLAN.md` Phase 5: make fks **private**; add top-level
       `strategies/` for trading IP; all images → git-clone external / private
       registry.
 - [ ] Carve out `crates/spawner` → own repo/crate (crates.io `spawner` is taken →
@@ -166,7 +166,7 @@ roadmap had drifted). Confirmed against current `main`:
 ### ⚠️ Standing — your action
 - [ ] **Rotate the KuCoin + Kraken API keys** — they were printed in the
       2026-06-14 session transcript. After rotating, put new ones in
-      `fks-full/.env`: `KUCOIN_API_KEY/SECRET/PASSPHRASE` + `KRAKEN_API_KEY/SECRET`
+      `fks/.env`: `KUCOIN_API_KEY/SECRET/PASSPHRASE` + `KRAKEN_API_KEY/SECRET`
       (compose bridges KuCoin → the bot's `KC_*`).
 
 ### Recommended order for a fresh session  *(updated 2026-06-18)*
@@ -203,7 +203,7 @@ janus consumes them:
 | `exchange-apiws` | **0.7.0** ✅ | `exchange-apiws = "0.7"` (signed REST across 6 exchanges + private user-data WS + `f64` quantities) |
 | `jflow-core` (janus) | **0.1.0** ✅ | first janus lib; rest of `jflow-*` prepped, not pushed |
 
-`fks-full` keeps only `src/proto`, `src/sql`, `crates/spawner`, `src/web`,
+`fks` keeps only `src/proto`, `src/sql`, `crates/spawner`, `src/web`,
 infra, and `bots/` (with `strategies/` to come). The two reference bots
 (`fks-bot-example`, `crypto-demo`) build as `fks-bot-*` images via
 `./run.sh build-bots` and are spawnable from the WebUI `/bots`.
@@ -338,7 +338,7 @@ transitional systemd crypto bots are scraped by the static job added in #160).
 
 > **See [`docs/MULTI_ASSET_BRAIN_ROADMAP.md`](docs/MULTI_ASSET_BRAIN_ROADMAP.md)
 > for the full cross-repo plan + evidence.** The items below are the
-> **fks-full / `bots/`** slice. The rest live in `janus/TODO.md` and
+> **fks / `bots/`** slice. The rest live in `janus/TODO.md` and
 > `rustrade/TODO.md`.
 
 ### Track 1 — make execution real (the #1 blocker)
@@ -526,7 +526,7 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
 - [ ] **`bots/`** — more thin strategy bots that consume the published
       `rustrade` + `indicators-ta` + `exchange-apiws` crates.
       `bots/fks-bot-example` is the first, and the template, for these.
-- [ ] **`strategies/`** — once `fks-full` flips **private**, this is where the
+- [ ] **`strategies/`** — once `fks` flips **private**, this is where the
       actual trading IP lives. Bots get wired to consume the published crates.
 - [ ] Retrain: run bracket sweep (`scripts/bracket_sweep.py`), apply optimal
       brackets, retrain vs the 93.5% baseline.
@@ -553,7 +553,7 @@ per-asset-class `RiskConfig` presets, the `RiskSweepService` (UTC rollover), and
   `IncrementalAtr` lifted out of janus into `indicators-ta`.
 - **Stale in-tree duplicates removed** — `crates/{janus,indicators-ta,exchange-apiws,kucoin}`
   deleted; docs re-based on the post-split reality.
-- **Earlier (PRs #1–#21)** — the arc that took fks-full from "broken monolith"
+- **Earlier (PRs #1–#21)** — the arc that took fks from "broken monolith"
   to "framework + spawner + repo-split-ready": rustrade family + examples,
   build-rot cleanup, spawner DB persistence + auth + tests + WebUI, the
   `fks-bot-example` reference image, and the `rustcode` / `openclaw` /

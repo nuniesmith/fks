@@ -2,7 +2,7 @@
 
 ## What this repo is
 
-**`fks-full` is the operational/orchestration root** for the FKS trading
+**`fks` is the operational/orchestration root** for the FKS trading
 platform. It runs the production stack, owns infrastructure config (Docker,
 nginx, Prometheus, …), houses the deployment scripts, and **consumes** the
 reusable pieces from their own repos / crates.io.

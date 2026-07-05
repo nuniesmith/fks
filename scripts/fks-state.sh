@@ -2,7 +2,7 @@
 # =============================================================================
 # fks-state.sh — encrypted backup / restore of the FKS *private* state.
 #
-# Lets fks-full (and the bot repos) be PUBLIC by keeping everything sensitive
+# Lets fks (and the bot repos) be PUBLIC by keeping everything sensitive
 # OUT of the repo and in an encrypted, versioned snapshot stored in a private
 # repo (default: github.com/nuniesmith/fks-state). The public repo ships only
 # templates (.env.example, state.example/) + this tool + the manifest.

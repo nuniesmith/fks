@@ -20,7 +20,7 @@ infrastructure/certs/
 
 # ── Strategy configs — the edge (the bot repos' tuned params) ────────────────
 # These live in the bot repos; symlink or copy them here, or point at them
-# directly if checked out alongside fks-full. Uncomment what applies:
+# directly if checked out alongside fks. Uncomment what applies:
 # ../crypto/funding.toml
 # ../crypto/spot-portfolio.toml
 # ../dip/.env

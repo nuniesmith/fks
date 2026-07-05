@@ -1,7 +1,7 @@
 # spawner — Claude Code Project Instructions
 
 > **Repo (future):** `github.com/nuniesmith/spawner`
-> **Today's path:** `fks-full/crates/spawner/` (recently moved from
+> **Today's path:** `fks/crates/spawner/` (recently moved from
 > `src/spawner/`). Will become its own published crate.
 
 ## What this is
@@ -113,7 +113,7 @@ curl -N http://localhost:8090/container/<id>/logs?tail=100 \
   `bollard::query_parameters::*Options` API throughout; there is **no**
   `#![allow(deprecated)]` shim. Verified by the blocking `clippy -D warnings`
   gate (which denies the `deprecated` lint), so a regression would fail CI.
-- **Postgres schema** lives in `fks-full/src/sql/ruby/007_spawner.sql` (or `src/ruby/sql/` after the in-flight reorg lands). Either way, the schema isn't owned by this crate — it travels with the Ruby DB migrations. Don't duplicate it here.
+- **Postgres schema** lives in `fks/src/sql/ruby/007_spawner.sql` (or `src/ruby/sql/` after the in-flight reorg lands). Either way, the schema isn't owned by this crate — it travels with the Ruby DB migrations. Don't duplicate it here.
 
 ## Status
 

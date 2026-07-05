@@ -1,6 +1,6 @@
 # Private state: backup & import
 
-`fks-full` is a **public** orchestrator. Everything sensitive — secrets, TLS
+`fks` is a **public** orchestrator. Everything sensitive — secrets, TLS
 certs, the runtime secret store, tuned strategy configs, live trading state, and
 model weights — lives **outside** the repo, in an encrypted, versioned snapshot
 stored in a **private** repo (`nuniesmith/fks-state`). The public repo ships only
@@ -62,7 +62,7 @@ $EDITOR state.manifest            # tune to your deployment
 ```
 
 On a fresh box (disaster recovery): install age, **restore your `age.key`**, then
-`git clone …/fks-full && cd fks-full && ./scripts/fks-state.sh import` → the stack
+`git clone …/fks && cd fks && ./scripts/fks-state.sh import` → the stack
 is ready to bring up.
 
 ## Security notes

@@ -1,9 +1,9 @@
 # ============================================================================
-# spawner — nested workspace (own dep universe, independent of fks-full root)
+# spawner — nested workspace (own dep universe, independent of fks root)
 #
 # This crate is heading for its own repo (see SPLIT_PLAN.md). The empty
 # [workspace] block keeps cargo from auto-attaching it to the parent
-# fks-full workspace, so `cargo check -p spawner` works both here and
+# fks workspace, so `cargo check -p spawner` works both here and
 # from inside the eventual standalone repo without any reshuffling.
 #
 # Deps are pinned to explicit versions (rather than `workspace = true`)

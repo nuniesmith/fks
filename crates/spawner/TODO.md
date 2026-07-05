@@ -38,7 +38,7 @@
 
 ## ✅ Recently shipped
 
-- HTTP API + Docker SDK wrapper + Prometheus self-metrics + file_sd writer (initial PRs in `fks-full`).
+- HTTP API + Docker SDK wrapper + Prometheus self-metrics + file_sd writer (initial PRs in `fks`).
 - Postgres persistence via `BotRunStore` (PR #12).
 - `/bots` WebUI route (PR #13).
 - Build rot + Axum 0.8 path syntax + Bollard 0.19 cleanup (PRs #11, #14, #18).
@@ -50,4 +50,4 @@
 - Bollard 0.19 deprecation migration fully landed — `query_parameters::*OptionsBuilder`, no `#![allow(deprecated)]` shim (the P0 item was stale; verified complete).
 - Root `Cargo.toml` workspace-members refreshed so `cargo check` from repo root works (PR #21).
 - Per-workspace CI job in `.github/workflows/rust.yml` (PR #23) — spawner's job has been passing throughout the CI green-up arc.
-- The "README polish — no fks-full path references" item from earlier was verified clean (zero `fks-full` references in `crates/spawner/README.md`).
+- The "README polish — no fks path references" item from earlier was verified clean (zero `fks` references in `crates/spawner/README.md`).

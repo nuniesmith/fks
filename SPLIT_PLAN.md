@@ -1,6 +1,6 @@
 # FKS Split Plan
 
-> Operational blueprint for cracking `fks-full` into multiple repos.
+> Operational blueprint for cracking `fks` into multiple repos.
 >
 > **Last updated:** 2026-05-31
 >
@@ -23,7 +23,7 @@
 
 ## End-state vision
 
-`fks-full` becomes a **private orchestration repo** — the place that runs
+`fks` becomes a **private orchestration repo** — the place that runs
 production, holds secrets, defines the deployment topology, and houses my
 **actual trading strategies** (the parts I don't open-source).
 
@@ -32,7 +32,7 @@ crates.io / PyPI / npm.
 
 ```
                         ┌────────────────────────────────────┐
-                        │       fks-full  (PRIVATE)          │
+                        │       fks  (PRIVATE)          │
                         │                                    │
                         │  docker-compose.yml                │
                         │  infrastructure/  (Dockerfiles)    │
@@ -85,9 +85,9 @@ crates.io / PyPI / npm.
 | `nuniesmith/janus`                     | TBD (probably private) | `crates/janus/`  | Will be carved up per `JANUS_EXTRACTION_PLAN.md` — public siblings ship via crates.io, the brain stays private |
 | `nuniesmith/ruby`                      | TBD        | `src/ruby/`                  | Python package; deployed as the `nuniesmith/fks:ruby` Docker image |
 | `nuniesmith/fks-web`                   | public     | `src/web/`                   | Dockerized SvelteKit app |
-| `nuniesmith/fks-full` (this repo)      | **private** | — (we're already here)      | Docker compose + secrets + strategies only |
+| `nuniesmith/fks` (this repo)      | **private** | — (we're already here)      | Docker compose + secrets + strategies only |
 
-### What stays in `fks-full` post-split
+### What stays in `fks` post-split
 
 - `docker-compose.yml`, `docker-compose.prod.yml`
 - `infrastructure/` — Dockerfiles, configs (nginx, prometheus, grafana, …), Kubernetes manifests, Tailscale certs
@@ -98,7 +98,7 @@ crates.io / PyPI / npm.
 - `docs/` — runbooks + architecture notes for the production deployment
 - (new) `strategies/` — the actual private trading logic the rest of the world doesn't see
 
-### What leaves `fks-full`
+### What leaves `fks`
 
 Eventually empty (each becomes a `*_REF` build arg pointing at the external repo):
 - `crates/rustrade/`
@@ -172,7 +172,7 @@ Each future-external directory needs **README.md + CLAUDE.md + TODO.md**
 
 The new CLAUDE.md files follow the same structure as the root one
 (overview → stack → build commands → conventions → gotchas) but are
-self-contained — readable without any context from `fks-full`.
+self-contained — readable without any context from `fks`.
 
 ---
 
@@ -201,7 +201,7 @@ self-contained — readable without any context from `fks-full`.
 - [ ] `spawner` → crates.io / Docker Hub (still in-tree; not yet its own repo).
 
 ### Phase 3 — Consume the published crates 🔄 in progress ← we are here
-- [x] Repos extracted; `fks-full` carries no library path-deps on them.
+- [x] Repos extracted; `fks` carries no library path-deps on them.
 - [x] Stale in-tree duplicates removed (`crates/{janus,indicators-ta,exchange-apiws,kucoin}`).
 - [x] **Ported `fks-bot-example` → `bots/` on crates.io `rustrade-framework`
       and deleted `crates/rustrade`** — proves end-to-end crates.io consumption.
@@ -211,14 +211,14 @@ self-contained — readable without any context from `fks-full`.
 
 ### Phase 4 — Service repos ✅ mostly done
 - [x] `janus` → `github.com/nuniesmith/janus`; image builds via `git clone`.
-- [x] **`src/ruby/` removed from `fks-full`** (2026-06-07) — janus is the platform
+- [x] **`src/ruby/` removed from `fks`** (2026-06-07) — janus is the platform
       now; the Python service was deleted rather than carried as a git-clone build.
       Rebuild whatever long-tail features you need as janus crates (or a Rithmic
       sidecar). See [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).
       The spawner's `ruby_db` schema was preserved in `src/sql/spawner/`.
 - [ ] `src/web/` → `github.com/nuniesmith/fks-web` (Dockerfile already git-clone capable; flip when ready).
 
-### Phase 5 — `fks-full` is the private orchestrator ⬜ not started
+### Phase 5 — `fks` is the private orchestrator ⬜ not started
 - [ ] Repo flips `private`.
 - [ ] New top-level `strategies/` directory for the actual trading IP.
 - [ ] All service images `git clone` external repos or pull pre-built images
@@ -251,10 +251,10 @@ self-contained — readable without any context from `fks-full`.
 For every directory that becomes its own repo:
 
 - [ ] `cargo check --workspace` (or `npm run check`, or `pytest`) passes from inside the directory.
-- [ ] `README.md` is self-contained — no references to `fks-full` paths.
+- [ ] `README.md` is self-contained — no references to `fks` paths.
 - [ ] `CLAUDE.md` describes everything an AI assistant needs to know to work in the repo without context from elsewhere.
 - [ ] `TODO.md` only lists work that belongs in this repo.
 - [ ] Every dep is either crates.io / PyPI / npm, OR a path dep that the new repo can satisfy locally.
 - [ ] CI config (when added in the new repo) actually runs the tests.
 - [ ] License + repo URL in `Cargo.toml` / `package.json` / `pyproject.toml` updated.
-- [ ] The current `fks-full` Dockerfile that consumed the code gets a `git clone --branch ${REPO_REF:-main}` step.
+- [ ] The current `fks` Dockerfile that consumed the code gets a `git clone --branch ${REPO_REF:-main}` step.

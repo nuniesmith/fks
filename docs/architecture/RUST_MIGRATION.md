@@ -1,7 +1,7 @@
 # RFC: Phasing out Python (Ruby) into a burn-native Rust platform
 
 > **Status:** Active — 2026-06-07. **`src/ruby/` has been removed from
-> `fks-full`** (see §0.1); the remaining work is finishing the burn-native
+> `fks`** (see §0.1); the remaining work is finishing the burn-native
 > capabilities inside janus.
 > **Goal:** Retire the Python "Ruby" service and run the platform Rust-only,
 > with native `burn` ML, by **growing janus into the platform** rather than
@@ -18,9 +18,9 @@ here is a big-bang rewrite.
 
 ---
 
-## 0.1 What changed (2026-06-07): Ruby removed from fks-full
+## 0.1 What changed (2026-06-07): Ruby removed from fks
 
-`fks-full` no longer carries the Python trading system. **janus is good enough
+`fks` no longer carries the Python trading system. **janus is good enough
 for the demo**, so rather than keep the Python service limping behind a service
 boundary until the very end (the original Phase 5 ordering), we cut it now and
 let the repo become the lean janus-centric orchestrator it's heading toward
@@ -244,7 +244,7 @@ Each phase ships independently and leaves the system trading correctly.
 - **Rithmic stays Python** behind a thin gRPC/HTTP shim — migrated last, or never.
 - **Exit:** `src/ruby/` deleted except (optionally) a minimal Rithmic sidecar.
 - **Status (2026-06-07):** the deletion happened *early* — `src/ruby/` is gone
-  from `fks-full` now (§0.1) since janus is good enough for the demo. The
+  from `fks` now (§0.1) since janus is good enough for the demo. The
   long-tail features were simply **not carried over**; rebuild the ones you
   actually need as janus crates (or a Rithmic sidecar) rather than porting the
   whole Python surface. This is the strangler-fig's final cut, pulled forward.
@@ -359,7 +359,7 @@ are straightforward Rust. janus's `services/backward` already has the scaffoldin
 
 With `src/ruby/` gone (§0.1) and the burn-native ML scaffolding built, the
 remaining work splits into **ML parity/polish** (inside janus) and
-**infrastructure repoint** (here in fks-full). None of it blocks the janus demo.
+**infrastructure repoint** (here in fks). None of it blocks the janus demo.
 
 ### A. ML — finish the burn-native champion (janus `crates/ml`)
 1. **Champion goldens (the one real blocker).** In your Python env, dump
@@ -378,7 +378,7 @@ remaining work splits into **ML parity/polish** (inside janus) and
 5. Move gap-scan / backfill / reconcile into janus `services/data`; retire
    `python_data_client.rs` once janus is the only QuestDB/Postgres/Redis writer.
 
-### C. Infrastructure repoint (fks-full — left dangling by the removal)
+### C. Infrastructure repoint (fks — left dangling by the removal)
 6. **WebUI → janus data contract.** The SvelteKit app's `PUBLIC_API_URL` now
    points at janus (`:7000`) but janus doesn't serve Ruby's API shape yet.
    Either version janus's axum API to cover what the dashboard calls, or trim the

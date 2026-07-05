@@ -1,4 +1,4 @@
-# fks-full
+# fks
 
 **FKS Trading System — infrastructure, orchestration, and runtime.**
 
@@ -11,7 +11,7 @@ deployment tooling.
 > and `exchange-apiws` are now their own repos, and the libraries are on
 > crates.io. This repo consumes them — it doesn't contain them. The full map
 > is in [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md);
-> the remaining moves are in [`SPLIT_PLAN.md`](SPLIT_PLAN.md). `fks-full` is
+> the remaining moves are in [`SPLIT_PLAN.md`](SPLIT_PLAN.md). `fks` is
 > heading toward a **private orchestrator** role that holds the production
 > strategies, secrets, and deployment topology.
 
@@ -19,7 +19,7 @@ deployment tooling.
 
 ## The pieces
 
-`fks-full` orchestrates four external repos (each its own crate(s) /
+`fks` orchestrates four external repos (each its own crate(s) /
 service) plus the bits that stay here.
 
 ### External — consumed, not contained
@@ -161,7 +161,7 @@ SPAWNER_REF=main
 ## Repository layout
 
 ```
-fks-full/
+fks/
 ├── README.md              # ← you are here
 ├── CLAUDE.md              # AI-assistant project rules
 ├── TODO.md                # cross-cutting roadmap

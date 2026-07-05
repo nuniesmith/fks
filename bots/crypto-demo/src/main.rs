@@ -76,6 +76,14 @@ fn env_u64(key: &str, default: u64) -> u64 {
 async fn main() -> anyhow::Result<()> {
     rustrade::logging::init_tracing();
 
+    // exchange-apiws compiles reqwest with `rustls-no-provider`, and cargo
+    // feature-unification applies that to every reqwest client in this binary.
+    // Its own client constructors install the ring provider, but the paper
+    // MockExchange path never calls them — so JanusBrain's plain-HTTP
+    // reqwest::Client panics at build time ("No rustls crypto provider is
+    // configured") unless we install one first. Idempotent.
+    exchange_apiws::ensure_crypto_provider();
+
     // ── Config from env ───────────────────────────────────────────────────
     let bot_id = std::env::var("FKS_BOT_ID").unwrap_or_else(|_| "crypto-demo".into());
     // KuCoin Futures perpetual symbols (XBT = BTC on KuCoin). Override with

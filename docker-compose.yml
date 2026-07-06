@@ -383,6 +383,25 @@ services:
             - REDIS_PORT=6379
             - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD required}
             - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+            # ── Experience pipeline (janus docs/architecture/EXPERIENCE_PIPELINE.md) ──
+            # forward records per-candle decisions → Arrow IPC spool on /dev/shm
+            # → backward ingests into Qdrant. Default OFF (same default-off
+            # discipline as JANUS_RISK_ENFORCE / ENABLE_EXECUTION).
+            - JANUS_EXPERIENCE_ENABLED=${JANUS_EXPERIENCE_ENABLED:-false}
+            # Spool lives on this container's /dev/shm tmpfs (sized via
+            # shm_size below). Forward (writer) and backward (ingester) both
+            # run inside THIS one container (unified bin/janus binary), so no
+            # cross-container tmpfs mount is needed.
+            - JANUS_EXPERIENCE_SPOOL_DIR=${JANUS_EXPERIENCE_SPOOL_DIR:-/dev/shm/janus/experience}
+            - JANUS_EXPERIENCE_BATCH_ROWS=${JANUS_EXPERIENCE_BATCH_ROWS:-256}
+            - JANUS_EXPERIENCE_FLUSH_SECS=${JANUS_EXPERIENCE_FLUSH_SECS:-60}
+            - JANUS_EXPERIENCE_SPOOL_MAX_MB=${JANUS_EXPERIENCE_SPOOL_MAX_MB:-256}
+            # Qdrant vector store for ingested experiences — the `qdrant`
+            # service above (container fks_qdrant, gRPC 6334). USE_MOCK=false:
+            # if Qdrant is unreachable, ingest batches stay parked in the spool
+            # instead of "persisting" to an in-memory mock that dies on restart.
+            - QDRANT_URL=${QDRANT_URL:-http://fks_qdrant:6334}
+            - QDRANT_USE_MOCK=${QDRANT_USE_MOCK:-false}
             - OPTIMIZER_ENABLED=${OPTIMIZER_ENABLED:-true}
             - DATA_DIR=/app/data
             - OPTIMIZER_DATA_DIR=/app/data
@@ -402,6 +421,11 @@ services:
             - "127.0.0.1:7001:8180" # Forward REST API (brain health, affinity endpoints)
             - "127.0.0.1:7002:50052" # PositionFeedback gRPC
             - "127.0.0.1:9092:9090" # Unified /metrics (brain+signals+optimizer live on container :9090; Prometheus scrapes janus:9090)
+        # /dev/shm sizing: Docker's default shm is 64 MB, but the experience
+        # spool lives there and its cap (JANUS_EXPERIENCE_SPOOL_MAX_MB) defaults
+        # to 256 MB — size the tmpfs comfortably above the cap so the writer's
+        # drop-oldest bound, not ENOSPC, is what limits the spool.
+        shm_size: "512m"
         tmpfs:
             - /tmp
             - /var/tmp
@@ -416,6 +440,8 @@ services:
             redis:
                 condition: service_healthy
             questdb:
+                condition: service_healthy
+            qdrant:
                 condition: service_healthy
         restart: unless-stopped
         healthcheck:

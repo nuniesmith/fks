@@ -46,7 +46,8 @@ DEMO_SYMBOLS=XBTUSDTM,ETHUSDTM DEMO_POLL_SECS=30 cargo run -p crypto-demo
 DEMO_SOURCE=synthetic cargo run -p crypto-demo
 
 # Let JANUS make the decisions (the janus ↔ rustrade tie-in):
-DEMO_BRAIN=janus JANUS_HTTP_URL=http://localhost:8080 cargo run -p crypto-demo
+# (forward service: :8180 native janus; :7001 from the host against the compose stack)
+DEMO_BRAIN=janus JANUS_HTTP_URL=http://localhost:8180 cargo run -p crypto-demo
 ```
 
 ## Two brains (`DEMO_BRAIN`)
@@ -62,9 +63,11 @@ The same wiring runs with either decision-maker:
 `Brain` swaps — candle pollers, supervisor, risk gate, paper exchange, and the
 `fks_bot_*` metrics are identical. It's resilient: if janus is unreachable or
 returns no signal it **holds** (never crashes), so a long run survives janus
-restarts. Point `JANUS_HTTP_URL` at the janus forward service (default
-`http://localhost:8080`); inside the FKS compose network that's
-`http://fks_janus:8080`.
+restarts. Point `JANUS_HTTP_URL` at the janus **forward** service (default
+`http://localhost:8180`, janus's native forward REST port); inside the FKS
+compose network that's `http://fks_janus:8180`, and from the host against the
+compose stack it's `http://localhost:7001`. (`:8080` / `fks_janus:8080` is the
+janus *api* service — signal generation 404s there.)
 
 Then watch it work:
 
@@ -84,7 +87,7 @@ curl -s localhost:9091/health      # → ok
 |-----|---------|---------|
 | `DEMO_SOURCE` | `kucoin` | `kucoin` (live) or `synthetic` (offline) |
 | `DEMO_BRAIN` | `ema-cross` | `ema-cross` (local) or `janus` (delegate to janus) |
-| `JANUS_HTTP_URL` | `http://localhost:8080` | janus forward service (when `DEMO_BRAIN=janus`) |
+| `JANUS_HTTP_URL` | `http://localhost:8180` | janus **forward** service (when `DEMO_BRAIN=janus`) — `fks_janus:8180` in-network, `localhost:7001` from the host |
 | `DEMO_SYMBOLS` | `XBTUSDTM,ETHUSDTM,SOLUSDTM` | comma-separated pairs (KuCoin Futures symbols) |
 | `DEMO_POLL_SECS` | `60` | how often to poll for new candles |
 | `DEMO_CANDLE_SECS` | `60` | candle interval (maps to KuCoin granularity) |

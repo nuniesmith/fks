@@ -249,6 +249,42 @@ get_tailscale_ip() {
     echo ""
 }
 
+# ---------------------------------------------------------------------------
+# Build pins — clone-layer cache busting for git-clone-built images
+# ---------------------------------------------------------------------------
+# janus/webui build by cloning a MOVING ref (main). Docker's layer cache can't
+# see the remote move, so an unpinned rebuild may silently reuse a stale clone
+# and ship old code while reporting success (bit us on oryx 2026-07-06: a
+# "rebuild" redeployed a 10-hour-old janus). Resolving the remote head sha
+# into JANUS_COMMIT/WEB_COMMIT (compose → REPO_COMMIT build arg) busts the
+# clone layer exactly when the remote moves. Best-effort: if ls-remote fails
+# the pin stays empty and the build behaves as before (cached — warned).
+resolve_build_pins() {
+    local janus_repo="${JANUS_REPO:-https://github.com/nuniesmith/janus}"
+    local janus_ref="${JANUS_REF:-main}"
+    local web_repo="${WEB_REPO:-https://github.com/nuniesmith/fks-web}"
+    local web_ref="${WEB_REF:-main}"
+    if [ -z "${JANUS_COMMIT:-}" ] && [ -n "$janus_repo" ]; then
+        JANUS_COMMIT=$(git ls-remote "$janus_repo" "$janus_ref" 2>/dev/null | head -1 | cut -f1)
+        export JANUS_COMMIT
+    fi
+    if [ -z "${WEB_COMMIT:-}" ] && [ -n "$web_repo" ]; then
+        WEB_COMMIT=$(git ls-remote "$web_repo" "$web_ref" 2>/dev/null | head -1 | cut -f1)
+        export WEB_COMMIT
+    fi
+    if [ -n "${JANUS_COMMIT:-}" ]; then
+        info "janus build pinned to ${JANUS_COMMIT:0:9} (${janus_ref})"
+    else
+        warn "janus build UNPINNED (ls-remote failed?) — clone layer may come from cache"
+    fi
+    if [ -n "${WEB_COMMIT:-}" ]; then
+        info "webui build pinned to ${WEB_COMMIT:0:9} (${web_ref})"
+    else
+        warn "webui build UNPINNED (ls-remote failed?) — clone layer may come from cache"
+    fi
+    return 0
+}
+
 # =============================================================================
 # .env management
 # =============================================================================
@@ -913,6 +949,7 @@ cmd_build() {
     local mode="${1:-dev}"
     shift || true
     header "Building Images (${mode})"
+    resolve_build_pins
     if [ "$mode" = "prod" ]; then
         $DC -f "$COMPOSE_FILE" -f "$PROD_COMPOSE_FILE" build "$@"
     else
@@ -978,6 +1015,7 @@ cmd_all() {
     local demo_profile=""
     [ "$with_demo" = true ] && demo_profile="--profile demo"
 
+    resolve_build_pins
     log "Building service images..."
     $DC $demo_profile build
     echo ""
@@ -1128,6 +1166,7 @@ cmd_fresh() {
     local demo_profile=""
     [ "$with_demo" = true ] && demo_profile="--profile demo"
 
+    resolve_build_pins
     log "Building service images ..."
     $DC $demo_profile build
     echo ""

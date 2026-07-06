@@ -168,14 +168,29 @@ ARG MIGRATIONS_DEST=""
 #   REPO_URL set               → git clone --depth=1 --branch REPO_REF REPO_URL
 ARG REPO_URL=""
 ARG REPO_REF=main
+# Cache-bust pin for the clone layer. A branch name like "main" is a moving
+# target Docker's layer cache can't see through — with REPO_COMMIT unset, a
+# rebuild can silently reuse a WEEKS-old cached clone and ship stale code
+# while reporting success. run.sh resolves this to the remote head sha per
+# build (resolve_repo_commit); any change invalidates the clone layer.
+ARG REPO_COMMIT=""
 
 ENV SQLX_OFFLINE=${SQLX_OFFLINE}
 
 # Acquire workspace source — git clone or local context copy.
 # Both modes land the full workspace at /build so cargo build works identically.
+# ${REPO_COMMIT} participates in the RUN's cache key via the echo; when set it
+# is also verified against the clone so a stale mirror fails loudly.
 RUN --mount=type=bind,source=.,target=/ctx \
+    echo "source pin: ${REPO_COMMIT:-unpinned}" && \
     if [ -n "${REPO_URL}" ]; then \
         git clone --depth=1 --branch "${REPO_REF}" "${REPO_URL}" /tmp/_repo && \
+        if [ -n "${REPO_COMMIT}" ]; then \
+            actual="$(git -C /tmp/_repo rev-parse HEAD)" && \
+            if [ "${actual}" != "${REPO_COMMIT}" ]; then \
+                echo "ERROR: cloned ${actual} but expected ${REPO_COMMIT}" >&2 && exit 1; \
+            fi; \
+        fi && \
         cp -r /tmp/_repo/. . && \
         rm -rf /tmp/_repo; \
     else \

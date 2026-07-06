@@ -26,6 +26,10 @@ FROM node:${NODE_VERSION}-alpine AS builder
 ARG REPO_URL=""
 ARG REPO_REF=main
 ARG APP_SRC=src/web
+# Cache-bust pin for the clone layer — same mechanism as the rust base image:
+# without it, a rebuild can silently reuse a stale cached clone of the moving
+# REPO_REF branch. run.sh resolves the remote head sha per build.
+ARG REPO_COMMIT=""
 
 WORKDIR /app
 
@@ -35,10 +39,20 @@ RUN apk add --no-cache git
 # `set -e` so a failed clone fails the BUILD — previously the trailing
 # `rm -rf` returned 0 after a clone failure, letting the build continue into
 # an empty directory and die confusingly at `npm ci` (missing lockfile).
+# ${REPO_COMMIT} participates in the RUN's cache key via the echo; when set
+# it is verified against the clone so a stale mirror fails loudly.
 RUN --mount=type=bind,source=.,target=/ctx \
     set -e; \
+    echo "source pin: ${REPO_COMMIT:-unpinned}"; \
     if [ -n "${REPO_URL}" ]; then \
         git clone --depth=1 --branch "${REPO_REF}" "${REPO_URL}" /tmp/_repo; \
+        if [ -n "${REPO_COMMIT}" ]; then \
+            actual="$(git -C /tmp/_repo rev-parse HEAD)"; \
+            if [ "${actual}" != "${REPO_COMMIT}" ]; then \
+                echo "ERROR: cloned ${actual} but expected ${REPO_COMMIT}" >&2; \
+                exit 1; \
+            fi; \
+        fi; \
         cp -r /tmp/_repo/. .; \
         rm -rf /tmp/_repo; \
     else \

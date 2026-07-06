@@ -115,8 +115,12 @@ async fn main() -> anyhow::Result<()> {
     //   "janus"               — POST features to janus and act on its signal
     let brain_kind = std::env::var("DEMO_BRAIN").unwrap_or_else(|_| "ema-cross".into());
     let brain: Arc<dyn Brain> = if brain_kind.eq_ignore_ascii_case("janus") {
+        // POST /api/v1/signals/generate lives on janus's FORWARD service:
+        // natively that's :8180; inside the FKS compose network
+        // http://fks_janus:8180; from the host against the compose stack
+        // http://localhost:7001. (:8080 is the api service — it 404s.)
         let janus_url =
-            std::env::var("JANUS_HTTP_URL").unwrap_or_else(|_| "http://localhost:8080".into());
+            std::env::var("JANUS_HTTP_URL").unwrap_or_else(|_| "http://localhost:8180".into());
         info!(janus_url = %janus_url, "using JanusBrain — signals delegated to janus");
         Arc::new(JanusBrain::new(
             format!("janus-{bot_id}"),

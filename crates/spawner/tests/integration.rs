@@ -568,6 +568,28 @@ async fn secrets_post_rejects_missing_fields() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn secrets_delete_degrades_gracefully_without_db() {
+    // No DATABASE_URL (store: None) — DELETE /secrets/{exchange} must degrade
+    // to ok:false + db_enabled:false, never 500.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(
+            Request::delete("/secrets/kraken")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"ok\":false"), "body: {payload}");
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Saved spawn configs (db feature) — graceful behaviour without a live Postgres
 // ─────────────────────────────────────────────────────────────────────────────

@@ -352,6 +352,20 @@ impl BotRunStore {
         Ok(rows.into_iter().map(SecretStatusRow::from_row).collect())
     }
 
+    /// Delete one exchange's stored credentials (hard delete — the encrypted
+    /// row is gone, unlike bot_configs' soft-delete). Returns whether a row
+    /// existed.
+    pub async fn delete_secret(&self, exchange: &str) -> Result<bool, SpawnerError> {
+        let res = sqlx::query("DELETE FROM exchange_secrets WHERE exchange = $1")
+            .bind(exchange)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx)?;
+        let removed = res.rows_affected() > 0;
+        debug!(exchange = %exchange, removed, "exchange_secrets row deleted");
+        Ok(removed)
+    }
+
     // ── bot_configs (see src/sql/spawner/002_spawner.sql) ───────────────────
     // Reusable named spawn templates. Resource limits + env live in the row's
     // JSONB `config_json` (the sqlx build has no decimal feature, so the NUMERIC

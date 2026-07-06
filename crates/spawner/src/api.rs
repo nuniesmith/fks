@@ -101,6 +101,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/runs", get(runs_handler))
         .route("/secrets", post(secrets_handler))
         .route("/secrets/status", get(secrets_status_handler))
+        .route("/secrets/{exchange}", delete(delete_secret_handler))
         .route(
             "/configs",
             get(list_configs_handler).post(save_config_handler),
@@ -531,6 +532,26 @@ async fn secrets_handler(
     Ok((
         StatusCode::OK,
         Json(serde_json::json!({ "ok": true, "exchange": exchange })),
+    ))
+}
+
+#[cfg(feature = "db")]
+async fn delete_secret_handler(
+    State(state): State<AppState>,
+    Path(exchange): Path<String>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let exchange = exchange.trim().to_lowercase();
+    let Some(store) = state.store.as_ref() else {
+        return Ok(Json(
+            serde_json::json!({ "ok": false, "db_enabled": false }),
+        ));
+    };
+
+    let removed = store.delete_secret(&exchange).await?;
+    // Log only the exchange — never credentials.
+    info!(exchange = %exchange, removed, "deleted exchange API credentials");
+    Ok(Json(
+        serde_json::json!({ "ok": removed, "exchange": exchange }),
     ))
 }
 

@@ -959,6 +959,16 @@ cmd_all() {
     ensure_tls_certs
     echo ""
 
+    # Build the postgres image BEFORE its first start: on a fresh host, `up`
+    # would otherwise pull/start a stale image and initialize the data volume
+    # without the baked /docker-entrypoint-initdb.d schema scripts — leaving
+    # janus_db/ruby_db present but EMPTY (initdb only runs on an empty volume,
+    # so the later build never gets a second chance). cmd_fresh already does
+    # this; cmd_all was the remaining path with the trap.
+    log "Building postgres image (bakes the DB init scripts) ..."
+    $DC build postgres
+    echo ""
+
     log "Starting postgres for database bootstrap ..."
     $DC up -d postgres 2>/dev/null || true
     sleep 3

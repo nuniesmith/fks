@@ -554,6 +554,27 @@ services:
     # PROXY
     # ===========================================================================
 
+    # Static MkDocs site (mkdocs.yml + docs/) — nginx proxies /docs-viewer/
+    # here; the WebUI /docs tab embeds it. Internal-only (no host port).
+    docs:
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/docs/Dockerfile
+        image: nuniesmith/fks:docs
+        container_name: fks_docs
+        restart: unless-stopped
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+            - CHOWN
+            - SETGID
+            - SETUID
+        networks:
+            - fks-network
+
     nginx:
         build:
             context: .

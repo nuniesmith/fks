@@ -67,24 +67,9 @@ plugins:
       separator: '[\s\-\.]+'
       lang: en
 
-  # Python docstring extraction
-  - mkdocstrings:
-      handlers:
-        python:
-          options:
-            docstring_style: google
-            show_source: true
-            show_root_heading: true
-            show_root_full_path: false
-            show_if_no_docstring: false
-            inherited_members: true
-            members_order: source
-            separate_signature: true
-            show_signature_annotations: true
-            signature_crossrefs: true
-          paths: [src]
-          import:
-            - https://docs.python.org/3/objects.inv
+  # (mkdocstrings removed: it extracted docstrings from the Python "Ruby"
+  # services, which were deleted in the janus migration — the plugin only
+  # added a hard build dependency with nothing left to document.)
 
 # Markdown extensions
 markdown_extensions:
@@ -266,7 +251,8 @@ nav:
       - Threat Model: research/threat_model.md
 
 # Watch for changes (dev mode)
+# (ai-agent removed: that directory no longer exists and a missing watch
+# path is a hard config error that aborts `mkdocs build`.)
 watch:
   - docs
-  - ai-agent
   - mkdocs.yml

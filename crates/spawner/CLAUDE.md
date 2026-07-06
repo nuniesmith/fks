@@ -54,6 +54,7 @@ cargo test -p spawner            # unit (incl. stats math) + HTTP integration te
 | `GET` | `/runs` | yes (db only) | Recent `bot_runs` history |
 | `POST` | `/secrets` | yes (db only) | Store exchange API credentials (never read back) |
 | `GET` | `/secrets/status` | yes (db only) | Which exchanges have keys configured |
+| `DELETE` | `/secrets/{exchange}` | yes (db only) | Remove one exchange's stored credentials (hard delete) |
 | `GET` `POST` | `/configs` | yes (db only) | List / save (UPSERT) reusable spawn configs |
 | `DELETE` | `/configs/{name}` | yes (db only) | Soft-delete a saved config |
 

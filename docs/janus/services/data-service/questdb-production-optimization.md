@@ -238,6 +238,29 @@ PARTITION BY YEAR   -- historical_data
 - Easier retention management (drop old partitions)
 - Parallel operations per partition
 
+#### Deduplication (candles_crypto)
+
+`candles_crypto` is auto-created over ILP by the janus candle sink with
+designated timestamp `timestamp` and columns
+`timestamp, open, high, low, close, volume, symbol, exchange, interval`. To make
+duplicate candle rows impossible at the storage layer (companion to backfill
+PR #141), the table has DEDUP enabled on the natural key:
+
+```sql
+-- fresh volume: init.sql CREATE TABLE already carries this clause
+DEDUP UPSERT KEYS(timestamp, symbol, exchange, interval)
+
+-- already-running table (idempotent, no restart) — see
+-- infrastructure/config/questdb/migrations/001_candles_crypto_dedup.sql
+ALTER TABLE candles_crypto DEDUP ENABLE UPSERT KEYS(timestamp, symbol, exchange, interval);
+```
+
+Re-ingesting the same `(timestamp, symbol, exchange, interval)` now upserts the
+existing row instead of appending a duplicate. Requires a WAL table (it is); the
+designated timestamp must be one of the keys (it is). QuestDB has no initdb hook,
+so `init.sql` is not auto-run — the ALTER above is the operative migration on
+existing deploys.
+
 #### Storage Class
 
 **AWS EBS GP3 (recommended):**

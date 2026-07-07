@@ -27,19 +27,42 @@ CREATE TABLE IF NOT EXISTS trades_crypto (
 
 -- ----------------------------------------------------------------------------
 -- Candles Table
--- Stores OHLCV candle data for backfilling and historical analysis
+-- Stores OHLCV candle data for backfilling and historical analysis.
+--
+-- ⚠️  This DDL is the CANONICAL schema for candles_crypto, but note QuestDB has
+--     no Postgres-style initdb hook — it does not execute this file on startup
+--     (init.sql is only baked into conf/ for reference). In practice the table
+--     is auto-created over ILP (port 9009) by the janus candle sink the first
+--     time a closed kline is written, so the shape below mirrors what ILP
+--     actually creates on the live deploy (verified via SHOW COLUMNS):
+--       - designated column is `timestamp` (µs TIMESTAMP), appended last by ILP
+--         — NOT `ts`; the previous `ts` DDL never applied;
+--       - symbol/exchange/interval are SYMBOL (ILP default CAPACITY 256 CACHE);
+--       - columns match the fks-web reader (src/web/src/hooks.server.ts):
+--         timestamp, open, high, low, close, volume, symbol, exchange, interval.
+--     Because ILP creates the table first, `IF NOT EXISTS` here is a no-op on an
+--     existing volume; the DEDUP clause below only self-applies on a genuinely
+--     fresh QuestDB volume. For an ALREADY-RUNNING table apply the idempotent
+--     migration in migrations/001_candles_crypto_dedup.sql (ALTER … DEDUP …).
+--
+-- DEDUP ENABLE UPSERT KEYS(...) makes duplicate candles impossible at the
+-- storage layer: re-ingesting a row with the same
+-- (timestamp, symbol, exchange, interval) upserts the existing row instead of
+-- appending a duplicate. Requires a WAL table; the designated timestamp MUST be
+-- one of the keys.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS candles_crypto (
-    ts TIMESTAMP,
     symbol SYMBOL CAPACITY 256 CACHE,
-    exchange SYMBOL CAPACITY 16 CACHE,
-    interval SYMBOL CAPACITY 8 CACHE,
+    exchange SYMBOL CAPACITY 256 CACHE,
+    interval SYMBOL CAPACITY 256 CACHE,
     open DOUBLE,
     high DOUBLE,
     low DOUBLE,
     close DOUBLE,
-    volume DOUBLE
-) TIMESTAMP(ts) PARTITION BY DAY WAL;
+    volume DOUBLE,
+    timestamp TIMESTAMP
+) TIMESTAMP(timestamp) PARTITION BY DAY WAL
+  DEDUP UPSERT KEYS(timestamp, symbol, exchange, interval);
 
 -- ----------------------------------------------------------------------------
 -- Market Metrics Table

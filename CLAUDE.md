@@ -33,6 +33,7 @@ data/engine/trainer service was removed — janus is the platform now. See
 | Path | Type | Owns its own docs |
 |--|--|--|
 | `crates/spawner/` | Bot-container lifecycle service | `CLAUDE.md` + `TODO.md` + `README.md` |
+| `crates/rithmic-connector/` | Credential-gated, **read-only** Rithmic futures feed (P12 foundation) | `README.md` + `TODO.md` |
 | `src/web/` | SvelteKit dashboard | `CLAUDE.md` + `TODO.md` + `README.md` |
 | `src/proto/` | `fks-proto` crate (protobuf) | — |
 | `src/sql/` | DB bootstrap baked into the postgres image (`janus/`, `spawner/`) | — |

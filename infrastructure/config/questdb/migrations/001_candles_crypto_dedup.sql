@@ -1,0 +1,36 @@
+-- ============================================================================
+-- QuestDB migration 001 — candles_crypto storage-layer dedup
+-- ============================================================================
+-- Companion to backfill PR #141: makes duplicate
+-- (timestamp, symbol, exchange, interval) candle rows impossible at the storage
+-- layer, so a re-run backfill (or overlapping ILP writes) can never double-count.
+--
+-- QuestDB has NO Postgres-style initdb / auto-migration mechanism: init.sql is
+-- baked into conf/ for reference only and is never executed on startup, and the
+-- candles_crypto table is auto-created over ILP by the janus candle sink. So on
+-- an already-running deploy the table exists WITHOUT dedup and must be altered
+-- in place. This file is that migration — apply it by hand (or from any
+-- runbook) against the running instance. It does NOT require a container
+-- restart and is idempotent (re-running ENABLE on an already-deduped table is a
+-- no-op / harmless).
+--
+-- Preconditions (verified live via localhost:9000/exec, 2026-07):
+--   - table is WAL-enabled            (DEDUP requires a WAL table)   → walEnabled=true ✓
+--   - designated timestamp is `timestamp`                            → ✓
+--   - key columns all exist: timestamp TIMESTAMP, symbol/exchange/interval SYMBOL ✓
+--   - dedup currently false                                          → ✓ (nothing to undo)
+-- The designated timestamp MUST be one of the UPSERT keys — it is (`timestamp`).
+--
+-- Apply (one-liner, config-only, no restart):
+--   curl -G 'http://localhost:9000/exec' \
+--     --data-urlencode "query=ALTER TABLE candles_crypto DEDUP ENABLE UPSERT KEYS(timestamp, symbol, exchange, interval);"
+--
+-- Verify afterwards (expect dedup=true):
+--   curl -G 'http://localhost:9000/exec' \
+--     --data-urlencode "query=SELECT table_name, dedup FROM tables() WHERE table_name = 'candles_crypto';"
+--
+-- To disable (rollback):
+--   ALTER TABLE candles_crypto DEDUP DISABLE;
+-- ============================================================================
+
+ALTER TABLE candles_crypto DEDUP ENABLE UPSERT KEYS(timestamp, symbol, exchange, interval);

@@ -10,9 +10,11 @@ noted.
       real credentials. Confirm the `rithmic-rs` login/subscribe dance works.
 - [ ] Own a **reconnect/resubscribe loop** — `rithmic-rs` leaves reconnection to
       the caller. Currently the stream loop exits on a connection issue.
-- [ ] Replace the persistence STUB (`src/persistence.rs`) with a real QuestDB
-      **ILP writer** to `candles_futures` (mirror janus `candle_sink.rs`).
-      Finalise the schema against janus's P11 multi-asset work.
+- [x] Replace the persistence STUB with a real QuestDB **ILP writer** to
+      `candles_futures` (`QuestDbCandleSink`, TCP :9009, mirrors janus
+      `candle_sink.rs`). ILP line shape unit-tested + validated live; DEDUP
+      migration `002_candles_futures_dedup.sql` added. Still to reconcile with
+      janus's P11 multi-asset schema if it diverges.
 - [ ] Trade timestamps: use the exchange/Rithmic tick timestamp
       (`rithmic_to_unix_nanos`) instead of `Utc::now()` for candle bucketing.
 - [ ] **Measure the DOM firehose** (subscribe order book for a few CME symbols;

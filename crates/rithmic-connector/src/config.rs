@@ -14,6 +14,8 @@
 
 use std::env;
 
+use crate::persistence::QuestDbConfig;
+
 /// Which Rithmic environment to target. Mirrors `rithmic_rs::RithmicEnv` but is
 /// kept as our own type so the config surface does not leak the vendor crate
 /// (and so the skeleton compiles without the `live-connect` feature).
@@ -136,6 +138,9 @@ pub struct RithmicConfig {
 
     /// Port for the /health + /status server (FKS bot contract: :9091).
     pub health_port: u16,
+
+    /// QuestDB ILP endpoint the persistence sink writes `candles_futures` to.
+    pub questdb: QuestDbConfig,
 }
 
 impl RithmicConfig {
@@ -180,6 +185,7 @@ impl RithmicConfig {
             health_port: get_or("RITHMIC_HEALTH_PORT", "9091")
                 .parse()
                 .unwrap_or(9091),
+            questdb: parse_questdb(&get),
         }
     }
 
@@ -209,6 +215,49 @@ impl RithmicConfig {
             GateDecision::MissingCredentials { missing }
         }
     }
+}
+
+/// Resolve the QuestDB ILP endpoint from the environment.
+///
+/// Precedence: `QUESTDB_ILP_URL` (an `host:port`, optionally `tcp://`-prefixed)
+/// wins; otherwise `QUESTDB_ILP_HOST` (default `fks_questdb`) + `QUESTDB_ILP_PORT`
+/// (default `9009`). Falls back to the in-network defaults on anything malformed
+/// — the sink is best-effort and must never fail config parsing.
+fn parse_questdb(get: &impl Fn(&str) -> Option<String>) -> QuestDbConfig {
+    let default = QuestDbConfig::default();
+
+    let non_empty = |k: &str| get(k).filter(|v| !v.trim().is_empty());
+
+    if let Some(url) = non_empty("QUESTDB_ILP_URL") {
+        // Strip an optional scheme, then split host:port.
+        let hostport = url
+            .trim()
+            .strip_prefix("tcp://")
+            .or_else(|| url.trim().strip_prefix("http://"))
+            .unwrap_or(url.trim());
+        if let Some((host, port)) = hostport.rsplit_once(':')
+            && let Ok(port) = port.parse::<u16>()
+            && !host.is_empty()
+        {
+            return QuestDbConfig {
+                host: host.to_string(),
+                port,
+            };
+        }
+        // Bare host with no port → keep the default ILP port.
+        if !hostport.is_empty() {
+            return QuestDbConfig {
+                host: hostport.to_string(),
+                port: default.port,
+            };
+        }
+    }
+
+    let host = non_empty("QUESTDB_ILP_HOST").unwrap_or(default.host);
+    let port = non_empty("QUESTDB_ILP_PORT")
+        .and_then(|p| p.trim().parse::<u16>().ok())
+        .unwrap_or(default.port);
+    QuestDbConfig { host, port }
 }
 
 /// Parse a boolean env var leniently: true/1/yes/on (case-insensitive) → true.
@@ -348,6 +397,42 @@ mod tests {
         ]));
         assert_eq!(cfg.gate(), GateDecision::Ready);
         assert!(cfg.gate().is_ready());
+    }
+
+    // ─── QuestDB ILP endpoint resolution ──────────────────────────────────
+
+    #[test]
+    fn questdb_defaults_to_in_network_fks_questdb() {
+        let cfg = RithmicConfig::from_getter(getter(&[]));
+        assert_eq!(cfg.questdb.host, "fks_questdb");
+        assert_eq!(cfg.questdb.port, 9009);
+        assert_eq!(cfg.questdb.ilp_addr(), "fks_questdb:9009");
+    }
+
+    #[test]
+    fn questdb_host_and_port_from_split_env() {
+        let cfg = RithmicConfig::from_getter(getter(&[
+            ("QUESTDB_ILP_HOST", "questdb.internal"),
+            ("QUESTDB_ILP_PORT", "9010"),
+        ]));
+        assert_eq!(cfg.questdb.host, "questdb.internal");
+        assert_eq!(cfg.questdb.port, 9010);
+    }
+
+    #[test]
+    fn questdb_url_overrides_and_strips_scheme() {
+        for url in ["tcp://qdb:9999", "qdb:9999", "http://qdb:9999"] {
+            let cfg = RithmicConfig::from_getter(getter(&[("QUESTDB_ILP_URL", url)]));
+            assert_eq!(cfg.questdb.host, "qdb", "url={url}");
+            assert_eq!(cfg.questdb.port, 9999, "url={url}");
+        }
+    }
+
+    #[test]
+    fn questdb_url_bare_host_keeps_default_port() {
+        let cfg = RithmicConfig::from_getter(getter(&[("QUESTDB_ILP_URL", "just-a-host")]));
+        assert_eq!(cfg.questdb.host, "just-a-host");
+        assert_eq!(cfg.questdb.port, 9009);
     }
 
     #[test]

@@ -17,6 +17,7 @@ const MINUTE_MS: i64 = 60_000;
 /// [`FuturesCandle`] to the sink when the minute rolls over.
 pub struct CandleAggregator {
     symbol: String,
+    exchange: String,
     sink: Arc<dyn CandleSink>,
     current: Option<Bucket>,
 }
@@ -31,10 +32,17 @@ struct Bucket {
 }
 
 impl CandleAggregator {
-    /// Create an aggregator for one venue-tagged symbol writing to `sink`.
-    pub fn new(symbol: impl Into<String>, sink: Arc<dyn CandleSink>) -> Self {
+    /// Create an aggregator for one venue-tagged symbol on `exchange`, writing to
+    /// `sink`. `symbol`/`exchange` populate the matching `candles_futures`
+    /// columns on every emitted bar.
+    pub fn new(
+        symbol: impl Into<String>,
+        exchange: impl Into<String>,
+        sink: Arc<dyn CandleSink>,
+    ) -> Self {
         Self {
             symbol: symbol.into(),
+            exchange: exchange.into(),
             sink,
             current: None,
         }
@@ -74,6 +82,7 @@ impl CandleAggregator {
         if let Some(bucket) = self.current.take() {
             self.sink.write_candle(&FuturesCandle {
                 symbol: self.symbol.clone(),
+                exchange: self.exchange.clone(),
                 interval: "1m".to_string(),
                 ts_ms: bucket.minute_start_ms,
                 open: bucket.open,
@@ -106,9 +115,21 @@ mod tests {
     }
 
     #[test]
+    fn emitted_candle_carries_symbol_and_exchange() {
+        let sink = Arc::new(RecordingSink::default());
+        let mut agg = CandleAggregator::new("rithmic:MESU6", "CME", sink.clone());
+        agg.on_trade(0, 100.0, 1);
+        agg.flush();
+        let candles = sink.candles.lock().unwrap();
+        assert_eq!(candles[0].symbol, "rithmic:MESU6");
+        assert_eq!(candles[0].exchange, "CME");
+        assert_eq!(candles[0].interval, "1m");
+    }
+
+    #[test]
     fn aggregates_within_a_minute_and_flushes_on_rollover() {
         let sink = Arc::new(RecordingSink::default());
-        let mut agg = CandleAggregator::new("rithmic:MES", sink.clone());
+        let mut agg = CandleAggregator::new("rithmic:MES", "CME", sink.clone());
 
         // Three trades in minute 0.
         assert!(!agg.on_trade(0, 5000.0, 1));
@@ -131,7 +152,7 @@ mod tests {
     #[test]
     fn final_flush_emits_open_bucket() {
         let sink = Arc::new(RecordingSink::default());
-        let mut agg = CandleAggregator::new("rithmic:MES", sink.clone());
+        let mut agg = CandleAggregator::new("rithmic:MES", "CME", sink.clone());
         agg.on_trade(0, 100.0, 5);
         assert!(agg.flush());
         assert!(!agg.flush(), "second flush has nothing to emit");

@@ -65,6 +65,37 @@ CREATE TABLE IF NOT EXISTS candles_crypto (
   DEDUP UPSERT KEYS(timestamp, symbol, exchange, interval);
 
 -- ----------------------------------------------------------------------------
+-- Futures Candles Table
+-- Stores OHLCV candle data for FUTURES instruments (separate instrument
+-- namespace from candles_crypto — conflating them corrupts series).
+--
+-- Written by crates/rithmic-connector (READ-ONLY Rithmic feed) over ILP
+-- (port 9009), mirroring how the janus candle sink writes candles_crypto. The
+-- SAME notes apply: QuestDB does not execute this file on startup — the table is
+-- auto-created over ILP the first time a closed 1m candle is written, and the
+-- shape below mirrors what ILP actually creates (verified live 2026-07 via a
+-- scratch table + SHOW COLUMNS). Symbols are venue-tagged (e.g. `rithmic:MESU6`)
+-- and the column set is IDENTICAL to candles_crypto so the same fks-web chart
+-- reader (src/web/src/hooks.server.ts) can query it unchanged.
+--
+-- On an already-running deploy the ILP-created table lacks dedup; apply the
+-- idempotent migration migrations/002_candles_futures_dedup.sql (ALTER … DEDUP …)
+-- to make duplicate (timestamp, symbol, exchange, interval) rows impossible.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS candles_futures (
+    symbol SYMBOL CAPACITY 256 CACHE,
+    exchange SYMBOL CAPACITY 256 CACHE,
+    interval SYMBOL CAPACITY 256 CACHE,
+    open DOUBLE,
+    high DOUBLE,
+    low DOUBLE,
+    close DOUBLE,
+    volume DOUBLE,
+    timestamp TIMESTAMP
+) TIMESTAMP(timestamp) PARTITION BY DAY WAL
+  DEDUP UPSERT KEYS(timestamp, symbol, exchange, interval);
+
+-- ----------------------------------------------------------------------------
 -- Market Metrics Table
 -- Stores market-wide metrics like Fear & Greed Index, volatility, ETF flows
 -- ----------------------------------------------------------------------------

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::config::GateDecision;
+use crate::persistence::PersistMetrics;
 
 /// Live connector state, shared between the connector task and the HTTP server.
 #[derive(Debug)]
@@ -23,6 +24,9 @@ pub struct ConnectorState {
     messages_received: AtomicU64,
     /// Count of candles handed to the persistence sink since start.
     candles_written: AtomicU64,
+    /// Persistence counters (candles durable / write errors). Shared with the
+    /// QuestDB sink so `/status` reflects what actually reached QuestDB.
+    persist: Arc<PersistMetrics>,
 }
 
 impl ConnectorState {
@@ -34,7 +38,14 @@ impl ConnectorState {
             connected: AtomicBool::new(false),
             messages_received: AtomicU64::new(0),
             candles_written: AtomicU64::new(0),
+            persist: Arc::new(PersistMetrics::default()),
         })
+    }
+
+    /// The shared persistence counters — hand this to the [`crate::persistence::QuestDbCandleSink`]
+    /// so its successes/errors surface on `/status`.
+    pub fn persist_metrics(&self) -> Arc<PersistMetrics> {
+        self.persist.clone()
     }
 
     /// Mark the Rithmic session as up/down.
@@ -66,6 +77,8 @@ impl ConnectorState {
             connected: self.connected.load(Ordering::Relaxed),
             messages_received: self.messages_received.load(Ordering::Relaxed),
             candles_written: self.candles_written.load(Ordering::Relaxed),
+            candles_persisted: self.persist.candles_persisted(),
+            persist_errors: self.persist.write_errors(),
             read_only: true,
             order_plant_open: false,
         }
@@ -88,6 +101,10 @@ pub struct StatusSnapshot {
     pub messages_received: u64,
     /// Candles handed to the persistence sink since start.
     pub candles_written: u64,
+    /// Candles successfully written to QuestDB (`candles_futures`) since start.
+    pub candles_persisted: u64,
+    /// Persistence errors (ILP connect/write failures, dropped lines) since start.
+    pub persist_errors: u64,
     /// Always true — this connector is read-only by construction.
     pub read_only: bool,
     /// Always false — the order plant is never opened (doctrine invariant).

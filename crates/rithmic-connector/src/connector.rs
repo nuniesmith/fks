@@ -111,7 +111,7 @@ async fn run_ready(
     let venue_symbol = format!("{VENUE}:{}", config.instrument);
     info!(symbol = %venue_symbol, exchange = %config.exchange, "subscribed to market data (read-only)");
 
-    let mut aggregator = CandleAggregator::new(venue_symbol.clone(), sink);
+    let mut aggregator = CandleAggregator::new(venue_symbol.clone(), config.exchange.clone(), sink);
 
     loop {
         match handle.subscription_receiver.recv().await {

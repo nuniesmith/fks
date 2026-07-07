@@ -1374,10 +1374,23 @@ services:
             # The single instrument this foundation subscribes to (read-only).
             - RITHMIC_INSTRUMENT=${RITHMIC_INSTRUMENT:-MES}
             - RITHMIC_EXCHANGE=${RITHMIC_EXCHANGE:-CME}
+            # Persistence — completed 1m candles are written to candles_futures
+            # over QuestDB ILP (TCP :9009), mirroring the janus candle sink for
+            # candles_crypto. Defaults to the in-network questdb service.
+            - QUESTDB_ILP_HOST=${QUESTDB_ILP_HOST:-fks_questdb}
+            - QUESTDB_ILP_PORT=${QUESTDB_ILP_PORT:-9009}
+            # QUESTDB_ILP_URL (host:port, optionally tcp://) overrides host+port.
+            - QUESTDB_ILP_URL=${QUESTDB_ILP_URL:-}
             - RITHMIC_HEALTH_HOST=0.0.0.0
             - RITHMIC_HEALTH_PORT=9091
             - RUST_LOG=${RITHMIC_LOG_LEVEL:-info,rithmic_connector=debug}
             - RUST_BACKTRACE=1
+        # Read-only market data lands in QuestDB; start it first when present.
+        # (condition: started, not healthy — the connector is best-effort and
+        # reconnects, so it must never block on QuestDB.)
+        depends_on:
+            questdb:
+                condition: service_started
         ports:
             - "127.0.0.1:9092:9091" # /health + /status (9092 host to avoid the bot :9091)
         networks:

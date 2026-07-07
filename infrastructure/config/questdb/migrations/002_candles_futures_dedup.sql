@@ -1,0 +1,65 @@
+-- ============================================================================
+-- QuestDB migration 002 — candles_futures storage-layer dedup
+-- ============================================================================
+-- Companion to the Rithmic read-path PR. The rithmic-connector writes 1-minute
+-- futures candles to `candles_futures` over ILP (port 9009), mirroring how the
+-- janus candle sink writes `candles_crypto`. This migration makes duplicate
+-- (timestamp, symbol, exchange, interval) rows impossible at the storage layer,
+-- so a reconnect/resubscribe (or overlapping ILP writes) can never double-count
+-- a bar — exactly as migration 001 does for candles_crypto (fks #177).
+--
+-- QuestDB has NO Postgres-style initdb / auto-migration mechanism: init.sql is
+-- baked into conf/ for reference only and is never executed on startup, and
+-- `candles_futures` is auto-created over ILP by the connector's QuestDbCandleSink
+-- the first time a closed candle is written. ILP creates the table WITHOUT
+-- dedup, so on a running deploy the table exists un-deduped and must be altered
+-- in place. This file is that migration — apply it by hand (or from the
+-- connector runbook) against the running instance. It does NOT require a
+-- container restart and is idempotent (re-running ENABLE on an already-deduped
+-- table is a harmless no-op).
+--
+-- The connector's ILP line shape was verified live against QuestDB (2026-07):
+-- a scratch table created from one line came back with columns/types identical
+-- to candles_crypto —
+--   symbol   SYMBOL      (ILP tag)   ┐
+--   exchange SYMBOL      (ILP tag)   ├─ the DEDUP UPSERT keys (plus timestamp)
+--   interval SYMBOL      (ILP tag)   ┘
+--   open/high/low/close/volume DOUBLE (bare-number ILP fields)
+--   timestamp TIMESTAMP  (designated, µs; ILP appends ns → µs)
+-- so the SAME fks-web chart reader (src/web/src/hooks.server.ts) can query
+-- candles_futures unchanged.
+--
+-- Preconditions (the table must already exist — i.e. the connector has written
+-- at least one candle; ILP auto-creates it WAL-enabled with `timestamp` as the
+-- designated column, both of which DEDUP requires). The designated timestamp
+-- MUST be one of the UPSERT keys — it is (`timestamp`).
+--
+-- Canonical DDL (what ILP auto-creates; shown for reference — do not run before
+-- the table exists, IF NOT EXISTS is a no-op on the live volume):
+--
+--   CREATE TABLE IF NOT EXISTS candles_futures (
+--       symbol    SYMBOL CAPACITY 256 CACHE,
+--       exchange  SYMBOL CAPACITY 256 CACHE,
+--       interval  SYMBOL CAPACITY 256 CACHE,
+--       open      DOUBLE,
+--       high      DOUBLE,
+--       low       DOUBLE,
+--       close     DOUBLE,
+--       volume    DOUBLE,
+--       timestamp TIMESTAMP
+--   ) TIMESTAMP(timestamp) PARTITION BY DAY WAL
+--     DEDUP UPSERT KEYS(timestamp, symbol, exchange, interval);
+--
+-- Apply (one-liner, config-only, no restart):
+--   curl -G 'http://localhost:9000/exec' \
+--     --data-urlencode "query=ALTER TABLE candles_futures DEDUP ENABLE UPSERT KEYS(timestamp, symbol, exchange, interval);"
+--
+-- Verify afterwards (expect dedup=true):
+--   curl -G 'http://localhost:9000/exec' \
+--     --data-urlencode "query=SELECT table_name, dedup FROM tables() WHERE table_name = 'candles_futures';"
+--
+-- To disable (rollback):
+--   ALTER TABLE candles_futures DEDUP DISABLE;
+-- ============================================================================
+
+ALTER TABLE candles_futures DEDUP ENABLE UPSERT KEYS(timestamp, symbol, exchange, interval);

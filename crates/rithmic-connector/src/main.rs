@@ -14,7 +14,7 @@ use tracing_subscriber::EnvFilter;
 use rithmic_connector::config::RithmicConfig;
 use rithmic_connector::connector;
 use rithmic_connector::health;
-use rithmic_connector::persistence::StubCandleSink;
+use rithmic_connector::persistence::{CandleSink, QuestDbCandleSink, StubCandleSink};
 use rithmic_connector::state::ConnectorState;
 
 #[tokio::main]
@@ -47,8 +47,23 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Connector task — no-op unless the gate is Ready. Persistence is the stub.
-    let sink = Arc::new(StubCandleSink);
+    // Persistence sink. Only stand up the real QuestDB ILP writer when the gate
+    // is Ready (i.e. candles will actually flow); otherwise the connector is a
+    // clean no-op and the stub sink just logs. The QuestDB writer connects
+    // lazily on the first candle and shares the state's persistence counters so
+    // `/status` reflects what reached QuestDB.
+    let sink: Arc<dyn CandleSink> = if state.gate().is_ready() {
+        info!(
+            questdb = %config.questdb.ilp_addr(),
+            "persisting candles_futures to QuestDB over ILP"
+        );
+        Arc::new(QuestDbCandleSink::connect(
+            config.questdb.clone(),
+            state.persist_metrics(),
+        ))
+    } else {
+        Arc::new(StubCandleSink)
+    };
     let connector_task = tokio::spawn(connector::run(config, state, sink));
 
     // Wait for shutdown or the connector completing.

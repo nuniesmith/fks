@@ -45,7 +45,10 @@ live-connect = ["dep:rithmic-rs"]
 
 [dependencies]
 # Async runtime
-tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "signal", "sync", "time"] }
+# net + io-util are required by the QuestDB ILP writer (TcpStream/AsyncWriteExt)
+# independently of the `live-connect` feature, so they are declared here rather
+# than relied on transitively via rithmic-rs.
+tokio = { version = "1.48", features = ["rt-multi-thread", "macros", "signal", "sync", "time", "net", "io-util"] }
 
 # HTTP server (health/status surface — FKS bot contract style)
 axum = { version = "0.8", features = ["macros"] }
@@ -71,4 +74,6 @@ chrono = { version = "0.4", features = ["serde"] }
 rithmic-rs = { version = "2.0.0", optional = true }
 
 [dev-dependencies]
-tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
+# Tests spin up a stand-in TCP listener for QuestDB's ILP port (net + io-util)
+# and poll metrics with a short sleep (time).
+tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "net", "io-util", "time"] }

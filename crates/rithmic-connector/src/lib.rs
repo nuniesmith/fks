@@ -28,7 +28,7 @@ pub mod connector;
 pub mod error;
 /// `/health` + `/status` HTTP server (FKS bot contract, :9091).
 pub mod health;
-/// Persistence STUB — where `candles_futures` writes will go (TODO).
+/// Persistence — `candles_futures` writes over QuestDB ILP (+ the logging stub).
 pub mod persistence;
 /// Shared, observable connector state for the status surface.
 pub mod state;
@@ -36,5 +36,8 @@ pub mod state;
 pub use config::{GateDecision, RithmicConfig, RithmicEnvironment};
 pub use connector::{VENUE, run};
 pub use error::ConnectorError;
-pub use persistence::{CandleSink, FuturesCandle, StubCandleSink};
+pub use persistence::{
+    CANDLES_TABLE, CandleSink, FuturesCandle, PersistMetrics, QuestDbCandleSink, QuestDbConfig,
+    StubCandleSink, format_ilp_line,
+};
 pub use state::{ConnectorState, StatusSnapshot};

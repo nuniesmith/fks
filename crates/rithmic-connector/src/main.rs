@@ -15,6 +15,7 @@ use rithmic_connector::config::RithmicConfig;
 use rithmic_connector::connector;
 use rithmic_connector::health;
 use rithmic_connector::persistence::{CandleSink, QuestDbCandleSink, StubCandleSink};
+use rithmic_connector::positions::PositionsBook;
 use rithmic_connector::state::ConnectorState;
 
 #[tokio::main]
@@ -37,12 +38,19 @@ async fn main() -> anyhow::Result<()> {
 
     let state = ConnectorState::new(gate, format!("{}:{}", connector::VENUE, config.instrument));
 
+    // Read-only positions book, shared between the PnL reader and the HTTP
+    // server. Empty until the (optional) positions subscription fills it.
+    let positions = PositionsBook::new();
+
     // Health/status server — always up, independent of the Rithmic session.
     let health_host = config.health_host.clone();
     let health_port = config.health_port;
     let health_state = state.clone();
+    let health_positions = positions.clone();
     let health_task = tokio::spawn(async move {
-        if let Err(e) = health::serve(&health_host, health_port, health_state).await {
+        if let Err(e) =
+            health::serve(&health_host, health_port, health_state, health_positions).await
+        {
             tracing::error!(error = %e, "health server exited with error");
         }
     });
@@ -64,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
     } else {
         Arc::new(StubCandleSink)
     };
-    let connector_task = tokio::spawn(connector::run(config, state, sink));
+    let connector_task = tokio::spawn(connector::run(config, state, sink, positions));
 
     // Wait for shutdown or the connector completing.
     tokio::select! {

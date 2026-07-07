@@ -133,6 +133,17 @@ pub struct RithmicConfig {
     /// The exchange the instrument trades on (e.g. "CME").
     pub exchange: String,
 
+    /// Trading account id for the read-only PnL/positions subscription.
+    /// Optional: market data (ticker) runs without it; positions need the
+    /// full triple (account_id/fcm_id/ib_id).
+    pub account_id: String,
+
+    /// Futures Commission Merchant id (positions subscription). Optional.
+    pub fcm_id: String,
+
+    /// Introducing Broker id (positions subscription). Optional.
+    pub ib_id: String,
+
     /// Host for the /health + /status server.
     pub health_host: String,
 
@@ -181,6 +192,9 @@ impl RithmicConfig {
             app_version: get_or("RITHMIC_APP_VERSION", env!("CARGO_PKG_VERSION")),
             instrument: get_or("RITHMIC_INSTRUMENT", "MES"),
             exchange: get_or("RITHMIC_EXCHANGE", "CME"),
+            account_id: get_or("RITHMIC_ACCOUNT_ID", ""),
+            fcm_id: get_or("RITHMIC_FCM_ID", ""),
+            ib_id: get_or("RITHMIC_IB_ID", ""),
             health_host: get_or("RITHMIC_HEALTH_HOST", "0.0.0.0"),
             health_port: get_or("RITHMIC_HEALTH_PORT", "9091")
                 .parse()
@@ -214,6 +228,16 @@ impl RithmicConfig {
         } else {
             GateDecision::MissingCredentials { missing }
         }
+    }
+
+    /// Whether the read-only positions subscription can run. Requires the full
+    /// account triple in addition to a `Ready` gate. When false, market data
+    /// still flows; only the PnL/positions reader is skipped.
+    pub fn positions_ready(&self) -> bool {
+        self.gate().is_ready()
+            && !self.account_id.trim().is_empty()
+            && !self.fcm_id.trim().is_empty()
+            && !self.ib_id.trim().is_empty()
     }
 }
 
@@ -433,6 +457,48 @@ mod tests {
         let cfg = RithmicConfig::from_getter(getter(&[("QUESTDB_ILP_URL", "just-a-host")]));
         assert_eq!(cfg.questdb.host, "just-a-host");
         assert_eq!(cfg.questdb.port, 9009);
+    }
+
+    #[test]
+    fn positions_ready_needs_ready_gate_plus_account_triple() {
+        let base = &[
+            ("RITHMIC_ENABLED", "true"),
+            ("RITHMIC_GATEWAY_URL", "wss://gw.example:443"),
+            ("RITHMIC_USER", "u"),
+            ("RITHMIC_PASSWORD", "p"),
+        ];
+        // Ready gate but no account triple ⇒ positions not ready.
+        let cfg = RithmicConfig::from_getter(getter(base));
+        assert!(cfg.gate().is_ready());
+        assert!(!cfg.positions_ready());
+
+        // Full account triple ⇒ positions ready.
+        let mut with_acct = base.to_vec();
+        with_acct.extend_from_slice(&[
+            ("RITHMIC_ACCOUNT_ID", "ACCT1"),
+            ("RITHMIC_FCM_ID", "FCM1"),
+            ("RITHMIC_IB_ID", "IB1"),
+        ]);
+        let cfg = RithmicConfig::from_getter(getter(&with_acct));
+        assert!(cfg.positions_ready());
+
+        // Partial triple ⇒ not ready.
+        let mut partial = base.to_vec();
+        partial.push(("RITHMIC_ACCOUNT_ID", "ACCT1"));
+        let cfg = RithmicConfig::from_getter(getter(&partial));
+        assert!(!cfg.positions_ready());
+    }
+
+    #[test]
+    fn positions_not_ready_when_gate_disabled() {
+        // Account triple present but the connector is disabled ⇒ never reads.
+        let cfg = RithmicConfig::from_getter(getter(&[
+            ("RITHMIC_ACCOUNT_ID", "ACCT1"),
+            ("RITHMIC_FCM_ID", "FCM1"),
+            ("RITHMIC_IB_ID", "IB1"),
+        ]));
+        assert_eq!(cfg.gate(), GateDecision::Disabled);
+        assert!(!cfg.positions_ready());
     }
 
     #[test]

@@ -20,6 +20,7 @@ use tracing::{info, warn};
 
 use crate::config::{GateDecision, RithmicConfig};
 use crate::persistence::CandleSink;
+use crate::positions::PositionsBook;
 use crate::state::ConnectorState;
 
 /// The venue tag applied to every symbol this connector emits (`rithmic:SYMBOL`).
@@ -33,6 +34,7 @@ pub async fn run(
     config: RithmicConfig,
     state: Arc<ConnectorState>,
     sink: Arc<dyn CandleSink>,
+    positions: PositionsBook,
 ) -> anyhow::Result<()> {
     match config.gate() {
         GateDecision::Disabled => {
@@ -49,26 +51,23 @@ pub async fn run(
                 environment = ?config.environment,
                 symbol = %format!("{VENUE}:{}", config.instrument),
                 exchange = %config.exchange,
+                positions_read = config.positions_ready(),
                 "capability gate READY — opening the read-only Ticker plant"
             );
-            run_ready(config, state, sink).await
+            run_ready(config, state, sink, positions).await
         }
     }
 }
 
-/// The `Ready` path. Split out so the gate handling above stays legible.
+/// Build the vendor crate's config from our env-driven [`RithmicConfig`]. We
+/// build programmatically (not `RrConfig::from_env`) because the crate's own env
+/// scheme differs from the spawner-injected RITHMIC_USER/RITHMIC_PASSWORD.
 #[cfg(feature = "live-connect")]
-async fn run_ready(
-    config: RithmicConfig,
-    state: Arc<ConnectorState>,
-    sink: Arc<dyn CandleSink>,
-) -> anyhow::Result<()> {
-    use rithmic_rs::{
-        ConnectStrategy, RithmicConfig as RrConfig, RithmicEnv, RithmicTickerPlant,
-        rti::messages::RithmicMessage,
-    };
+fn build_rr_config(
+    config: &RithmicConfig,
+) -> anyhow::Result<rithmic_rs::RithmicConfig> {
+    use rithmic_rs::{RithmicConfig as RrConfig, RithmicEnv};
 
-    use crate::aggregator::CandleAggregator;
     use crate::config::RithmicEnvironment;
 
     let env = match config.environment {
@@ -77,10 +76,7 @@ async fn run_ready(
         RithmicEnvironment::Live => RithmicEnv::Live,
     };
 
-    // Translate our env-driven config into the vendor crate's builder. We build
-    // programmatically (not `RrConfig::from_env`) because the crate's own env
-    // scheme differs from the spawner-injected RITHMIC_USER/RITHMIC_PASSWORD.
-    let rr_config = RrConfig::builder(env)
+    RrConfig::builder(env)
         .url(config.gateway_url.clone())
         .beta_url(config.gateway_alt_url.clone())
         .user(config.user.clone())
@@ -89,7 +85,48 @@ async fn run_ready(
         .app_name(config.app_name.clone())
         .app_version(config.app_version.clone())
         .build()
-        .map_err(|e| anyhow::anyhow!("failed to build Rithmic config: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("failed to build Rithmic config: {e}"))
+}
+
+/// The `Ready` path. Split out so the gate handling above stays legible.
+#[cfg(feature = "live-connect")]
+async fn run_ready(
+    config: RithmicConfig,
+    state: Arc<ConnectorState>,
+    sink: Arc<dyn CandleSink>,
+    positions: PositionsBook,
+) -> anyhow::Result<()> {
+    use rithmic_rs::{ConnectStrategy, RithmicTickerPlant, rti::messages::RithmicMessage};
+
+    use crate::aggregator::CandleAggregator;
+
+    let rr_config = build_rr_config(&config)?;
+
+    // Read-only positions reader (PnL plant). Runs concurrently with the ticker
+    // ONLY when the account triple is configured; market data flows regardless.
+    // Spawned as a detached task so a positions-side reconnect can't stall the
+    // market-data loop, and vice versa. Never opens the order plant.
+    let pnl_task = if config.positions_ready() {
+        let account = rithmic_rs::RithmicAccount {
+            account_id: config.account_id.clone(),
+            fcm_id: config.fcm_id.clone(),
+            ib_id: config.ib_id.clone(),
+        };
+        let pnl_config = build_rr_config(&config)?;
+        let book = positions.clone();
+        info!(account = %config.account_id, "starting read-only PnL/positions reader");
+        Some(tokio::spawn(async move {
+            if let Err(e) = crate::positions::run_pnl(pnl_config, account, book).await {
+                warn!(error = %e, "PnL/positions reader exited with error");
+            }
+        }))
+    } else {
+        info!(
+            "positions reader disabled (set RITHMIC_ACCOUNT_ID/FCM_ID/IB_ID to enable); \
+             market data still flows"
+        );
+        None
+    };
 
     // Ticker plant ONLY. Read-only by construction.
     let ticker_plant = RithmicTickerPlant::connect(&rr_config, ConnectStrategy::Retry)
@@ -161,6 +198,11 @@ async fn run_ready(
     state.set_connected(false);
     let _ = handle.disconnect().await;
     info!("ticker plant disconnected");
+
+    // Tear the positions reader down with the market-data loop.
+    if let Some(task) = pnl_task {
+        task.abort();
+    }
     Ok(())
 }
 
@@ -172,6 +214,7 @@ async fn run_ready(
     _config: RithmicConfig,
     _state: Arc<ConnectorState>,
     _sink: Arc<dyn CandleSink>,
+    _positions: PositionsBook,
 ) -> anyhow::Result<()> {
     warn!(
         "gate is READY but the crate was built without the `live-connect` feature — \
@@ -194,7 +237,9 @@ mod tests {
         let cfg = RithmicConfig::from_getter(|_| None); // enabled=false
         let state = ConnectorState::new(cfg.gate(), "rithmic:MES");
         let sink = Arc::new(StubCandleSink);
-        run(cfg, state.clone(), sink).await.unwrap();
+        run(cfg, state.clone(), sink, PositionsBook::new())
+            .await
+            .unwrap();
         assert!(!state.snapshot().connected);
         assert_eq!(state.snapshot().messages_received, 0);
     }
@@ -209,7 +254,7 @@ mod tests {
             GateDecision::MissingCredentials { .. }
         ));
         let state = ConnectorState::new(cfg.gate(), "rithmic:MES");
-        run(cfg, state.clone(), Arc::new(StubCandleSink))
+        run(cfg, state.clone(), Arc::new(StubCandleSink), PositionsBook::new())
             .await
             .unwrap();
         assert!(!state.snapshot().connected);

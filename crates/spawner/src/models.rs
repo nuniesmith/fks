@@ -84,6 +84,44 @@ pub struct SecretRequest {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Notification channel request (POST /notifications)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Request body for `POST /notifications` — stores an operator-configured
+/// notification channel (a Discord webhook today).
+///
+/// SECURITY: the WebUI browser only ever SUBMITS this; the spawner persists the
+/// `url` server-side (encrypted with the same cipher as exchange keys) and
+/// never returns it. A Discord webhook URL is a bearer capability — anyone
+/// holding it can post to the channel — so it is treated as a secret.
+///
+/// BOUNDARY: this is the STORE only. Actually SENDING to the channel is a
+/// consumer-side follow-up (a notifier task / bots / janus reading channels).
+#[derive(Debug, Deserialize)]
+pub struct NotificationChannelRequest {
+    /// Operator-chosen channel name (the UPSERT key), e.g. "ops-alerts".
+    pub name: String,
+
+    /// Transport kind. Defaults to "discord_webhook"; future kinds
+    /// (slack_webhook, telegram, generic_webhook) validate the same way.
+    #[serde(default = "default_channel_kind")]
+    pub kind: String,
+
+    /// The webhook URL — stored encrypted at rest, never returned.
+    pub url: String,
+
+    /// Subscribed event names. An EMPTY list is the catch-all ("send
+    /// everything"); specific names (e.g. "spawn", "stop", "live_flip",
+    /// "pnl_digest") subscribe to just those events.
+    #[serde(default)]
+    pub events: Vec<String>,
+}
+
+fn default_channel_kind() -> String {
+    "discord_webhook".to_string()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Saved spawn config (POST /configs) — a reusable, named spawn template
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -297,6 +335,37 @@ mod tests {
         let raw2 = r#"{"exchange":"kucoin","api_key":"k","api_secret":"s","api_passphrase":"p"}"#;
         let req2: SecretRequest = serde_json::from_str(raw2).expect("valid JSON");
         assert_eq!(req2.api_passphrase.as_deref(), Some("p"));
+    }
+
+    #[test]
+    fn notification_channel_request_defaults_kind_and_events() {
+        // Minimal: kind defaults to discord_webhook, events defaults to empty
+        // (catch-all).
+        let raw = r#"{"name":"ops-alerts","url":"https://discord.com/api/webhooks/1/abc"}"#;
+        let req: NotificationChannelRequest = serde_json::from_str(raw).expect("valid JSON");
+        assert_eq!(req.name, "ops-alerts");
+        assert_eq!(
+            req.kind, "discord_webhook",
+            "kind defaults to discord_webhook"
+        );
+        assert_eq!(req.url, "https://discord.com/api/webhooks/1/abc");
+        assert!(
+            req.events.is_empty(),
+            "events defaults to empty (catch-all)"
+        );
+    }
+
+    #[test]
+    fn notification_channel_request_full_deserializes() {
+        let raw = r#"{
+            "name":"pnl",
+            "kind":"discord_webhook",
+            "url":"https://discord.com/api/webhooks/2/xyz",
+            "events":["spawn","stop","pnl_digest"]
+        }"#;
+        let req: NotificationChannelRequest = serde_json::from_str(raw).expect("valid JSON");
+        assert_eq!(req.events.len(), 3);
+        assert_eq!(req.events[2], "pnl_digest");
     }
 
     #[test]

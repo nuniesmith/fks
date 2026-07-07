@@ -366,6 +366,103 @@ impl BotRunStore {
         Ok(removed)
     }
 
+    // ── notification_channels (see src/sql/spawner/004_notifications.sql) ────
+    // Operator-configured notification channels (Discord webhooks today). The
+    // WebUI submits a channel here; the target URL is stored server-side and
+    // never returned. `upsert_channel` writes it (encrypting the URL at rest,
+    // overwriting any prior row for that name); `list_channels` reports only
+    // name/kind/events — never the URL. This is the STORE only; SENDING to the
+    // channel is a consumer-side follow-up.
+
+    /// Store (UPSERT) a notification channel. `name` is the primary key, so
+    /// re-submitting overwrites rather than duplicating. The `url` is encrypted
+    /// at rest when SPAWNER_SECRETS_KEY is configured (same cipher as exchange
+    /// secrets — a webhook URL is a bearer capability).
+    pub async fn upsert_channel(
+        &self,
+        name: &str,
+        kind: &str,
+        url: &str,
+        events: &[String],
+    ) -> Result<(), SpawnerError> {
+        let map_crypto = |e: String| SpawnerError::Other(format!("webhook encryption failed: {e}"));
+        let target = self.cipher.encrypt(url).map_err(map_crypto)?;
+        let events_json = serde_json::json!(events);
+
+        sqlx::query(
+            "INSERT INTO notification_channels (name, kind, target, events) \
+             VALUES ($1, $2, $3, $4) \
+             ON CONFLICT (name) DO UPDATE \
+             SET kind = EXCLUDED.kind, \
+                 target = EXCLUDED.target, \
+                 events = EXCLUDED.events, \
+                 updated_at = NOW()",
+        )
+        .bind(name)
+        .bind(kind)
+        .bind(&target)
+        .bind(events_json)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        debug!(
+            name = %name,
+            kind = %kind,
+            encrypted = self.cipher.is_encrypting(),
+            "notification_channels row upserted"
+        );
+        Ok(())
+    }
+
+    /// List configured notification channels — newest update first. Returns
+    /// only metadata (name, kind, events, last update); the target URL is
+    /// deliberately never selected.
+    pub async fn list_channels(&self) -> Result<Vec<NotificationChannelRow>, SpawnerError> {
+        let rows = sqlx::query(
+            "SELECT name, kind, events, updated_at \
+             FROM notification_channels \
+             ORDER BY updated_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        Ok(rows
+            .into_iter()
+            .map(NotificationChannelRow::from_row)
+            .collect())
+    }
+
+    /// Fetch + decrypt one channel's target URL. Intended for the consumer-side
+    /// sender (follow-up PR); `Ok(None)` = no row stored for that name. Never
+    /// exposed over an HTTP GET.
+    #[allow(dead_code)] // consumed by the notifier follow-up (sending is out of scope here)
+    pub async fn get_channel_target(&self, name: &str) -> Result<Option<String>, SpawnerError> {
+        let row = sqlx::query("SELECT target FROM notification_channels WHERE name = $1")
+            .bind(name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx)?;
+
+        let Some(row) = row else { return Ok(None) };
+        let target: String = row.get("target");
+        Ok(Some(self.decrypt_secret(&target)?))
+    }
+
+    /// Delete one notification channel by name (hard delete). Returns whether a
+    /// row existed.
+    pub async fn delete_channel(&self, name: &str) -> Result<bool, SpawnerError> {
+        let res = sqlx::query("DELETE FROM notification_channels WHERE name = $1")
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx)?;
+        let removed = res.rows_affected() > 0;
+        debug!(name = %name, removed, "notification_channels row deleted");
+        Ok(removed)
+    }
+
     // ── bot_configs (see src/sql/spawner/002_spawner.sql) ───────────────────
     // Reusable named spawn templates. Resource limits + env live in the row's
     // JSONB `config_json` (the sqlx build has no decimal feature, so the NUMERIC
@@ -492,6 +589,38 @@ impl SecretStatusRow {
         Self {
             exchange: r.try_get("exchange").unwrap_or_default(),
             has_passphrase: r.try_get("has_passphrase").unwrap_or(false),
+            updated_at: r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
+        }
+    }
+}
+
+/// A row from `notification_channels` exposed via GET /notifications. Carries
+/// only non-sensitive metadata — never the target URL. An empty `events` list
+/// is the catch-all ("send everything").
+#[derive(Debug, serde::Serialize)]
+pub struct NotificationChannelRow {
+    pub name: String,
+    pub kind: String,
+    pub events: Vec<String>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl NotificationChannelRow {
+    fn from_row(r: PgRow) -> Self {
+        let events = r
+            .try_get::<serde_json::Value, _>("events")
+            .ok()
+            .and_then(|v| v.as_array().cloned())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self {
+            name: r.try_get("name").unwrap_or_default(),
+            kind: r.try_get("kind").unwrap_or_default(),
+            events,
             updated_at: r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
         }
     }

@@ -26,6 +26,7 @@
 #   10     — Janus migrations
 #   25     — Spawner schema       (bot_configs / bot_runs)
 #   26     — Exchange secrets     (exchange_secrets — WebUI Phase E)
+#   27     — Notification channels (notification_channels — Discord webhooks)
 #
 # Rebuild whenever SQL files change:
 #   docker compose build postgres
@@ -59,3 +60,9 @@ COPY src/sql/spawner/002_spawner.sql                      /docker-entrypoint-ini
 # Phase 4 — Exchange secrets (ruby_db) — exchange_secrets (WebUI Phase E)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/003_secrets.sql                      /docker-entrypoint-initdb.d/26-secrets.sql
+
+# ---------------------------------------------------------------------------
+# Phase 5 — Notification channels (ruby_db) — notification_channels
+# (Discord webhooks; store + management API only, sending is a follow-up)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/004_notifications.sql                /docker-entrypoint-initdb.d/27-notifications.sql

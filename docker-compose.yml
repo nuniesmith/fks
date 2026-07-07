@@ -1323,6 +1323,73 @@ services:
                 max-file: "3"
                 labels: "service=fks_bot_crypto_demo,environment=dev"
 
+    # -------------------------------------------------------------------------
+    # rithmic-connector — credential-gated, READ-ONLY Rithmic futures feed.
+    #
+    # FOUNDATION / skeleton (roadmap P12; design in
+    # docs/architecture/RITHMIC_INTEGRATION_SPIKE.md). NOT part of the default
+    # `up`: it is behind the `rithmic` profile AND runtime-gated on
+    # RITHMIC_ENABLED. It only makes sense once a Rithmic dev kit + test-system
+    # credentials exist (spike Phase 0 — the long pole).
+    #
+    #     docker compose --profile rithmic up rithmic-connector
+    #
+    # DOCTRINE: read-only. The order plant is never opened; no execution path
+    # exists in the image. Creds (RITHMIC_USER/PASSWORD/SYSTEM_NAME) are injected
+    # from the spawner secret store like other brokers — leave them EMPTY here to
+    # keep the connector idle. Persistence to `candles_futures` is a STUB in this
+    # PR (see crates/rithmic-connector/src/persistence.rs).
+    rithmic-connector:
+        profiles: ["rithmic"]
+        build:
+            context: .
+            dockerfile: infrastructure/docker/services/rithmic-connector/Dockerfile
+            args:
+                RUST_VERSION: "1.94.1"
+                SERVICE_PORT: "9091"
+                REPO_URL: ${RITHMIC_CONNECTOR_REPO:-}
+                REPO_REF: ${RITHMIC_CONNECTOR_REF:-main}
+        image: nuniesmith/fks:rithmic-connector
+        container_name: fks_rithmic_connector
+        user: "1000:1000"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            # Master gate — OFF by default. Nothing connects until true AND
+            # credentials are present (the capability gate).
+            - RITHMIC_ENABLED=${RITHMIC_ENABLED:-false}
+            - RITHMIC_ENV=${RITHMIC_ENV:-demo} # demo | test | live
+            - RITHMIC_GATEWAY_URL=${RITHMIC_GATEWAY_URL:-}
+            - RITHMIC_GATEWAY_ALT_URL=${RITHMIC_GATEWAY_ALT_URL:-}
+            - RITHMIC_SYSTEM_NAME=${RITHMIC_SYSTEM_NAME:-}
+            # Credentials — injected by the spawner secret store (broker 3-slot:
+            # user→api_key, password→api_secret, system→api_passphrase). Empty
+            # here = connector idles.
+            - RITHMIC_USER=${RITHMIC_USER:-}
+            - RITHMIC_PASSWORD=${RITHMIC_PASSWORD:-}
+            - RITHMIC_APP_NAME=${RITHMIC_APP_NAME:-fks-rithmic-connector}
+            - RITHMIC_APP_VERSION=${RITHMIC_APP_VERSION:-0.1.0}
+            # The single instrument this foundation subscribes to (read-only).
+            - RITHMIC_INSTRUMENT=${RITHMIC_INSTRUMENT:-MES}
+            - RITHMIC_EXCHANGE=${RITHMIC_EXCHANGE:-CME}
+            - RITHMIC_HEALTH_HOST=0.0.0.0
+            - RITHMIC_HEALTH_PORT=9091
+            - RUST_LOG=${RITHMIC_LOG_LEVEL:-info,rithmic_connector=debug}
+            - RUST_BACKTRACE=1
+        ports:
+            - "127.0.0.1:9092:9091" # /health + /status (9092 host to avoid the bot :9091)
+        networks:
+            - fks-network
+        restart: unless-stopped
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=fks_rithmic_connector,environment=dev"
+
 # =============================================================================
 # VOLUMES
 # =============================================================================

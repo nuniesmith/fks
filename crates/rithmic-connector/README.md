@@ -23,7 +23,8 @@ positions integration (that is follow-on, spike Phases 2–3).
 | `/health` + `/status` server (:9091) | **Real.** |
 | Trade → 1-minute candle bucketing | **Minimal but real** — wires the read path to the sink. |
 | Persistence to `candles_futures` (QuestDB ILP) | **Real + unit-tested.** ILP line formatting is byte-for-byte tested and validated live against QuestDB; the aggregator→sink flow is tested end-to-end over a stand-in TCP socket. Not yet exercised against a *live Rithmic* trade stream (needs paid creds). |
-| DOM / `book_events_futures`, positions/PnL, order history | **Out of scope** (follow-on). |
+| Read-only positions/PnL (PnL plant → `/positions`) | **Real + unit-tested.** Opens the PnL plant read-only (account triple required), snapshots + subscribes, maps updates into an in-memory book served at `GET /positions`. The message→snapshot mapping is unit-tested against the vendor protobuf types; the **live wire path is unverified** (needs paid creds). |
+| DOM / `book_events_futures`, order history | **Out of scope** (follow-on). |
 | Reconnect/resubscribe loop | **Not yet** — `rithmic-rs` leaves reconnection to the caller; the loop exits on a connection issue. Follow-on. |
 
 ## The capability gate
@@ -54,6 +55,9 @@ the connector's state (including `read_only: true`, `order_plant_open: false`).
 | `RITHMIC_APP_VERSION` | crate version | App version string. |
 | `RITHMIC_INSTRUMENT` | `MES` | The single instrument to subscribe. |
 | `RITHMIC_EXCHANGE` | `CME` | Its exchange (becomes the `exchange` column). |
+| `RITHMIC_ACCOUNT_ID` | *(empty)* | Trading account id for the read-only positions/PnL subscription. Optional — market data flows without it. |
+| `RITHMIC_FCM_ID` | *(empty)* | Futures Commission Merchant id (positions). Optional. |
+| `RITHMIC_IB_ID` | *(empty)* | Introducing Broker id (positions). Optional. |
 | `QUESTDB_ILP_HOST` | `fks_questdb` | QuestDB ILP host for `candles_futures` writes. |
 | `QUESTDB_ILP_PORT` | `9009` | QuestDB ILP TCP port. |
 | `QUESTDB_ILP_URL` | *(empty)* | Overrides host+port; `host:port`, optional `tcp://`/`http://` prefix (scheme stripped). |
@@ -105,6 +109,41 @@ running deploy apply the idempotent migration
 [`infrastructure/config/questdb/migrations/002_candles_futures_dedup.sql`](../../infrastructure/config/questdb/migrations/002_candles_futures_dedup.sql)
 (`ALTER TABLE candles_futures DEDUP ENABLE UPSERT KEYS(...)`).
 
+## Positions / PnL — `GET /positions` (read-only)
+
+When the account triple (`RITHMIC_ACCOUNT_ID` / `RITHMIC_FCM_ID` / `RITHMIC_IB_ID`)
+is present **and** the gate is `Ready`, the connector opens a **second** read-only
+plant — the **PnL plant** — concurrently with the market-data ticker. It logs in,
+pulls a position snapshot, subscribes to live updates, and maintains an in-memory
+book of open positions keyed by symbol (a position going flat is dropped). Market
+data flows with or without the account triple; only this reader is gated on it.
+
+The book is served as JSON at `GET /positions` on the health port (`:9091`):
+
+```jsonc
+{
+  "account": "ACCT1",
+  "count": 1,
+  "positions": [
+    { "symbol": "ESU6", "exchange": "CME", "product_code": "ES",
+      "net_quantity": -2, "direction": "short", "avg_open_price": 5012.25,
+      "open_pnl": -37.5, "day_pnl": -40.0, "buy_qty": 0, "sell_qty": 2,
+      "open_quantity": 2, "account_id": "ACCT1" }
+  ],
+  "account_summary": { "account_id": "ACCT1", "net_quantity": -2,
+                       "open_pnl": -37.5, "day_pnl": -40.0, "account_balance": 52000.0 },
+  "read_only": true,
+  "order_plant_open": false
+}
+```
+
+`/status` also carries a `positions_tracked` count. **Doctrine:** this reads the
+PnL plant *only* — `RithmicOrderPlant` is never imported or opened anywhere in the
+crate, and both `/positions` and `/status` surface `order_plant_open: false`. The
+message→snapshot mapping (`map_instrument_update` / `map_account_update`) is pure
+and unit-tested against the vendor protobuf types; the **live wire path is
+unverified** and needs a paid Rithmic account to confirm.
+
 **Exact ILP line shape** (unit-tested byte-for-byte, and validated live against
 QuestDB :9009 via a scratch table whose columns/types came back identical to
 `candles_crypto`):
@@ -129,7 +168,9 @@ compose profile (not in the default `up`) AND pass the runtime capability gate
    `RITHMIC_ENV=test` (or `demo`/`live`), `RITHMIC_GATEWAY_URL=wss://…`,
    `RITHMIC_INSTRUMENT` / `RITHMIC_EXCHANGE` for the contract you want.
    `QUESTDB_ILP_HOST`/`PORT` default to the in-network `fks_questdb:9009` — leave
-   them unless QuestDB is elsewhere.
+   them unless QuestDB is elsewhere. For the **read-only positions/PnL** feed,
+   also set `RITHMIC_ACCOUNT_ID` / `RITHMIC_FCM_ID` / `RITHMIC_IB_ID`; omit them
+   and only market data flows.
 4. **Spawn under the profile:**
    ```bash
    docker compose --profile rithmic build rithmic-connector
@@ -154,6 +195,11 @@ compose profile (not in the default `up`) AND pass the runtime capability gate
    `candles_persisted` on `/status` should climb in lockstep; `persist_errors`
    should stay at 0. The fks-web chart reader can then query `candles_futures`
    with the same code path as `candles_crypto`.
+8. **Verify positions** (if the account triple is set): `GET /positions` lists
+   open positions and account P&L, and `/status` carries `positions_tracked`:
+   ```bash
+   curl -s http://127.0.0.1:9092/positions | jq
+   ```
 
 To **stand down**: `RITHMIC_ENABLED=false` (or stop the profile) → the connector
 returns to a clean, logged no-op; nothing connects.

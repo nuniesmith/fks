@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use rithmic_connector::config::{GateDecision, RithmicConfig};
 use rithmic_connector::persistence::StubCandleSink;
+use rithmic_connector::positions::PositionsBook;
 use rithmic_connector::state::ConnectorState;
 use rithmic_connector::{connector, health};
 
@@ -33,7 +34,7 @@ async fn disabled_by_default_and_connector_noops() {
     assert_eq!(config.gate(), GateDecision::Disabled);
 
     let state = ConnectorState::new(config.gate(), "rithmic:MES");
-    connector::run(config, state.clone(), Arc::new(StubCandleSink))
+    connector::run(config, state.clone(), Arc::new(StubCandleSink), PositionsBook::new())
         .await
         .expect("disabled connector must return Ok");
 
@@ -52,7 +53,7 @@ async fn enabled_without_creds_noops() {
     ));
 
     let state = ConnectorState::new(config.gate(), "rithmic:MES");
-    connector::run(config, state.clone(), Arc::new(StubCandleSink))
+    connector::run(config, state.clone(), Arc::new(StubCandleSink), PositionsBook::new())
         .await
         .expect("uncredentialed connector must return Ok");
     assert!(!state.snapshot().connected);
@@ -82,6 +83,33 @@ async fn health_router_assembles_for_every_gate_state() {
         GateDecision::Ready,
     ] {
         let state = ConnectorState::new(gate, "rithmic:MES");
-        let _router = health::router(state);
+        let _router = health::router(state, PositionsBook::new());
     }
+}
+
+#[tokio::test]
+async fn positions_gate_needs_account_triple() {
+    // Ready to connect, but no account triple ⇒ positions reader stays off.
+    // (Dummy user/pass "u"/"p" match the config.rs test convention — short,
+    // obviously-fake placeholders, not credential-shaped.)
+    let config = cfg(&[
+        ("RITHMIC_ENABLED", "true"),
+        ("RITHMIC_GATEWAY_URL", "wss://rituz00100.rithmic.com:443"),
+        ("RITHMIC_USER", "u"),
+        ("RITHMIC_PASSWORD", "p"),
+    ]);
+    assert!(config.gate().is_ready());
+    assert!(!config.positions_ready());
+
+    // With the full triple, positions are cleared to read (still no live conn).
+    let config = cfg(&[
+        ("RITHMIC_ENABLED", "true"),
+        ("RITHMIC_GATEWAY_URL", "wss://rituz00100.rithmic.com:443"),
+        ("RITHMIC_USER", "u"),
+        ("RITHMIC_PASSWORD", "p"),
+        ("RITHMIC_ACCOUNT_ID", "ACCT1"),
+        ("RITHMIC_FCM_ID", "FCM1"),
+        ("RITHMIC_IB_ID", "IB1"),
+    ]);
+    assert!(config.positions_ready());
 }

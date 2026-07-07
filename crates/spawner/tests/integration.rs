@@ -591,6 +591,158 @@ async fn secrets_delete_degrades_gracefully_without_db() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Notification channels (db feature) — graceful behaviour without a live Postgres
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_list_degrades_gracefully_without_db() {
+    // No DATABASE_URL (store: None) — GET /notifications must degrade to an
+    // empty list with db_enabled:false, never 500.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(Request::get("/notifications").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+    assert!(payload.contains("\"total\":0"), "body: {payload}");
+    assert!(payload.contains("\"channels\":[]"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_post_without_db_returns_503() {
+    // A well-formed channel submission with no DB configured must report an
+    // honest 503 (storage unavailable), not a fake success.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "name": "ops-alerts",
+        "kind": "discord_webhook",
+        "url": "https://discord.com/api/webhooks/1/abc",
+        "events": []
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/notifications")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_post_rejects_missing_url() {
+    // Validation runs before the store check, so a blank url is rejected (400)
+    // regardless of whether Postgres is configured.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "name": "ops-alerts",
+        "url": ""
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/notifications")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_post_rejects_non_http_url() {
+    // A non-http(s) URL is rejected (400) before touching the store.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "name": "ops-alerts",
+        "url": "ftp://example.com/hook"
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/notifications")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_post_rejects_unknown_kind() {
+    // An unrecognised kind is a 400 (allowlist), not a silent store.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "name": "ops-alerts",
+        "kind": "carrier_pigeon",
+        "url": "https://discord.com/api/webhooks/1/abc"
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/notifications")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_delete_degrades_gracefully_without_db() {
+    // No DATABASE_URL (store: None) — DELETE /notifications/{name} must degrade
+    // to ok:false + db_enabled:false, never 500.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(
+            Request::delete("/notifications/ops-alerts")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"ok\":false"), "body: {payload}");
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Saved spawn configs (db feature) — graceful behaviour without a live Postgres
 // ─────────────────────────────────────────────────────────────────────────────
 

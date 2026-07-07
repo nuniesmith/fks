@@ -55,6 +55,9 @@ cargo test -p spawner            # unit (incl. stats math) + HTTP integration te
 | `POST` | `/secrets` | yes (db only) | Store exchange API credentials (never read back) |
 | `GET` | `/secrets/status` | yes (db only) | Which exchanges have keys configured |
 | `DELETE` | `/secrets/{exchange}` | yes (db only) | Remove one exchange's stored credentials (hard delete) |
+| `POST` | `/notifications` | yes (db only) | Store/UPSERT a notification channel (Discord webhook — URL encrypted, never read back) |
+| `GET` | `/notifications` | yes (db only) | List channels (name/kind/events — never the URL) |
+| `DELETE` | `/notifications/{name}` | yes (db only) | Remove one notification channel (hard delete) |
 | `GET` `POST` | `/configs` | yes (db only) | List / save (UPSERT) reusable spawn configs |
 | `DELETE` | `/configs/{name}` | yes (db only) | Soft-delete a saved config |
 

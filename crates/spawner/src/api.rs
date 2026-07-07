@@ -47,7 +47,7 @@ use crate::{
 #[cfg(feature = "db")]
 use crate::db::{BotRunStore, RecordSpawn};
 #[cfg(feature = "db")]
-use crate::models::{ConfigRequest, SecretRequest};
+use crate::models::{ConfigRequest, NotificationChannelRequest, SecretRequest};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared state
@@ -102,6 +102,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/secrets", post(secrets_handler))
         .route("/secrets/status", get(secrets_status_handler))
         .route("/secrets/{exchange}", delete(delete_secret_handler))
+        .route(
+            "/notifications",
+            get(list_notifications_handler).post(save_notification_handler),
+        )
+        .route("/notifications/{name}", delete(delete_notification_handler))
         .route(
             "/configs",
             get(list_configs_handler).post(save_config_handler),
@@ -574,6 +579,151 @@ async fn secrets_status_handler(
         "total": rows.len(),
         "db_enabled": true,
     })))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notification channels  (db feature only) — operator-configured webhooks
+//
+// SECURITY: the WebUI browser only ever SUBMITS a channel here; the target URL
+// is never returned. POST stores (UPSERT by name); GET reports only
+// name/kind/events (never the URL); DELETE removes one channel. The URL is
+// encrypted at rest with the same cipher as exchange secrets (a Discord webhook
+// URL is a bearer capability). Every route is additionally gated by
+// X-Internal-Token.
+//
+// BOUNDARY: this is the STORE + management API only. Actually SENDING
+// notifications (a notifier task / bots / janus reading channels and POSTing to
+// Discord) is a consumer-side follow-up, deliberately NOT wired here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Max length of a submitted webhook URL — generous but bounded to reject
+/// obviously-bogus input before it hits the cipher / DB.
+#[cfg(feature = "db")]
+const MAX_WEBHOOK_URL_LEN: usize = 2048;
+
+/// Known transport kinds. Only `discord_webhook` is meaningful today; the list
+/// is the validation allowlist so a typo'd kind is a 400, not a silent store.
+#[cfg(feature = "db")]
+const KNOWN_CHANNEL_KINDS: &[&str] = &["discord_webhook"];
+
+#[cfg(feature = "db")]
+async fn save_notification_handler(
+    State(state): State<AppState>,
+    Json(req): Json<NotificationChannelRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>), SpawnerError> {
+    let name = req.name.trim().to_string();
+    let kind = req.kind.trim().to_lowercase();
+    let url = req.url.trim();
+    // Normalise events: trim, drop blanks, de-dup while preserving order. An
+    // empty resulting list is the catch-all.
+    let mut events: Vec<String> = Vec::new();
+    for e in &req.events {
+        let e = e.trim().to_string();
+        if !e.is_empty() && !events.contains(&e) {
+            events.push(e);
+        }
+    }
+
+    if name.is_empty() || url.is_empty() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "name and url are required",
+            })),
+        ));
+    }
+    if name.len() > 64 {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "name too long (max 64 chars)",
+            })),
+        ));
+    }
+    if url.len() > MAX_WEBHOOK_URL_LEN
+        || !(url.starts_with("https://") || url.starts_with("http://"))
+    {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "url must be an http(s) URL under 2048 chars",
+            })),
+        ));
+    }
+    if !KNOWN_CHANNEL_KINDS.contains(&kind.as_str()) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("unknown kind '{kind}' (supported: discord_webhook)"),
+            })),
+        ));
+    }
+
+    let Some(store) = state.store.as_ref() else {
+        // No Postgres configured — can't persist. Tell the caller honestly
+        // instead of pretending the channel was saved.
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "ok": false,
+                "db_enabled": false,
+                "error": "notification storage requires the spawner Postgres DB",
+            })),
+        ));
+    };
+
+    // AWAIT the write — confirm the channel persisted before reporting success.
+    store.upsert_channel(&name, &kind, url, &events).await?;
+
+    // Log only the name/kind — never the webhook URL.
+    info!(name = %name, kind = %kind, "stored notification channel");
+
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "name": name, "kind": kind })),
+    ))
+}
+
+#[cfg(feature = "db")]
+async fn list_notifications_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        // DB not configured — empty list so the WebUI degrades gracefully.
+        return Ok(Json(serde_json::json!({
+            "channels": [],
+            "total": 0,
+            "db_enabled": false,
+        })));
+    };
+
+    let rows = store.list_channels().await?;
+    Ok(Json(serde_json::json!({
+        "channels": rows,
+        "total": rows.len(),
+        "db_enabled": true,
+    })))
+}
+
+#[cfg(feature = "db")]
+async fn delete_notification_handler(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let name = name.trim().to_string();
+    let Some(store) = state.store.as_ref() else {
+        return Ok(Json(
+            serde_json::json!({ "ok": false, "db_enabled": false }),
+        ));
+    };
+
+    let removed = store.delete_channel(&name).await?;
+    info!(name = %name, removed, "deleted notification channel");
+    Ok(Json(serde_json::json!({ "ok": removed, "name": name })))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -63,6 +63,12 @@ pub struct Config {
     /// reject requests that don't carry the matching header value.
     /// Empty = no auth (dev mode).
     pub internal_token: String,
+
+    /// Whether bot-lifecycle events are dispatched to configured notification
+    /// channels (Discord webhooks). Opt-out: defaults to `true`. With zero
+    /// channels configured it is a cheap no-op regardless; set
+    /// `NOTIFY_ENABLED=false` to hard-disable the sender. Env: NOTIFY_ENABLED.
+    pub notify_enabled: bool,
 }
 
 impl Config {
@@ -90,6 +96,7 @@ impl Config {
                 .or_else(|_| env::var("DATABASE_URL"))
                 .unwrap_or_default(),
             internal_token: env::var("NGINX_INTERNAL_TOKEN").unwrap_or_default(),
+            notify_enabled: env_parse_bool("NOTIFY_ENABLED", true),
         }
     }
 
@@ -110,6 +117,20 @@ fn env_parse_f64(key: &str, default: f64) -> f64 {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(default)
+}
+
+/// Parse a boolean env flag. Accepts the common truthy/falsey spellings
+/// (`true/false`, `1/0`, `yes/no`, `on/off`, case-insensitive); anything
+/// unrecognised falls back to `default`.
+fn env_parse_bool(key: &str, default: bool) -> bool {
+    match env::var(key) {
+        Ok(v) => match v.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => true,
+            "false" | "0" | "no" | "off" => false,
+            _ => default,
+        },
+        Err(_) => default,
+    }
 }
 
 #[cfg(test)]
@@ -140,6 +161,7 @@ mod tests {
             prune_interval_secs: 60,
             database_url: String::new(),
             internal_token: String::new(),
+            notify_enabled: true,
         };
         assert_eq!(cfg.bind_addr(), "0.0.0.0:8090");
         assert!(
@@ -168,6 +190,7 @@ mod tests {
             prune_interval_secs: 0,
             database_url: String::new(),
             internal_token: String::new(),
+            notify_enabled: true,
         };
         assert_eq!(cfg.bind_addr(), "127.0.0.1:12345");
     }

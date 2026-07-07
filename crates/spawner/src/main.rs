@@ -77,6 +77,10 @@ async fn main() -> anyhow::Result<()> {
     {
         let docker_prune: Arc<dyn DockerOps> = docker.clone();
         let config_prune = config.clone();
+        // The prune sweep emits a best-effort bot_removed notification per
+        // sweep (a count summary — auto_prune returns a count, not ids).
+        #[cfg(feature = "db")]
+        let store_prune = store.clone();
         tokio::spawn(async move {
             let interval = Duration::from_secs(config_prune.prune_interval_secs);
             loop {
@@ -85,6 +89,20 @@ async fn main() -> anyhow::Result<()> {
                     Ok(n) if n > 0 => {
                         metrics::PRUNE_TOTAL.inc_by(n as f64);
                         prometheus_sd::update_sd_file(docker_prune.as_ref(), &config_prune).await;
+                        // Notify configured channels (best-effort, detached).
+                        #[cfg(feature = "db")]
+                        if config_prune.notify_enabled
+                            && let Some(store) = store_prune.clone()
+                        {
+                            use spawner::notifications::{
+                                NotificationDispatcher, NotificationEvent,
+                            };
+                            tokio::spawn(async move {
+                                NotificationDispatcher::new(store)
+                                    .dispatch(NotificationEvent::pruned(n))
+                                    .await;
+                            });
+                        }
                     }
                     Ok(_) => {}
                     Err(e) => tracing::warn!(error = %e, "auto-prune error"),

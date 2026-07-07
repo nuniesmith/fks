@@ -48,6 +48,8 @@ use crate::{
 use crate::db::{BotRunStore, RecordSpawn};
 #[cfg(feature = "db")]
 use crate::models::{ConfigRequest, NotificationChannelRequest, SecretRequest};
+#[cfg(feature = "db")]
+use crate::notifications::{NotificationDispatcher, NotificationEvent, TestOutcome};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared state
@@ -63,6 +65,26 @@ pub struct AppState {
     /// Optional Postgres-backed bot_runs persistence. None = stateless mode.
     #[cfg(feature = "db")]
     pub store: Option<BotRunStore>,
+}
+
+/// Fire a best-effort notification dispatch OFF the critical path.
+///
+/// Gated on `NOTIFY_ENABLED` (default true) and on the channel store being
+/// configured (with no DB there are no channels to load). The dispatch itself
+/// is best-effort — every webhook failure is logged + counted inside the
+/// dispatcher and NEVER propagated, so this can never affect the lifecycle
+/// response. `tokio::spawn` detaches it so we don't await it on the request.
+#[cfg(feature = "db")]
+fn spawn_dispatch(state: &AppState, ev: NotificationEvent) {
+    if !state.config.notify_enabled {
+        return;
+    }
+    let Some(store) = state.store.clone() else {
+        return;
+    };
+    tokio::spawn(async move {
+        NotificationDispatcher::new(store).dispatch(ev).await;
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,6 +129,10 @@ pub fn build_router(state: AppState) -> Router {
             get(list_notifications_handler).post(save_notification_handler),
         )
         .route("/notifications/{name}", delete(delete_notification_handler))
+        .route(
+            "/notifications/{name}/test",
+            post(test_notification_handler),
+        )
         .route(
             "/configs",
             get(list_configs_handler).post(save_config_handler),
@@ -167,6 +193,15 @@ async fn spawn_handler(
         .next()
         .unwrap_or(&req.image)
         .to_string();
+
+    // Best-effort context for a bot_error notification if the spawn fails
+    // (captured before `req` is moved into the Docker call / secrets rebind).
+    #[cfg(feature = "db")]
+    let (bot_id_hint, image_hint, mode_hint) = (
+        req.bot_id.clone().unwrap_or_default(),
+        req.image.clone(),
+        req.mode.clone(),
+    );
 
     // ── Spawn-time secrets injection ────────────────────────────────────────
     // `secrets: ["kraken", …]` injects that exchange's stored credentials as
@@ -233,11 +268,20 @@ async fn spawn_handler(
         req
     };
 
-    let resp = state.docker.spawn(req).await.map_err(|e| {
-        metrics::SPAWN_ERRORS_TOTAL.inc();
-        warn!(error = %e, "spawn failed");
-        e
-    })?;
+    let resp = match state.docker.spawn(req).await {
+        Ok(resp) => resp,
+        Err(e) => {
+            metrics::SPAWN_ERRORS_TOTAL.inc();
+            warn!(error = %e, "spawn failed");
+            // A failed spawn is a bot_error event (best-effort, off-path).
+            #[cfg(feature = "db")]
+            spawn_dispatch(
+                &state,
+                NotificationEvent::error(&bot_id_hint, &image_hint, &mode_hint, &e.to_string()),
+            );
+            return Err(e);
+        }
+    };
 
     metrics::SPAWNS_TOTAL.inc();
     metrics::SPAWN_DURATION
@@ -270,6 +314,10 @@ async fn spawn_handler(
             }
         });
     }
+
+    // Notify configured channels of the successful spawn (best-effort, off-path).
+    #[cfg(feature = "db")]
+    spawn_dispatch(&state, NotificationEvent::spawned(&resp));
 
     // Update Prometheus SD file asynchronously — don't block the response.
     let docker = state.docker.clone();
@@ -383,6 +431,10 @@ async fn remove_handler(
         });
     }
 
+    // Notify configured channels of the removal (best-effort, off-path).
+    #[cfg(feature = "db")]
+    spawn_dispatch(&state, NotificationEvent::removed(&id));
+
     let docker = state.docker.clone();
     let config = state.config.clone();
     tokio::spawn(async move {
@@ -412,6 +464,10 @@ async fn stop_handler(
             }
         });
     }
+
+    // Notify configured channels of the stop (best-effort, off-path).
+    #[cfg(feature = "db")]
+    spawn_dispatch(&state, NotificationEvent::stopped(&id));
 
     let docker = state.docker.clone();
     let config = state.config.clone();
@@ -591,9 +647,10 @@ async fn secrets_status_handler(
 // URL is a bearer capability). Every route is additionally gated by
 // X-Internal-Token.
 //
-// BOUNDARY: this is the STORE + management API only. Actually SENDING
-// notifications (a notifier task / bots / janus reading channels and POSTing to
-// Discord) is a consumer-side follow-up, deliberately NOT wired here.
+// SENDER: the consumer half lives in `crate::notifications`. Lifecycle handlers
+// fire a best-effort, off-critical-path `NotificationDispatcher` (gated on
+// NOTIFY_ENABLED); POST /notifications/{name}/test sends a one-off probe to a
+// single channel so the WebUI can verify a webhook end-to-end.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Max length of a submitted webhook URL — generous but bounded to reject
@@ -724,6 +781,66 @@ async fn delete_notification_handler(
     let removed = store.delete_channel(&name).await?;
     info!(name = %name, removed, "deleted notification channel");
     Ok(Json(serde_json::json!({ "ok": removed, "name": name })))
+}
+
+/// POST /notifications/{name}/test — send a one-off "connected" message to a
+/// single channel and report whether the webhook accepted it. Lets the WebUI
+/// "Test" button verify an operator's webhook end-to-end. Best-effort: a failed
+/// delivery is a 200 with `ok:false` (a legit test result, not a server error);
+/// a missing channel is a 404; no DB is a 503. NEVER logs the webhook URL.
+#[cfg(feature = "db")]
+async fn test_notification_handler(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let name = name.trim().to_string();
+
+    let Some(store) = state.store.clone() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "ok": false,
+                "db_enabled": false,
+                "error": "notification test requires the spawner Postgres DB",
+            })),
+        );
+    };
+
+    let outcome = NotificationDispatcher::new(store).send_test(&name).await;
+    match outcome {
+        TestOutcome::Delivered => {
+            info!(name = %name, "notification test delivered");
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "ok": true, "name": name })),
+            )
+        }
+        TestOutcome::NotFound => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "ok": false,
+                "name": name,
+                "error": "no notification channel with that name",
+            })),
+        ),
+        TestOutcome::HttpStatus(code) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok": false,
+                "name": name,
+                "status": code,
+                "error": "webhook returned a non-2xx status",
+            })),
+        ),
+        TestOutcome::Failed(reason) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "ok": false,
+                "name": name,
+                "error": reason,
+            })),
+        ),
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -211,6 +211,7 @@ fn test_config(internal_token: &str) -> Config {
         prune_interval_secs: 60,
         database_url: String::new(),
         internal_token: internal_token.to_string(),
+        notify_enabled: true,
     }
 }
 
@@ -740,6 +741,49 @@ async fn notifications_delete_degrades_gracefully_without_db() {
     let payload = body_string(resp).await;
     assert!(payload.contains("\"ok\":false"), "body: {payload}");
     assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_test_route_degrades_gracefully_without_db() {
+    // No DATABASE_URL (store: None) — POST /notifications/{name}/test must
+    // report an honest 503 (storage unavailable), never 500, and must never
+    // attempt a webhook POST.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(
+            Request::post("/notifications/ops-alerts/test")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"ok\":false"), "body: {payload}");
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn notifications_test_route_is_token_gated() {
+    // With a configured token, the test route rejects an unauthenticated
+    // request (401) before touching the store — same gate as the other
+    // /notifications routes.
+    let (app, _) = build_app(test_config("s3cr3t"));
+
+    let resp = app
+        .oneshot(
+            Request::post("/notifications/ops-alerts/test")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

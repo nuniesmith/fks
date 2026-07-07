@@ -371,8 +371,9 @@ impl BotRunStore {
     // WebUI submits a channel here; the target URL is stored server-side and
     // never returned. `upsert_channel` writes it (encrypting the URL at rest,
     // overwriting any prior row for that name); `list_channels` reports only
-    // name/kind/events — never the URL. This is the STORE only; SENDING to the
-    // channel is a consumer-side follow-up.
+    // name/kind/events — never the URL. `get_channel_target` decrypts the URL
+    // for the notification sender (`crate::notifications`), which is the only
+    // consumer that ever sees it (outbound webhook POST, never an HTTP GET).
 
     /// Store (UPSERT) a notification channel. `name` is the primary key, so
     /// re-submitting overwrites rather than duplicating. The `url` is encrypted
@@ -434,10 +435,10 @@ impl BotRunStore {
             .collect())
     }
 
-    /// Fetch + decrypt one channel's target URL. Intended for the consumer-side
-    /// sender (follow-up PR); `Ok(None)` = no row stored for that name. Never
-    /// exposed over an HTTP GET.
-    #[allow(dead_code)] // consumed by the notifier follow-up (sending is out of scope here)
+    /// Fetch + decrypt one channel's target URL for the notification sender
+    /// (see `crate::notifications`). `Ok(None)` = no row stored for that name.
+    /// Never exposed over an HTTP GET — the decrypted URL is a bearer capability
+    /// that only flows into an outbound webhook POST.
     pub async fn get_channel_target(&self, name: &str) -> Result<Option<String>, SpawnerError> {
         let row = sqlx::query("SELECT target FROM notification_channels WHERE name = $1")
             .bind(name)

@@ -72,10 +72,19 @@ chacha20poly1305 = { version = "0.10", optional = true }
 base64 = { version = "0.22", optional = true }
 hex = { version = "0.4", optional = true }
 
+# Outbound HTTP for the notification sender (Discord webhooks) — db-only.
+# rustls (no OpenSSL) to keep the container image dependency-light and match
+# sqlx's runtime-tokio-rustls stack.
+reqwest = { version = "0.12", default-features = false, optional = true, features = [
+    "json",
+    "rustls-tls",
+] }
+
 [features]
 default = ["db"]
-# Enables Postgres persistence of spawn/stop events into bot_runs.
-db = ["dep:sqlx", "dep:chacha20poly1305", "dep:base64", "dep:hex"]
+# Enables Postgres persistence of spawn/stop events into bot_runs, plus the
+# notification sender (needs the channel store + webhook HTTP client).
+db = ["dep:sqlx", "dep:chacha20poly1305", "dep:base64", "dep:hex", "dep:reqwest"]
 
 [dev-dependencies]
 tokio        = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }

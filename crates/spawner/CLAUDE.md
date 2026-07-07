@@ -58,6 +58,7 @@ cargo test -p spawner            # unit (incl. stats math) + HTTP integration te
 | `POST` | `/notifications` | yes (db only) | Store/UPSERT a notification channel (Discord webhook — URL encrypted, never read back) |
 | `GET` | `/notifications` | yes (db only) | List channels (name/kind/events — never the URL) |
 | `DELETE` | `/notifications/{name}` | yes (db only) | Remove one notification channel (hard delete) |
+| `POST` | `/notifications/{name}/test` | yes (db only) | Send a one-off "connected" probe to one channel; reports whether the webhook accepted it |
 | `GET` `POST` | `/configs` | yes (db only) | List / save (UPSERT) reusable spawn configs |
 | `DELETE` | `/configs/{name}` | yes (db only) | Soft-delete a saved config |
 
@@ -127,5 +128,13 @@ Hardened (auth + HTTP integration tests) and DB-backed in `ruby_db`:
   credential storage (`POST /secrets`, `GET /secrets/status`) — all db-gated.
 - `/containers` enriches running bots with live CPU% + memory from the Docker
   stats API (pure CPU%/mem math is unit-tested).
+- **Notification sender** (`src/notifications.rs`): lifecycle events
+  (`bot_spawned` / `bot_stopped` / `bot_removed` / `bot_error`) are dispatched
+  to configured Discord webhook channels (URL decrypted via the `SecretsCipher`).
+  Best-effort + off the critical path (each dispatch is `tokio::spawn`ed; webhook
+  failures are logged + counted, never propagated), gated on `NOTIFY_ENABLED`
+  (default true — opt-out). Channel `events=[]` is catch-all; a non-empty list
+  filters by kind. `POST /notifications/{name}/test` sends a one-off probe.
+  Webhook URLs are NEVER logged (channel name only).
 - Wired into the WebUI `/bots` route; `fks-bot-example` / `crypto-demo` demo the
   spawn contract end-to-end.

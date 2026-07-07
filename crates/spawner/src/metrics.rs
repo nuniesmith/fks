@@ -56,6 +56,22 @@ pub static PRUNE_TOTAL: Lazy<Counter> = Lazy::new(|| {
     .expect("metric registration failed")
 });
 
+pub static NOTIFY_SENT_TOTAL: Lazy<Counter> = Lazy::new(|| {
+    register_counter!(
+        "fks_spawner_notify_sent_total",
+        "Total number of notification webhook POSTs that succeeded (2xx)"
+    )
+    .expect("metric registration failed")
+});
+
+pub static NOTIFY_FAILED_TOTAL: Lazy<Counter> = Lazy::new(|| {
+    register_counter!(
+        "fks_spawner_notify_failed_total",
+        "Total number of notification webhook POSTs that failed (non-2xx, timeout, or decrypt error)"
+    )
+    .expect("metric registration failed")
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Gauges
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,6 +109,8 @@ pub fn render() -> String {
     let _ = &*STOPS_TOTAL;
     let _ = &*REMOVES_TOTAL;
     let _ = &*PRUNE_TOTAL;
+    let _ = &*NOTIFY_SENT_TOTAL;
+    let _ = &*NOTIFY_FAILED_TOTAL;
     let _ = &*RUNNING_BOTS;
     let _ = &*SPAWN_DURATION;
 

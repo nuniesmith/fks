@@ -53,6 +53,12 @@ pub struct Config {
     /// How often (in seconds) the background auto-prune task runs.
     pub prune_interval_secs: u64,
 
+    /// How often (in seconds) the net-worth sampler polls each running bot's
+    /// `/status` endpoint and appends a `net_worth_snapshots` row. Coarse by
+    /// design (years-horizon backbone, not a live tick). Env:
+    /// NET_WORTH_SAMPLE_INTERVAL_SECS. Only runs when the DB is configured.
+    pub net_worth_sample_interval_secs: u64,
+
     /// Postgres connection string. Empty = stateless mode (no DB writes).
     /// Recognised env vars (in order): SPAWNER_DATABASE_URL, DATABASE_URL.
     pub database_url: String,
@@ -92,6 +98,10 @@ impl Config {
             bot_metrics_port: env_parse("BOT_METRICS_PORT", 9091),
             prune_after_secs: env_parse("PRUNE_AFTER_SECS", 300),
             prune_interval_secs: env_parse("PRUNE_INTERVAL_SECS", 60),
+            net_worth_sample_interval_secs: env_parse(
+                "NET_WORTH_SAMPLE_INTERVAL_SECS",
+                crate::net_worth::DEFAULT_SAMPLE_INTERVAL_SECS,
+            ),
             database_url: env::var("SPAWNER_DATABASE_URL")
                 .or_else(|_| env::var("DATABASE_URL"))
                 .unwrap_or_default(),
@@ -159,6 +169,7 @@ mod tests {
             bot_metrics_port: 9091,
             prune_after_secs: 300,
             prune_interval_secs: 60,
+            net_worth_sample_interval_secs: 300,
             database_url: String::new(),
             internal_token: String::new(),
             notify_enabled: true,
@@ -188,6 +199,7 @@ mod tests {
             bot_metrics_port: 9091,
             prune_after_secs: 0,
             prune_interval_secs: 0,
+            net_worth_sample_interval_secs: 0,
             database_url: String::new(),
             internal_token: String::new(),
             notify_enabled: true,

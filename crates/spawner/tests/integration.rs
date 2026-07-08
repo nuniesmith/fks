@@ -209,6 +209,7 @@ fn test_config(internal_token: &str) -> Config {
         bot_metrics_port: 9091,
         prune_after_secs: 300,
         prune_interval_secs: 60,
+        net_worth_sample_interval_secs: 300,
         database_url: String::new(),
         internal_token: internal_token.to_string(),
         notify_enabled: true,
@@ -852,6 +853,60 @@ async fn config_save_rejects_missing_name() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Net-worth sampler — discovery/target-building over the DockerOps trait
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn net_worth_sampler_targets_only_running_bots() {
+    // The sampler discovers who to poll via DockerOps::list_bots (mocked here)
+    // and builds `http://<container_name>:<port>/status` for each RUNNING bot.
+    // Stopped bots must not be polled. This exercises the same discovery half
+    // the real sampler uses, without needing a bot HTTP server.
+    use spawner::docker_client::DockerOps;
+    use spawner::models::SpawnRequest;
+    use spawner::net_worth::running_status_targets;
+
+    let config = test_config("");
+    let port = config.bot_metrics_port;
+    let mock = MockDockerClient::from_config(&config);
+
+    // Two running bots …
+    for bot_id in ["alpha", "beta"] {
+        mock.spawn(SpawnRequest {
+            image: "fks-bot-example:latest".to_string(),
+            bot_id: Some(bot_id.to_string()),
+            mode: "paper".to_string(),
+            env: HashMap::new(),
+            labels: HashMap::new(),
+            cpu_limit: None,
+            memory_limit_mb: None,
+            cmd: None,
+            entrypoint: None,
+            secrets: vec![],
+        })
+        .await
+        .expect("spawn");
+    }
+
+    // … then stop one (state → exited).
+    let beta_id = format!("{:0>12}", "beta");
+    mock.stop(&beta_id).await.expect("stop");
+
+    let bots = mock.list_bots().await.expect("list_bots");
+    let mut targets = running_status_targets(&bots, port);
+    targets.sort();
+
+    assert_eq!(
+        targets.len(),
+        1,
+        "only the running bot is a target: {targets:?}"
+    );
+    assert_eq!(targets[0].0, "alpha");
+    assert_eq!(targets[0].1, format!("http://fks-bot-alpha:{port}/status"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

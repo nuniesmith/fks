@@ -66,3 +66,9 @@ COPY src/sql/spawner/003_secrets.sql                      /docker-entrypoint-ini
 # (Discord webhooks; store + management API only, sending is a follow-up)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/004_notifications.sql                /docker-entrypoint-initdb.d/27-notifications.sql
+
+# ---------------------------------------------------------------------------
+# Phase 6 — Net-worth history (ruby_db) — net_worth_snapshots
+# (durable, append-only; written by the spawner's periodic /status sampler)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/006_net_worth_snapshots.sql          /docker-entrypoint-initdb.d/28-net-worth-snapshots.sql

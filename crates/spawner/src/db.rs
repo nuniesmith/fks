@@ -536,7 +536,11 @@ impl BotRunStore {
 
     /// Save (UPSERT by name) a dock layout. Returns whether a NEW row was
     /// created (`true`) vs. an existing one overwritten (`false`).
-    pub async fn upsert_layout(&self, name: &str, layout: &serde_json::Value) -> Result<bool, SpawnerError> {
+    pub async fn upsert_layout(
+        &self,
+        name: &str,
+        layout: &serde_json::Value,
+    ) -> Result<bool, SpawnerError> {
         let row = sqlx::query(
             "INSERT INTO ui_layouts (name, layout) \
              VALUES ($1, $2) \

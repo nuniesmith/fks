@@ -153,6 +153,22 @@ pub struct ConfigRequest {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Saved dock layout (POST /ui/layouts) — a named WebUI workspace arrangement
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Request body for `POST /ui/layouts` — persists a named dock layout in
+/// `ui_layouts`. The `layout` is the opaque serialized dockview envelope the
+/// `/workspace` client produces; the spawner stores it verbatim (plaintext —
+/// a layout carries no secrets). Re-posting the same name UPSERTs.
+#[derive(Debug, Deserialize)]
+pub struct LayoutRequest {
+    /// Unique human-readable name (the upsert key).
+    pub name: String,
+    /// The serialized dockview layout envelope, stored verbatim.
+    pub layout: serde_json::Value,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Spawn response
 // ─────────────────────────────────────────────────────────────────────────────
 

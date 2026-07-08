@@ -47,7 +47,7 @@ use crate::{
 #[cfg(feature = "db")]
 use crate::db::{BotRunStore, RecordSpawn};
 #[cfg(feature = "db")]
-use crate::models::{ConfigRequest, NotificationChannelRequest, SecretRequest};
+use crate::models::{ConfigRequest, LayoutRequest, NotificationChannelRequest, SecretRequest};
 #[cfg(feature = "db")]
 use crate::notifications::{NotificationDispatcher, NotificationEvent, TestOutcome};
 
@@ -137,7 +137,15 @@ pub fn build_router(state: AppState) -> Router {
             "/configs",
             get(list_configs_handler).post(save_config_handler),
         )
-        .route("/configs/{name}", delete(delete_config_handler));
+        .route("/configs/{name}", delete(delete_config_handler))
+        .route(
+            "/ui/layouts",
+            get(list_layouts_handler).post(save_layout_handler),
+        )
+        .route(
+            "/ui/layouts/{name}",
+            get(get_layout_handler).delete(delete_layout_handler),
+        );
 
     let protected = protected
         .layer(middleware::from_fn_with_state(
@@ -917,6 +925,117 @@ async fn delete_config_handler(
     };
 
     let removed = store.deactivate_config(&name).await?;
+    Ok(Json(serde_json::json!({ "ok": removed, "name": name })))
+}
+
+// ── ui_layouts: named WebUI dock layouts (see src/sql/spawner/005_ui_layouts.sql).
+// Plaintext (a layout carries no secrets); returned by GET so arrangements can
+// follow the operator across devices. ──────────────────────────────────────────
+
+/// POST /ui/layouts — create/UPSERT a named dock layout.
+#[cfg(feature = "db")]
+async fn save_layout_handler(
+    State(state): State<AppState>,
+    Json(req): Json<LayoutRequest>,
+) -> Result<(StatusCode, Json<serde_json::Value>), SpawnerError> {
+    let name = req.name.trim();
+    if name.is_empty() || name.len() > 120 {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "name is required (1–120 chars)",
+            })),
+        ));
+    }
+    if !req.layout.is_object() {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "layout must be a JSON object",
+            })),
+        ));
+    }
+
+    let Some(store) = state.store.as_ref() else {
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "ok": false,
+                "db_enabled": false,
+                "error": "layout storage requires the spawner Postgres DB",
+            })),
+        ));
+    };
+
+    let created = store.upsert_layout(name, &req.layout).await?;
+    info!(name, created, "saved ui layout");
+    Ok((
+        StatusCode::OK,
+        Json(serde_json::json!({ "ok": true, "name": name, "created": created })),
+    ))
+}
+
+/// GET /ui/layouts — list saved layout names + last-updated (not the blobs).
+#[cfg(feature = "db")]
+async fn list_layouts_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        return Ok(Json(serde_json::json!({
+            "layouts": [],
+            "total": 0,
+            "db_enabled": false,
+        })));
+    };
+
+    let rows = store.list_layouts().await?;
+    Ok(Json(serde_json::json!({
+        "layouts": rows,
+        "total": rows.len(),
+        "db_enabled": true,
+    })))
+}
+
+/// GET /ui/layouts/{name} — fetch one full layout envelope.
+#[cfg(feature = "db")]
+async fn get_layout_handler(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<(StatusCode, Json<serde_json::Value>), SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        return Ok((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "ok": false, "db_enabled": false })),
+        ));
+    };
+
+    match store.get_layout(&name).await? {
+        Some(layout) => Ok((
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "name": name, "layout": layout })),
+        )),
+        None => Ok((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "ok": false, "name": name, "error": "no such layout" })),
+        )),
+    }
+}
+
+/// DELETE /ui/layouts/{name} — remove one saved layout.
+#[cfg(feature = "db")]
+async fn delete_layout_handler(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+) -> Result<Json<serde_json::Value>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        return Ok(Json(
+            serde_json::json!({ "ok": false, "db_enabled": false }),
+        ));
+    };
+
+    let removed = store.delete_layout(&name).await?;
     Ok(Json(serde_json::json!({ "ok": removed, "name": name })))
 }
 

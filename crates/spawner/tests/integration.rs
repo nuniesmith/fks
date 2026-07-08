@@ -948,3 +948,154 @@ async fn auth_does_not_apply_to_metrics_even_when_enabled() {
 
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saved dock layouts (db feature) — graceful behaviour without a live Postgres
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn layouts_list_degrades_gracefully_without_db() {
+    // No DATABASE_URL (store: None) — GET /ui/layouts must degrade to an empty
+    // list with db_enabled:false, never 500.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(Request::get("/ui/layouts").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+    assert!(payload.contains("\"total\":0"), "body: {payload}");
+    assert!(payload.contains("\"layouts\":[]"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn layouts_post_without_db_returns_503() {
+    // A well-formed layout with no DB configured reports an honest 503, not a
+    // fake success.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({
+        "name": "trading-desk",
+        "layout": { "grid": {}, "panels": {} }
+    })
+    .to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/ui/layouts")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn layouts_post_rejects_missing_name() {
+    // Validation runs before the store check: a blank name is a 400 regardless
+    // of DB availability.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({ "name": "", "layout": { "grid": {} } }).to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/ui/layouts")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn layouts_post_rejects_non_object_layout() {
+    // The layout must be a JSON object (a dockview envelope), not an array or
+    // scalar — rejected 400 before the store.
+    let (app, _) = build_app(test_config(""));
+
+    let body = serde_json::json!({ "name": "x", "layout": [1, 2, 3] }).to_string();
+
+    let resp = app
+        .oneshot(
+            Request::post("/ui/layouts")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn layouts_get_one_without_db_returns_503() {
+    // GET /ui/layouts/{name} with no DB is an honest 503, never 500.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(
+            Request::get("/ui/layouts/trading-desk")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn layouts_delete_degrades_gracefully_without_db() {
+    // DELETE /ui/layouts/{name} with no DB degrades to ok:false + db_enabled:false.
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(
+            Request::delete("/ui/layouts/trading-desk")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert!(payload.contains("\"ok\":false"), "body: {payload}");
+    assert!(payload.contains("\"db_enabled\":false"), "body: {payload}");
+}
+
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn layouts_routes_are_token_gated() {
+    // With a configured token, the layout routes reject unauthenticated
+    // requests (401) before touching the store — same gate as the rest.
+    let (app, _) = build_app(test_config("s3cr3t"));
+
+    let resp = app
+        .oneshot(Request::get("/ui/layouts").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}

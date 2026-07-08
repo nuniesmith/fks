@@ -16,6 +16,7 @@
 //   BOT_METRICS_PORT          port bots expose /metrics on (default: 9091)
 //   PRUNE_AFTER_SECS          seconds before a stopped bot is pruned (default: 300)
 //   PRUNE_INTERVAL_SECS       seconds between prune sweeps (default: 60)
+//   NET_WORTH_SAMPLE_INTERVAL_SECS  seconds between net-worth samples (default: 300; DB only)
 //   RUST_LOG                  log level (default: info,spawner=debug)
 // =============================================================================
 
@@ -109,6 +110,24 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         });
+    }
+
+    // ── Background: net-worth sampler task ─────────────────────────────────────
+    // Polls each running bot's /status endpoint on an interval and appends
+    // net_worth_snapshots rows. DB-only (nothing to write to without Postgres)
+    // and best-effort (a bot that doesn't expose net worth is skipped, never
+    // fatal). See crate::net_worth for the contract.
+    #[cfg(feature = "db")]
+    if let Some(store_sampler) = store.clone() {
+        let docker_sampler: Arc<dyn DockerOps> = docker.clone();
+        let config_sampler = config.clone();
+        tokio::spawn(async move {
+            spawner::net_worth::run_sampler(docker_sampler, config_sampler, store_sampler).await;
+        });
+        info!(
+            interval_secs = %config.net_worth_sample_interval_secs,
+            "net-worth sampler started"
+        );
     }
 
     // ── HTTP server ───────────────────────────────────────────────────────────

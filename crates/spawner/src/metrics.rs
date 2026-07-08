@@ -72,6 +72,14 @@ pub static NOTIFY_FAILED_TOTAL: Lazy<Counter> = Lazy::new(|| {
     .expect("metric registration failed")
 });
 
+pub static NET_WORTH_SNAPSHOTS_TOTAL: Lazy<Counter> = Lazy::new(|| {
+    register_counter!(
+        "fks_spawner_net_worth_snapshots_total",
+        "Total number of net_worth_snapshots rows the sampler has written"
+    )
+    .expect("metric registration failed")
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Gauges
 // ─────────────────────────────────────────────────────────────────────────────
@@ -111,6 +119,7 @@ pub fn render() -> String {
     let _ = &*PRUNE_TOTAL;
     let _ = &*NOTIFY_SENT_TOTAL;
     let _ = &*NOTIFY_FAILED_TOTAL;
+    let _ = &*NET_WORTH_SNAPSHOTS_TOTAL;
     let _ = &*RUNNING_BOTS;
     let _ = &*SPAWN_DURATION;
 

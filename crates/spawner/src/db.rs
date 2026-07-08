@@ -40,6 +40,7 @@ use uuid::Uuid;
 
 use crate::error::SpawnerError;
 use crate::models::ConfigRequest;
+use crate::net_worth::NetWorthSnapshot;
 use crate::secrets_crypto::SecretsCipher;
 
 /// One exchange's decrypted API credentials, as fetched by
@@ -595,6 +596,38 @@ impl BotRunStore {
             .await
             .map_err(map_sqlx)?;
         Ok(r.rows_affected() > 0)
+    }
+
+    // ── net_worth_snapshots (see src/sql/spawner/006_net_worth_snapshots.sql) ─
+    // Append-only net-worth history written by the periodic sampler
+    // (`crate::net_worth`). One row per running bot per sweep. `ts` defaults to
+    // NOW() in the table so the DB clock stamps the reading.
+
+    /// Insert one net-worth snapshot row. The NUMERIC `net_worth` column is
+    /// bound as text + cast (`$2::numeric`) because this sqlx build has no
+    /// decimal feature — the same reason `bot_configs.cpu_limit` lives in JSON
+    /// (see `upsert_config`). Formatting an `f64` via `Display` yields the
+    /// shortest round-trippable decimal, so no precision is lost on the way in.
+    pub async fn record_net_worth(&self, snap: &NetWorthSnapshot) -> Result<(), SpawnerError> {
+        sqlx::query(
+            "INSERT INTO net_worth_snapshots (bot_id, net_worth, currency, venue, source) \
+             VALUES ($1, $2::numeric, $3, $4, $5)",
+        )
+        .bind(&snap.bot_id)
+        .bind(snap.net_worth.to_string())
+        .bind(&snap.currency)
+        .bind(snap.venue.as_deref())
+        .bind(&snap.source)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        debug!(
+            bot_id = %snap.bot_id,
+            currency = %snap.currency,
+            "net_worth_snapshots row inserted"
+        );
+        Ok(())
     }
 }
 

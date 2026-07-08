@@ -399,6 +399,25 @@ services:
             - JANUS_EXPERIENCE_BATCH_ROWS=${JANUS_EXPERIENCE_BATCH_ROWS:-256}
             - JANUS_EXPERIENCE_FLUSH_SECS=${JANUS_EXPERIENCE_FLUSH_SECS:-60}
             - JANUS_EXPERIENCE_SPOOL_MAX_MB=${JANUS_EXPERIENCE_SPOOL_MAX_MB:-256}
+            # Phase 2.5 reward scheme (writer-side): multi-bar, fee-aware,
+            # volatility-normalized holding return. Defaults turn it ON in code;
+            # listed here so operators can tune per venue (janus #145).
+            - JANUS_EXPERIENCE_REWARD_HORIZON=${JANUS_EXPERIENCE_REWARD_HORIZON:-5}
+            - JANUS_EXPERIENCE_REWARD_FEE_BPS=${JANUS_EXPERIENCE_REWARD_FEE_BPS:-0}
+            - JANUS_EXPERIENCE_REWARD_VOL_NORM=${JANUS_EXPERIENCE_REWARD_VOL_NORM:-true}
+            - JANUS_EXPERIENCE_REWARD_VOL_FLOOR=${JANUS_EXPERIENCE_REWARD_VOL_FLOOR:-0.0001}
+            # Phase 2 training: fill the replay buffer from live Qdrant
+            # experiences (janus #144). Default OFF; flip in .env to train janus
+            # on its own decisions using the Phase 2.5 reward.
+            - JANUS_TRAIN_FROM_QDRANT=${JANUS_TRAIN_FROM_QDRANT:-false}
+            # Challenger training scheduler (janus #146). Default OFF — a redeploy
+            # is a no-op until enabled. When true, periodic multi-step sessions
+            # train into the CHALLENGER dir only (never the live champion
+            # latest_model.bin) with NO checkpoint notifier. Promotion is manual.
+            - JANUS_TRAIN_SCHEDULE_ENABLED=${JANUS_TRAIN_SCHEDULE_ENABLED:-false}
+            - JANUS_TRAIN_INTERVAL_SECS=${JANUS_TRAIN_INTERVAL_SECS:-900}
+            - JANUS_TRAIN_STEPS_PER_SESSION=${JANUS_TRAIN_STEPS_PER_SESSION:-200}
+            - JANUS_TRAIN_CHALLENGER_DIR=${JANUS_TRAIN_CHALLENGER_DIR:-checkpoints/backward/challenger}
             # Qdrant vector store for ingested experiences — the `qdrant`
             # service above (container fks_qdrant, gRPC 6334). USE_MOCK=false:
             # if Qdrant is unreachable, ingest batches stay parked in the spool

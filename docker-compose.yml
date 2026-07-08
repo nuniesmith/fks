@@ -453,6 +453,11 @@ services:
             - /var/tmp
         volumes:
             - optimizer_data:/app/data
+            # Persist model checkpoints (champion + challenger) across container
+            # recreates — otherwise a `docker compose up` wipes /app/checkpoints,
+            # resetting the challenger to fresh-init on every janus redeploy
+            # (defeating resume-from-checkpoint accumulation; janus #150/#152).
+            - janus_checkpoints:/app/checkpoints
             - ./infrastructure/config/janus:/app/config:ro
         networks:
             - fks-network
@@ -1435,6 +1440,8 @@ volumes:
     qdrant_data:
         driver: local
     optimizer_data:
+        driver: local
+    janus_checkpoints:
         driver: local
     prometheus_sd:
         driver: local

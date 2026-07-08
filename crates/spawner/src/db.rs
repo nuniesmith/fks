@@ -529,6 +529,73 @@ impl BotRunStore {
         .map_err(map_sqlx)?;
         Ok(r.rows_affected() > 0)
     }
+
+    // ── ui_layouts (see src/sql/spawner/005_ui_layouts.sql) ──────────────────
+    // Named WebUI dock layouts, stored plaintext (a layout carries no secrets),
+    // so the operator's arrangements follow them across devices.
+
+    /// Save (UPSERT by name) a dock layout. Returns whether a NEW row was
+    /// created (`true`) vs. an existing one overwritten (`false`).
+    pub async fn upsert_layout(
+        &self,
+        name: &str,
+        layout: &serde_json::Value,
+    ) -> Result<bool, SpawnerError> {
+        let row = sqlx::query(
+            "INSERT INTO ui_layouts (name, layout) \
+             VALUES ($1, $2) \
+             ON CONFLICT (name) DO UPDATE \
+             SET layout = EXCLUDED.layout, updated_at = NOW() \
+             RETURNING (xmax = 0) AS inserted",
+        )
+        .bind(name)
+        .bind(layout)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+        let inserted: bool = row.try_get("inserted").unwrap_or(false);
+        debug!(name, inserted, "ui_layouts row upserted");
+        Ok(inserted)
+    }
+
+    /// All saved layout names + their last-updated time (NOT the blobs), so the
+    /// picker stays light. Name-ordered.
+    pub async fn list_layouts(&self) -> Result<Vec<UiLayoutSummaryRow>, SpawnerError> {
+        let rows = sqlx::query(
+            "SELECT name, updated_at::text AS updated_at \
+             FROM ui_layouts ORDER BY name ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+        Ok(rows
+            .into_iter()
+            .map(|r| UiLayoutSummaryRow {
+                name: r.try_get("name").unwrap_or_default(),
+                updated_at: r.try_get("updated_at").unwrap_or_default(),
+            })
+            .collect())
+    }
+
+    /// Fetch one full layout envelope by name.
+    pub async fn get_layout(&self, name: &str) -> Result<Option<serde_json::Value>, SpawnerError> {
+        let row = sqlx::query("SELECT layout FROM ui_layouts WHERE name = $1")
+            .bind(name)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx)?;
+        Ok(row.and_then(|r| r.try_get::<serde_json::Value, _>("layout").ok()))
+    }
+
+    /// Hard-delete a layout by name. Returns whether a row was removed.
+    pub async fn delete_layout(&self, name: &str) -> Result<bool, SpawnerError> {
+        let r = sqlx::query("DELETE FROM ui_layouts WHERE name = $1")
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .map_err(map_sqlx)?;
+        Ok(r.rows_affected() > 0)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -625,6 +692,15 @@ impl NotificationChannelRow {
             updated_at: r.try_get("updated_at").unwrap_or_else(|_| Utc::now()),
         }
     }
+}
+
+/// A `ui_layouts` list entry exposed via GET /ui/layouts — the name + when it
+/// was last saved (the full layout blob is fetched per-name via GET
+/// /ui/layouts/{name}, keeping the list light).
+#[derive(Debug, serde::Serialize)]
+pub struct UiLayoutSummaryRow {
+    pub name: String,
+    pub updated_at: String,
 }
 
 /// A row from `bot_configs` exposed via GET /configs. Resource limits + env are

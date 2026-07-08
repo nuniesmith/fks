@@ -61,6 +61,8 @@ cargo test -p spawner            # unit (incl. stats math) + HTTP integration te
 | `POST` | `/notifications/{name}/test` | yes (db only) | Send a one-off "connected" probe to one channel; reports whether the webhook accepted it |
 | `GET` `POST` | `/configs` | yes (db only) | List / save (UPSERT) reusable spawn configs |
 | `DELETE` | `/configs/{name}` | yes (db only) | Soft-delete a saved config |
+| `GET` `POST` | `/ui/layouts` | yes (db only) | List (names + updated_at) / save (UPSERT) named WebUI dock layouts |
+| `GET` `DELETE` | `/ui/layouts/{name}` | yes (db only) | Fetch one full layout envelope / hard-delete it |
 
 Auth = `X-Internal-Token: ${NGINX_INTERNAL_TOKEN}` set by nginx.
 Empty token = dev passthrough.

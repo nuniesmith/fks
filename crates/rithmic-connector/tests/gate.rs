@@ -34,9 +34,14 @@ async fn disabled_by_default_and_connector_noops() {
     assert_eq!(config.gate(), GateDecision::Disabled);
 
     let state = ConnectorState::new(config.gate(), "rithmic:MES");
-    connector::run(config, state.clone(), Arc::new(StubCandleSink), PositionsBook::new())
-        .await
-        .expect("disabled connector must return Ok");
+    connector::run(
+        config,
+        state.clone(),
+        Arc::new(StubCandleSink),
+        PositionsBook::new(),
+    )
+    .await
+    .expect("disabled connector must return Ok");
 
     let snap = state.snapshot();
     assert!(!snap.connected);
@@ -53,9 +58,14 @@ async fn enabled_without_creds_noops() {
     ));
 
     let state = ConnectorState::new(config.gate(), "rithmic:MES");
-    connector::run(config, state.clone(), Arc::new(StubCandleSink), PositionsBook::new())
-        .await
-        .expect("uncredentialed connector must return Ok");
+    connector::run(
+        config,
+        state.clone(),
+        Arc::new(StubCandleSink),
+        PositionsBook::new(),
+    )
+    .await
+    .expect("uncredentialed connector must return Ok");
     assert!(!state.snapshot().connected);
 }
 

@@ -38,9 +38,9 @@ pub mod state;
 pub use config::{GateDecision, RithmicConfig, RithmicEnvironment};
 pub use connector::{VENUE, run};
 pub use error::ConnectorError;
-pub use positions::{AccountSummary, PositionSnapshot, PositionsBook, PositionsView};
 pub use persistence::{
     CANDLES_TABLE, CandleSink, FuturesCandle, PersistMetrics, QuestDbCandleSink, QuestDbConfig,
     StubCandleSink, format_ilp_line,
 };
+pub use positions::{AccountSummary, PositionSnapshot, PositionsBook, PositionsView};
 pub use state::{ConnectorState, StatusSnapshot};

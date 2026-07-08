@@ -120,7 +120,11 @@ impl PositionsBook {
 
     /// Number of open positions currently tracked.
     pub fn len(&self) -> usize {
-        self.inner.lock().expect("positions book poisoned").positions.len()
+        self.inner
+            .lock()
+            .expect("positions book poisoned")
+            .positions
+            .len()
     }
 
     /// Whether the book has no open positions.
@@ -280,7 +284,10 @@ pub async fn run_pnl(
                 }
             }
             Err(RecvError::Lagged(n)) => {
-                warn!(skipped = n, "PnL subscription lagged — some updates dropped");
+                warn!(
+                    skipped = n,
+                    "PnL subscription lagged — some updates dropped"
+                );
             }
             Err(RecvError::Closed) => {
                 warn!("PnL subscription channel closed — stopping loop");

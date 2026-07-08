@@ -63,9 +63,7 @@ pub async fn run(
 /// build programmatically (not `RrConfig::from_env`) because the crate's own env
 /// scheme differs from the spawner-injected RITHMIC_USER/RITHMIC_PASSWORD.
 #[cfg(feature = "live-connect")]
-fn build_rr_config(
-    config: &RithmicConfig,
-) -> anyhow::Result<rithmic_rs::RithmicConfig> {
+fn build_rr_config(config: &RithmicConfig) -> anyhow::Result<rithmic_rs::RithmicConfig> {
     use rithmic_rs::{RithmicConfig as RrConfig, RithmicEnv};
 
     use crate::config::RithmicEnvironment;
@@ -254,9 +252,14 @@ mod tests {
             GateDecision::MissingCredentials { .. }
         ));
         let state = ConnectorState::new(cfg.gate(), "rithmic:MES");
-        run(cfg, state.clone(), Arc::new(StubCandleSink), PositionsBook::new())
-            .await
-            .unwrap();
+        run(
+            cfg,
+            state.clone(),
+            Arc::new(StubCandleSink),
+            PositionsBook::new(),
+        )
+        .await
+        .unwrap();
         assert!(!state.snapshot().connected);
     }
 }

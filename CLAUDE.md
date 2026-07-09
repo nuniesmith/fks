@@ -27,34 +27,24 @@ data/engine/trainer service was removed — janus is the platform now. See
 | [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | TA math | crates.io `indicators-ta` 0.2 (imports as `indicators`) |
 | [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.9 |
 | [`fks-web`](https://github.com/nuniesmith/fks-web) | SvelteKit UI | Docker image (`git clone` at `WEB_REF`) |
-| `fks-state` *(private)* | trading edges (`bots/crypto-futures` funding bot) + encrypted state snapshots | local checkout only — the funding image builds there; snapshots via `scripts/fks-state.sh` |
+| [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) | the **bot factory**: spawner lifecycle service + `crypto-bot-core` SDK + the bots (`spot-portfolio` **production**, `crypto-demo`, `fks-bot-example`, `rustrade-exchange-apiws`) | spawner image via `git clone` (`SPAWNER_REPO`); bot images build from the sibling checkout (`docker build -f bots/spot-portfolio/Dockerfile …` from its root) |
+| `fks-state` *(private)* | trading edges (`bots/crypto-futures` funding bot), `crates/rithmic-connector` (read-only Rithmic feed), encrypted state snapshots, strategy docs (`docs/ARCHITECTURE.md`) | local checkout only — the funding + rithmic images build there; snapshots via `scripts/fks-state.sh` |
 
 ### Lives in this repo
 
 | Path | Type | Owns its own docs |
 |--|--|--|
-| `crates/spawner/` | Bot-container lifecycle service | `CLAUDE.md` + `TODO.md` + `README.md` |
-| `crates/rithmic-connector/` | Credential-gated, **read-only** Rithmic futures feed (P12 foundation) | `README.md` + `TODO.md` |
-| `crates/crypto-bot-core/` | Shared bot scaffolding (Discord alerts, JSONL journal, `:9091` status server) for the crypto bots | own `[workspace]` |
-| `src/web/` | SvelteKit dashboard | `CLAUDE.md` + `TODO.md` + `README.md` |
+| `src/web/` | SvelteKit dashboard stub (real UI = `fks-web`) | `CLAUDE.md` + `TODO.md` + `README.md` |
 | `src/proto/` | `fks-proto` crate (protobuf) | — |
-| `src/sql/` | DB bootstrap baked into the postgres image (`janus/`, `spawner/`) | — |
-| `bots/fks-bot-example/` | reference bot — consumes the published crates | own `[workspace]` |
-| `bots/crypto-demo/` | working multi-symbol demo bot (paper by default) | own `[workspace]` |
-| `bots/rustrade-exchange-apiws/` | `rustrade::ExchangeClient` over `exchange-apiws` (KuCoin) — the live order path | `README.md` + own `[workspace]` |
-| `bots/spot-portfolio/` | **production** multi-exchange spot rebalancer (migrated from the dissolved `crypto` repo) | `README.md` + `SPOT.md` + own `[workspace]` |
-| `strategies/` | private trading IP (consumes the published crates) | *(planned)* |
+| `src/sql/` | DB bootstrap baked into the postgres image (`janus/`, `spawner/` — the spawner's schema deliberately stays here) | — |
+| `strategies/` | private trading IP (consumes the published crates) | *(planned — superseded by `fks-state`)* |
 
-> `bots/fks-bot-example/` is the canonical example of consuming the published
-> crates: a standalone crate depending on `rustrade-framework` from crates.io.
-> It's what the spawner launches and the template for real bots.
-
-> **The `crypto` repo is dissolved.** Its spot bot lives here
-> (`bots/spot-portfolio` + shared `crates/crypto-bot-core`; image builds from
-> the fks root: `docker build -f bots/spot-portfolio/Dockerfile -t
-> fks-bot-crypto-spot:latest .`). The futures/funding **trading edges** live in
-> the **private `fks-state`** repo (`bots/crypto-futures`, git-pins
-> `crypto-bot-core`), which also holds the encrypted state snapshots.
+> **fks is now a pure orchestrator**: compose topology, nginx/monitoring
+> infra, DB bootstrap, proto, docs. All Rust services/bots live in their own
+> repos. The `crypto` repo is dissolved: its spot bot + shared scaffolding are
+> in `fks-spawner`; the futures/funding **trading edges** are in the
+> **private `fks-state`** repo (which also holds `rithmic-connector` and the
+> encrypted state snapshots).
 
 > **When working in any sub-directory, read its sub-CLAUDE first.** This root
 > file covers cross-cutting concerns: how the pieces wire together at the
@@ -68,7 +58,7 @@ data/engine/trainer service was removed — janus is the platform now. See
 |---------|--------|--------------|-------|
 | **Janus** | `nuniesmith/janus` (git-clone image) | 7000 / 7001 / 8080 / 8180 | Rust trading brain + native data ingestion + burn ML. The platform. |
 | **WebUI** | `src/web/` (or `nuniesmith/fks-web`) | 3001 | SvelteKit 5 dashboard. Includes `/bots` for spawner control. |
-| **Spawner** | `crates/spawner/` | 8090 | Bot container lifecycle. Mounts `/var/run/docker.sock`, writes Prometheus SD. |
+| **Spawner** | `fks-spawner` repo (git-clone build via `SPAWNER_REPO`) | 8090 | Bot container lifecycle. Mounts `/var/run/docker.sock`, writes Prometheus SD. |
 | **Postgres** | — | 5432 | `janus_db` + `ruby_db` on one instance (`ruby_db` = spawner schema). |
 | **Redis** | — | 6379 | Shared pub/sub, state, caching. |
 | **QuestDB** | — | 9000 / 9009 / 8812 | Time-series market data. |
@@ -98,7 +88,7 @@ Spawned `fks-bot-*` containers go on `fks_network` with `cap_drop: ALL`,
 
 # Rust that lives HERE (the external repos build in their own repos / via git-clone):
 cd src/proto       && cargo check                      # fks-proto
-cd crates/spawner  && cargo test --workspace           # 11 unit + 10 integration
+# spawner + bots test in the fks-spawner repo; rithmic-connector in fks-state
 cd src/web         && npm run check && npm run build
 ```
 

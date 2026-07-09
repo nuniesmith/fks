@@ -1294,8 +1294,10 @@ services:
     crypto-demo:
         profiles: ["demo"]
         build:
-            context: .
-            dockerfile: infrastructure/docker/services/crypto-demo/Dockerfile
+            # Source + Dockerfile live in the fks-spawner repo (bot factory);
+            # building needs the sibling checkout at ../fks-spawner.
+            context: ../fks-spawner
+            dockerfile: bots/crypto-demo/Dockerfile
             args:
                 RUST_VERSION: "1.94.1"
         image: fks-bot-crypto-demo:latest
@@ -1370,17 +1372,18 @@ services:
     # exists in the image. Creds (RITHMIC_USER/PASSWORD/SYSTEM_NAME) are injected
     # from the spawner secret store like other brokers — leave them EMPTY here to
     # keep the connector idle. Persistence to `candles_futures` is a STUB in this
-    # PR (see crates/rithmic-connector/src/persistence.rs).
+    # PR (see fks-state:crates/rithmic-connector/src/persistence.rs).
     rithmic-connector:
         profiles: ["rithmic"]
         build:
-            context: .
-            dockerfile: infrastructure/docker/services/rithmic-connector/Dockerfile
+            # rithmic-connector moved to the PRIVATE fks-state repo (funded-side
+            # code: PnL plant, future ORB supervision / copy-trade). Building
+            # needs the sibling checkout at ../fks-state.
+            context: ../fks-state
+            dockerfile: crates/rithmic-connector/Dockerfile
             args:
                 RUST_VERSION: "1.94.1"
                 SERVICE_PORT: "9091"
-                REPO_URL: ${RITHMIC_CONNECTOR_REPO:-}
-                REPO_REF: ${RITHMIC_CONNECTOR_REF:-main}
         image: nuniesmith/fks:rithmic-connector
         container_name: fks_rithmic_connector
         user: "1000:1000"

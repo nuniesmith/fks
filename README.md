@@ -47,7 +47,7 @@ Other service repos built via `git clone` at a pinned ref:
 | `proto/` + `src/proto/` | Protobuf source of truth (the `fks-proto` crate) |
 | `src/sql/` | Postgres bootstrap baked into the image (`janus/`, `spawner/`) |
 | `scripts/` + `run.sh` | Operational tooling (DB bootstrap, build, health, …) |
-| `crates/spawner/` | Bot-container lifecycle service (until it splits out) |
+| [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) | Bot factory: spawner service + bot SDK + bots (own repo) |
 | `bots/`, `strategies/` | Thin bots / private trading IP that consume the published crates *(planned)* |
 
 > The SvelteKit UI moved to its own repo —
@@ -172,14 +172,10 @@ fks/
 ├── run.sh
 ├── proto/fks/             # .proto source of truth
 ├── bots/
-│   ├── fks-bot-example/   # minimal reference bot — heartbeat + fks_bot_* metrics
-│   ├── crypto-demo/       # working bot: rustrade + indicators-ta + exchange-apiws (+ optional JanusBrain)
-│   ├── rustrade-exchange-apiws/  # rustrade::ExchangeClient adapter over exchange-apiws (the live order path)
-│   └── spot-portfolio/    # PRODUCTION spot rebalancer (migrated from the dissolved crypto repo)
+│   └── (bots moved to the fks-spawner repo — spot-portfolio, crypto-demo, …)
 ├── crates/
 │   ├── spawner/           # bot lifecycle manager (nested workspace)
-│   ├── rithmic-connector/ # credential-gated read-only Rithmic futures feed
-│   └── crypto-bot-core/   # shared bot scaffolding: alerts, journal, :9091 status server
+│   └── (spawner/crypto-bot-core → fks-spawner; rithmic-connector → fks-state)
 ├── src/
 │   ├── web/               # SvelteKit dashboard — has its own CLAUDE/TODO
 │   ├── proto/             # fks-proto Rust crate (protobuf build)
@@ -215,7 +211,7 @@ fks/
 - The repo map + crates.io coordinates? → [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md)
 - Working on the framework? → [`nuniesmith/rustrade`](https://github.com/nuniesmith/rustrade)
 - Working on the brain? → [`nuniesmith/janus`](https://github.com/nuniesmith/janus)
-- Working on bot lifecycles? → [`crates/spawner/CLAUDE.md`](crates/spawner/CLAUDE.md)
+- Working on bot lifecycles? → the [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) repo (`crates/spawner/CLAUDE.md` there)
 - Finishing the Python→Rust port? → [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md)
 - Working on the frontend? → [`nuniesmith/fks-web`](https://github.com/nuniesmith/fks-web)
 - Remaining split moves? → [`SPLIT_PLAN.md`](SPLIT_PLAN.md)

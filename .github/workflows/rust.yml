@@ -1,9 +1,9 @@
 # =============================================================================
 # Rust CI — per-workspace check / test / clippy / fmt
 # =============================================================================
-# fks keeps a few Cargo workspaces (src/proto, crates/spawner, and the
-# standalone bots/fks-bot-example that consumes the published crates). This
-# workflow runs each one's compile + test gate independently. The framework /
+# fks keeps one Cargo workspace in-tree (src/proto). The bot factory
+# (spawner + crypto-bot-core + the bots) lives in the fks-spawner repo;
+# rithmic-connector lives in the private fks-state repo; the framework /
 # brain / TA / exchange crates live in their own repos (see SPLIT_PLAN.md).
 #
 # Trigger: PRs against main, plus pushes to main.
@@ -72,34 +72,12 @@ jobs:
                     #   false — library-shaped workspace without a committed lockfile;
                     #           --locked would fail because cargo has to generate
                     #           the lockfile from scratch.
+                    # The bot factory (spawner + crypto-bot-core + the bots) moved
+                    # to the fks-spawner repo; rithmic-connector to fks-state.
+                    # Only the proto workspace remains in-tree.
                     - workspace: "root · src/proto"
                       path: "."
                       needs_protoc: true
-                      lock_flag: "--locked"
-                    - workspace: "fks-bot-example"
-                      path: "bots/fks-bot-example"
-                      needs_protoc: false
-                      # Standalone bot consuming the published rustrade-framework
-                      # from crates.io — proves end-to-end consumption. Committed
-                      # Cargo.lock pins the deps for reproducible image builds.
-                      lock_flag: "--locked"
-                    - workspace: "crypto-demo"
-                      path: "bots/crypto-demo"
-                      needs_protoc: false
-                      # Working demo bot: rustrade + indicators-ta + exchange-apiws
-                      # from crates.io, paper-traded. Committed lock for repro builds.
-                      lock_flag: "--locked"
-                    - workspace: "rustrade-exchange-apiws"
-                      path: "bots/rustrade-exchange-apiws"
-                      needs_protoc: false
-                      # rustrade ExchangeClient over exchange-apiws (the live KuCoin
-                      # order path). crypto-demo path-depends on it, but that job only
-                      # *compiles* it as a dep — this entry runs its own tests/clippy.
-                      # Committed lock keeps the run reproducible like the bots.
-                      lock_flag: "--locked"
-                    - workspace: "spawner"
-                      path: "crates/spawner"
-                      needs_protoc: false
                       lock_flag: "--locked"
         steps:
             - name: 📥 Checkout
@@ -164,7 +142,7 @@ jobs:
               shell: bash
               run: |
                   set -e
-                  for ws in . bots/fks-bot-example bots/crypto-demo bots/rustrade-exchange-apiws crates/spawner; do
+                  for ws in .; do
                       printf "\n===> %s\n" "$ws"
                       # `--manifest-path` keeps fmt scoped to THIS workspace's
                       # members — without it, `--all` follows path deps into

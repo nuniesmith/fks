@@ -1,7 +1,7 @@
 # fks — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks`
-> **Last synced:** 2026-06-14 — see **🗺️ NEXT PHASES** below for the current plan
+> **Last synced:** 2026-07-09 — see **🗺️ NEXT PHASES** below for the current plan
 >
 > This file covers **cross-cutting** orchestration work — consuming the
 > external repos/crates, docker-compose, Dockerfiles, CI/CD, Postgres
@@ -25,7 +25,7 @@
 
 ---
 
-# 🗺️ NEXT PHASES — prioritized plan (synced 2026-06-14 · verified 2026-06-18)
+# 🗺️ NEXT PHASES — prioritized plan (synced 2026-06-14 · verified 2026-06-18 · updated 2026-07-09)
 
 > **Read this section first.** It's the master roadmap written after a large
 > live-stack session. Everything *below the next `---`* (the older "Status
@@ -73,7 +73,7 @@ roadmap had drifted). Confirmed against current `main`:
   stale comment); exchange-apiws has Dependabot + `cargo-deny` (#53).
 - **fks safety (#146):** `run.sh setup-env` no longer generates
   `ENABLE_EXECUTION=true` against the documented `=false` default.
-- **Still genuinely open (non-blocked):** finish A2 — (a) feed real specs into
+- **Still genuinely open (non-blocked)** *(closed 2026-07 — see the next block)*: finish A2 — (a) feed real specs into
   `bots/rustrade-exchange-apiws/src/kraken.rs` (still hardcodes
   `tick/lot/min_notional = 0.0` at ~:301); (b) type the 9 remaining untyped
   `Result<Value>` methods (KuCoin cancels, bybit `get_instruments`/`get_wallet_balance`,
@@ -83,25 +83,40 @@ roadmap had drifted). Confirmed against current `main`:
 - **Still blocked on you:** live KuCoin-futures order test (rotate keys first);
   Phase B ML brain (GPU + champion goldens).
 
+### ✅ Shipped 2026-07 (early July) — do NOT redo
+- **A2 CLOSED end-to-end.** exchange-apiws typed the 9 straggler `Result<Value>`
+  methods (#63 cancels/wallet/instruments, #66 kraken market-data — breaking) and
+  **published 0.9.0** (2026-07-08); the kraken adapter now sources real instrument
+  specs from Kraken AssetPairs (#190) incl. `min_notional` from `costmin`, and the
+  bot/adapter are bumped to 0.9.0 (#192). Nothing in A2 remains.
+- **The `crypto` repo is dissolved — bots migrated.** The spot bot lives HERE:
+  `bots/spot-portfolio` + the shared scaffolding crate `crates/crypto-bot-core`
+  (#193), with a deployable image (#194) built from the fks root
+  (`docker build -f bots/spot-portfolio/Dockerfile -t fks-bot-crypto-spot:latest .`).
+  The futures/funding **edges** moved to the **private `fks-state`** repo
+  (`bots/crypto-futures`, git-pins `crypto-bot-core`; the funding image builds
+  from the fks-state root). The crypto GitHub repo is being deleted.
+- **Net-worth history backbone.** `net_worth_snapshots` schema
+  (`src/sql/spawner/006_net_worth_snapshots.sql`) + spawner-side `/status`
+  sampler (#188) + db-gated `GET /net-worth` read endpoint (#189); the history
+  panel shipped in fks-web.
+
 ### Phase A — Live trading real & safe  · *mostly DONE*
 - [x] 9-gate execution gate wired + flag-gated (`JANUS_GATE_ENFORCE`), 37 tests.
 - [x] `entry_price` producer gap (janus #118); warmup-from-history (#119/#120).
-- [ ] **A2 — exchange-apiws instrument typing** (robustness; **P1**) · *exchange-apiws
-      code mostly DONE; adapter + publish remain*. Type the untyped
-      `serde_json::Value` returns so callers get tick/lot/min-notional + precision
-      for order validation & quantity rounding:
+- [x] **A2 — exchange-apiws instrument typing** · *DONE 2026-07 — see the
+      shipped block above*. Typed the untyped `serde_json::Value` returns so
+      callers get tick/lot/min-notional + precision for order validation &
+      quantity rounding:
       - [x] `exchange-apiws/src/binance/rest.rs get_exchange_info` → typed (#51).
       - [x] `exchange-apiws/src/cryptocom/private.rs` (10 methods) → typed off real
         Exchange-v1 schemas, numeric fields kept **as `String`** (#61, breaking).
-      - [ ] **9 stragglers still untyped** (`Result<Value>`): KuCoin
-        `cancel_order`/`cancel_all_orders`/`cancel_stop_order`/`cancel_all_stop_orders`,
-        bybit `get_instruments`/`get_wallet_balance`, kraken
-        `get_ohlc`/`get_recent_trades`/`get_spread`.
-      - [ ] then feed real specs into `bots/rustrade-exchange-apiws/src/kraken.rs`
-        (still hardcodes `tick_size/lot_size/min_notional = 0.0` at :301-303).
-      - [ ] Chain: exchange-apiws code → **publish 0.9.0** (breaking) → bump bot/adapter.
-      - *DoD:* adapters report real instrument specs; orders rounded to lot/tick
-        + checked vs min-notional. *Effort M · Risk low.*
+      - [x] the 9 stragglers → typed (exchange-apiws #63 KuCoin cancels + bybit
+        instruments/wallet, #66 kraken `get_ohlc`/`get_recent_trades`/`get_spread`).
+      - [x] real specs fed into `bots/rustrade-exchange-apiws/src/kraken.rs` — from
+        Kraken AssetPairs (#190), `min_notional` from `costmin` (#192).
+      - [x] Chain: exchange-apiws code → **0.9.0 published 2026-07-08** → bot/adapter
+        bumped (#192).
 - [ ] **Gate-enforce end-to-end check** (do during the live-order test): with a
       sandbox/sub-account execution service connected, set `JANUS_GATE_ENFORCE=1`
       + `ENABLE_EXECUTION=true` and confirm a blocking verdict suppresses the
@@ -169,13 +184,13 @@ roadmap had drifted). Confirmed against current `main`:
       `fks/.env`: `KUCOIN_API_KEY/SECRET/PASSPHRASE` + `KRAKEN_API_KEY/SECRET`
       (compose bridges KuCoin → the bot's `KC_*`).
 
-### Recommended order for a fresh session  *(updated 2026-06-18)*
-Most of **C** and **E** are now done (see the verified-2026-06-18 block above).
-The genuinely-remaining non-blocked work: **finish A2** — type the 9 straggler
-`Result<Value>` methods, feed real specs into the kraken adapter, then **cut
-exchange-apiws 0.9.0** (breaking) and bump the bot. Then **B** (when goldens +
-GPU exist, your action) → **D** (split-to-private, last). Live KuCoin order test
-whenever ready (**rotate keys first**).
+### Recommended order for a fresh session  *(updated 2026-07-09)*
+Most of **C** and **E** are done (verified-2026-06-18 block) and **A2 is closed**
+(shipped-2026-07 block: typing + 0.9.0 publish + real kraken specs). The
+remaining non-blocked work: **B** (when goldens + GPU exist, your action) →
+**D** (split-to-private, last — the crypto-repo dissolution already moved the
+trading edges into the private `fks-state`). Live KuCoin order test whenever
+ready (**rotate keys first**).
 
 ### Ops quick-reference
 - Rebuild janus from local source (no push): `docker build --target workspace -f

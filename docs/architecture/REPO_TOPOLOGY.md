@@ -2,7 +2,7 @@
 
 > **Superseded:** the canonical, current map is
 > [`PLATFORM_ARCHITECTURE.md`](PLATFORM_ARCHITECTURE.md) — all nine repos
-> (incl. fks-web, crypto, fks-kotlin, technical_papers) plus contracts and
+> (incl. fks-web, fks-state, fks-kotlin, technical_papers) plus contracts and
 > data flows. This file predates the web split and the fks → fks
 > rename; kept for history.
 >

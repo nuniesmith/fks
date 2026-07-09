@@ -3,9 +3,10 @@
 Multi-exchange spot HODL: %-target baskets + a stablecoin/fiat **cash reserve**,
 rebalanced on drift and on new deposits. Venues: **Kraken**, **Crypto.com**, and
 **KuCoin spot** — all behind the `SpotExchange` trait. (Bybit is excluded: not
-available in Canada.) Shares this repo with the KuCoin **futures** dip bot for now
-(separate binary, untouched) — so KuCoin runs both spot and futures here, with
-distinct keys. To be split into its own crate later.
+available in Canada.) Lives at `fks/bots/spot-portfolio` as its own crate; the
+KuCoin **futures** dip bot it used to share a repo with now lives in the private
+`fks-state` repo (`bots/crypto-futures`). One KuCoin key can still drive both —
+keys are account-wide — but the env names stay distinct.
 
 ## Build
 ```
@@ -13,9 +14,10 @@ cargo build --release --bin spot-portfolio
 ```
 Binary: `target/release/spot-portfolio`.
 
-> The Crypto.com `get-tickers` fix is pinned via `rev = "a0b785d"` on the
-> exchange-apiws branch `cryptocom-get-tickers-fix`, so this builds reproducibly
-> (CI / Docker) with no sibling checkout. Re-pin to a `main` commit once it merges.
+> `exchange-apiws` is pinned by git `rev = "fa35543"` (a `main` commit carrying
+> the Crypto.com `get-tickers` + v1 user-balance fixes — the same rev the old
+> `crypto` repo used), so this builds reproducibly (CI / Docker) with no sibling
+> checkout. `Cargo.lock` pins the exact revision.
 
 ## Configure
 ```
@@ -46,21 +48,25 @@ them. A KuCoin key is account-wide, so one key can drive both spot and futures.
    the rebalance plan for a while.
 2. Set `live = true` with **small** baskets; watch ONE rebalance execute and
    verify the fills (Kraken fills are confirmed from closed-orders).
-3. Run unattended as a service.
+3. Run unattended as a spawner-managed container (below).
 
-## Run as a service
+## Run as a container (the platform way)
+The systemd units are retired — the platform runs the bot as a spawner-managed
+`fks-bot-*` container. Build from the **fks repo root** (the crate path-deps
+`crates/crypto-bot-core`):
 ```
-cp deploy/spot-portfolio.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now spot-portfolio
-journalctl --user -u spot-portfolio -f
+docker build -f bots/spot-portfolio/Dockerfile -t fks-bot-crypto-spot:latest .
 ```
+Then spawn it from the WebUI `/bots` (or the spawner API) with `secrets: [...]`
+injection — the image bakes a **dry-run** config by design and keys arrive as
+env from the encrypted secret store. See [README.md](README.md).
 
 ## Status / metrics
 The bot serves `GET /health`, `/metrics` (Prometheus), and `/status` (JSON:
 per-exchange balances, holdings, drift, recent trades, and the all-venue net
-worth) on `BOT_STATUS_PORT` (default 9091; the unit file pins it). See the
-README's “Status / metrics server” section for the full contract.
+worth) on `BOT_STATUS_PORT` (default 9091). The server ships from
+`crates/crypto-bot-core` (`status` module); the platform-wide bot contract is
+documented in `docs/architecture/PLATFORM_ARCHITECTURE.md` §5.1.
 
 ```
 curl -s localhost:9091/status | jq '{net_worth_usd, exchanges: [.exchanges[] | {exchange, mode, total_value}]}'

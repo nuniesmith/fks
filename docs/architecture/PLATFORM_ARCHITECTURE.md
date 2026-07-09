@@ -4,9 +4,9 @@
 > consumes, what each repo does, how it supports the running platform, and the
 > contracts that bind them.
 >
-> **Last updated:** 2026-07-03 (post signal-bridge / observability / secrets /
-> exchanges-integration work). Supersedes
-> [`REPO_TOPOLOGY.md`](REPO_TOPOLOGY.md) (2026-05-31, pre-web-split).
+> **Last updated:** 2026-07-09 (post crypto-repo dissolution: spot bot →
+> in-tree `bots/spot-portfolio`, futures/funding edges → private `fks-state`).
+> Supersedes [`REPO_TOPOLOGY.md`](REPO_TOPOLOGY.md) (2026-05-31, pre-web-split).
 
 ---
 
@@ -16,13 +16,13 @@
                           ┌─────────────────────────────────────────────────────┐
                           │              nuniesmith/fks  (THIS REPO)            │
                           │   docker-compose orchestrator · infra config ·      │
-                          │   spawner crate · sql bootstrap · demo bots         │
+                          │   spawner crate · sql bootstrap · demo + spot bots  │
                           └───┬───────────┬────────────┬───────────┬────────────┘
               git-clone image │           │ git-clone  │ local     │ in-tree
-                              ▼           ▼ image      ▼ systemd*  ▼ crates
+                              ▼           ▼ image      ▼ image*    ▼ crates
                      ┌────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
-                     │   janus    │ │ fks-web  │ │  crypto  │ │crates/spawner│
-                     │ (brain)    │ │ (webui)  │ │ (bots)   │ │ (lifecycle)  │
+                     │   janus    │ │ fks-web  │ │fks-state │ │crates/spawner│
+                     │ (brain)    │ │ (webui)  │ │ (edges)  │ │ (lifecycle)  │
                      └─────┬──────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘
                            │ consumes    │ proxies    │ consumes     │ spawns
                            ▼ crates.io   ▼ APIs       ▼ crates.io    ▼ fks-bot-*
@@ -36,9 +36,10 @@
                      │ fks-kotlin │                          │ (the theory) │
                      │ (mobile)   │                          └──────────────┘
                      └────────────┘
-        * crypto bots run as user systemd units during the transitional phase;
-          Phase 2 of crypto/FKS-INTEGRATION.md moves them to spawner-managed
-          fks-bot-* containers.
+        * the production bots run as spawner-managed fks-bot-* containers.
+          The spot rebalancer builds IN-TREE (bots/spot-portfolio); the private
+          futures/funding edges build from the local fks-state checkout
+          (bots/crypto-futures) — the old `crypto` repo is dissolved.
 ```
 
 **Design doctrine** (from the split): *consume, don't absorb*. Reusable pieces
@@ -52,20 +53,23 @@ can consume.
 
 | Repo | Role | Consumed by fks as | Visibility |
 |------|------|--------------------|-----------|
-| [`nuniesmith/fks`](https://github.com/nuniesmith/fks) | **Orchestrator** — compose, infra config, spawner, SQL, demo bots | — (this repo) | public |
+| [`nuniesmith/fks`](https://github.com/nuniesmith/fks) | **Orchestrator** — compose, infra config, spawner, SQL, demo bots, the **spot-portfolio bot** + `crypto-bot-core` scaffolding | — (this repo) | public |
 | [`nuniesmith/janus`](https://github.com/nuniesmith/janus) | **Trading brain** — signals, regime, risk, data ingestion, ML research | Docker image (git-clone `JANUS_REPO@JANUS_REF`) | public |
 | [`nuniesmith/fks-web`](https://github.com/nuniesmith/fks-web) | **Operator UI** — SvelteKit dashboard | Docker image (git-clone `WEB_REPO@WEB_REF`) | public |
 | [`nuniesmith/rustrade`](https://github.com/nuniesmith/rustrade) | **Bot framework** — `Bot`/`Brain` traits, risk primitives, supervisor, backtest | crates.io `rustrade-framework` **0.4.x** | public |
 | [`nuniesmith/indicators-ta`](https://github.com/nuniesmith/indicators-ta) | **TA math** — RSI/EMA/ATR/MACD/Bollinger + regime detection | crates.io `indicators-ta` **0.2.x** | public |
-| [`nuniesmith/exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange connectivity** — REST + WS for Kraken/KuCoin/Crypto.com/Bybit/Binance | crates.io `exchange-apiws` **0.8.x** | public |
-| [`nuniesmith/crypto`](https://github.com/nuniesmith/crypto) | **Production bots** — spot portfolio (live) + futures funding (paper) | systemd today → `fks-bot-*` images (Phase 2) | **private** |
+| [`nuniesmith/exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange connectivity** — REST + WS for Kraken/KuCoin/Crypto.com/Bybit/Binance | crates.io `exchange-apiws` **0.9.x** | public |
+| `nuniesmith/fks-state` | **Private layer** — futures/funding trading edges (`bots/crypto-futures`) + encrypted state snapshots | `fks-bot-crypto-funding` image built from the local checkout; snapshots via `scripts/fks-state.sh` | **private** |
 | [`nuniesmith/fks-kotlin`](https://github.com/nuniesmith/fks-kotlin) | **Mobile/KMP client** — read-only janus API surface | independent client of janus's HTTP APIs | public |
 | [`nuniesmith/technical_papers`](https://github.com/nuniesmith/technical_papers) | **Theory** — the JANUS paper (`project_janus/janus.tex`) | reference; reconciled with code periodically | public |
 
-> **Private-repo consequence:** `nuniesmith/crypto` is private, so the
-> git-clone-in-Dockerfile pattern used for janus/fks-web **cannot** build its
-> images without credential-baking. The `fks-bot-crypto-*` Dockerfiles belong
-> in the crypto repo itself, built from the local checkout on the host.
+> **Where the bot images build** (the `crypto` repo is dissolved): the spot
+> image builds **in-tree** — `docker build -f bots/spot-portfolio/Dockerfile
+> -t fks-bot-crypto-spot:latest .` from the fks root. `fks-state` is private,
+> so the git-clone-in-Dockerfile pattern used for janus/fks-web **cannot**
+> build its image without credential-baking — the funding image builds from
+> the local checkout on the host: `docker build -t
+> fks-bot-crypto-funding:latest bots/crypto-futures` from the fks-state root.
 
 ---
 
@@ -92,11 +96,12 @@ Tailscale-served nginx edge only).
 | jaeger | `fks_jaeger` | upstream | 16686 | tracing |
 | exporters | postgres/redis/questdb | | 9187/9121/9191 | DB metrics |
 
-**Host processes (transitional):** the crypto bots run as *user systemd units*
-(`spot-portfolio.service`, `funding-paper.service`) with status/metrics
-servers expected on host **:9091** (spot) and **:9095** (funding — 9092/9093
-are taken by janus metrics and alertmanager). Prometheus scrapes them via the
-static `fks-bots-transitional` job (`host.docker.internal`, host-gateway).
+**Crypto bots:** spawner-managed containers since 2026-07-06 —
+`fks-bot-crypto-spot` (dry-run, real keys injected from the encrypted secret
+store) and `fks-bot-crypto-funding` (paper); the transitional user systemd
+units are retired. Prometheus discovers spawned bots via the spawner's
+file-SD (the static `fks-bots-transitional` job in `prometheus.yml` is a
+leftover of the systemd phase, awaiting removal).
 
 ---
 
@@ -123,7 +128,12 @@ publish:
   `spawner/` schemas).
 - **`src/proto/`** — `fks-proto` crate (protobuf contracts, `fks.<svc>.v1`).
 - **`bots/`** — reference bots (`fks-bot-example`, `crypto-demo`) that
-  demonstrate the spawn contract end-to-end using only published crates.
+  demonstrate the spawn contract end-to-end using only published crates,
+  plus the **production spot rebalancer** `bots/spot-portfolio` (migrated
+  from the dissolved `crypto` repo; see §4.7).
+- **`crates/crypto-bot-core`** — the shared, edge-free bot scaffolding
+  (Discord alerts, JSONL journal, the `:9091` status/metrics server) used by
+  `bots/spot-portfolio` here and git-pinned by the `fks-state` edges.
 - **`src/web/`** — legacy in-tree copy of the webui (dev fallback; production
   clones `fks-web`).
 
@@ -216,28 +226,35 @@ REST + WebSocket clients for Kraken, KuCoin, Crypto.com, Bybit, Binance —
 market data and the authenticated order path. Hard-won operational fixes live
 here: rustls provider wiring (`rustls-no-provider` + ring install — the class
 of bug that once broke both janus wss and bot HTTPS), 429/Retry-After backoff,
-IPv4 forcing for dual-stack venues. 0.8.1 current. Consumed by the crypto
+IPv4 forcing for dual-stack venues. 0.9.0 current (typed instrument
+specs/wallet/cancel + kraken market-data returns). Consumed by the crypto
 bots, `fks/bots/rustrade-exchange-apiws` (the live order-path adapter), and
 janus forward (Bybit connectivity).
 
-### 4.7 `crypto` — the production bots (private)
+### 4.7 The production bots — `bots/spot-portfolio` (here) + `fks-state` (private)
 
-Two binaries built on the three published crates:
+Two binaries built on the three published crates, migrated out of the
+dissolved `crypto` repo into their post-split homes:
 
-- **`spot-portfolio`** — multi-venue spot rebalancer (Kraken + KuCoin +
-  Crypto.com), threshold-based deposit-rebalance; runs **LIVE** with real
-  funds (small). Leave-alone by doctrine.
-- **`kucoin-futures` (funding)** — funding-extreme reversion strategy on
-  KuCoin USDT-M perps; **paper**, two-key arm gate (`live=true` +
-  `DIP_ARM_LIVE=1`) before it can ever trade real money.
+- **`spot-portfolio`** (`fks/bots/spot-portfolio`, this repo) — multi-venue
+  spot rebalancer (Kraken + KuCoin + Crypto.com), threshold-based
+  deposit-rebalance; runs with real keys injected but a **dry-run** baked
+  config — going live is a deliberate image-level override, never a UI
+  toggle (see [`WEBUI_PLATFORM_ROADMAP.md`](WEBUI_PLATFORM_ROADMAP.md) P9).
+  Shares the generic scaffolding via `crates/crypto-bot-core`.
+- **`kucoin-futures` (funding)** (`fks-state/bots/crypto-futures`, private) —
+  funding-extreme reversion strategy on KuCoin USDT-M perps; **paper**,
+  two-key arm gate (`live=true` + `DIP_ARM_LIVE=1`) before it can ever trade
+  real money. Git-pins `crypto-bot-core` from this repo.
 
 Both serve the **FKS bot contract** (§5.1) natively: `/health`, `/metrics`
 (`fks_bot_*` gauges incl. net worth, per-exchange totals, positions) and a
 rich `/status` JSON document that the WebUI `/exchanges` pages read. The
-integration plan (`crypto/FKS-INTEGRATION.md`) tracks the move from systemd to
-spawner-managed containers: Phase 1 (status servers) done; Phase 2
-(fks-bot images, `BOT_CONFIG` env parsing, Postgres state store), Phase 3 UI
-(done on the fks side), Phase 4 (systemd retirement) pending.
+systemd→spawner integration plan (now at
+`fks-state/bots/crypto-futures/FKS-INTEGRATION.md`) is essentially complete:
+both bots run as spawner-managed `fks-bot-*` containers (2026-07-06) and the
+systemd units are retired; durable funding state (Postgres `StateStore`)
+continues in `fks-state`.
 
 ### 4.8 `fks-kotlin` — mobile/KMP client
 
@@ -320,7 +337,7 @@ mount; alertmanager routes to Discord. Key SLO: `data_completeness_percent`
 
 ---
 
-## 7. Current integration status (2026-07-03)
+## 7. Current integration status (2026-07-09)
 
 | Thread | State |
 |---|---|
@@ -329,5 +346,5 @@ mount; alertmanager routes to Discord. Key SLO: `data_completeness_percent`
 | Alert board + Grafana | ✅ audited — 85 real rules, repointed dashboards |
 | WebUI: charts/signals/exchanges/settings/bots | ✅ live |
 | Secrets: encrypt-at-rest + spawn injection + UI | ✅ live |
-| Crypto bots on the platform | ⏳ transitional systemd; Phase-1 status servers built, awaiting restart (spot :9091 / funding :9095); Phase 2 containerization pending in the crypto repo |
+| Crypto bots on the platform | ✅ spawner-managed containers (2026-07-06); code homes migrated — spot → `bots/spot-portfolio` (here) + `crates/crypto-bot-core`, funding edges → private `fks-state` |
 | JANUS neural core in live loop | 🔬 research (per the paper's maturity gap) |

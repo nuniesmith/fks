@@ -35,7 +35,8 @@ docker build -f bots/spot-portfolio/Dockerfile -t fks-bot-crypto-spot:latest .
 Same image contract as the old `crypto` repo's `--target spot` build: bakes
 `spot-portfolio.toml` if the operator's (gitignored) copy sits in this
 directory, else the example; **fails the build if `live = true` would bake**
-(dry-run image by design — FKSRUNBOOK.md §6); `SPOT_PORTFOLIO_CONFIG=/etc/crypto/spot-portfolio.toml`,
+(dry-run image by design — going live must be a deliberate, explicit
+override); `SPOT_PORTFOLIO_CONFIG=/etc/crypto/spot-portfolio.toml`,
 `BOT_STATUS_PORT=9091`, non-root, `ENTRYPOINT spot-portfolio`. Keys arrive as
 env from the spawner's secret store — never baked.
 

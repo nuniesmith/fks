@@ -25,8 +25,9 @@ data/engine/trainer service was removed — janus is the platform now. See
 | [`rustrade`](https://github.com/nuniesmith/rustrade) | trading framework | crates.io `rustrade-framework` 0.4 (imports as `rustrade`) |
 | [`janus`](https://github.com/nuniesmith/janus) | trading brain | Docker image (`git clone` at `JANUS_REF`) + `jflow-*` crates |
 | [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | TA math | crates.io `indicators-ta` 0.2 (imports as `indicators`) |
-| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.8 |
+| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.9 |
 | [`fks-web`](https://github.com/nuniesmith/fks-web) | SvelteKit UI | Docker image (`git clone` at `WEB_REF`) |
+| `fks-state` *(private)* | trading edges (`bots/crypto-futures` funding bot) + encrypted state snapshots | local checkout only — the funding image builds there; snapshots via `scripts/fks-state.sh` |
 
 ### Lives in this repo
 
@@ -34,17 +35,26 @@ data/engine/trainer service was removed — janus is the platform now. See
 |--|--|--|
 | `crates/spawner/` | Bot-container lifecycle service | `CLAUDE.md` + `TODO.md` + `README.md` |
 | `crates/rithmic-connector/` | Credential-gated, **read-only** Rithmic futures feed (P12 foundation) | `README.md` + `TODO.md` |
+| `crates/crypto-bot-core/` | Shared bot scaffolding (Discord alerts, JSONL journal, `:9091` status server) for the crypto bots | own `[workspace]` |
 | `src/web/` | SvelteKit dashboard | `CLAUDE.md` + `TODO.md` + `README.md` |
 | `src/proto/` | `fks-proto` crate (protobuf) | — |
 | `src/sql/` | DB bootstrap baked into the postgres image (`janus/`, `spawner/`) | — |
 | `bots/fks-bot-example/` | reference bot — consumes the published crates | own `[workspace]` |
 | `bots/crypto-demo/` | working multi-symbol demo bot (paper by default) | own `[workspace]` |
 | `bots/rustrade-exchange-apiws/` | `rustrade::ExchangeClient` over `exchange-apiws` (KuCoin) — the live order path | `README.md` + own `[workspace]` |
+| `bots/spot-portfolio/` | **production** multi-exchange spot rebalancer (migrated from the dissolved `crypto` repo) | `README.md` + `SPOT.md` + own `[workspace]` |
 | `strategies/` | private trading IP (consumes the published crates) | *(planned)* |
 
 > `bots/fks-bot-example/` is the canonical example of consuming the published
 > crates: a standalone crate depending on `rustrade-framework` from crates.io.
 > It's what the spawner launches and the template for real bots.
+
+> **The `crypto` repo is dissolved.** Its spot bot lives here
+> (`bots/spot-portfolio` + shared `crates/crypto-bot-core`; image builds from
+> the fks root: `docker build -f bots/spot-portfolio/Dockerfile -t
+> fks-bot-crypto-spot:latest .`). The futures/funding **trading edges** live in
+> the **private `fks-state`** repo (`bots/crypto-futures`, git-pins
+> `crypto-bot-core`), which also holds the encrypted state snapshots.
 
 > **When working in any sub-directory, read its sub-CLAUDE first.** This root
 > file covers cross-cutting concerns: how the pieces wire together at the
@@ -163,7 +173,7 @@ depend on crates.io — never re-vendor:
 ```toml
 rustrade       = { package = "rustrade-framework", version = "0.4" }  # import as `rustrade`
 indicators-ta  = "0.2"                                                # import as `indicators` (0.2.2)
-exchange-apiws = "0.8"
+exchange-apiws = "0.9"
 ```
 
 ### Rust

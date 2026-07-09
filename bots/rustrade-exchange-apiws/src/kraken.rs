@@ -51,7 +51,7 @@ use rustrade::{
 use tokio::sync::{Mutex as AsyncMutex, OnceCell, mpsc, watch};
 use tracing::{debug, info, warn};
 
-use exchange_apiws::kraken::KrakenTradeHistoryEntry;
+use exchange_apiws::kraken::{KrakenAssetPair, KrakenTradeHistoryEntry};
 use exchange_apiws::{KrakenCredentials, KrakenPrivateClient, KrakenRestClient};
 
 use crate::ex;
@@ -130,6 +130,21 @@ fn secs_to_dt(secs: f64) -> Option<DateTime<Utc>> {
 /// the corresponding increment (e.g. `2 → 0.01`, `8 → 1e-8`, `0 → 1.0`).
 fn decimals_to_increment(decimals: u32) -> f64 {
     10f64.powi(-(decimals as i32))
+}
+
+/// Build an [`InstrumentSpec`] from a Kraken [`KrakenAssetPair`]: spot,
+/// `contract_value` 1.0, tick/lot from the pair's decimal precision, and
+/// `min_notional` from the pair's minimum order *cost* (`costmin`, the quote
+/// notional). A pair with no `costmin` ⇒ `min_notional` 0.0 — unconstrained,
+/// the same permissive default as before the field was exposed.
+fn spec_from_pair(p: &KrakenAssetPair) -> InstrumentSpec {
+    InstrumentSpec {
+        asset_class: AssetClass::CryptoSpot,
+        contract_value: 1.0,
+        tick_size: decimals_to_increment(p.pair_decimals),
+        lot_size: decimals_to_increment(p.lot_decimals),
+        min_notional: p.costmin_f64().unwrap_or(0.0),
+    }
 }
 
 // ── Adapter ──────────────────────────────────────────────────────────────────
@@ -222,22 +237,7 @@ impl KrakenSpotAdapter {
                 match public.get_asset_pairs(None).await {
                     Ok(pairs) => pairs
                         .values()
-                        .map(|p| {
-                            (
-                                p.altname.clone(),
-                                InstrumentSpec {
-                                    asset_class: AssetClass::CryptoSpot,
-                                    contract_value: 1.0,
-                                    tick_size: decimals_to_increment(p.pair_decimals),
-                                    lot_size: decimals_to_increment(p.lot_decimals),
-                                    // Kraken's min order volume (`ordermin`) / min
-                                    // cost (`costmin`) aren't exposed by this
-                                    // exchange-apiws version's `KrakenAssetPair`,
-                                    // so min-notional stays unconstrained.
-                                    min_notional: 0.0,
-                                },
-                            )
-                        })
+                        .map(|p| (p.altname.clone(), spec_from_pair(p)))
                         .collect(),
                     Err(e) => {
                         warn!(error = %e, "Kraken: AssetPairs fetch failed — instrument specs default to permissive spot");
@@ -390,9 +390,9 @@ impl ExchangeClient for KrakenSpotAdapter {
         // at startup or after the first order); a permissive spot default while
         // still cold, so behaviour is safe before the async fetch runs. This is
         // sync (trait contract), so it can only READ the cache — the fetch is
-        // driven from the async order path / `prime_instrument_specs`.
-        // `min_notional` stays 0.0: `ordermin`/`costmin` aren't on this
-        // exchange-apiws version's `KrakenAssetPair`.
+        // driven from the async order path / `prime_instrument_specs`. A warm
+        // spec carries the pair's real `min_notional` (from `costmin`); the
+        // cold default below stays 0.0 (unconstrained) until the fetch runs.
         self.cached_spec(symbol.as_str()).unwrap_or(InstrumentSpec {
             asset_class: AssetClass::CryptoSpot,
             contract_value: 1.0,
@@ -711,6 +711,38 @@ mod tests {
         assert_eq!(miss.tick_size, 0.0);
         assert_eq!(miss.lot_size, 0.0);
         assert_eq!(miss.asset_class, AssetClass::CryptoSpot);
+    }
+
+    fn asset_pair(costmin: Option<&str>) -> KrakenAssetPair {
+        KrakenAssetPair {
+            altname: "XBTUSD".into(),
+            wsname: None,
+            base: "XXBT".into(),
+            quote: "ZUSD".into(),
+            pair_decimals: 1,
+            lot_decimals: 8,
+            lot_multiplier: 1,
+            ordermin: Some("0.00005".into()),
+            costmin: costmin.map(Into::into),
+            cost_decimals: Some(5),
+            status: Some("online".into()),
+        }
+    }
+
+    #[test]
+    fn spec_min_notional_from_costmin() {
+        // A pair advertising a min order cost → min_notional carries it, while
+        // tick/lot still derive from the pair's decimal precision.
+        let spec = spec_from_pair(&asset_pair(Some("0.5")));
+        assert!((spec.min_notional - 0.5).abs() < 1e-12);
+        assert!((spec.tick_size - 0.1).abs() < 1e-12);
+        assert!((spec.lot_size - 1e-8).abs() < 1e-15);
+        assert_eq!(spec.asset_class, AssetClass::CryptoSpot);
+
+        // No costmin (absent / unparseable) → 0.0: unconstrained, the permissive
+        // default that held before the field was exposed.
+        assert_eq!(spec_from_pair(&asset_pair(None)).min_notional, 0.0);
+        assert_eq!(spec_from_pair(&asset_pair(Some("nope"))).min_notional, 0.0);
     }
 
     #[test]

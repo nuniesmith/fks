@@ -331,6 +331,9 @@ services:
         environment:
             - EXECUTION_MODE=${EXECUTION_MODE:-paper_trading}
             - QUESTDB_ILP_PORT=9009
+            # Where the backfill disk-gate stats free space (the read-only
+            # questdb_data mount above). Re-enables the gate instead of fail-open.
+            - JANUS_QUESTDB_DATA_DIR=${JANUS_QUESTDB_DATA_DIR:-/var/lib/questdb}
             - DATA_SOURCE=${DATA_SOURCE:-live}
             - DATA_EXCHANGE=${DATA_EXCHANGE:-binance}
             - DATA_WS_URL=${DATA_WS_URL:-wss://stream.binance.com:9443/ws}
@@ -458,6 +461,11 @@ services:
             # resetting the challenger to fresh-init on every janus redeploy
             # (defeating resume-from-checkpoint accumulation; janus #150/#152).
             - janus_checkpoints:/app/checkpoints
+            # Read-only view of QuestDB's data volume so the backfill disk-gate
+            # can stat free space (janus + questdb are separate containers; without
+            # it the gate fails OPEN and backfills proceed ungated). Paired with
+            # JANUS_QUESTDB_DATA_DIR below.
+            - questdb_data:/var/lib/questdb:ro
             - ./infrastructure/config/janus:/app/config:ro
         networks:
             - fks-network

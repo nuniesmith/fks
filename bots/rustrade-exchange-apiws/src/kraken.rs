@@ -39,6 +39,7 @@
 
 use std::collections::HashMap;
 use std::collections::{HashSet, VecDeque};
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -47,11 +48,11 @@ use rustrade::{
     AssetClass, Capability, ExchangeClient, Fill, FillSource, InstrumentSpec, OpenOrder, Order,
     OrderKind, OrderStatus, Position, Price, Result, Side, Symbol, Volume,
 };
-use tokio::sync::{Mutex as AsyncMutex, mpsc, watch};
+use tokio::sync::{Mutex as AsyncMutex, OnceCell, mpsc, watch};
 use tracing::{debug, info, warn};
 
 use exchange_apiws::kraken::KrakenTradeHistoryEntry;
-use exchange_apiws::{KrakenCredentials, KrakenPrivateClient};
+use exchange_apiws::{KrakenCredentials, KrakenPrivateClient, KrakenRestClient};
 
 use crate::ex;
 
@@ -125,6 +126,12 @@ fn secs_to_dt(secs: f64) -> Option<DateTime<Utc>> {
     DateTime::<Utc>::from_timestamp(whole, nanos)
 }
 
+/// Kraken advertises price/lot precision as a decimal-place count; convert it to
+/// the corresponding increment (e.g. `2 → 0.01`, `8 → 1e-8`, `0 → 1.0`).
+fn decimals_to_increment(decimals: u32) -> f64 {
+    10f64.powi(-(decimals as i32))
+}
+
 // ── Adapter ──────────────────────────────────────────────────────────────────
 
 /// A [`rustrade::ExchangeClient`] for Kraken **spot**. See this module's documentation.
@@ -133,6 +140,12 @@ pub struct KrakenSpotAdapter {
     client: KrakenPrivateClient,
     /// symbol → Kraken base-asset code (for balance → position lookups).
     base_assets: HashMap<String, String>,
+    /// Lazily-fetched per-pair instrument specs (Kraken **altname** → spec),
+    /// derived from the public `AssetPairs` endpoint so live orders round to
+    /// Kraken's real tick/lot precision instead of a blind 8 dp. `Arc<OnceCell>`
+    /// so clones share a single fetch; populated on the first async touch
+    /// (`place_order` / [`prime_instrument_specs`](Self::prime_instrument_specs)).
+    specs: Arc<OnceCell<HashMap<String, InstrumentSpec>>>,
 }
 
 impl KrakenSpotAdapter {
@@ -144,6 +157,7 @@ impl KrakenSpotAdapter {
         Self {
             client,
             base_assets: HashMap::new(),
+            specs: Arc::new(OnceCell::new()),
         }
     }
 
@@ -188,6 +202,66 @@ impl KrakenSpotAdapter {
     pub fn client(&self) -> &KrakenPrivateClient {
         &self.client
     }
+
+    /// The per-pair instrument specs, fetched once from Kraken's **public**
+    /// `AssetPairs` endpoint and cached for the process lifetime. Mirrors the
+    /// crypto spot bot's `lot_decimals_for`: on any failure (public client can't
+    /// be built, or the fetch errors) it caches an empty map, so specs degrade
+    /// to a permissive spot default rather than blocking orders. Keyed by Kraken
+    /// **altname** (e.g. `"XBTUSD"`), matching the pair names orders use.
+    async fn cached_specs(&self) -> &HashMap<String, InstrumentSpec> {
+        self.specs
+            .get_or_init(|| async {
+                let public = match KrakenRestClient::new() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        warn!(error = %e, "Kraken: public client build failed — instrument specs unavailable");
+                        return HashMap::new();
+                    }
+                };
+                match public.get_asset_pairs(None).await {
+                    Ok(pairs) => pairs
+                        .values()
+                        .map(|p| {
+                            (
+                                p.altname.clone(),
+                                InstrumentSpec {
+                                    asset_class: AssetClass::CryptoSpot,
+                                    contract_value: 1.0,
+                                    tick_size: decimals_to_increment(p.pair_decimals),
+                                    lot_size: decimals_to_increment(p.lot_decimals),
+                                    // Kraken's min order volume (`ordermin`) / min
+                                    // cost (`costmin`) aren't exposed by this
+                                    // exchange-apiws version's `KrakenAssetPair`,
+                                    // so min-notional stays unconstrained.
+                                    min_notional: 0.0,
+                                },
+                            )
+                        })
+                        .collect(),
+                    Err(e) => {
+                        warn!(error = %e, "Kraken: AssetPairs fetch failed — instrument specs default to permissive spot");
+                        HashMap::new()
+                    }
+                }
+            })
+            .await
+    }
+
+    /// Cached [`InstrumentSpec`] for `symbol` if the spec cache is already warm,
+    /// else `None`. Sync — safe to call from [`ExchangeClient::instrument_spec`].
+    fn cached_spec(&self, symbol: &str) -> Option<InstrumentSpec> {
+        self.specs.get().and_then(|m| m.get(symbol).copied())
+    }
+
+    /// Warm the instrument-spec cache from Kraken's public `AssetPairs` so
+    /// [`instrument_spec`](ExchangeClient::instrument_spec) reports real
+    /// tick/lot precision from the very first order. Idempotent and safe to call
+    /// at startup. Returns the number of pairs cached (`0` if the fetch failed —
+    /// specs then fall back to a permissive spot default).
+    pub async fn prime_instrument_specs(&self) -> usize {
+        self.cached_specs().await.len()
+    }
 }
 
 #[async_trait]
@@ -203,9 +277,22 @@ impl ExchangeClient for KrakenSpotAdapter {
             ));
         }
         let order_type = kraken_order_type(order.kind)?;
-        let volume = fmt_amount(order.size.value());
+        // Round to Kraken's advertised precision (lazily fetched + cached). The
+        // framework snaps limit prices via `instrument_spec`, but never rounds
+        // order volume — so we round volume down to the pair's lot here. This is
+        // the live-order money path: it must not submit more precision than
+        // Kraken accepts. Unknown pair / cold cache ⇒ a no-op (raw value).
+        let spec = self
+            .cached_specs()
+            .await
+            .get(order.symbol.as_str())
+            .copied();
+        let volume =
+            fmt_amount(spec.map_or(order.size.value(), |s| s.round_qty_down(order.size.value())));
         let price = if order.kind == OrderKind::Limit {
-            order.limit_price.map(|p| fmt_amount(p.value()))
+            order
+                .limit_price
+                .map(|p| fmt_amount(spec.map_or(p.value(), |s| s.round_price(p.value()))))
         } else {
             None
         };
@@ -248,8 +335,12 @@ impl ExchangeClient for KrakenSpotAdapter {
                 symbol.as_str()
             )));
         }
-        // Spot is long-only: closing a holding is a market SELL of the balance.
-        let volume = fmt_amount(position.qty.abs());
+        // Spot is long-only: closing a holding is a market SELL of the balance,
+        // rounded DOWN to the pair's lot so Kraken accepts the precision and we
+        // never try to sell more than we hold. No-op when the spec is unknown.
+        let spec = self.cached_specs().await.get(symbol.as_str()).copied();
+        let volume =
+            fmt_amount(spec.map_or(position.qty.abs(), |s| s.round_qty_down(position.qty.abs())));
         let resp = self
             .client
             .place_order(symbol.as_str(), "sell", "market", &volume, None)
@@ -294,14 +385,21 @@ impl ExchangeClient for KrakenSpotAdapter {
         1.0
     }
 
-    fn instrument_spec(&self, _symbol: &Symbol) -> InstrumentSpec {
-        InstrumentSpec {
+    fn instrument_spec(&self, symbol: &Symbol) -> InstrumentSpec {
+        // Real tick/lot from Kraken's AssetPairs once the cache is warm (primed
+        // at startup or after the first order); a permissive spot default while
+        // still cold, so behaviour is safe before the async fetch runs. This is
+        // sync (trait contract), so it can only READ the cache — the fetch is
+        // driven from the async order path / `prime_instrument_specs`.
+        // `min_notional` stays 0.0: `ordermin`/`costmin` aren't on this
+        // exchange-apiws version's `KrakenAssetPair`.
+        self.cached_spec(symbol.as_str()).unwrap_or(InstrumentSpec {
             asset_class: AssetClass::CryptoSpot,
             contract_value: 1.0,
             tick_size: 0.0,
             lot_size: 0.0,
             min_notional: 0.0,
-        }
+        })
     }
 
     async fn get_open_orders(&self, symbol: &Symbol) -> Result<Vec<OpenOrder>> {
@@ -565,9 +663,54 @@ mod tests {
         let spec = a.instrument_spec(&Symbol::from("XBTUSD"));
         assert_eq!(spec.asset_class, AssetClass::CryptoSpot);
         assert_eq!(spec.contract_value, 1.0);
+        // Cold cache (no network): permissive defaults — tick/lot/min unconstrained.
+        assert_eq!(spec.tick_size, 0.0);
+        assert_eq!(spec.lot_size, 0.0);
+        assert_eq!(spec.min_notional, 0.0);
         assert_eq!(a.name(), "kraken");
         assert!(a.supports(Capability::OrderTracking));
         assert!(!a.supports(Capability::StopOrders));
+    }
+
+    #[test]
+    fn decimals_to_increment_maps_precision() {
+        assert_eq!(decimals_to_increment(0), 1.0);
+        assert!((decimals_to_increment(1) - 0.1).abs() < 1e-12);
+        assert!((decimals_to_increment(2) - 0.01).abs() < 1e-12);
+        assert!((decimals_to_increment(8) - 1e-8).abs() < 1e-15);
+    }
+
+    #[test]
+    fn instrument_spec_uses_cached_pair_precision() {
+        let a = KrakenSpotAdapter::new(
+            KrakenPrivateClient::new(KrakenCredentials::new("k", "c2VjcmV0")).unwrap(),
+        )
+        .with_base_asset("XBTUSD", "XXBT");
+        // Seed the cache exactly as the async AssetPairs fetch would: XBTUSD with
+        // 1-dp price precision and 8-dp lot precision.
+        let mut specs = HashMap::new();
+        specs.insert(
+            "XBTUSD".to_string(),
+            InstrumentSpec {
+                asset_class: AssetClass::CryptoSpot,
+                contract_value: 1.0,
+                tick_size: decimals_to_increment(1),
+                lot_size: decimals_to_increment(8),
+                min_notional: 0.0,
+            },
+        );
+        a.specs.set(specs).expect("cache starts empty");
+
+        let spec = a.instrument_spec(&Symbol::from("XBTUSD"));
+        assert!((spec.tick_size - 0.1).abs() < 1e-12);
+        assert!((spec.lot_size - 1e-8).abs() < 1e-15);
+        assert_eq!(spec.min_notional, 0.0);
+
+        // Unknown pair → permissive spot default (cache miss).
+        let miss = a.instrument_spec(&Symbol::from("NOPE"));
+        assert_eq!(miss.tick_size, 0.0);
+        assert_eq!(miss.lot_size, 0.0);
+        assert_eq!(miss.asset_class, AssetClass::CryptoSpot);
     }
 
     #[test]

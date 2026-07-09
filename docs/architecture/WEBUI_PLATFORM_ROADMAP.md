@@ -11,7 +11,10 @@
 > Grounded in a read-only survey (2026-07-06) of `fks-web` (shell, charts,
 > settings, `hooks.server.ts` adapter), `janus` (`services/data`, unified
 > binary, workspace deps), `indicators-ta` (registry), `crates/spawner`
-> (secret store), the `crypto` repo (Dockerfile, `FKS-INTEGRATION.md`), and
+> (secret store), the then-extant `crypto` repo (Dockerfile,
+> `FKS-INTEGRATION.md` — since **dissolved**: spot → this repo's
+> `bots/spot-portfolio` + `crates/crypto-bot-core`, futures/funding edges →
+> the private `fks-state` repo's `bots/crypto-futures`), and
 > the live Docker host. Companion docs:
 > [`PLATFORM_ARCHITECTURE.md`](PLATFORM_ARCHITECTURE.md) (the platform map),
 > [`WEBUI_BUILDOUT_PLAN.md`](WEBUI_BUILDOUT_PLAN.md) (the phase log that got
@@ -39,10 +42,12 @@
   crypto bots run on this host as spawner-managed containers —
   `fks-bot-crypto-spot` (dry-run, real keys injected) and
   `fks-bot-crypto-funding` (paper) — via crypto PR #4; the desktop systemd
-  units are retired. Remaining: the deliberate live flip for spot, the
-  funding Postgres `StateStore` (sibling PR in flight in the crypto repo),
-  durable net-worth history (today: Prometheus gauges, 30-day retention),
-  and a future read-only BTC xpub watcher (§4).
+  units are retired. (The images now build from the post-migration homes:
+  spot from the fks root, funding from the `fks-state` root.) Remaining: the
+  deliberate live flip for spot, the funding Postgres `StateStore` (now in
+  the private `fks-state` repo, the edges' home), a future read-only BTC
+  xpub watcher (§4) — and durable net-worth history, since **shipped**
+  (fks #188/#189 + the fks-web panel; §4.2).
 - **Credentials generalized one step** (fks-web #24, merged 2026-07-06): the
   `/settings` provider picker covers 5 exchanges + Rithmic + a free-slug
   escape hatch, all mapped onto the spawner's fixed 3-slot secret record.
@@ -140,9 +145,13 @@ Supersedes the "transitional systemd" row in
   store, and `fks-bot-crypto-funding` (`fks.bot_id=crypto-funding`,
   `fks.mode=paper`, `fks.market=futures`). Images built from crypto PR #4
   (*"feat(docker): fks-bot spawner images for spot-portfolio and
-  kucoin-futures"*, merged). No `spot-portfolio`/`funding-paper` user
+  kucoin-futures"*, merged; with the crypto repo since dissolved, the spot
+  image builds in-tree — `docker build -f bots/spot-portfolio/Dockerfile -t
+  fks-bot-crypto-spot:latest .` from the fks root — and the funding image
+  from the `fks-state` root). No `spot-portfolio`/`funding-paper` user
   systemd units remain on this host; the desktop units are disabled.
-- **Spot is deliberately dry-run:** the crypto `Dockerfile` bakes the spot
+- **Spot is deliberately dry-run:** the spot `Dockerfile` (now
+  `fks/bots/spot-portfolio/Dockerfile`) bakes the spot
   TOML with `live = false` and documents that going live *"must be an
   explicit, deliberate override — never the default of whatever someone
   spawns from the UI."*
@@ -150,14 +159,17 @@ Supersedes the "transitional systemd" row in
   (`funding-state-{SYM}.json`) and the PROBE-B paper record
   (`funding-paper.jsonl`) live in the container's writable layer — a
   recreate loses them. The durable fix, a `StateStore` trait with file +
-  Postgres impls (`crypto/FKS-INTEGRATION.md` Phase-2 item 4a), is being
-  implemented **now** in a sibling PR in the crypto repo; this design treats
+  Postgres impls (`FKS-INTEGRATION.md` Phase-2 item 4a — that plan now lives
+  at `fks-state/bots/crypto-futures/FKS-INTEGRATION.md`), is being
+  implemented in the private `fks-state` repo; this design treats
   it as in flight and builds on it (§4.2).
 - **Net worth today:** the bots export `fks_bot_*` gauges (net worth,
   per-exchange totals, positions) and rich `/status` JSON; the `/exchanges`
-  pages read `/status` live. The **only** history is Prometheus scrape data
-  with `--storage.tsdb.retention.time=30d` (`docker-compose.yml:662`). There
-  is no durable net-worth ledger and no history panel.
+  pages read `/status` live. *(At survey time the only history was
+  Prometheus scrape data with `--storage.tsdb.retention.time=30d`; the
+  durable backbone has since **shipped** — `net_worth_snapshots` schema +
+  spawner `/status` sampler, fks #188, db-gated `GET /net-worth` read
+  endpoint, fks #189, and the fks-web history panel. See §4.2.)*
 
 ### 1.4 Credentials
 
@@ -385,16 +397,18 @@ same storage contracts.
 
 With both bots spawner-managed (§1.3), the remaining work is:
 
-1. **The live flip for spot (deliberate, small).** Per the crypto
-   Dockerfile's doctrine, live must be an explicit variant: a tuned
+1. **The live flip for spot (deliberate, small).** Per the spot
+   Dockerfile's doctrine (`bots/spot-portfolio/Dockerfile`, in this repo
+   post-migration), live must be an explicit variant: a tuned
    production TOML plus a **live-variant image** (e.g.
    `fks-bot-crypto-spot-live` baking `live = true` and the tuned config) so
    that *which image you spawn* is the decision, never a UI env toggle on
    the dry-run image. Spawn it via a saved `bot_configs` template with
    secrets injection (all mechanics already exist). Days of work; the
    caution is the point.
-2. **Funding Postgres `StateStore` — in flight.** A sibling PR in the
-   crypto repo is implementing `FKS-INTEGRATION.md` Phase-2 item 4a (a
+2. **Funding Postgres `StateStore` — in flight.** The private `fks-state`
+   repo (`bots/crypto-futures`, the edges' post-migration home) is
+   implementing `FKS-INTEGRATION.md` Phase-2 item 4a (a
    `StateStore` trait — load/save open trade, append paper record — with
    file + Postgres impls) as of this writing. This roadmap consumes it
    rather than redesigning it, and leans on its second-order effect: a
@@ -405,13 +419,19 @@ With both bots spawner-managed (§1.3), the remaining work is:
 
 ### 4.2 Net-worth history: stop relying on Prometheus retention
 
+> **Shipped (2026-07):** `net_worth_snapshots` schema
+> (`src/sql/spawner/006_net_worth_snapshots.sql`) + the spawner-side
+> `/status` sampler (fks #188), the db-gated `GET /net-worth` read endpoint
+> (fks #189), and the fks-web `NetWorthHistoryPanel`. The design below is
+> the record of what was built.
+
 Today the only net-worth time series is `fks_bot_*` gauges in Prometheus
 with 30-day retention (§1.3) — fine for ops, wrong for a years-horizon
 net-worth backbone. Design:
 
 - **`net_worth_snapshots` table** (Postgres — schema shipped from this
   repo's `src/sql/`, either `ruby_db` next to the spawner's tables or the
-  crypto StateStore's schema; decide with the sibling PR — §8.4):
+  `fks-state` StateStore's schema; decided: `ruby_db`, spawner-side — §8.4):
   `(ts, source, exchange, currency, balance, usd_value, net_worth_usd)` at
   a coarse cadence (e.g. every 15 min + on-demand).
 - **Writer:** a small sampler that polls each registered bot's `/status`
@@ -623,11 +643,11 @@ except where noted. Effort tags are honest single-person estimates —
 | P2 | **Indicator discovery** | indicators-ta 0.3 descriptors (§6.1); janus catalog+compute API (§6.2); adapter merge + routing + parity fixture (§6.3) | indicators-ta, janus, fks-web | **~1.5–2 weeks** across 3 PRs, each shippable | — |
 | P3 | **Panel extraction** | `src/lib/panels/` + registry; recompose 3–4 pages (charts, signals, exchanges, bots) as panels; poll-dedupe in `$stores/poll.ts` | fks-web | **~2 weeks** (refactor-heavy; per-page PRs) | — |
 | P4 | **`/workspace` docking** | dockview-core + Svelte 5 adapter; layout persist (localStorage → `ui_layouts` + adapter routes); 3 preset layouts | fks-web, fks (sql) | **~1–1.5 weeks** | P3 |
-| P5 | **Net-worth history** | `net_worth_snapshots` schema; spawner-side `/status` sampler; `NetWorthHistoryPanel` | fks, fks-web, (crypto StateStore PR) | **~1 week** | crypto StateStore PR (schema home decision) |
+| P5 | **Net-worth history** — **✅ shipped 2026-07** (fks #188/#189 + fks-web panel) | `net_worth_snapshots` schema; spawner-side `/status` sampler; `NetWorthHistoryPanel` | fks, fks-web | — (done) | schema home resolved: spawner `ruby_db` |
 | P6 | **Secret kinds + webhooks** | `kind` column + `fields` v2 API (§5.1); Discord-webhook provider in picker; spawn/stop/live-flip notifications | fks (spawner, sql), fks-web | **~1 week** | — |
 | P7 | **Capabilities gating** | `/api/capabilities` + capabilities store; Rithmic-gated nav/panels | fks-web | **days (2–3)** | P6 for kinds (soft) |
 | P8 | **Signed credential verify** | spawner `POST /secrets/{name}/verify` via exchange-apiws; settings-page verification state | fks (spawner), fks-web | **~1 week** (new dep in spawner + per-venue calls + rate limiting) | — |
-| P9 | **Spot live flip** | Tuned TOML + live-variant image; saved spawn template; runbook | crypto, fks | **days** — deliberately small, gated on operator judgement, not engineering | P5 recommended first (watch history before/after) |
+| P9 | **Spot live flip** | Tuned TOML + live-variant image; saved spawn template; runbook | fks (`bots/spot-portfolio`) | **days** — deliberately small, gated on operator judgement, not engineering | P5 recommended first (watch history before/after) |
 | P10 | **News source** | `news` source kind + `news_items` + `/api/news` + `NewsPanel` | janus, fks-web | **~2 weeks** (provider choice adds unknowns) | P3 (panel home); §8.3 decision |
 | P11 | **Multi-asset storage contracts** | Parameterize candle sink table; venue-tagged symbols; `candles_futures` | janus, fks-web (symbol picker) | **~1 week** | best before P12 |
 | P12 | **Rithmic connector** | SDK evaluation spike (**timeboxed 1 week, decides everything after**), then connector container: auth from secret store, trades+depth → QuestDB, source-status registration | new repo/fks, janus | **weeks + unknown** — do not schedule downstream work on it until the spike reports | P11, P7; creds already storable |
@@ -659,9 +679,9 @@ creds-present-but-no-connector) degrades gracefully until it lands.
    pick during P10 planning, and design `news_items` so the source is just
    a column.
 4. **Schema home for `net_worth_snapshots`** — spawner's `ruby_db` schema
-   vs. the crypto StateStore's schema (sibling PR). Resolve with that PR's
-   author: whoever owns writes owns schema; the panel only needs a read
-   route either way.
+   vs. the `fks-state` StateStore's schema. **Resolved 2026-07:** the
+   spawner owns the writes, so the schema landed in `ruby_db`
+   (`src/sql/spawner/006_net_worth_snapshots.sql`, fks #188).
 5. **Rithmic book-data volume.** Depth updates for even a few CME symbols
    dwarf kline traffic; whether QuestDB ILP on this host absorbs full depth
    or the connector downsamples (top-N levels, conflated snapshots) is a
@@ -697,8 +717,8 @@ docker inspect fks-bot-crypto-spot fks-bot-crypto-funding \
   --format '{{.Name}} {{.Config.Labels}}'
 systemctl --user list-unit-files | grep -E "spot|funding"   # → nothing
 
-# Spot image bakes dry-run:
-grep -n "live = false" ~/github/crypto/Dockerfile
+# Spot image bakes dry-run (spot lives in-tree post crypto-repo dissolution):
+grep -n "live = false" ~/github/fks/bots/spot-portfolio/Dockerfile
 
 # Secret store requires key+secret; no kind column:
 sed -n '60,85p' ~/github/fks/crates/spawner/src/models.rs

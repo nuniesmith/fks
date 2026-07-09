@@ -173,9 +173,13 @@ fks/
 ├── proto/fks/             # .proto source of truth
 ├── bots/
 │   ├── fks-bot-example/   # minimal reference bot — heartbeat + fks_bot_* metrics
-│   └── crypto-demo/       # working bot: rustrade + indicators-ta + exchange-apiws (+ optional JanusBrain)
+│   ├── crypto-demo/       # working bot: rustrade + indicators-ta + exchange-apiws (+ optional JanusBrain)
+│   ├── rustrade-exchange-apiws/  # rustrade::ExchangeClient adapter over exchange-apiws (the live order path)
+│   └── spot-portfolio/    # PRODUCTION spot rebalancer (migrated from the dissolved crypto repo)
 ├── crates/
-│   └── spawner/           # bot lifecycle manager (nested workspace)
+│   ├── spawner/           # bot lifecycle manager (nested workspace)
+│   ├── rithmic-connector/ # credential-gated read-only Rithmic futures feed
+│   └── crypto-bot-core/   # shared bot scaffolding: alerts, journal, :9091 status server
 ├── src/
 │   ├── web/               # SvelteKit dashboard — has its own CLAUDE/TODO
 │   ├── proto/             # fks-proto Rust crate (protobuf build)
@@ -197,6 +201,12 @@ fks/
 > - `crypto-demo` — a working bot exercising the whole stack (rustrade +
 >   indicators-ta + exchange-apiws), with an optional `JanusBrain` that
 >   delegates decisions to janus. See [`bots/crypto-demo/README.md`](bots/crypto-demo/README.md).
+>
+> `bots/spot-portfolio` is the **production** spot rebalancer (dry-run image
+> by default); its image builds from the repo root:
+> `docker build -f bots/spot-portfolio/Dockerfile -t fks-bot-crypto-spot:latest .`
+> The futures/funding trading edges live in the **private `fks-state`** repo
+> (`bots/crypto-futures`), which also holds the encrypted state snapshots.
 
 ---
 

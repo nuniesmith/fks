@@ -10,10 +10,10 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use rustrade::{Candle, CandleSource, Result, Symbol};
-use serde_json::Value;
 use tracing::debug;
 
 use exchange_apiws::KrakenRestClient;
+use exchange_apiws::kraken::KrakenOhlc;
 
 use crate::ex;
 
@@ -31,48 +31,20 @@ fn kraken_interval_mins(interval: Duration) -> u32 {
     }
 }
 
-/// Parse a Value field Kraken sends as a decimal **string** (or, defensively, a
-/// number) into `f64` — `0.0` if absent/unparseable.
-fn cell_f64(v: &Value) -> f64 {
-    v.as_str()
-        .and_then(|s| s.parse().ok())
-        .or_else(|| v.as_f64())
-        .unwrap_or(0.0)
-}
-
-/// Parse Kraken's OHLC response into rustrade candles, keeping the most recent
-/// `limit`. The response shape is
-/// `{ "<PAIR>": [[time, open, high, low, close, vwap, volume, count], …], "last": N }`
-/// — one pair array under a pair-named key. Times are Kraken Unix **seconds**,
-/// converted to milliseconds to match the other sources.
-fn parse_ohlc(raw: &Value, limit: usize) -> Vec<Candle> {
-    // The single pair array lives under a pair-named key (anything but "last").
-    let Some(rows) = raw
-        .as_object()
-        .and_then(|obj| {
-            obj.iter()
-                .find(|(k, v)| k.as_str() != "last" && v.is_array())
-        })
-        .and_then(|(_, v)| v.as_array())
-    else {
-        return Vec::new();
-    };
-
-    let mut candles: Vec<Candle> = rows
+/// Convert Kraken's typed OHLC response into rustrade candles, keeping the most
+/// recent `limit`. Kraken sends candles oldest-first with times in Unix
+/// **seconds**; convert to milliseconds to match the other sources.
+fn parse_ohlc(raw: &KrakenOhlc, limit: usize) -> Vec<Candle> {
+    let mut candles: Vec<Candle> = raw
+        .candles
         .iter()
-        .filter_map(|row| {
-            let r = row.as_array()?;
-            if r.len() < 7 {
-                return None;
-            }
-            Some(Candle {
-                time: r[0].as_i64()? * 1_000, // seconds → milliseconds
-                open: cell_f64(&r[1]),
-                high: cell_f64(&r[2]),
-                low: cell_f64(&r[3]),
-                close: cell_f64(&r[4]),
-                volume: cell_f64(&r[6]), // r[5] is vwap; volume is r[6]
-            })
+        .map(|c| Candle {
+            time: c.time * 1_000, // seconds → milliseconds
+            open: c.open_f64(),
+            high: c.high_f64(),
+            low: c.low_f64(),
+            close: c.close_f64(),
+            volume: c.volume_f64(), // `vwap` is a separate field; use volume
         })
         .collect();
 
@@ -139,15 +111,20 @@ mod tests {
         assert_eq!(kraken_interval_mins(Duration::from_secs(86_400)), 1440);
     }
 
+    /// Deserialize a Kraken OHLC wire body into the typed [`KrakenOhlc`].
+    fn ohlc(v: serde_json::Value) -> KrakenOhlc {
+        serde_json::from_value(v).expect("valid Kraken OHLC body")
+    }
+
     #[test]
     fn parses_pair_array_and_converts_seconds_to_millis() {
-        let raw = json!({
+        let raw = ohlc(json!({
             "XXBTZUSD": [
                 [1_700_000_000i64, "65000.0", "65100.5", "64950.0", "65080.0", "65020.0", "12.5", 42],
                 [1_700_000_060i64, "65080.0", "65200.0", "65050.0", "65150.0", "65120.0", "8.0", 30]
             ],
             "last": 1_700_000_060i64
-        });
+        }));
         let candles = parse_ohlc(&raw, 10);
         assert_eq!(candles.len(), 2);
         assert_eq!(candles[0].time, 1_700_000_000_000); // secs → ms
@@ -159,10 +136,10 @@ mod tests {
 
     #[test]
     fn keeps_only_the_most_recent_limit() {
-        let rows: Vec<Value> = (0..5)
+        let rows: Vec<serde_json::Value> = (0..5)
             .map(|i| json!([1_700_000_000i64 + i * 60, "1", "1", "1", "1", "1", "1", 1]))
             .collect();
-        let raw = json!({ "XXBTZUSD": rows, "last": 0 });
+        let raw = ohlc(json!({ "XXBTZUSD": rows, "last": 0 }));
         let candles = parse_ohlc(&raw, 2);
         assert_eq!(candles.len(), 2);
         // Most recent two (i=3, i=4).
@@ -171,9 +148,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_or_error_shape_yields_no_candles() {
-        assert!(parse_ohlc(&json!({ "last": 0 }), 10).is_empty());
-        assert!(parse_ohlc(&json!({}), 10).is_empty());
-        assert!(parse_ohlc(&json!("nonsense"), 10).is_empty());
+    fn empty_series_yields_no_candles() {
+        assert!(parse_ohlc(&ohlc(json!({ "XXBTZUSD": [], "last": 0 })), 10).is_empty());
     }
 }

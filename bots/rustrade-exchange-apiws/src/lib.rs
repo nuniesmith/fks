@@ -89,6 +89,7 @@ use rustrade::{
     OrderStatus, Position, Price, Result, Side, StopAttachment, StopKind, Symbol, Volume,
 };
 
+use exchange_apiws::rest::orders::CancelledOrders;
 use exchange_apiws::{
     Credentials, KuCoinClient, KucoinEnv, OrderType as EaOrderType, Side as EaSide,
     TimeInForce as EaTif,
@@ -199,12 +200,10 @@ fn to_contracts(size: Volume) -> Result<u32> {
     Ok(rounded as u32)
 }
 
-/// Count cancellations in a KuCoin `{ "cancelledOrderIds": [...] }` response;
-/// `0` if the field is absent or not an array.
-fn count_cancelled(v: &serde_json::Value) -> usize {
-    v.get("cancelledOrderIds")
-        .and_then(serde_json::Value::as_array)
-        .map_or(0, Vec::len)
+/// Count the orders a KuCoin cancel endpoint actually cancelled (`0` when
+/// nothing matched).
+fn count_cancelled(resp: &CancelledOrders) -> usize {
+    resp.cancelled_order_ids.len()
 }
 
 /// Milliseconds since the epoch → `DateTime<Utc>` (None on overflow).
@@ -662,12 +661,23 @@ mod tests {
 
     #[test]
     fn count_cancelled_parses_response() {
-        let v = serde_json::json!({ "cancelledOrderIds": ["a", "b", "c"] });
-        assert_eq!(count_cancelled(&v), 3);
-        assert_eq!(count_cancelled(&serde_json::json!({})), 0);
+        let de = |v: serde_json::Value| -> CancelledOrders {
+            serde_json::from_value(v).expect("valid cancel response")
+        };
         assert_eq!(
-            count_cancelled(&serde_json::json!({ "cancelledOrderIds": 7 })),
-            0
+            count_cancelled(&de(
+                serde_json::json!({ "cancelledOrderIds": ["a", "b", "c"] })
+            )),
+            3
+        );
+        // Absent field defaults to an empty list ⇒ 0.
+        assert_eq!(count_cancelled(&de(serde_json::json!({}))), 0);
+        // A malformed (non-array) field is now a deserialization error.
+        assert!(
+            serde_json::from_value::<CancelledOrders>(
+                serde_json::json!({ "cancelledOrderIds": 7 })
+            )
+            .is_err()
         );
     }
 

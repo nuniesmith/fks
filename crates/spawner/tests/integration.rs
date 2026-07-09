@@ -80,7 +80,7 @@ impl DockerOps for MockDockerClient {
         }
 
         let bot_id = req.bot_id.unwrap_or_else(|| "test-id".to_string());
-        let container_id: String = format!("{:0>12}", &bot_id.chars().take(12).collect::<String>());
+        let container_id: String = format!("{:0>12}", bot_id.chars().take(12).collect::<String>());
         let container_name = format!("fks-bot-{}", bot_id);
 
         let mut labels: HashMap<String, String> = req.labels.clone();

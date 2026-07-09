@@ -121,6 +121,7 @@ pub fn build_router(state: AppState) -> Router {
     #[cfg(feature = "db")]
     let protected = protected
         .route("/runs", get(runs_handler))
+        .route("/net-worth", get(net_worth_handler))
         .route("/secrets", post(secrets_handler))
         .route("/secrets/status", get(secrets_status_handler))
         .route("/secrets/{exchange}", delete(delete_secret_handler))
@@ -539,6 +540,40 @@ async fn runs_handler(
         "total": rows.len(),
         "db_enabled": true,
     })))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /net-worth  (db feature only) — recent net_worth_snapshots history
+//
+// Returns a flat JSON array `[{bot_id, ts, net_worth, currency, venue}]`
+// ordered by ts (oldest → newest within the window) so the WebUI can plot it
+// directly. `?bot_id=` filters to one bot; `?limit=` bounds the most-recent
+// rows returned (default 500, capped 5000). Without a database configured it
+// degrades to `[]` so the panel just shows "no data" rather than erroring.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(feature = "db")]
+#[derive(Deserialize)]
+struct NetWorthQuery {
+    /// Optional exact-match filter on the `fks.bot_id` label. Blank = all bots.
+    bot_id: Option<String>,
+    /// Max rows to return (clamped to 1..=5000). Default: 500.
+    limit: Option<i64>,
+}
+
+#[cfg(feature = "db")]
+async fn net_worth_handler(
+    State(state): State<AppState>,
+    Query(params): Query<NetWorthQuery>,
+) -> Result<Json<Vec<crate::db::NetWorthSnapshotRow>>, SpawnerError> {
+    let Some(store) = state.store.as_ref() else {
+        // DB not configured — empty history so the WebUI degrades gracefully.
+        return Ok(Json(Vec::new()));
+    };
+
+    let (bot_id, limit) = crate::db::net_worth_query_plan(params.bot_id.as_deref(), params.limit);
+    let rows = store.list_net_worth(bot_id.as_deref(), limit).await?;
+    Ok(Json(rows))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -629,6 +629,64 @@ impl BotRunStore {
         );
         Ok(())
     }
+
+    /// Read recent net-worth snapshots for `GET /net-worth`. Selects the most
+    /// recent `limit` rows (optionally filtered to one `bot_id`) but returns
+    /// them oldest → newest so the WebUI can plot the series left-to-right
+    /// without reversing. The `NUMERIC` column is cast to `float8` in SQL
+    /// because this sqlx build has no decimal feature — the mirror of the
+    /// text/`::numeric` round-trip `record_net_worth` uses on the way in.
+    /// Clamp/normalise the inputs with [`net_worth_query_plan`] first.
+    pub async fn list_net_worth(
+        &self,
+        bot_id: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<NetWorthSnapshotRow>, SpawnerError> {
+        let rows = sqlx::query(
+            "SELECT bot_id, ts, net_worth::float8 AS net_worth, currency, venue \
+             FROM ( \
+                 SELECT bot_id, ts, net_worth, currency, venue \
+                 FROM net_worth_snapshots \
+                 WHERE ($1::text IS NULL OR bot_id = $1) \
+                 ORDER BY ts DESC \
+                 LIMIT $2 \
+             ) recent \
+             ORDER BY ts ASC",
+        )
+        .bind(bot_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx)?;
+
+        Ok(rows
+            .into_iter()
+            .map(NetWorthSnapshotRow::from_row)
+            .collect())
+    }
+}
+
+// ── GET /net-worth request shaping (pure — unit-tested) ──────────────────────
+
+/// Default number of net-worth snapshot rows returned by `GET /net-worth`.
+pub const NET_WORTH_DEFAULT_LIMIT: i64 = 500;
+/// Hard cap on the number of rows `GET /net-worth` will return.
+pub const NET_WORTH_MAX_LIMIT: i64 = 5000;
+
+/// Pure request-shaping for `GET /net-worth`. Clamps `limit` into
+/// `1..=NET_WORTH_MAX_LIMIT` (defaulting to [`NET_WORTH_DEFAULT_LIMIT`] when
+/// absent) and normalises the optional `bot_id` filter (trimmed; blank → no
+/// filter). Split out from the handler + query so the query-shaping logic is
+/// unit-testable without a live database. Returns `(bot_id_filter, limit)`.
+pub fn net_worth_query_plan(bot_id: Option<&str>, limit: Option<i64>) -> (Option<String>, i64) {
+    let limit = limit
+        .unwrap_or(NET_WORTH_DEFAULT_LIMIT)
+        .clamp(1, NET_WORTH_MAX_LIMIT);
+    let bot_id = bot_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    (bot_id, limit)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -672,6 +730,33 @@ impl BotRunRow {
             stopped_at: r.try_get("stopped_at").ok(),
             runtime_secs: r.try_get("runtime_secs").ok(),
             error_message: r.try_get("error_message").ok(),
+        }
+    }
+}
+
+/// A row from `net_worth_snapshots` exposed via GET /net-worth. `net_worth` is
+/// the account value at `ts` in `currency`; `venue` is null for a bot-level
+/// total. Serialises to `{bot_id, ts, net_worth, currency, venue}`.
+#[derive(Debug, serde::Serialize)]
+pub struct NetWorthSnapshotRow {
+    pub bot_id: String,
+    pub ts: DateTime<Utc>,
+    pub net_worth: f64,
+    pub currency: String,
+    pub venue: Option<String>,
+}
+
+impl NetWorthSnapshotRow {
+    fn from_row(r: PgRow) -> Self {
+        Self {
+            bot_id: r.try_get("bot_id").unwrap_or_default(),
+            ts: r.try_get("ts").unwrap_or_else(|_| Utc::now()),
+            // `net_worth::float8` in the query — a bare NUMERIC can't decode
+            // without sqlx's decimal feature.
+            net_worth: r.try_get("net_worth").unwrap_or(0.0),
+            currency: r.try_get("currency").unwrap_or_default(),
+            // Nullable column — NULL decodes as Err, which `.ok()` maps to None.
+            venue: r.try_get("venue").ok(),
         }
     }
 }
@@ -816,7 +901,7 @@ fn sanitize_url(url: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_url;
+    use super::{NET_WORTH_DEFAULT_LIMIT, NET_WORTH_MAX_LIMIT, net_worth_query_plan, sanitize_url};
 
     #[test]
     fn sanitize_strips_credentials() {
@@ -837,5 +922,31 @@ mod tests {
     #[test]
     fn sanitize_handles_garbage() {
         assert_eq!(sanitize_url("not-a-url"), "<unparseable>");
+    }
+
+    #[test]
+    fn net_worth_query_plan_defaults_and_clamps_limit() {
+        assert_eq!(net_worth_query_plan(None, None).1, NET_WORTH_DEFAULT_LIMIT);
+        assert_eq!(net_worth_query_plan(None, Some(10)).1, 10);
+        // Below the floor clamps up to 1; a silly-large limit clamps to the cap.
+        assert_eq!(net_worth_query_plan(None, Some(0)).1, 1);
+        assert_eq!(net_worth_query_plan(None, Some(-5)).1, 1);
+        assert_eq!(
+            net_worth_query_plan(None, Some(i64::MAX)).1,
+            NET_WORTH_MAX_LIMIT
+        );
+    }
+
+    #[test]
+    fn net_worth_query_plan_normalises_bot_id_filter() {
+        // Absent / blank / whitespace-only → no filter.
+        assert_eq!(net_worth_query_plan(None, None).0, None);
+        assert_eq!(net_worth_query_plan(Some(""), None).0, None);
+        assert_eq!(net_worth_query_plan(Some("   "), None).0, None);
+        // A real value is trimmed and kept.
+        assert_eq!(
+            net_worth_query_plan(Some("  eth-scalper "), None).0,
+            Some("eth-scalper".to_string())
+        );
     }
 }

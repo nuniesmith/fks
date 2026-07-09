@@ -416,6 +416,12 @@ state.manifest
 *.age
 .fks-state-stage/
 
+# --- Bot configs: only the *.example.toml templates are tracked ---
+# The operator's tuned spot config (mirrors the crypto repo's .gitignore). The
+# Docker build globs it in when it sits next to the example; it must never be
+# committed.
+bots/spot-portfolio/spot-portfolio.toml
+
 # ============================================================================
 # Keep Empty Directories
 # ============================================================================

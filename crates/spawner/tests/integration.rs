@@ -491,6 +491,28 @@ async fn runs_degrades_gracefully_without_db() {
     assert!(payload.contains("\"total\":0"), "body: {payload}");
 }
 
+#[cfg(feature = "db")]
+#[tokio::test]
+async fn net_worth_degrades_gracefully_without_db() {
+    // No DATABASE_URL configured (store: None) — /net-worth must degrade to an
+    // empty JSON array (not 500), including when the ?bot_id=/?limit= filters
+    // are supplied (exercises the Query extractor + query-plan wiring).
+    let (app, _) = build_app(test_config(""));
+
+    let resp = app
+        .oneshot(
+            Request::get("/net-worth?bot_id=eth-scalper&limit=10")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let payload = body_string(resp).await;
+    assert_eq!(payload, "[]", "body: {payload}");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Secrets endpoints (db feature) — graceful behaviour without a live Postgres
 // ─────────────────────────────────────────────────────────────────────────────

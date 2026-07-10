@@ -1358,6 +1358,49 @@ services:
                 labels: "service=fks_bot_crypto_demo,environment=dev"
 
     # -------------------------------------------------------------------------
+    # orb-briefing — ORB decision-support (fks-state:crates/orb-briefing).
+    #
+    # Sends the operator two Discord messages per weekday: the ~08:30 ET
+    # pre-market briefing and the ~10:00 ET opening-range day-plan with SIZED
+    # contracts (orb crate: inverse-to-stop sizing + prop guards). Advisory
+    # only — never places orders. Data v1 = Yahoo (~15-min delayed, tagged in
+    # every message); the rithmic-connector becomes the real-time source later.
+    # Plan time is 10:00 (not 09:45) so the delayed 09:30–09:45 window is
+    # complete; move earlier once real-time data lands.
+    orb-briefing:
+        build:
+            context: ../fks-state
+            dockerfile: crates/orb-briefing/Dockerfile
+        image: fks-orb-briefing:latest
+        container_name: fks_orb_briefing
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - DISCORD_WEBHOOK=${DISCORD_WEBHOOK:-}
+            - ORB_BRIEFING_TIME=${ORB_BRIEFING_TIME:-08:30}
+            - ORB_PLAN_TIME=${ORB_PLAN_TIME:-10:00}
+            - ORB_SYMBOLS=${ORB_SYMBOLS:-GC,NQ,ES}
+            - ORB_RISK_USD=${ORB_RISK_USD:-500}
+            - ORB_MAX_CONTRACTS=${ORB_MAX_CONTRACTS:-15}
+            - ORB_DAILY_LOSS_HEADROOM=${ORB_DAILY_LOSS_HEADROOM:-3000}
+            - ORB_TRAILING_DD_HEADROOM=${ORB_TRAILING_DD_HEADROOM:-4500}
+            - ORB_OPEN_RANGE_MINS=${ORB_OPEN_RANGE_MINS:-15}
+            - ORB_STOP_MODE=${ORB_STOP_MODE:-opposite}
+            - ORB_TARGET_R=${ORB_TARGET_R:-2.0}
+            - RUST_LOG=info
+        networks:
+            - fks-network
+        restart: unless-stopped
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=orb_briefing,environment=dev"
+
+    # -------------------------------------------------------------------------
     # rithmic-connector — credential-gated, READ-ONLY Rithmic futures feed.
     #
     # FOUNDATION / skeleton (roadmap P12; design in

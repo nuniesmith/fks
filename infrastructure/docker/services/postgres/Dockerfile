@@ -72,3 +72,10 @@ COPY src/sql/spawner/004_notifications.sql                /docker-entrypoint-ini
 # (durable, append-only; written by the spawner's periodic /status sampler)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/006_net_worth_snapshots.sql          /docker-entrypoint-initdb.d/28-net-worth-snapshots.sql
+
+# ---------------------------------------------------------------------------
+# Phase 7 — Treasury (ruby_db) — transfers ledger + accounts registry
+# (deposit/withdrawal ledger so net-worth drift decomposes into deposits vs
+# profit, plus the multi-account topology's source of truth)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/007_treasury.sql                     /docker-entrypoint-initdb.d/29-treasury.sql

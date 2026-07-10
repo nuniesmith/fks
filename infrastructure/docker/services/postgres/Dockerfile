@@ -79,3 +79,11 @@ COPY src/sql/spawner/006_net_worth_snapshots.sql          /docker-entrypoint-ini
 # profit, plus the multi-account topology's source of truth)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/007_treasury.sql                     /docker-entrypoint-initdb.d/29-treasury.sql
+
+# ---------------------------------------------------------------------------
+# Phase 8 — Edge factory (ruby_db) — edges registry + backtest_runs ledger
+# (the edge-portfolio's source of truth plus the factory's backtest run
+# ledger: spawner inserts a run, the one-shot backtest container reports
+# its own results back)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/008_edge_factory.sql                 /docker-entrypoint-initdb.d/30-edge-factory.sql

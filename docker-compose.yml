@@ -1358,6 +1358,38 @@ services:
                 labels: "service=fks_bot_crypto_demo,environment=dev"
 
     # -------------------------------------------------------------------------
+    # advisor — daily/weekly "what to do next" Discord digests
+    # (fks-state:crates/advisor). Synthesizes spawner treasury/edge state into
+    # short advice: daily 17:30 ET + Sunday 18:00 ET weekly report. Advisory
+    # only; reads the spawner HTTP API, never trades.
+    advisor:
+        build:
+            context: ../fks-state
+            dockerfile: crates/advisor/Dockerfile
+        image: fks-advisor:latest
+        container_name: fks_advisor
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        environment:
+            - SPAWNER_TOKEN=${NGINX_INTERNAL_TOKEN}
+            - DISCORD_WEBHOOK=${DISCORD_WEBHOOK:-}
+            - ADVISOR_DAILY_TIME=${ADVISOR_DAILY_TIME:-17:30}
+            - ADVISOR_WEEKLY=${ADVISOR_WEEKLY:-Sun 18:00}
+            - ADVISOR_GATE_A_DATE=${ADVISOR_GATE_A_DATE:-2026-08-01}
+            - RUST_LOG=info
+        networks:
+            - fks-network
+        restart: unless-stopped
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=advisor,environment=dev"
+
+    # -------------------------------------------------------------------------
     # orb-briefing — ORB decision-support (fks-state:crates/orb-briefing).
     #
     # Sends the operator two Discord messages per weekday: the ~08:30 ET

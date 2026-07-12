@@ -264,6 +264,8 @@ resolve_build_pins() {
     local janus_ref="${JANUS_REF:-main}"
     local web_repo="${WEB_REPO:-https://github.com/nuniesmith/fks-web}"
     local web_ref="${WEB_REF:-main}"
+    local spawner_repo="${SPAWNER_REPO:-}"
+    local spawner_ref="${SPAWNER_REF:-main}"
     if [ -z "${JANUS_COMMIT:-}" ] && [ -n "$janus_repo" ]; then
         JANUS_COMMIT=$(git ls-remote "$janus_repo" "$janus_ref" 2>/dev/null | head -1 | cut -f1)
         export JANUS_COMMIT
@@ -271,6 +273,10 @@ resolve_build_pins() {
     if [ -z "${WEB_COMMIT:-}" ] && [ -n "$web_repo" ]; then
         WEB_COMMIT=$(git ls-remote "$web_repo" "$web_ref" 2>/dev/null | head -1 | cut -f1)
         export WEB_COMMIT
+    fi
+    if [ -z "${SPAWNER_COMMIT:-}" ] && [ -n "$spawner_repo" ]; then
+        SPAWNER_COMMIT=$(git ls-remote "$spawner_repo" "$spawner_ref" 2>/dev/null | head -1 | cut -f1)
+        export SPAWNER_COMMIT
     fi
     if [ -n "${JANUS_COMMIT:-}" ]; then
         info "janus build pinned to ${JANUS_COMMIT:0:9} (${janus_ref})"
@@ -281,6 +287,13 @@ resolve_build_pins() {
         info "webui build pinned to ${WEB_COMMIT:0:9} (${web_ref})"
     else
         warn "webui build UNPINNED (ls-remote failed?) — clone layer may come from cache"
+    fi
+    if [ -n "$spawner_repo" ]; then
+        if [ -n "${SPAWNER_COMMIT:-}" ]; then
+            info "spawner build pinned to ${SPAWNER_COMMIT:0:9} (${spawner_ref})"
+        else
+            warn "spawner build UNPINNED (ls-remote failed?) — clone layer may come from cache"
+        fi
     fi
     return 0
 }

@@ -27,6 +27,14 @@
 #   25     — Spawner schema       (bot_configs / bot_runs)
 #   26     — Exchange secrets     (exchange_secrets — WebUI Phase E)
 #   27     — Notification channels (notification_channels — Discord webhooks)
+#   28     — Net-worth history    (net_worth_snapshots)
+#   29     — Treasury             (transfers ledger + accounts registry)
+#   30     — Edge factory         (edges registry + backtest_runs ledger)
+#   31     — UI layouts           (ui_layouts — server-side saved dock layouts)
+#
+# ⚠️ Every src/sql/{janus,spawner}/*.sql file MUST be COPY'd below — initdb
+# only runs on an EMPTY volume, so a missing script here means a fresh-host
+# (or volume-loss) bootstrap silently drops that schema.
 #
 # Rebuild whenever SQL files change:
 #   docker compose build postgres
@@ -87,3 +95,9 @@ COPY src/sql/spawner/007_treasury.sql                     /docker-entrypoint-ini
 # its own results back)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/008_edge_factory.sql                 /docker-entrypoint-initdb.d/30-edge-factory.sql
+
+# ---------------------------------------------------------------------------
+# Phase 9 — UI layouts (ruby_db) — ui_layouts
+# (server-side saved dock layouts so /workspace layouts follow the operator)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/005_ui_layouts.sql                   /docker-entrypoint-initdb.d/31-ui-layouts.sql

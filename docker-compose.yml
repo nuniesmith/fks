@@ -1212,6 +1212,7 @@ services:
                 SERVICE_PORT: "8090"
                 REPO_URL: ${SPAWNER_REPO:-}
                 REPO_REF: ${SPAWNER_REF:-main}
+                REPO_COMMIT: ${SPAWNER_COMMIT:-}
         image: nuniesmith/fks:spawner
         container_name: fks_bot_spawner
         restart: unless-stopped

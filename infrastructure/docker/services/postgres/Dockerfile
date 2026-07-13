@@ -31,6 +31,7 @@
 #   29     — Treasury             (transfers ledger + accounts registry)
 #   30     — Edge factory         (edges registry + backtest_runs ledger)
 #   31     — UI layouts           (ui_layouts — server-side saved dock layouts)
+#   32     — Backtest role        (fks_backtest — scoped creds for backtest containers)
 #
 # ⚠️ Every src/sql/{janus,spawner}/*.sql file MUST be COPY'd below — initdb
 # only runs on an EMPTY volume, so a missing script here means a fresh-host
@@ -44,6 +45,8 @@
 #   POSTGRES_PASSWORD  — shared password
 #   JANUS_DB           — Janus database name               (default: janus_db)
 #   RUBY_DB            — Spawner database name (legacy name) (default: ruby_db)
+#   BACKTEST_DB_PASSWORD — password for the scoped fks_backtest role (009);
+#                        empty/unset = role created but not loggable-into
 # =============================================================================
 
 FROM postgres:16-alpine
@@ -101,3 +104,12 @@ COPY src/sql/spawner/008_edge_factory.sql                 /docker-entrypoint-ini
 # (server-side saved dock layouts so /workspace layouts follow the operator)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/005_ui_layouts.sql                   /docker-entrypoint-initdb.d/31-ui-layouts.sql
+
+# ---------------------------------------------------------------------------
+# Phase 10 — Backtest role (cluster + ruby_db) — fks_backtest
+# (scoped LOGIN role handed to one-shot factory backtest containers via
+# BACKTEST_DB_URL: SELECT + UPDATE(status,results,finished_at) on
+# backtest_runs ONLY — never the spawner's full fks_user credentials.
+# Must run AFTER 30-edge-factory.sql, which creates backtest_runs.)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/009_backtest_role.sql                /docker-entrypoint-initdb.d/32-backtest-role.sql

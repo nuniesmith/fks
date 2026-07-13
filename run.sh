@@ -66,6 +66,23 @@ fi
 TAILSCALE_IP="${TAILSCALE_IP:-}"
 
 # ---------------------------------------------------------------------------
+# Compose profile "state" — private-sibling autodetection
+# ---------------------------------------------------------------------------
+# advisor + orb-briefing build from the PRIVATE sibling repo ../fks-state and
+# are gated behind the compose profile "state" so a fresh host with only the
+# public fks repo can still `./run.sh all`. When the sibling checkout exists,
+# auto-enable the profile (MERGED into any COMPOSE_PROFILES from .env, not
+# overwritten) so behavior on a full checkout is unchanged. Bare
+# `docker compose` users without run.sh: set COMPOSE_PROFILES=state in .env.
+if [ -d "$SCRIPT_DIR/../fks-state" ]; then
+    case ",${COMPOSE_PROFILES:-}," in
+        *,state,*) ;; # already listed
+        *) COMPOSE_PROFILES="${COMPOSE_PROFILES:+${COMPOSE_PROFILES},}state" ;;
+    esac
+    export COMPOSE_PROFILES
+fi
+
+# ---------------------------------------------------------------------------
 # Colours
 # ---------------------------------------------------------------------------
 RED='\033[0;31m'
@@ -1027,6 +1044,14 @@ cmd_all() {
 
     local demo_profile=""
     [ "$with_demo" = true ] && demo_profile="--profile demo"
+    # A --profile flag OVERRIDES COMPOSE_PROFILES (compose does not merge
+    # them), so re-assert the auto-enabled "state" profile alongside demo or
+    # advisor/orb-briefing would silently drop out of this build/up.
+    if [ -n "$demo_profile" ]; then
+        case ",${COMPOSE_PROFILES:-}," in
+            *,state,*) demo_profile="$demo_profile --profile state" ;;
+        esac
+    fi
 
     resolve_build_pins
     log "Building service images..."
@@ -1178,6 +1203,14 @@ cmd_fresh() {
 
     local demo_profile=""
     [ "$with_demo" = true ] && demo_profile="--profile demo"
+    # A --profile flag OVERRIDES COMPOSE_PROFILES (compose does not merge
+    # them), so re-assert the auto-enabled "state" profile alongside demo or
+    # advisor/orb-briefing would silently drop out of this build/up.
+    if [ -n "$demo_profile" ]; then
+        case ",${COMPOSE_PROFILES:-}," in
+            *,state,*) demo_profile="$demo_profile --profile state" ;;
+        esac
+    fi
 
     resolve_build_pins
     log "Building service images ..."

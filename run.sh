@@ -955,16 +955,29 @@ cmd_build_redis() {
 # the `fks-bot-` prefix the spawner whitelists (ALLOWED_IMAGE_PREFIX).
 cmd_build_bots() {
     header "Building Reference Bot Images"
+    # The reference bots moved to the fks-spawner repo in the #196 prune (their
+    # crates path-dep ../../crates/crypto-bot-core, so the build CONTEXT is the
+    # fks-spawner repo ROOT, not this repo). Build from the sibling checkout.
+    local spawner_dir="${SPAWNER_DIR:-$(dirname "$SCRIPT_DIR")/fks-spawner}"
+    if [ ! -d "$spawner_dir/bots" ]; then
+        err "fks-spawner checkout not found at ${spawner_dir} (set SPAWNER_DIR). The bots live there since #196."
+        return 1
+    fi
     local rc=0
     local bots=(
-        "fks-bot-example:infrastructure/docker/services/fks-bot-example/Dockerfile"
-        "fks-bot-crypto-demo:infrastructure/docker/services/crypto-demo/Dockerfile"
+        "fks-bot-example:bots/fks-bot-example/Dockerfile"
+        "fks-bot-crypto-demo:bots/crypto-demo/Dockerfile"
     )
     for spec in "${bots[@]}"; do
         local tag="${spec%%:*}"
         local dockerfile="${spec#*:}"
-        info "Building ${tag}:latest"
-        if docker build -f "$dockerfile" -t "${tag}:latest" .; then
+        if [ ! -f "$spawner_dir/$dockerfile" ]; then
+            err "${tag}: ${dockerfile} not found under ${spawner_dir}"
+            rc=1
+            continue
+        fi
+        info "Building ${tag}:latest (context: ${spawner_dir})"
+        if docker build -f "$spawner_dir/$dockerfile" -t "${tag}:latest" "$spawner_dir"; then
             ok "${tag}:latest built"
         else
             err "${tag} build failed"

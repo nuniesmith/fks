@@ -1266,6 +1266,17 @@ services:
             # Shared secret nginx forwards on every proxied request.
             # Empty = dev mode (auth disabled).
             - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
+            # Fail closed (refuse to boot) when the internal token is unset,
+            # instead of the silent dev-passthrough. Off by default.
+            - REQUIRE_INTERNAL_TOKEN=${REQUIRE_INTERNAL_TOKEN:-false}
+            # Edge-decay: weekly re-run of every active edge's backtest so the
+            # Sunday advisor report can show drift vs the prior run. Default
+            # OFF; the schedule (UTC) defaults to Sun 16:00 (~6h before the
+            # Sun 18:00 ET advisor report). Needs BACKTEST_DB_URL (above).
+            - EDGE_DECAY_ENABLED=${EDGE_DECAY_ENABLED:-false}
+            - EDGE_DECAY_WEEKDAY=${EDGE_DECAY_WEEKDAY:-0}
+            - EDGE_DECAY_HOUR_UTC=${EDGE_DECAY_HOUR_UTC:-16}
+            - EDGE_DECAY_MINUTE_UTC=${EDGE_DECAY_MINUTE_UTC:-0}
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
             - prometheus_sd:/prometheus-sd

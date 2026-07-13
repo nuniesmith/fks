@@ -38,6 +38,12 @@ POSTGRES_USER="${POSTGRES_USER:-fks_user}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST="${FKS_STATE_MANIFEST:-$REPO_ROOT/state.manifest}"
+# Archive anchor: the manifest references sibling repos via `../fks-spawner`,
+# `../fks-state`, so files live ABOVE REPO_ROOT. Anchor the snapshot at the
+# parent dir and store every file by its path relative to it — a plain
+# `files/<manifest-path>` layout collapsed the `..` out of the staging dir
+# (the sibling configs escaped `files/` and import never restored them).
+FKS_BASE="$(dirname "$REPO_ROOT")"
 cd "$REPO_ROOT"
 
 # ── Output helpers (never print secret values) ───────────────────────────────
@@ -51,7 +57,11 @@ need_age() {
   command -v age-keygen >/dev/null 2>&1 || die "age-keygen not found (ships with age)"
 }
 
-manifest_paths() { grep -vE '^\s*(#|$|db:)' "$MANIFEST" 2>/dev/null || true; }
+# File lines carry an optional `file:` prefix (symmetric with `db:`); strip it
+# so the remainder is a bare glob. Without the strip, `compgen -G "file:.env"`
+# matched nothing and every file — incl. .env + the live bot configs — was
+# silently skipped while the DB dump succeeded (looked like a working backup).
+manifest_paths() { grep -vE '^\s*(#|$|db:)' "$MANIFEST" 2>/dev/null | sed -E 's/^\s*file:\s*//' || true; }
 manifest_dbs()   { grep -E '^\s*db:' "$MANIFEST" 2>/dev/null | sed -E 's/^\s*db:\s*//' || true; }
 
 # ── init ─────────────────────────────────────────────────────────────────────
@@ -125,9 +135,16 @@ cmd_export() {
     local matches; matches=$(compgen -G "$pat" 2>/dev/null || true)
     [[ -z "$matches" ]] && { warn "skip (no match): $pat"; continue; }
     while IFS= read -r f; do
-      mkdir -p "$payload/files/$(dirname "$f")"
-      cp -a "$f" "$payload/files/$f"
-      log "+ file $f"
+      # Store by path relative to FKS_BASE so `..` siblings survive the tar
+      # (and import restores them to the right place). Refuse anything that
+      # still escapes the anchor rather than silently mis-storing it.
+      local rel; rel="$(realpath -m --relative-to="$FKS_BASE" "$f")"
+      case "$rel" in
+        ../*|/*) warn "skip (outside $FKS_BASE): $f"; continue ;;
+      esac
+      mkdir -p "$payload/files/$(dirname "$rel")"
+      cp -a "$f" "$payload/files/$rel"
+      log "+ file $rel"
     done <<<"$matches"
   done < <(manifest_paths)
 
@@ -173,21 +190,25 @@ cmd_import() {
   [[ -f "$snap" ]] || die "snapshot not found: $snap (try: $0 list)"
 
   local stage; stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
+  # export archives the payload CONTENTS at the root (`tar -C "$payload" .`),
+  # so the snapshot holds ./MANIFEST.txt, ./files/, ./db/ — there is no
+  # `payload/` prefix. (This path referenced one, so restore never found a
+  # single file.)
   age -d -i "$FKS_AGE_KEY" "$snap" | tar -C "$stage" -xzf -
-  log "decrypted $(basename "$snap"):"; sed 's/^/    /' "$stage/payload/MANIFEST.txt" 2>/dev/null || true
+  log "decrypted $(basename "$snap"):"; sed 's/^/    /' "$stage/MANIFEST.txt" 2>/dev/null || true
 
   if [[ "${DRY_RUN:-0}" == "1" ]]; then
-    log "DRY RUN — files that WOULD be restored:"; ( cd "$stage/payload/files" && find . -type f | sed 's|^\.|    '"$REPO_ROOT"'|' )
-    log "DB dumps available:"; ls -1 "$stage/payload/db" 2>/dev/null | sed 's/^/    /'
-    return 0
+    log "DRY RUN — files that WOULD be restored:"; ( cd "$stage/files" && find . -type f | sed 's|^\.|    '"$FKS_BASE"'|' )
+    log "DB dumps available:"; ls -1 "$stage/db" 2>/dev/null | sed 's/^/    /'
+    trap - EXIT; rm -rf "$stage"; return 0
   fi
-  printf '\033[33mRestore over the working tree at %s? Existing files WILL be overwritten. [y/N] \033[0m' "$REPO_ROOT"
+  printf '\033[33mRestore over the working tree under %s? Existing files WILL be overwritten. [y/N] \033[0m' "$FKS_BASE"
   read -r ans; [[ "$ans" == "y" || "$ans" == "Y" ]] || die "aborted"
 
-  ( cd "$stage/payload/files" && tar -cf - . ) | tar -C "$REPO_ROOT" -xf -
-  log "restored files into $REPO_ROOT"
-  if compgen -G "$stage/payload/db/*.sql" >/dev/null && $FKS_COMPOSE ps "$POSTGRES_SERVICE" >/dev/null 2>&1; then
-    for f in "$stage"/payload/db/*.sql; do
+  ( cd "$stage/files" && tar -cf - . ) | tar -C "$FKS_BASE" -xf -
+  log "restored files into $FKS_BASE"
+  if compgen -G "$stage/db/*.sql" >/dev/null && $FKS_COMPOSE ps "$POSTGRES_SERVICE" >/dev/null 2>&1; then
+    for f in "$stage"/db/*.sql; do
       local db; db="$(basename "$f" .sql)"
       log "restoring db rows → $db (psql)"; $FKS_COMPOSE exec -T "$POSTGRES_SERVICE" psql -q -U "$POSTGRES_USER" -d "$db" < "$f" || warn "psql restore had errors for $db (often duplicate rows — review)"
     done

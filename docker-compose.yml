@@ -83,6 +83,10 @@ services:
             - POSTGRES_USER=${POSTGRES_USER:-fks_user}
             - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
             - RUBY_DB=${RUBY_DB:-ruby_db}
+            # Password for the scoped fks_backtest role (32-backtest-role.sql,
+            # consumed via psql \getenv). Empty = role is created without a
+            # usable password (fails closed); re-apply the script to set it.
+            - BACKTEST_DB_PASSWORD=${BACKTEST_DB_PASSWORD:-}
             - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
         ports:
             - "127.0.0.1:5432:5432"
@@ -1252,6 +1256,13 @@ services:
             # Empty/unset = stateless mode (the spawner still runs).
             # Schema: src/sql/ruby/007_spawner.sql
             - SPAWNER_DATABASE_URL=postgres://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${RUBY_DB:-ruby_db}?sslmode=disable
+            # Scoped URL handed to one-shot factory backtest containers instead
+            # of the spawner's own full-privilege URL above. The fks_backtest
+            # role (src/sql/spawner/009_backtest_role.sql) can ONLY read
+            # backtest_runs and update its status/results/finished_at — no
+            # exchange_secrets, no treasury tables. Consumed by the spawner
+            # once the matching fks-spawner change lands; ignored until then.
+            - BACKTEST_DB_URL=postgresql://fks_backtest:${BACKTEST_DB_PASSWORD:-}@fks_postgres:5432/${RUBY_DB:-ruby_db}
             # Shared secret nginx forwards on every proxied request.
             # Empty = dev mode (auth disabled).
             - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
@@ -1363,7 +1374,14 @@ services:
     # (fks-state:crates/advisor). Synthesizes spawner treasury/edge state into
     # short advice: daily 17:30 ET + Sunday 18:00 ET weekly report. Advisory
     # only; reads the spawner HTTP API, never trades.
+    #
+    # Profile "state": builds from the PRIVATE sibling checkout ../fks-state,
+    # which a fresh public-only host doesn't have — without the gate,
+    # `./run.sh all` dies at "unable to prepare context: ../fks-state".
+    # run.sh auto-enables the profile when ../fks-state exists; for bare
+    # docker compose set COMPOSE_PROFILES=state in .env.
     advisor:
+        profiles: ["state"]
         build:
             context: ../fks-state
             dockerfile: crates/advisor/Dockerfile
@@ -1400,7 +1418,12 @@ services:
     # every message); the rithmic-connector becomes the real-time source later.
     # Plan time is 10:00 (not 09:45) so the delayed 09:30–09:45 window is
     # complete; move earlier once real-time data lands.
+    #
+    # Profile "state": same gate as advisor — builds from the PRIVATE sibling
+    # ../fks-state. run.sh auto-enables it when the checkout exists; bare
+    # docker compose users set COMPOSE_PROFILES=state in .env.
     orb-briefing:
+        profiles: ["state"]
         build:
             context: ../fks-state
             dockerfile: crates/orb-briefing/Dockerfile

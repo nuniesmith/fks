@@ -174,8 +174,14 @@ cmd_export() {
   ln -sf "$(basename "$out")" "$FKS_STATE_DIR/snapshots/latest.tar.gz.age"
   log "encrypted snapshot → $out ($(du -sh "$out" | cut -f1))"
 
+  # The snapshot repo shares a branch with the code repo (both push to
+  # fks-state), so a code merge between snapshots leaves this clone behind and
+  # a plain push is rejected non-fast-forward. Rebase our snapshot commit onto
+  # the remote first (snapshots touch only snapshots/, code touches only
+  # crates//bots/ — they never conflict) so the backup stays automatable.
   ( cd "$FKS_STATE_DIR" && git add -A && git commit -q -m "snapshot $ts (${1:-manual})" \
-      && { git push -q origin HEAD 2>/dev/null && log "pushed to $FKS_STATE_REPO" || warn "commit done; push failed (set the remote / create the repo, then 'git -C $FKS_STATE_DIR push')"; } )
+      && { local br; br="$(git rev-parse --abbrev-ref HEAD)"; git pull -q --rebase origin "$br" 2>/dev/null || true; } \
+      && { git push -q origin HEAD 2>/dev/null && log "pushed to $FKS_STATE_REPO" || warn "commit done; push failed (run: git -C $FKS_STATE_DIR pull --rebase && git push)"; } )
   trap - EXIT; rm -rf "$stage"
 }
 

@@ -1,9 +1,15 @@
 # =============================================================================
 # FKS — Production Environment Overrides
 # =============================================================================
-# Production-ready configuration with enhanced security and resource limits.
+# ⚠️ UNMAINTAINED / DRIFTED (flagged 2026-07-13). This override predates the
+# whole treasury/spawner/advisor/edge-factory era: it has NO spawner, advisor,
+# orb-briefing, EDGE_DECAY_*, or BACKTEST_DB_URL config, so layering it would
+# resurrect a pre-treasury stack. The live deploy on oryx runs the base
+# docker-compose.yml via `./run.sh` (which also applies the `state` profile and
+# sha-pins clones) — it does NOT use this file. Do not `-f` this in production
+# until it is rewritten against the current base compose, or delete it.
 #
-# Usage:
+# Usage (do not use as-is — see the warning above):
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Features:

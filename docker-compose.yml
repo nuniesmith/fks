@@ -79,6 +79,13 @@ services:
             - SETGID
             - SETUID
         environment:
+            # The image's initdb creates POSTGRES_DB as the first database and
+            # runs the init scripts connected to it. src/sql/janus/001_init.sql
+            # does `\connect :janus_db` (= POSTGRES_DB), so this MUST name
+            # janus_db — without it a FRESH volume created only `postgres` and
+            # 001 died with "database janus_db does not exist", aborting the
+            # whole bootstrap. (Ignored on a non-empty volume, so safe live.)
+            - POSTGRES_DB=${JANUS_DB:-janus_db}
             - JANUS_DB=${JANUS_DB:-janus_db}
             - POSTGRES_USER=${POSTGRES_USER:-fks_user}
             - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
@@ -1277,6 +1284,18 @@ services:
             - EDGE_DECAY_WEEKDAY=${EDGE_DECAY_WEEKDAY:-0}
             - EDGE_DECAY_HOUR_UTC=${EDGE_DECAY_HOUR_UTC:-16}
             - EDGE_DECAY_MINUTE_UTC=${EDGE_DECAY_MINUTE_UTC:-0}
+            # P0.6 read-only treasury nodes (idle until the operator supplies
+            # inputs). Without this glue the spawner reads only its own env, so
+            # setting BTC_WATCH_XPUB / RITHMIC_SAMPLER_URL in .env would never
+            # reach it and the watchers would silently stay off.
+            - BTC_WATCH_XPUB=${BTC_WATCH_XPUB:-}
+            - BTC_WATCH_ADDRESSES=${BTC_WATCH_ADDRESSES:-}
+            - BTC_WATCH_ACCOUNT_ID=${BTC_WATCH_ACCOUNT_ID:-btc-cold}
+            - BTC_WATCH_GAP=${BTC_WATCH_GAP:-20}
+            - BTC_WATCH_INTERVAL_SECS=${BTC_WATCH_INTERVAL_SECS:-3600}
+            - ESPLORA_API_BASE=${ESPLORA_API_BASE:-}
+            - RITHMIC_SAMPLER_URL=${RITHMIC_SAMPLER_URL:-}
+            - RITHMIC_SAMPLE_INTERVAL_SECS=${RITHMIC_SAMPLE_INTERVAL_SECS:-300}
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
             - prometheus_sd:/prometheus-sd

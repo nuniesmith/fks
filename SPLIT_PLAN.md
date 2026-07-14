@@ -2,7 +2,9 @@
 
 > Operational blueprint for cracking `fks` into multiple repos.
 >
-> **Last updated:** 2026-05-31
+> **Last updated:** 2026-07-13 (Phases 2/4/5 reconciled: fks-spawner split
+> done, fks-web is the canonical UI, and the end-state reversed to a
+> **public** orchestrator + private `fks-state` — see `docs/GO_PUBLIC.md`)
 >
 > ## ✅ Status: the split has executed
 >
@@ -198,7 +200,9 @@ self-contained — readable without any context from `fks`.
       → crates.io (0.2.1). _Bare `rustrade` was taken → facade is `rustrade-framework`._
 - [x] `jflow-core` → crates.io (0.1.0).
 - [ ] Finish the `jflow-*` publish run (Tier-0 leaves → Tier-1+ bottom-up).
-- [ ] `spawner` → crates.io / Docker Hub (still in-tree; not yet its own repo).
+- [x] `spawner` → own repo — **done 2026-07 as `fks-spawner`** (fks #196):
+      spawner service + `crypto-bot-core` SDK + all bots moved there; consumed
+      as a git-clone Docker image (`SPAWNER_REPO`, sha-pinned), not crates.io.
 
 ### Phase 3 — Consume the published crates 🔄 in progress ← we are here
 - [x] Repos extracted; `fks` carries no library path-deps on them.
@@ -216,13 +220,20 @@ self-contained — readable without any context from `fks`.
       Rebuild whatever long-tail features you need as janus crates (or a Rithmic
       sidecar). See [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).
       The spawner's `ruby_db` schema was preserved in `src/sql/spawner/`.
-- [ ] `src/web/` → `github.com/nuniesmith/fks-web` (Dockerfile already git-clone capable; flip when ready).
+- [x] `src/web/` → `github.com/nuniesmith/fks-web` — done; `WEB_REPO` defaults
+      to the fks-web git-clone build. The in-tree `src/web` survives only as a
+      dev fallback (removal tracked in `docs/GO_PUBLIC.md` §4).
 
-### Phase 5 — `fks` is the private orchestrator ⬜ not started
-- [ ] Repo flips `private`.
-- [ ] New top-level `strategies/` directory for the actual trading IP.
-- [ ] All service images `git clone` external repos or pull pre-built images
-      from a private registry.
+### Phase 5 — `fks` is the ~~private~~ **public** orchestrator ✅ done (direction reversed)
+The end-state flipped: instead of taking fks private, everything sensitive
+moved OUT (encrypted `fks-state` snapshots + the private `fks-state` repo for
+trading edges — see `docs/GO_PUBLIC.md` and `docs/STATE_BACKUP.md`), and the
+repo went **public** in 2026-07.
+- [x] Repo visibility settled — **public** (was: "flips private").
+- [x] Trading IP home — the **private `fks-state` repo** (`bots/crypto-futures`,
+      orb/advisor crates), superseding the planned in-tree `strategies/`.
+- [x] All service images `git clone` external repos (janus / fks-web /
+      fks-spawner), sha-pinned at build by `run.sh`.
 
 ---
 

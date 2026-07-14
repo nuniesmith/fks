@@ -1,7 +1,7 @@
 # fks — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks`
-> **Last synced:** 2026-07-09 — see **🗺️ NEXT PHASES** below for the current plan
+> **Last synced:** 2026-07-13 — see **🗺️ NEXT PHASES** below for the current plan
 >
 > This file covers **cross-cutting** orchestration work — consuming the
 > external repos/crates, docker-compose, Dockerfiles, CI/CD, Postgres
@@ -25,7 +25,7 @@
 
 ---
 
-# 🗺️ NEXT PHASES — prioritized plan (synced 2026-06-14 · verified 2026-06-18 · updated 2026-07-09)
+# 🗺️ NEXT PHASES — prioritized plan (synced 2026-06-14 · verified 2026-06-18 · updated 2026-07-13)
 
 > **Read this section first.** It's the master roadmap written after a large
 > live-stack session. Everything *below the next `---`* (the older "Status
@@ -101,6 +101,45 @@ roadmap had drifted). Confirmed against current `main`:
   sampler (#188) + db-gated `GET /net-worth` read endpoint (#189); the history
   panel shipped in fks-web.
 
+### ✅ Shipped 2026-07-10 → 07-13 — do NOT redo
+- **The bot factory left the tree (#196).** `crates/spawner`, `crates/crypto-bot-core`,
+  and all of `bots/` moved to the **`fks-spawner`** repo; `rithmic-connector`
+  moved to the private **`fks-state`** repo. The spawner image now always
+  git-clones (`SPAWNER_REPO`), **pinned to the remote head sha** via
+  `SPAWNER_COMMIT` (#201); `./run.sh build-bots` builds the reference bot
+  images from the sibling `../fks-spawner` checkout (#204).
+- **fks went PUBLIC.** `nuniesmith/fks` is public (the GO_PUBLIC.md flip);
+  the private surface lives in `fks-state`. The old `nuniesmith/crypto` repo
+  is **deleted** from GitHub (local clone kept).
+- **SQL layer grew (all baked into the postgres image, #201/#202):** treasury
+  ledger + accounts registry (`007`, #197), edge factory — edges registry +
+  `backtest_runs` ledger (`008`, #199), `ui_layouts` (`005`, #184), and the
+  **scoped `fks_backtest` role** (`009`, #202) handed to one-shot backtest
+  containers via `BACKTEST_DB_URL` (`BACKTEST_DB_PASSWORD` in `.env`).
+- **fks-state services in compose:** `orb-briefing` (#198) + `advisor` (#200)
+  behind the **`state` profile** (#202) — `run.sh` auto-enables it when
+  `../fks-state` exists, so a public-only checkout still comes up clean.
+- **Encrypted backups are real now:** `scripts/fks-state.sh` fixed (#203 —
+  `file:` prefix strip, sibling-path anchoring at the parent dir, import
+  payload path) + export rebases before push so a code merge can't break the
+  backup (#206). Live + **restore-verified** on the prod host.
+- **Spawner env passthrough (#205):** `EDGE_DECAY_*` (weekly edge-decay
+  backtest scheduler, default OFF / Sun 16:00 UTC when armed) +
+  `REQUIRE_INTERNAL_TOKEN` (opt-in fail-closed internal auth).
+- **fks-spawner side (its own repo):** scoped `BACKTEST_DB_URL` for backtest
+  containers + per-account `/net-worth` windows + RUNNING-only bot cap (#4),
+  net-PnL W/L counts + `REQUIRE_INTERNAL_TOKEN` posture (#5), weekly
+  edge-decay scheduler (#6).
+
+**Known open (found en route, not yet fixed):**
+- [ ] Fresh-volume bootstrap needs `POSTGRES_DB=janus_db` in the postgres env
+      or `10-janus-api-keys.sql` dies (initdb runs it against the default DB) —
+      found during #202 testing.
+- [ ] `prometheus.yml` still carries the stale `fks-bots-transitional` static
+      job (systemd-era leftover) — remove it.
+- [ ] Snapshots share `main` with code in `fks-state` (the #206 rebase is a
+      workaround); a dedicated snapshots branch/repo is the clean fix.
+
 ### Phase A — Live trading real & safe  · *mostly DONE*
 - [x] 9-gate execution gate wired + flag-gated (`JANUS_GATE_ENFORCE`), 37 tests.
 - [x] `entry_price` producer gap (janus #118); warmup-from-history (#119/#120).
@@ -150,14 +189,18 @@ roadmap had drifted). Confirmed against current `main`:
       sole QuestDB/Postgres/Redis writer — closes the two-data-paths divergence.
       *Effort M–L · Risk M (routing). DoD: no 502s; WebUI reads janus; one data path.*
 
-### Phase D — Split-to-private orchestrator  · *structural · lower urgency*
-- [ ] `SPLIT_PLAN.md` Phase 5: make fks **private**; add top-level
-      `strategies/` for trading IP; all images → git-clone external / private
-      registry.
-- [ ] Carve out `crates/spawner` → own repo/crate (crates.io `spawner` is taken →
-      use **`fks-spawner`**; add Cargo metadata + `LICENSE`). See
-      `crates/spawner/TODO.md`.
-- [ ] Flip `src/web` → `fks-web` repo "when ready". *Effort L · Risk M–H.*
+### Phase D — Split the orchestrator  · *✅ DONE (direction reversed: public, not private)*
+- [x] ~~`SPLIT_PLAN.md` Phase 5: make fks **private**~~ — **reversed**: fks is
+      **public** (see `docs/GO_PUBLIC.md`); the private surface (trading edges,
+      state snapshots, funded-side services) lives in the **`fks-state`** repo
+      instead of an in-tree `strategies/`. All service images git-clone
+      external repos (janus / fks-web / fks-spawner), sha-pinned by `run.sh`.
+- [x] Carve out `crates/spawner` → own repo — **done as `fks-spawner`** (#196),
+      consumed as a git-clone Docker image (not crates.io); the bots + the
+      `crypto-bot-core` SDK moved with it.
+- [x] Flip `src/web` → `fks-web` repo — done; `WEB_REPO` defaults to the
+      git-clone build. The in-tree `src/web` remains only as a dev fallback
+      (removal tracked in `docs/GO_PUBLIC.md` §4).
 
 ### Phase E — CI / supply-chain / hygiene  · *cheap, parallelizable*
 - [x] **rustcode CI-B (security):** DONE — `cargo-audit` + `cargo-deny` jobs +
@@ -184,13 +227,13 @@ roadmap had drifted). Confirmed against current `main`:
       `fks/.env`: `KUCOIN_API_KEY/SECRET/PASSPHRASE` + `KRAKEN_API_KEY/SECRET`
       (compose bridges KuCoin → the bot's `KC_*`).
 
-### Recommended order for a fresh session  *(updated 2026-07-09)*
-Most of **C** and **E** are done (verified-2026-06-18 block) and **A2 is closed**
-(shipped-2026-07 block: typing + 0.9.0 publish + real kraken specs). The
-remaining non-blocked work: **B** (when goldens + GPU exist, your action) →
-**D** (split-to-private, last — the crypto-repo dissolution already moved the
-trading edges into the private `fks-state`). Live KuCoin order test whenever
-ready (**rotate keys first**).
+### Recommended order for a fresh session  *(updated 2026-07-13)*
+Most of **C** and **E** are done (verified-2026-06-18 block), **A2 is closed**
+(shipped-2026-07 block: typing + 0.9.0 publish + real kraken specs), and **D is
+done** (fks-spawner split + the public flip — see the 07-10→07-13 block). The
+remaining non-blocked work: **B** (when goldens + GPU exist, your action) and
+the "Known open" list above. Live KuCoin order test whenever ready (**rotate
+keys first**).
 
 ### Ops quick-reference
 - Rebuild janus from local source (no push): `docker build --target workspace -f
@@ -198,7 +241,8 @@ ready (**rotate keys first**).
   --build-arg RUST_VERSION=1.94.1 -t nuniesmith/fks:janus ~/github/janus` then
   `docker compose up -d --no-deps janus`. **`cargo fmt` before pushing janus Rust**
   (the `rust check` gate is rustfmt; #119 merged red, fixed by #120).
-- Rebuild the demo bot: `docker compose build crypto-demo`.
+- Rebuild the demo bot: `docker compose build crypto-demo` (source + Dockerfile
+  live in the sibling `../fks-spawner` checkout since #196).
 - Run the demo: `docker compose --profile demo up -d`. Health: `./run.sh health`.
 - janus default is **operator-start** (`JANUS_AUTO_START=false`); set `=true` to
   auto-run the brain for verification.

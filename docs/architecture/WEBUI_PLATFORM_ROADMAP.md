@@ -43,7 +43,8 @@
   `fks-bot-crypto-spot` (dry-run, real keys injected) and
   `fks-bot-crypto-funding` (paper) — via crypto PR #4; the desktop systemd
   units are retired. (The images now build from the post-migration homes:
-  spot from the fks root, funding from the `fks-state` root.) Remaining: the
+  spot from the fks-spawner root since the #196 prune, funding from the
+  `fks-state` root.) Remaining: the
   deliberate live flip for spot, the funding Postgres `StateStore` (now in
   the private `fks-state` repo, the edges' home), a future read-only BTC
   xpub watcher (§4) — and durable net-worth history, since **shipped**
@@ -146,23 +147,23 @@ Supersedes the "transitional systemd" row in
   `fks.mode=paper`, `fks.market=futures`). Images built from crypto PR #4
   (*"feat(docker): fks-bot spawner images for spot-portfolio and
   kucoin-futures"*, merged; with the crypto repo since dissolved, the spot
-  image builds in-tree — `docker build -f bots/spot-portfolio/Dockerfile -t
-  fks-bot-crypto-spot:latest .` from the fks root — and the funding image
-  from the `fks-state` root). No `spot-portfolio`/`funding-paper` user
-  systemd units remain on this host; the desktop units are disabled.
+  image builds from the fks-spawner sibling — `docker build -f
+  bots/spot-portfolio/Dockerfile -t fks-bot-crypto-spot:latest .` from the
+  fks-spawner root (post-#196) — and the funding image from the `fks-state`
+  root). No `spot-portfolio`/`funding-paper` user systemd units remain on
+  this host; the desktop units are disabled.
 - **Spot is deliberately dry-run:** the spot `Dockerfile` (now
-  `fks/bots/spot-portfolio/Dockerfile`) bakes the spot
-  TOML with `live = false` and documents that going live *"must be an
+  `fks-spawner/bots/spot-portfolio/Dockerfile` after the #196 prune) bakes the
+  spot TOML with `live = false` and documents that going live *"must be an
   explicit, deliberate override — never the default of whatever someone
-  spawns from the UI."*
-- **Funding state is still ephemeral:** open-trade state
-  (`funding-state-{SYM}.json`) and the PROBE-B paper record
-  (`funding-paper.jsonl`) live in the container's writable layer — a
-  recreate loses them. The durable fix, a `StateStore` trait with file +
-  Postgres impls (`FKS-INTEGRATION.md` Phase-2 item 4a — that plan now lives
-  at `fks-state/bots/crypto-futures/FKS-INTEGRATION.md`), is being
-  implemented in the private `fks-state` repo; this design treats
-  it as in flight and builds on it (§4.2).
+  spawns from the UI."* *(The production live flip has since happened as
+  exactly that kind of explicit override — see P9.)*
+- **Funding state is durable now** *(was ephemeral at survey time)*: the
+  `StateStore` trait with file + Postgres impls (`FKS-INTEGRATION.md`
+  Phase-2 item 4a — that plan now lives at
+  `fks-state/bots/crypto-futures/FKS-INTEGRATION.md`) **shipped** in the
+  private `fks-state` repo — the funding bot resumes its Postgres state
+  across container recreates (verified on the prod host, 2026-07-12).
 - **Net worth today:** the bots export `fks_bot_*` gauges (net worth,
   per-exchange totals, positions) and rich `/status` JSON; the `/exchanges`
   pages read `/status` live. *(At survey time the only history was
@@ -397,23 +398,20 @@ same storage contracts.
 
 With both bots spawner-managed (§1.3), the remaining work is:
 
-1. **The live flip for spot (deliberate, small).** Per the spot
-   Dockerfile's doctrine (`bots/spot-portfolio/Dockerfile`, in this repo
-   post-migration), live must be an explicit variant: a tuned
-   production TOML plus a **live-variant image** (e.g.
-   `fks-bot-crypto-spot-live` baking `live = true` and the tuned config) so
-   that *which image you spawn* is the decision, never a UI env toggle on
-   the dry-run image. Spawn it via a saved `bot_configs` template with
-   secrets injection (all mechanics already exist). Days of work; the
-   caution is the point.
-2. **Funding Postgres `StateStore` — in flight.** The private `fks-state`
-   repo (`bots/crypto-futures`, the edges' post-migration home) is
-   implementing `FKS-INTEGRATION.md` Phase-2 item 4a (a
-   `StateStore` trait — load/save open trade, append paper record — with
-   file + Postgres impls) as of this writing. This roadmap consumes it
-   rather than redesigning it, and leans on its second-order effect: a
-   **queryable trade ledger in Postgres**, which is what the WebUI needs
-   for real trade-history panels (replacing stubbed trade surfaces).
+1. **The live flip for spot (deliberate, small) — ✅ done 2026-07.** Per the
+   spot Dockerfile's doctrine (`bots/spot-portfolio/Dockerfile`, now in
+   fks-spawner), live had to be an explicit operator act. It shipped as the
+   saved `crypto-spot-live` spawn config (`SPOT_LIVE=1` + secrets injection +
+   `REDIS_URL`) rather than the live-variant *image* this item sketched —
+   the decision is still a deliberate config choice, never a default. The
+   dry-run image remains the baseline.
+2. **Funding Postgres `StateStore` — ✅ shipped.** The private `fks-state`
+   repo (`bots/crypto-futures`, the edges' post-migration home) implemented
+   `FKS-INTEGRATION.md` Phase-2 item 4a (a `StateStore` trait — load/save
+   open trade, append paper record — with file + Postgres impls); the
+   funding bot resumes Postgres state across recreates. Its second-order
+   effect stands: a **queryable trade ledger in Postgres**, which is what
+   the WebUI needs for real trade-history panels.
 3. **Net-worth history panels (§4.2).**
 4. **BTC hardware-wallet xpub watcher (§4.3, future).**
 
@@ -642,15 +640,15 @@ except where noted. Effort tags are honest single-person estimates —
 | P1 | **Backfill goes live** | Wire the dormant candle-scan/backfill into unified `run_live_mode` behind `JANUS_CANDLE_SCAN=1`; default symbols from live config | janus | **days (2–4)** | — |
 | P2 | **Indicator discovery** | indicators-ta 0.3 descriptors (§6.1); janus catalog+compute API (§6.2); adapter merge + routing + parity fixture (§6.3) | indicators-ta, janus, fks-web | **~1.5–2 weeks** across 3 PRs, each shippable | — |
 | P3 | **Panel extraction** | `src/lib/panels/` + registry; recompose 3–4 pages (charts, signals, exchanges, bots) as panels; poll-dedupe in `$stores/poll.ts` | fks-web | **~2 weeks** (refactor-heavy; per-page PRs) | — |
-| P4 | **`/workspace` docking** | dockview-core + Svelte 5 adapter; layout persist (localStorage → `ui_layouts` + adapter routes); 3 preset layouts | fks-web, fks (sql) | **~1–1.5 weeks** | P3 |
+| P4 | **`/workspace` docking** — **✅ shipped 2026-07** (fks-web `/workspace` route; server-side layouts via the spawner `ui_layouts` table + API, fks #184, schema `005_ui_layouts.sql`) | dockview-core + Svelte 5 adapter; layout persist (localStorage → `ui_layouts` + adapter routes); 3 preset layouts | fks-web, fks (sql) | — (done) | P3 |
 | P5 | **Net-worth history** — **✅ shipped 2026-07** (fks #188/#189 + fks-web panel) | `net_worth_snapshots` schema; spawner-side `/status` sampler; `NetWorthHistoryPanel` | fks, fks-web | — (done) | schema home resolved: spawner `ruby_db` |
-| P6 | **Secret kinds + webhooks** | `kind` column + `fields` v2 API (§5.1); Discord-webhook provider in picker; spawn/stop/live-flip notifications | fks (spawner, sql), fks-web | **~1 week** | — |
+| P6 | **Secret kinds + webhooks** — **partially shipped 2026-07**: Discord-webhook notifications landed via a dedicated `notification_channels` store + management API (fks #179, schema `004_notifications.sql`) and a spawner-side sender firing on bot lifecycle events (fks #181) — **not** via the §5.1 kind-aware secret store, which remains open | `kind` column + `fields` v2 API (§5.1); Discord-webhook provider in picker; spawn/stop/live-flip notifications | fks (spawner, sql), fks-web | remaining: the §5.1 schema evolution | — |
 | P7 | **Capabilities gating** | `/api/capabilities` + capabilities store; Rithmic-gated nav/panels | fks-web | **days (2–3)** | P6 for kinds (soft) |
 | P8 | **Signed credential verify** | spawner `POST /secrets/{name}/verify` via exchange-apiws; settings-page verification state | fks (spawner), fks-web | **~1 week** (new dep in spawner + per-venue calls + rate limiting) | — |
-| P9 | **Spot live flip** | Tuned TOML + live-variant image; saved spawn template; runbook | fks (`bots/spot-portfolio`) | **days** — deliberately small, gated on operator judgement, not engineering | P5 recommended first (watch history before/after) |
+| P9 | **Spot live flip** — **✅ done 2026-07**: the spot bot runs **live** as a spawner-managed container via the deliberate `SPOT_LIVE=1` override in the saved `crypto-spot-live` spawn config (secrets-injected), rather than the live-variant *image* this row designed — the "explicit operator act" doctrine held, the mechanism differed | Tuned TOML + live-variant image; saved spawn template; runbook | fks-spawner (`bots/spot-portfolio`) | — (done) | P5 recommended first (watch history before/after) |
 | P10 | **News source** | `news` source kind + `news_items` + `/api/news` + `NewsPanel` | janus, fks-web | **~2 weeks** (provider choice adds unknowns) | P3 (panel home); §8.3 decision |
-| P11 | **Multi-asset storage contracts** | Parameterize candle sink table; venue-tagged symbols; `candles_futures` | janus, fks-web (symbol picker) | **~1 week** | best before P12 |
-| P12 | **Rithmic connector** | SDK evaluation spike (**timeboxed 1 week, decides everything after**), then connector container: auth from secret store, trades+depth → QuestDB, source-status registration | new repo/fks, janus | **weeks + unknown** — do not schedule downstream work on it until the spike reports | P11, P7; creds already storable |
+| P11 | **Multi-asset storage contracts** — *partially shipped*: `candles_futures` exists as the rithmic-connector's write target (fks #182); the janus candle-sink parameterization + venue-tagged symbols remain open | Parameterize candle sink table; venue-tagged symbols; `candles_futures` | janus, fks-web (symbol picker) | remainder ~1 week | best before P12 |
+| P12 | **Rithmic connector** — *foundation shipped 2026-07* (fks #180/#182/#183/#185: read-only connector w/ mechanically-enforced doctrine, `candles_futures` persistence, positions/PnL `GET /positions`; spike report: [`RITHMIC_INTEGRATION_SPIKE.md`](RITHMIC_INTEGRATION_SPIKE.md)). Code now lives in **fks-state** `crates/rithmic-connector` (compose `rithmic` profile, runtime-gated `RITHMIC_ENABLED`); **idle until paid dev-kit credentials exist** (spike Phase 0 — the long pole) | SDK evaluation spike (**timeboxed 1 week, decides everything after**), then connector container: auth from secret store, trades+depth → QuestDB, source-status registration | fks-state, janus | remaining gate: **access/conformance**, not engineering | P11, P7; creds already storable |
 | P13 | **xpub watcher** | `kind=watch-only` xpub; derivation + Esplora poller; on-chain rows in net-worth history + `/exchanges` entry | fks or janus, fks-web | **~1 week** (self-hosted Esplora excluded — that's infra, priced separately) | P5, P6 |
 
 Sequencing notes: P1 and P2 are the highest leverage-per-effort and touch
@@ -717,11 +715,11 @@ docker inspect fks-bot-crypto-spot fks-bot-crypto-funding \
   --format '{{.Name}} {{.Config.Labels}}'
 systemctl --user list-unit-files | grep -E "spot|funding"   # → nothing
 
-# Spot image bakes dry-run (spot lives in-tree post crypto-repo dissolution):
-grep -n "live = false" ~/github/fks/bots/spot-portfolio/Dockerfile
+# Spot image bakes dry-run (spot lives in fks-spawner since the #196 prune):
+grep -n "live = false" ~/github/fks-spawner/bots/spot-portfolio/Dockerfile
 
-# Secret store requires key+secret; no kind column:
-sed -n '60,85p' ~/github/fks/crates/spawner/src/models.rs
+# Secret store requires key+secret; no kind column (spawner code → fks-spawner):
+sed -n '60,85p' ~/github/fks-spawner/crates/spawner/src/models.rs
 grep -n "api_secret" ~/github/fks/src/sql/spawner/003_secrets.sql
 
 # Provider picker merged (fks-web #24) incl. Rithmic 3-slot mapping:

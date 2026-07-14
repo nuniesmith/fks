@@ -1261,7 +1261,7 @@ services:
             # role (src/sql/spawner/009_backtest_role.sql) can ONLY read
             # backtest_runs and update its status/results/finished_at — no
             # exchange_secrets, no treasury tables. Consumed by the spawner
-            # once the matching fks-spawner change lands; ignored until then.
+            # since fks-spawner #4 (unset = loud degraded-fallback warning).
             - BACKTEST_DB_URL=postgresql://fks_backtest:${BACKTEST_DB_PASSWORD:-}@fks_postgres:5432/${RUBY_DB:-ruby_db}
             # Shared secret nginx forwards on every proxied request.
             # Empty = dev mode (auth disabled).

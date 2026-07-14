@@ -3,7 +3,10 @@
 # snapshot. Copy to `state.manifest` (gitignored) and tune to your deployment.
 #
 # Lines are either:
-#   • a file or glob, relative to the repo root  (e.g. .env, models/*.bin)
+#   • a file or glob, relative to the repo root — optionally prefixed `file:`
+#     (e.g. .env, models/*.bin). Sibling-repo paths (`../fks-state/...`) work:
+#     the snapshot is anchored at the PARENT directory of this checkout, so
+#     `..` paths round-trip through export/import.
 #   • db:<database>[:table1,table2,...]           dumped via the postgres container
 # Blank lines and #-comments are ignored. Missing file matches are skipped with
 # a warning, so it's safe to list paths you don't always have.
@@ -18,12 +21,13 @@
 .env.secrets
 infrastructure/certs/
 
-# ── Strategy configs — the edge (the bot repos' tuned params) ────────────────
-# These live in the bot repos; symlink or copy them here, or point at them
-# directly if checked out alongside fks. Uncomment what applies:
-# ../crypto/funding.toml
-# ../crypto/spot-portfolio.toml
-# ../dip/.env
+# ── Strategy configs — the edge (the sibling bot repos' tuned params) ────────
+# These live in the sibling checkouts (the `crypto` repo is dissolved: the spot
+# bot lives in fks-spawner, the futures/funding edges in the private
+# fks-state). Point at them directly — `../` paths are supported. Uncomment
+# what applies:
+# ../fks-state/bots/crypto-futures/funding.toml
+# ../fks-spawner/bots/spot-portfolio/spot-portfolio.toml
 
 # ── Model weights / optimizer + backtest output ──────────────────────────────
 models/*.bin
@@ -33,9 +37,9 @@ models/*.onnx
 
 # ── Live file-state (journals, open positions) ───────────────────────────────
 # Bot working state that must survive a redeploy. Adjust to your layout:
-# ../crypto/funding-paper.jsonl
-# ../crypto/funding-state-*.json
-# ../crypto/spot-trades.jsonl
+# ../fks-state/bots/crypto-futures/funding-paper.jsonl
+# ../fks-state/bots/crypto-futures/funding-state-*.json
+# ../fks-spawner/bots/spot-portfolio/spot-trades.jsonl
 
 # ── Database tables — the runtime secret store + account/PnL state ───────────
 # Dumped data-only (schema lives in src/sql/, applied at container init).
@@ -43,3 +47,5 @@ db:ruby_db:exchange_secrets
 db:janus_db:api_keys,api_key_audit
 # Add account / position / pnl tables as your schema grows, e.g.:
 # db:ruby_db:bot_configs,bot_runs
+# db:ruby_db:accounts,transfers,net_worth_snapshots     (treasury layer)
+# db:ruby_db:edges,backtest_runs                        (edge factory)

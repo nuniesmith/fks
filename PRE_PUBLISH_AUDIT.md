@@ -1,5 +1,13 @@
 # Pre-publish audit (Phase 2 of `SPLIT_PLAN.md`)
 
+> **Historical (2026-05).** The publish run has since executed — current
+> published versions are `rustrade-framework` 0.4.x, `indicators-ta` 0.2.x,
+> `exchange-apiws` 0.9.0, `jflow-core` 0.1.0 (see `CLAUDE.md` / TODO). The
+> `spawner` open question resolved itself: it moved to its **own repo**
+> (`fks-spawner`, fks #196) and ships as a Docker image, not a crate. Kept
+> as the record of the pre-publish state; the per-crate paths below no
+> longer exist in this tree.
+>
 > Last refreshed 2026-05-12 with `cargo package --no-verify --allow-dirty`
 > results.
 >

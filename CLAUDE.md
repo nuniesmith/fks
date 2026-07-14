@@ -9,12 +9,14 @@ reusable pieces from their own repos / crates.io.
 
 > 🎯 **The split already happened.** `rustrade`, `janus`, `indicators-ta`, and
 > `exchange-apiws` are their own repos; the libraries are on crates.io. This
-> repo wires them together at runtime and is heading toward a **private
-> orchestrator** role (production strategies + secrets + topology). The repo
-> map is in [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md);
-> remaining moves are in [`SPLIT_PLAN.md`](SPLIT_PLAN.md).
+> repo wires them together at runtime as the **public orchestrator** — every
+> secret/strategy/state lives outside it, in the private `fks-state` layer +
+> encrypted snapshots (see [`docs/GO_PUBLIC.md`](docs/GO_PUBLIC.md) and
+> [`docs/STATE_BACKUP.md`](docs/STATE_BACKUP.md)). The canonical repo map is
+> [`docs/architecture/PLATFORM_ARCHITECTURE.md`](docs/architecture/PLATFORM_ARCHITECTURE.md);
+> the split history is in [`SPLIT_PLAN.md`](SPLIT_PLAN.md).
 
-**Stack:** Rust + SvelteKit + Docker. ~14 containers. (The Python "Ruby"
+**Stack:** Rust + SvelteKit + Docker. ~20 containers. (The Python "Ruby"
 data/engine/trainer service was removed — janus is the platform now. See
 [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).)
 
@@ -28,7 +30,7 @@ data/engine/trainer service was removed — janus is the platform now. See
 | [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.9 |
 | [`fks-web`](https://github.com/nuniesmith/fks-web) | SvelteKit UI | Docker image (`git clone` at `WEB_REF`) |
 | [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) | the **bot factory**: spawner lifecycle service + `crypto-bot-core` SDK + the bots (`spot-portfolio` **production**, `crypto-demo`, `fks-bot-example`, `rustrade-exchange-apiws`) | spawner image via `git clone` (`SPAWNER_REPO`); bot images build from the sibling checkout (`docker build -f bots/spot-portfolio/Dockerfile …` from its root) |
-| `fks-state` *(private)* | trading edges (`bots/crypto-futures` funding bot), `crates/rithmic-connector` (read-only Rithmic feed), encrypted state snapshots, strategy docs (`docs/ARCHITECTURE.md`) | local checkout only — the funding + rithmic images build there; snapshots via `scripts/fks-state.sh` |
+| `fks-state` *(private)* | trading edges (`bots/crypto-futures` funding bot), `crates/{rithmic-connector,advisor,orb,orb-backtest,orb-briefing}` (read-only Rithmic feed + Discord advisor/ORB decision-support), encrypted state snapshots, strategy docs (`docs/ARCHITECTURE.md`) | local checkout only — `advisor`/`orb-briefing` build via the compose `state` profile, `rithmic-connector` via `rithmic`; the funding image builds there; snapshots via `scripts/fks-state.sh` |
 
 ### Lives in this repo
 
@@ -100,7 +102,9 @@ cd src/web         && npm run check && npm run build
 
 | Profile | Adds |
 |---------|------|
-| `demo` | `crypto-demo` paper bot driving the janus brain end-to-end |
+| `demo` | `crypto-demo` paper bot driving the janus brain end-to-end (image builds from the sibling `../fks-spawner`) |
+| `state` | `advisor` + `orb-briefing` (Discord digests/briefings) — build from the **private** sibling `../fks-state`; `run.sh` auto-enables this profile when that checkout exists |
+| `rithmic` | `rithmic-connector` (read-only futures feed, fks-state) — additionally runtime-gated on `RITHMIC_ENABLED=true` |
 | `qdrant` | Qdrant vector database (now always-on; profile is legacy) |
 
 ---
@@ -140,7 +144,7 @@ removed; don't add a second data path elsewhere.
 | DB | Schema location | Used by |
 |--|--|--|
 | `janus_db` (Postgres) | janus repo `sql/` + `src/sql/janus/` bootstrap | Janus services |
-| `ruby_db` (Postgres) | `src/sql/spawner/` (`002_spawner.sql` = `bot_runs`/`bot_configs`) | Spawner (legacy DB name) |
+| `ruby_db` (Postgres) | `src/sql/spawner/` (`002`–`009`: `bot_runs`/`bot_configs`, secrets, notifications, `ui_layouts`, `net_worth_snapshots`, treasury, edge factory + the scoped `fks_backtest` role) | Spawner (legacy DB name) |
 | QuestDB | — | Tick / bar storage |
 | Qdrant | — | Vector embeddings (optional) |
 
@@ -193,10 +197,11 @@ exchange-apiws = "0.9"
 
 ### Adding a new bot/strategy
 
-Create a crate under `bots/` (or `strategies/` once private) that depends on
-the published `rustrade` + `indicators-ta` + `exchange-apiws`. Implement a
-`rustrade::Brain`. Ship it as a Docker image the spawner can launch.
-`bots/fks-bot-example/` is the working reference.
+Create a crate under the **fks-spawner** repo's `bots/` (or, for private
+edges, under `fks-state`'s `bots/`) that depends on the published `rustrade`
++ `indicators-ta` + `exchange-apiws`. Implement a `rustrade::Brain`. Ship it
+as an `fks-bot-*` Docker image the spawner can launch.
+`fks-spawner/bots/fks-bot-example/` is the working reference.
 
 ### Adding a new service to the stack
 
@@ -222,11 +227,13 @@ the published `rustrade` + `indicators-ta` + `exchange-apiws`. Implement a
 ## Gotchas
 
 - **No in-tree framework copy.** `rustrade` lives at `nuniesmith/rustrade`
-  on crates.io (facade `rustrade-framework`). Bots under `bots/` depend on it
-  from crates.io — never re-vendor it into the tree.
-- **Janus is no longer in this tree.** Its image always builds via
-  `git clone` (`JANUS_REPO` defaults to the janus repo). To hack on janus,
-  work in the janus repo and point `JANUS_REF` at your branch.
+  on crates.io (facade `rustrade-framework`). The bots (fks-spawner repo)
+  depend on it from crates.io — never re-vendor it into a tree.
+- **Janus and the spawner are no longer in this tree.** Their images always
+  build via `git clone` (`JANUS_REPO` defaults to the janus repo;
+  `SPAWNER_REPO` is set in `.env` — empty fails, there's no local context
+  since #196). `run.sh` sha-pins the clones (`*_COMMIT`). To hack on either,
+  work in its repo and point the `*_REF` at your branch.
 - **External volumes** are declared `external: true` in `docker-compose.yml`
   (`prometheus_data`, `grafana_data`, `alertmanager_data`). Create them once:
   ```bash

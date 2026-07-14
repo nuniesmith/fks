@@ -10,10 +10,11 @@ deployment tooling.
 > 📋 **The repo split has happened.** `rustrade`, `janus`, `indicators-ta`,
 > and `exchange-apiws` are now their own repos, and the libraries are on
 > crates.io. This repo consumes them — it doesn't contain them. The full map
-> is in [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md);
-> the remaining moves are in [`SPLIT_PLAN.md`](SPLIT_PLAN.md). `fks` is
-> heading toward a **private orchestrator** role that holds the production
-> strategies, secrets, and deployment topology.
+> is in [`docs/architecture/PLATFORM_ARCHITECTURE.md`](docs/architecture/PLATFORM_ARCHITECTURE.md);
+> the split history is in [`SPLIT_PLAN.md`](SPLIT_PLAN.md). `fks` is the
+> **public orchestrator**: production strategies, secrets, and live state
+> live outside it — in the private `fks-state` repo and the encrypted
+> snapshots managed by [`docs/STATE_BACKUP.md`](docs/STATE_BACKUP.md).
 
 ---
 
@@ -26,14 +27,19 @@ service) plus the bits that stay here.
 
 | Repo | Role | Consumed as |
 |------|------|-------------|
-| [`rustrade`](https://github.com/nuniesmith/rustrade) | **Trading framework** (`Bot`, `Brain`, supervisor, risk, backtest) | crates.io — `rustrade-framework` 0.2 (imports as `rustrade`) |
+| [`rustrade`](https://github.com/nuniesmith/rustrade) | **Trading framework** (`Bot`, `Brain`, supervisor, risk, backtest) | crates.io — `rustrade-framework` 0.4 (imports as `rustrade`) |
 | [`janus`](https://github.com/nuniesmith/janus) | **Trading brain** (neuromorphic + strategies + signals) | Docker image (`git clone` at `JANUS_REF`) + `jflow-*` crates |
-| [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | **TA math** (indicators + regime detection) | crates.io — `indicators-ta` 0.1 |
-| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange APIs/WS** (5 exchanges, REST + WebSocket) | crates.io — `exchange-apiws` 0.1 |
+| [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | **TA math** (indicators + regime detection) | crates.io — `indicators-ta` 0.2 |
+| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange APIs/WS** (5 exchanges, REST + WebSocket) | crates.io — `exchange-apiws` 0.9 |
 
 Other service repos built via `git clone` at a pinned ref:
-[`fks-web`](https://github.com/nuniesmith/fks-web) (SvelteKit UI),
-[`fks-kotlin`](https://github.com/nuniesmith/fks-kotlin) (KMP apps).
+[`fks-spawner`](https://github.com/nuniesmith/fks-spawner) (bot factory: spawner
+service + bot SDK + the bots), [`fks-web`](https://github.com/nuniesmith/fks-web)
+(SvelteKit UI), [`fks-kotlin`](https://github.com/nuniesmith/fks-kotlin) (KMP apps).
+The **private** `fks-state` sibling holds the trading edges, the
+`advisor`/`orb-briefing`/`rithmic-connector` services (compose profiles
+`state`/`rithmic`, built from the local `../fks-state` checkout), and the
+encrypted state snapshots.
 
 > The Python "Ruby" data/engine/trainer service was **removed** (2026-06-07) —
 > janus is the platform now. See
@@ -43,26 +49,32 @@ Other service repos built via `git clone` at a pinned ref:
 
 | Path | What |
 |------|------|
-| `docker-compose*.yml`, `infrastructure/` | The ~14-service stack + Dockerfiles + nginx/prometheus/grafana config |
+| `docker-compose*.yml`, `infrastructure/` | The ~20-service stack + Dockerfiles + nginx/prometheus/grafana config |
 | `proto/` + `src/proto/` | Protobuf source of truth (the `fks-proto` crate) |
 | `src/sql/` | Postgres bootstrap baked into the image (`janus/`, `spawner/`) |
-| `scripts/` + `run.sh` | Operational tooling (DB bootstrap, build, health, …) |
-| [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) | Bot factory: spawner service + bot SDK + bots (own repo) |
-| `bots/`, `strategies/` | Thin bots / private trading IP that consume the published crates *(planned)* |
+| `scripts/` + `run.sh` | Operational tooling (DB bootstrap, build, health, `fks-state.sh` encrypted backups, …) |
+
+> **Nothing bot-shaped lives here anymore** (the #196 prune): the spawner
+> service, the `crypto-bot-core` SDK, and all the bots (incl. the production
+> `spot-portfolio`) live in [`fks-spawner`](https://github.com/nuniesmith/fks-spawner);
+> the private trading edges (`bots/crypto-futures`) plus `rithmic-connector`,
+> `advisor`, and `orb-briefing` live in the **private `fks-state`** repo. The
+> once-planned `strategies/` directory is superseded by `fks-state`.
 
 > The SvelteKit UI moved to its own repo —
 > [`nuniesmith/fks-web`](https://github.com/nuniesmith/fks-web). The `webui`
 > image git-clones it at build time (`WEB_REPO` / `WEB_REF` in `.env`); set
 > `WEB_REPO=` empty only for local bind-mount dev against a manual checkout.
 
-> The dependency graph and exact crates.io coordinates are in
-> [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md).
+> The dependency graph and per-repo deep dives are in
+> [`docs/architecture/PLATFORM_ARCHITECTURE.md`](docs/architecture/PLATFORM_ARCHITECTURE.md)
+> (the superseded historical map is `REPO_TOPOLOGY.md`).
 
 ---
 
 ## Stack (containers)
 
-Roughly 14 containers:
+Roughly 20 containers (the core ones):
 
 | Service | Container | Port(s) | Role |
 |---------|-----------|---------|------|
@@ -82,7 +94,11 @@ Roughly 14 containers:
 
 Plus the dynamically-spawned `fks-bot-*` containers managed by the spawner
 (placed on `fks_network` with `cap_drop: ALL`, scraped by Prometheus via the
-file_sd config the spawner writes).
+file_sd config the spawner writes), and — behind the **`state`** compose
+profile on hosts with the private `../fks-state` sibling checkout — the
+`fks_advisor` (daily/weekly Discord digests) and `fks_orb_briefing` (pre-market
+briefing + sized ORB day-plan) services. `run.sh` auto-enables the `state`
+profile when `../fks-state` exists.
 
 ## Access
 
@@ -135,9 +151,14 @@ acquire source in **dual mode**:
 - **`*_REPO` empty** → bind-mount the local context (dev, for sub-codebases
   that still live in this repo).
 
-`janus` has no in-tree copy, so its image **always** builds via `git clone`
-(`JANUS_REPO` defaults to `https://github.com/nuniesmith/janus`). `web` and
-`spawner` still have local copies and default to the bind-mount.
+`janus` and `spawner` have no in-tree copies, so their images **always** build
+via `git clone` (`JANUS_REPO` defaults to `https://github.com/nuniesmith/janus`;
+`SPAWNER_REPO` must point at `nuniesmith/fks-spawner` — the `.env` template
+sets it, and leaving it empty would try the pruned local context and fail).
+`run.sh` pins each clone to the remote head sha at build time (`*_COMMIT` via
+`git ls-remote`) so a cached clone layer can't silently ship stale code. `web`
+defaults to the `fks-web` git-clone too; the in-tree `src/web` is a dev
+fallback only.
 
 Pin a branch/commit at build time:
 
@@ -167,15 +188,12 @@ fks/
 ├── TODO.md                # cross-cutting roadmap
 ├── SPLIT_PLAN.md          # remaining repo-split moves
 ├── Cargo.toml             # slim virtual workspace (src/proto)
-├── docker-compose.yml     # ~14-service unified compose
+├── docker-compose.yml     # ~20-service unified compose
 ├── docker-compose.prod.yml
 ├── run.sh
 ├── proto/fks/             # .proto source of truth
-├── bots/
-│   └── (bots moved to the fks-spawner repo — spot-portfolio, crypto-demo, …)
-├── crates/
-│   ├── spawner/           # bot lifecycle manager (nested workspace)
-│   └── (spawner/crypto-bot-core → fks-spawner; rithmic-connector → fks-state)
+│                          # (no bots/ or crates/ — the bot factory lives in the
+│                          #  fks-spawner repo; rithmic-connector in fks-state)
 ├── src/
 │   ├── web/               # SvelteKit dashboard — has its own CLAUDE/TODO
 │   ├── proto/             # fks-proto Rust crate (protobuf build)
@@ -186,20 +204,23 @@ fks/
 │   │   └── services/      # per-service Dockerfiles (external apps mostly)
 │   └── config/            # nginx, prometheus, grafana, alertmanager, …
 ├── scripts/               # operational scripts (DB bootstrap, build, health, …)
-├── docs/                  # runbooks + architecture notes (see REPO_TOPOLOGY.md)
+├── docs/                  # runbooks + architecture notes (see PLATFORM_ARCHITECTURE.md)
 └── models/                # model artifacts (mostly gitignored)
 ```
 
-> **Reference bots** under `bots/` are standalone crates that consume the
-> published crates and ship as `fks-bot-*` images the spawner can launch
-> (build both with `./run.sh build-bots`, then spawn from the WebUI `/bots`):
+> **The bots live in the [`fks-spawner`](https://github.com/nuniesmith/fks-spawner)
+> repo** (moved in the #196 prune) as standalone crates that consume the
+> published crates and ship as `fks-bot-*` images the spawner can launch.
+> `./run.sh build-bots` builds the reference images from the **sibling
+> checkout** (`../fks-spawner`, override with `SPAWNER_DIR`), then spawn from
+> the WebUI `/bots`:
 > - `fks-bot-example` — the minimal template (heartbeat + `fks_bot_*` metrics).
 > - `crypto-demo` — a working bot exercising the whole stack (rustrade +
 >   indicators-ta + exchange-apiws), with an optional `JanusBrain` that
->   delegates decisions to janus. See [`bots/crypto-demo/README.md`](bots/crypto-demo/README.md).
+>   delegates decisions to janus.
 >
-> `bots/spot-portfolio` is the **production** spot rebalancer (dry-run image
-> by default); its image builds from the repo root:
+> `bots/spot-portfolio` (fks-spawner) is the **production** spot rebalancer
+> (dry-run image by default); its image builds from the fks-spawner root:
 > `docker build -f bots/spot-portfolio/Dockerfile -t fks-bot-crypto-spot:latest .`
 > The futures/funding trading edges live in the **private `fks-state`** repo
 > (`bots/crypto-futures`), which also holds the encrypted state snapshots.
@@ -208,7 +229,7 @@ fks/
 
 ## Where to go next
 
-- The repo map + crates.io coordinates? → [`docs/architecture/REPO_TOPOLOGY.md`](docs/architecture/REPO_TOPOLOGY.md)
+- The repo map + per-repo deep dives? → [`docs/architecture/PLATFORM_ARCHITECTURE.md`](docs/architecture/PLATFORM_ARCHITECTURE.md)
 - Working on the framework? → [`nuniesmith/rustrade`](https://github.com/nuniesmith/rustrade)
 - Working on the brain? → [`nuniesmith/janus`](https://github.com/nuniesmith/janus)
 - Working on bot lifecycles? → the [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) repo (`crates/spawner/CLAUDE.md` there)

@@ -1,11 +1,21 @@
 # Rithmic R|API Integration — Spike / Design Doc
 
-> **Status:** research + design only. **No Rithmic code is proposed or written
-> here** — the SDK/protocol is gated behind a paid Rithmic account, per-app
-> credentials, and a conformance review. This is the timeboxed evaluation that
-> [`WEBUI_PLATFORM_ROADMAP.md`](WEBUI_PLATFORM_ROADMAP.md) **P12** requires
-> *before* any futures-feed work is scheduled ("SDK evaluation spike —
-> **timeboxed 1 week, decides everything after**").
+> **Status update (2026-07):** the connector **foundation has since shipped**
+> along the lines designed here — read-only doctrine mechanically enforced by
+> test (fks #185), `candles_futures` persistence (#182), positions/PnL
+> subscription + `GET /positions` (#183). The code lives in the **private
+> `fks-state` repo** (`crates/rithmic-connector`; §3.1's home question is
+> resolved — it moved there in the #196 prune), deployed via the compose
+> `rithmic` profile and runtime-gated on `RITHMIC_ENABLED`. It stays **idle**:
+> Phase 0 (paid dev-kit credentials + conformance) remains the long pole, so
+> everything below about the access gate is still the operative truth.
+>
+> **Status (original):** research + design only. **No Rithmic code is proposed
+> or written here** — the SDK/protocol is gated behind a paid Rithmic account,
+> per-app credentials, and a conformance review. This is the timeboxed
+> evaluation that [`WEBUI_PLATFORM_ROADMAP.md`](WEBUI_PLATFORM_ROADMAP.md)
+> **P12** requires *before* any futures-feed work is scheduled ("SDK evaluation
+> spike — **timeboxed 1 week, decides everything after**").
 >
 > **Quality bar:** the roadmap and the janus `EXPERIENCE_PIPELINE.md` house
 > style — every load-bearing claim is either verified against the tree or
@@ -439,8 +449,10 @@ instruction.
    conflated snapshots).
 5. **Contract rolls.** How to represent front-month vs. continuous series in the
    `rithmic:SYMBOL` namespace (chart continuity across expiries). (§3.2)
-6. **Connector home** — new `rithmic-connector` repo vs. `crates/` in `fks`.
-   Lean in-`fks` for the spike; revisit. (§3.1)
+6. **Connector home** — ~~new `rithmic-connector` repo vs. `crates/` in
+   `fks`~~ **resolved**: it started in-`fks` and moved to the private
+   `fks-state` repo (`crates/rithmic-connector`) in the #196 prune, alongside
+   the rest of the funded-side code. (§3.1)
 7. **Positions/orders storage** — live `/status` vs. Postgres, aligned with the
    crypto `StateStore` trade-ledger schema. (§3.3, roadmap §4.1)
 8. **Framing / TLS specifics of R|Protocol** — the one genuinely unverifiable
@@ -498,8 +510,9 @@ maintained Rust client exists) lowers the *engineering* cost but not that gate.
 grep -n "rithmic\|api_passphrase\|System\|testable" \
   ~/github/fks-web/src/routes/settings/+page.svelte
 
-# The secret store already holds an optional third slot (api_passphrase):
-sed -n '60,85p' ~/github/fks/crates/spawner/src/models.rs
+# The secret store already holds an optional third slot (api_passphrase)
+# (spawner code lives in the fks-spawner repo since the #196 prune):
+sed -n '60,85p' ~/github/fks-spawner/crates/spawner/src/models.rs
 
 # Candle sink is hardcoded crypto today (P11 parameterizes it → candles_futures):
 grep -n 'const TABLE' ~/github/janus/services/data/src/candle_sink.rs

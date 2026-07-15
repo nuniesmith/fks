@@ -1,0 +1,137 @@
+# ============================================================================
+# Janus Silent-Stall Alert Rules
+# ============================================================================
+# Catches the failure class where a background persistence / pipeline task
+# silently dies but the process stays up and keeps ingesting — so no existing
+# "service down" / "ingestion halted" alert fires.
+#
+# Origin incident (2026-07): the janus candle sink froze for ~4 days.
+# `questdb_writes_total{table="candles_crypto"}` went completely flat while
+# trades kept flowing (`trades_ingested_total` climbing the whole time), so the
+# WebUI chart-history table stopped growing with zero alerting. IngestionHalted
+# could not catch it because ingestion never stopped — only the *persistence*
+# task did.
+#
+# Detection idiom (flat-while-alive): a critical counter shows no increase over
+# a window WHILE the ingestion liveness counter is still climbing. The
+# `and on() (sum(rate(trades_ingested_total[...])) > 0)` clause is the
+# discriminator — it suppresses these alerts during a genuine full-ingestion
+# halt (which IngestionHalted / AllExchangesDown already own) and only fires
+# when the process is demonstrably alive and ingesting but a downstream write
+# task has died.
+#
+# Metric provenance (verified against the live janus :9092 /metrics endpoint,
+# exporter services/data/src/metrics/prometheus_exporter.rs):
+#   questdb_writes_total{table}            counter — candle_sink.rs increments
+#                                          table="candles_crypto" on every
+#                                          persisted closed kline (line ~144).
+#   trades_ingested_total{exchange,symbol} counter — liveness proof; the
+#                                          canonical ingestion counter already
+#                                          used by market-data-pipeline.yml.
+#   janus_experience_rows_recorded_total   counter — completed experience rows
+#                                          handed to the writer (Phase-1
+#                                          experience pipeline, live 2026-07-06).
+#
+# Routing: severity=critical → Alertmanager discord-critical receiver
+# (http://alertmanager-discord:9094/), the same Discord path every other
+# critical FKS alert uses. No new channel/receiver introduced.
+# ============================================================================
+
+groups:
+    # ========================================================================
+    # CRITICAL - Silent persistence / pipeline stalls (process alive, task dead)
+    # ========================================================================
+    - name: janus_silent_stall_critical
+      interval: 30s
+      rules:
+          # ------------------------------------------------------------------
+          # Candle persistence stalled (the 4-day candle-sink freeze)
+          # ------------------------------------------------------------------
+          # No new writes to candles_crypto for 15 minutes while trades are
+          # still being ingested. Closed 1m klines persist ~once/minute per
+          # symbol, so a 15m flat window is unambiguous — the candle sink task
+          # has died or its ILP connection is wedged. `for: 5m` → detected in
+          # ~20 min vs the 4 days the original incident went unnoticed.
+          - alert: JanusCandlePersistenceStalled
+            expr: |
+                increase(questdb_writes_total{table="candles_crypto"}[15m]) == 0
+                and on()
+                (sum(rate(trades_ingested_total[15m])) > 0)
+            for: 5m
+            labels:
+                severity: critical
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "Janus candle persistence stalled (candles_crypto writes frozen)"
+                description: |
+                    No writes to the candles_crypto QuestDB table in over 15 minutes
+                    while trade ingestion is still active. The candle sink task has
+                    likely died or its ILP connection is wedged — WebUI chart history
+                    has stopped growing even though the process is alive and ingesting.
+                    This is the exact signature of the 2026-07 4-day candle-sink freeze.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/janus-candle-persistence-stalled.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+          # ------------------------------------------------------------------
+          # Experience pipeline stalled (general flat-while-alive counter)
+          # ------------------------------------------------------------------
+          # Same idiom applied to the experience pipeline: completed experience
+          # rows stop being handed to the writer while ingestion continues,
+          # indicating the recorder task has died. Phase-1 experience pipeline
+          # feeds decision vectors to Qdrant; a silent freeze here starves
+          # training data with no other symptom.
+          - alert: JanusExperiencePipelineStalled
+            expr: |
+                increase(janus_experience_rows_recorded_total[15m]) == 0
+                and on()
+                (sum(rate(trades_ingested_total[15m])) > 0)
+            for: 5m
+            labels:
+                severity: critical
+                component: experience-pipeline
+                pipeline: experience
+            annotations:
+                summary: "Janus experience pipeline stalled (rows_recorded frozen)"
+                description: |
+                    janus_experience_rows_recorded_total has not increased in over
+                    15 minutes while trade ingestion is still active. The experience
+                    recorder task has likely died — decision vectors are no longer
+                    reaching the writer / Qdrant even though the process is alive.
+                runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/janus-experience-pipeline-stalled.md"
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+    # ========================================================================
+    # WARNING - Generalized "critical counter frozen" catch-all
+    # ========================================================================
+    - name: janus_silent_stall_warning
+      interval: 30s
+      rules:
+          # ------------------------------------------------------------------
+          # Any QuestDB write-counter series frozen while alive
+          # ------------------------------------------------------------------
+          # Generalized version of JanusCandlePersistenceStalled that keeps the
+          # `table` label, so any *future* persistence table wired into
+          # questdb_writes_total (e.g. table="trades") is covered automatically
+          # by the same flat-while-alive rule. Warning severity so it doesn't
+          # double-page against the candles_crypto critical above; it exists to
+          # catch a stalled table we haven't named a dedicated critical for.
+          - alert: JanusQuestDBWriteCounterFrozen
+            expr: |
+                increase(questdb_writes_total[15m]) == 0
+                and on()
+                (sum(rate(trades_ingested_total[15m])) > 0)
+            for: 10m
+            labels:
+                severity: warning
+                component: data-factory
+                pipeline: market-data
+            annotations:
+                summary: "QuestDB write counter frozen for table {{ $labels.table }} while ingesting"
+                description: |
+                    questdb_writes_total{table="{{ $labels.table }}"} has not increased
+                    in over 15 minutes while trade ingestion is still active.
+                    A persistence writer for this table has likely stalled. If this is
+                    the candles_crypto table, JanusCandlePersistenceStalled (critical)
+                    will also be firing.
+                dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"

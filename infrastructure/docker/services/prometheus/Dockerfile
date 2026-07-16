@@ -9,19 +9,7 @@ COPY infrastructure/config/prometheus/prometheus.yml \
      /etc/prometheus/prometheus.yml
 
 # --- Alert rules ---
-COPY infrastructure/config/prometheus/alerts/data.yml \
-     /etc/prometheus/alerts/data.yml
-COPY infrastructure/config/prometheus/alerts/database-alerts.yml \
-     /etc/prometheus/alerts/database-alerts.yml
-COPY infrastructure/config/prometheus/alerts/execution_alerts.yml \
-     /etc/prometheus/alerts/execution_alerts.yml
-COPY infrastructure/config/prometheus/alerts/market-data-pipeline.yml \
-     /etc/prometheus/alerts/market-data-pipeline.yml
-COPY infrastructure/config/prometheus/alerts/technical-indicators.yml \
-     /etc/prometheus/alerts/technical-indicators.yml
-COPY infrastructure/config/prometheus/alerts/trading-alerts.yml \
-     /etc/prometheus/alerts/trading-alerts.yml
-COPY infrastructure/config/prometheus/alerts/bot-alerts.yml \
-    /etc/prometheus/alerts/bot-alerts.yml
-COPY infrastructure/config/prometheus/alerts/janus-silent-stall.yml \
-     /etc/prometheus/alerts/janus-silent-stall.yml
+# Copy the whole alerts/ dir so every *.yml rule file ships automatically.
+# (Individual per-file COPYs were a footgun: a new rule file silently didn't
+# bake in until someone remembered to add a matching COPY line — see #209/#210.)
+COPY infrastructure/config/prometheus/alerts/ /etc/prometheus/alerts/

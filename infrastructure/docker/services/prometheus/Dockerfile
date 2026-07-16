@@ -23,3 +23,5 @@ COPY infrastructure/config/prometheus/alerts/trading-alerts.yml \
      /etc/prometheus/alerts/trading-alerts.yml
 COPY infrastructure/config/prometheus/alerts/bot-alerts.yml \
     /etc/prometheus/alerts/bot-alerts.yml
+COPY infrastructure/config/prometheus/alerts/janus-silent-stall.yml \
+     /etc/prometheus/alerts/janus-silent-stall.yml

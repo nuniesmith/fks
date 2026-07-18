@@ -1120,6 +1120,54 @@ services:
                 max-file: "3"
                 labels: "service=node-exporter,environment=dev"
 
+    deadman:
+        # External dead-man's-switch heartbeat. Added 2026-07-17: every alert
+        # path on this box (Prometheus → Alertmanager → Discord bridge) dies
+        # WITH the box — if oryx loses power, disk, or network, the platform's
+        # last act is silence, not a page ("no alerts" and "total outage" are
+        # the same signal). This service GETs a hosted dead-man check
+        # (healthchecks.io or similar) every 60s; the *check* pages when the
+        # heartbeat STOPS. Pure observer: no depends_on, no ports, no volumes
+        # beyond its own script — it must never be a reason another service
+        # can't start (or vice versa). Silently disabled (container idles)
+        # when DEADMAN_PING_URL is unset, so fresh checkouts need no setup.
+        # Setup + what a page means: docs/infrastructure/DEADMAN_SWITCH.md
+        image: curlimages/curl:8.21.0
+        container_name: fks_deadman
+        # curl_user — the image's own unprivileged default, pinned explicitly.
+        user: "100:101"
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
+        read_only: true
+        entrypoint: ["/bin/sh", "/opt/fks/deadman-ping.sh"]
+        environment:
+            # Full ping URL incl. the check's secret UUID — set in .env. The
+            # script never logs it (and discards curl's stderr for the same
+            # reason); leave unset to disable the pinger.
+            - DEADMAN_PING_URL=${DEADMAN_PING_URL:-}
+            - DEADMAN_INTERVAL_SECS=${DEADMAN_INTERVAL_SECS:-60}
+        volumes:
+            - ./scripts/monitoring/deadman-ping.sh:/opt/fks/deadman-ping.sh:ro
+        networks:
+            - fks-network
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: "0.10"
+                    memory: 32m
+                reservations:
+                    cpus: "0.01"
+                    memory: 8m
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+                labels: "service=deadman,environment=dev"
+
     redis-exporter:
         # Binary baked into image via infrastructure/docker/services/redis-exporter/Dockerfile.
         # Rebuild with: docker compose build redis-exporter

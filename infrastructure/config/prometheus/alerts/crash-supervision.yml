@@ -1,0 +1,91 @@
+# ============================================================================
+# crash-supervision.yml — page when a spawner-managed bot dies unexpectedly
+# ============================================================================
+# Closes the "dead live bot vanishes from monitoring in ~7 min" gap. The old
+# failure mode: a live bot crashes → the container exits → the spawner's prune
+# removes it (and its SD entry) → the `up{job="fks-bots"}` series DISAPPEARS →
+# BotStopped (up==0, warning) RESOLVES → no rule fires on the ABSENCE, so a
+# live-money bot is simply gone with one buried warning as the only trace.
+#
+# The fks-spawner supervisor (crate::supervisor) now:
+#   • keys prune on FINISHED time and QUARANTINES live/crashed containers
+#     (they are no longer removed within ~60s), and
+#   • exports `fks_spawner_crashed_bots` — the count of spawner-managed bots
+#     currently retained after an UNEXPECTED exit (an exited container whose
+#     bot_runs row was never closed via the API). Any exit that wasn't an
+#     operator stop (panic, OOM-kill, host reboot) leaves that row open, so
+#     this gauge is the absence-ROBUST crash signal: it does not depend on the
+#     bot's own `up` series still existing.
+#
+# Two complementary page-worthy alerts:
+#   1. LiveBotCrashed        — the spawner detected an unexpected exit
+#                              (`fks_spawner_crashed_bots > 0`). Robust to the
+#                              target vanishing; this is the 3am-panic page.
+#   2. LiveBotMetricsDown     — a LIVE bot's metrics target is present in the SD
+#                              file but unreachable/scrape-failing for >2m
+#                              (the "goes down" half — process wedged, not yet
+#                              exited). The existing BotStopped (warning, any
+#                              mode) stays; this is the live-money CRITICAL.
+#
+# Routing: severity=critical → Alertmanager `discord-critical` receiver (same
+# Discord path every other critical FKS alert uses; see alertmanager.yml.tmpl).
+# `fks_spawner_crashed_bots` is scraped on the fks-spawner job; the `up`/mode
+# labels come from the spawner's file_sd (relabel_configs in prometheus.yml).
+# ============================================================================
+
+groups:
+    # ========================================================================
+    # CRITICAL — a spawner-managed bot exited unexpectedly (crash)
+    # ========================================================================
+    - name: crash-supervision-critical
+      rules:
+          # ------------------------------------------------------------------
+          # A bot crashed and is being quarantined for forensics. Stays firing
+          # until the operator investigates and removes the container (which
+          # drops the gauge to 0 and resolves the alert). `for: 1m` requires the
+          # gauge to persist one scrape cycle so a same-tick detect/clear can't
+          # flap it.
+          # ------------------------------------------------------------------
+          - alert: LiveBotCrashed
+            expr: fks_spawner_crashed_bots > 0
+            for: 1m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-lifecycle
+            annotations:
+                summary: "A spawner-managed bot crashed ({{ $value }} quarantined)"
+                description: >
+                    fks_spawner_crashed_bots = {{ $value }} — the spawner
+                    detected {{ $value }} bot container(s) that exited WITHOUT an
+                    operator stop (panic / OOM / host reboot). The container(s)
+                    are quarantined (not pruned) for forensics, and any live
+                    money bot among them is DOWN. Investigate now.
+                runbook: >
+                    List crashed runs: curl http://spawner:8090/runs | jq
+                    '.runs[] | select(.status=="error")' — inspect the container's
+                    logs, then DELETE it via the spawner API (or WebUI) to clear
+                    this alert once triaged.
+
+          # ------------------------------------------------------------------
+          # A LIVE bot's metrics target is present but unreachable (process
+          # wedged / metrics port hung) for >2m. The exited-and-vanished case is
+          # covered by LiveBotCrashed above; this catches the still-present-but-
+          # dead case that `up` can see.
+          # ------------------------------------------------------------------
+          - alert: LiveBotMetricsDown
+            expr: up{job="fks-bots", mode="live"} == 0
+            for: 2m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-lifecycle
+            annotations:
+                summary: "Live bot {{ $labels.container_name }} metrics target is DOWN"
+                description: >
+                    Live-money bot {{ $labels.bot_id }}
+                    ({{ $labels.container_name }}) has been unreachable at its
+                    :9091/metrics endpoint for over 2 minutes while still present
+                    in the spawner SD file — the process may be wedged. If it has
+                    actually exited, LiveBotCrashed will also fire.
+                runbook: "Check logs: curl http://spawner:8090/container/{{ $labels.container_name }}/logs"

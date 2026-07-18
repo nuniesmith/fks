@@ -420,6 +420,17 @@ services:
             - JANUS_EXPERIENCE_REWARD_FEE_BPS=${JANUS_EXPERIENCE_REWARD_FEE_BPS:-0}
             - JANUS_EXPERIENCE_REWARD_VOL_NORM=${JANUS_EXPERIENCE_REWARD_VOL_NORM:-true}
             - JANUS_EXPERIENCE_REWARD_VOL_FLOOR=${JANUS_EXPERIENCE_REWARD_VOL_FLOOR:-0.0001}
+            # 9-gate ExecutionGate controls. Without these passthroughs the vars
+            # set in .env would silently never reach the container (janus parses
+            # strictly: only "1"/"true" enables — 0 keeps today's behavior).
+            # JANUS_GATE_METRICS_REDIS=1 turns on the gate-counter Redis exporter
+            # (needed for the Gate-A block-mix soak log, GATE_A_PREREGISTRATION
+            # §4a-J3; also persists the consecutive-loss breaker across restarts).
+            # JANUS_GATE_ENFORCE stays 0 until the Gate-A verdict + the §4a
+            # enforce-flip prerequisite (blocked-vs-actionable separation) pass —
+            # never flip it before Gate-A day.
+            - JANUS_GATE_METRICS_REDIS=${JANUS_GATE_METRICS_REDIS:-0}
+            - JANUS_GATE_ENFORCE=${JANUS_GATE_ENFORCE:-0}
             # Phase 2 training: fill the replay buffer from live Qdrant
             # experiences (janus #144). Default OFF; flip in .env to train janus
             # on its own decisions using the Phase 2.5 reward.

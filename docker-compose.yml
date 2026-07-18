@@ -372,6 +372,23 @@ services:
             # Set BRAIN_API_TOKEN in .env to require auth. Empty default keeps
             # current behaviour so this passthrough is a no-op until you opt in.
             - BRAIN_API_TOKEN=${BRAIN_API_TOKEN:-}
+            # Bearer token required on ALL mutating (non-GET) routes of both
+            # janus HTTP surfaces — the forward REST server (risk-config PUT,
+            # portfolio POST/DELETE, signal generation, brain kill-switch) and
+            # the janus-api gateway (services start/stop, /api/config PUT,
+            # signals/publish, log-level, positions ingress). GET/HEAD/OPTIONS
+            # (health, metrics, all reads, WS) stay open — the tailnet read
+            # posture is deliberate.
+            #
+            # FAIL POSTURE: empty/unset default = FAIL-CLOSED. With no token,
+            # janus DENIES every mutating request (503) and logs a startup
+            # warning; reads are unaffected. Set JANUS_API_TOKEN in .env to a
+            # strong random value to enable writes. The in-stack caller that
+            # needs it — the webui, which proxies the risk-config and optimizer
+            # PUTs — receives the SAME token below. (This supersedes the
+            # narrower BRAIN_API_TOKEN above; leave that one unset to avoid a
+            # double-bearer conflict on the kill-switch routes.)
+            - JANUS_API_TOKEN=${JANUS_API_TOKEN:-}
             - RUST_LOG=info,janus=debug,sqlx=debug,janus_backward=debug
             - RUST_BACKTRACE=1
             - JANUS_CONFIG_PATH=/app/config/janus.toml
@@ -566,6 +583,14 @@ services:
             - CRYPTO_SPOT_INTERNAL_URL=${CRYPTO_SPOT_INTERNAL_URL:-}
             - CRYPTO_FUNDING_INTERNAL_URL=${CRYPTO_FUNDING_INTERNAL_URL:-}
             - PUBLIC_JANUS_URL=http://fks_janus:7000
+            # Bearer token the SvelteKit server attaches to its mutating janus
+            # proxy calls (the /settings risk-config PUT → forward, and the
+            # "Janus Optimizer" /api/config PUT → janus-api). MUST equal the
+            # janus service's JANUS_API_TOKEN above, or those two settings
+            # panels get 401 once the token is set. Empty default = the panels
+            # keep working only while janus is also unset (fail-closed) — set
+            # both together in .env. Never sent to the browser (server-side only).
+            - JANUS_API_TOKEN=${JANUS_API_TOKEN:-}
             # D1 live-bars bridge: empty (default) keeps /sse/bars/:sym on the
             # graceful idle stub. Once the janus image includes the
             # /sse/bars/{symbol} endpoint (janus PR #106), set in .env:

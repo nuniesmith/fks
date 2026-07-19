@@ -81,6 +81,50 @@ run_detached() {
     echo "$pid"
 }
 
+# =============================================================================
+# HELPER: POST to a mutating janus control route, carrying the bearer token.
+# =============================================================================
+# Since the janus-auth change (janus PR #161 / compose PR #215), every mutating
+# (non-GET) janus route — including POST /api/services/start — requires
+# `Authorization: Bearer <JANUS_API_TOKEN>`. janus is fail-closed: with the
+# token set, an unauthenticated start POST returns 401 and janus stays in
+# STANDBY (no ingestion, empty charts); with it unset, mutations return 503.
+# Either way the plain `curl -X POST .../api/services/start` calls below would
+# leave janus idle after a (re)deploy or a mid-run drop to standby.
+#
+# `_janus_token` resolves the token from the environment or, if not yet sourced,
+# from the .env files this script uses (same precedence as the compose stack).
+# `janus_post` attaches the header only when a token is configured, so behaviour
+# is byte-for-byte unchanged while JANUS_API_TOKEN is unset.
+_janus_token() {
+    if [ -n "${JANUS_API_TOKEN:-}" ]; then
+        printf '%s' "$JANUS_API_TOKEN"
+        return 0
+    fi
+    local f t
+    for f in ".env" "${TEST_DIR:-}/.env.test" "$HOME/fks/.env"; do
+        [ -n "$f" ] && [ -f "$f" ] || continue
+        t=$(grep -E "^JANUS_API_TOKEN=" "$f" 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' || true)
+        if [ -n "$t" ]; then
+            printf '%s' "$t"
+            return 0
+        fi
+    done
+}
+
+# janus_post <url> — POST with the bearer when JANUS_API_TOKEN is set. Prints
+# the response body; returns curl's exit status (callers keep their own
+# `|| echo ""` / `|| true` fallbacks).
+janus_post() {
+    local url="$1" tok
+    tok=$(_janus_token)
+    if [ -n "$tok" ]; then
+        curl -sf -X POST -H "Authorization: Bearer ${tok}" "$url"
+    else
+        curl -sf -X POST "$url"
+    fi
+}
+
 # Export TEST_DIR for monitoring.sh to pick up
 export FKS_TEST_DIR="$TEST_DIR"
 
@@ -312,7 +356,7 @@ if [ "$TEST_TYPE" = "paper-trading-soak" ]; then
     SVC_STATE=$(echo "$SVC_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_state','unknown'))" 2>/dev/null || echo "unknown")
 
     if [ "$SVC_STATE" = "standby" ] || [ "$SVC_STATE" = "stopped" ]; then
-        START_RESP=$(curl -sf -X POST "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || echo "")
+        START_RESP=$(janus_post "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || echo "")
         if echo "$START_RESP" | grep -q '"success".*true'; then
             echo "  ✅ Janus services started (was: $SVC_STATE)"
         else
@@ -323,7 +367,7 @@ if [ "$TEST_TYPE" = "paper-trading-soak" ]; then
         echo "  ✅ Janus services already running"
     else
         echo "  ⚠️ Could not determine Janus service state ($SVC_STATE), attempting start..."
-        curl -sf -X POST "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || true
+        janus_post "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || true
         sleep 5
     fi
     echo ""
@@ -647,7 +691,7 @@ elif [ "$TEST_TYPE" = "rss-monitoring" ]; then
 
         if [ "$SVC_STATE" = "standby" ] || [ "$SVC_STATE" = "stopped" ]; then
             echo "  ⏩ Starting Janus processing services (standby → running)..."
-            START_RESP=$(curl -sf -X POST "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || echo "")
+            START_RESP=$(janus_post "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || echo "")
             if echo "$START_RESP" | grep -q '"success".*true'; then
                 echo "  ✅ Janus services started successfully"
             else
@@ -669,7 +713,7 @@ elif [ "$TEST_TYPE" = "rss-monitoring" ]; then
     else
         echo "  ⚠️ Could not reach Janus API at localhost:${JANUS_PORT}"
         echo "     Attempting to start services anyway..."
-        curl -sf -X POST "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || true
+        janus_post "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || true
         sleep 10
     fi
     echo ""
@@ -837,7 +881,7 @@ elif [ "$TEST_TYPE" = "audit-72h-soak" ]; then
     SVC_STATE=$(echo "$SVC_STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_state','unknown'))" 2>/dev/null || echo "unknown")
 
     if [ "$SVC_STATE" = "standby" ] || [ "$SVC_STATE" = "stopped" ]; then
-        START_RESP=$(curl -sf -X POST "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || echo "")
+        START_RESP=$(janus_post "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || echo "")
         if echo "$START_RESP" | grep -q '"success".*true'; then
             echo "  ✅ Janus services started (was: $SVC_STATE)"
         else
@@ -848,7 +892,7 @@ elif [ "$TEST_TYPE" = "audit-72h-soak" ]; then
         echo "  ✅ Janus services already running"
     else
         echo "  ⚠️ Could not determine Janus service state ($SVC_STATE), attempting start..."
-        curl -sf -X POST "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || true
+        janus_post "http://localhost:${JANUS_PORT}/api/services/start" 2>/dev/null || true
         sleep 5
     fi
     echo ""
@@ -1239,6 +1283,17 @@ if [ -z "$REDIS_PASSWORD" ] && [ -f "$HOME/fks/.env" ]; then
     REDIS_PASSWORD=$(grep -E "^REDIS_PASSWORD=" "$HOME/fks/.env" | head -1 | cut -d'=' -f2- | tr -d '"' || true)
 fi
 
+# ── Load JANUS_API_TOKEN so the auto-restart POST below can authenticate ──
+# The janus-auth change gates POST /api/services/start behind a bearer. Without
+# this, a mid-run drop to standby could not be recovered once the token is set
+# (401 → janus stays idle for the rest of the soak). Empty → no header sent.
+JANUS_API_TOKEN="${JANUS_API_TOKEN:-}"
+for _envf in "$SCRIPT_DIR/.env.test" "$HOME/fks/.env"; do
+    [ -n "$JANUS_API_TOKEN" ] && break
+    [ -f "$_envf" ] || continue
+    JANUS_API_TOKEN=$(grep -E "^JANUS_API_TOKEN=" "$_envf" | head -1 | cut -d'=' -f2- | tr -d '"' || true)
+done
+
 echo "# Health Monitor Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$HEALTH_LOG"
 echo "# Interval: ${INTERVAL_SEC}s | Max Duration: ${MAX_DURATION_SEC}s" >> "$HEALTH_LOG"
 
@@ -1299,7 +1354,11 @@ while true; do
         JANUS_STATE=$(curl -sf "http://localhost:7000/api/services/status" 2>/dev/null \
             | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_state','unknown'))" 2>/dev/null || echo "unknown")
         if [ "$JANUS_STATE" = "standby" ] || [ "$JANUS_STATE" = "stopped" ]; then
-            RESTART_RESP=$(curl -sf -X POST "http://localhost:7000/api/services/start" 2>/dev/null || echo "")
+            if [ -n "$JANUS_API_TOKEN" ]; then
+                RESTART_RESP=$(curl -sf -X POST -H "Authorization: Bearer ${JANUS_API_TOKEN}" "http://localhost:7000/api/services/start" 2>/dev/null || echo "")
+            else
+                RESTART_RESP=$(curl -sf -X POST "http://localhost:7000/api/services/start" 2>/dev/null || echo "")
+            fi
             if echo "$RESTART_RESP" | grep -q '"success".*true'; then
                 JANUS_STATE="restarted_from_${JANUS_STATE}"
                 echo "HEALTH_AUTO_RESTART ts=$(date -u +%Y-%m-%dT%H:%M:%SZ) action=janus_services_start prev_state=${JANUS_STATE} result=success" >> "$HEALTH_LOG"

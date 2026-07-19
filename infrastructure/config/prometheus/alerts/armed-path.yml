@@ -1,0 +1,205 @@
+# ============================================================================
+# armed-path.yml — page when the LIVE funding bot's MONEY PATH misbehaves (M2)
+# ============================================================================
+# The gap this closes (2026-07 readiness review): the alerting layer watched the
+# DATA plane, not the MONEY path. A session-halt trip, a circuit-breaker trip, a
+# resting protective stop that went missing, an order-submit failure, a position
+# whose exit never filled, or a funding settlement that never booked — none of
+# these reached Prometheus, so once real money arms (M2) the first live incident
+# would be visible only if the operator happened to be watching Discord.
+#
+# The funding bot (fks-state `bots/crypto-futures`) now exports a money-path
+# series set on a SECOND port (:9092, `BOT_RISK_METRICS_PORT`), scraped by the
+# `fks-bots-risk` job (see prometheus.yml). That job is scoped to mode="live"
+# funding targets, so these rules are INERT until a live bot is built + armed:
+#   • the running PAPER twin is mode="paper" → never scraped by fks-bots-risk,
+#   • every rule selects mode="live" → nothing matches until a live bot emits.
+# So this file can ship now and simply not fire during the Gate-A window.
+#
+# Emitted money-path series (fks_bot_* on :9092, mode/bot_id/container_name
+# injected by the spawner file-SD relabeling — see prometheus.yml):
+#   fks_bot_session_halt_active{symbol}          gauge 0/1  (daily-loss halt)
+#   fks_bot_circuit_breaker_tripped{symbol}      gauge 0/1  (loss-streak breaker)
+#   fks_bot_resting_stop_present{symbol}         gauge      (stops on the venue)
+#   fks_bot_resting_stop_expected{symbol}        gauge      (stops wanted, 0/1)
+#   fks_bot_open_positions                       gauge      (count)
+#   fks_bot_open_notional_usd                    gauge
+#   fks_bot_open_position_entry_unix{symbol}     gauge      (entry, unix s)
+#   fks_bot_fills_total                          counter
+#   fks_bot_fill_anomalies_total{kind}           counter
+#   fks_bot_order_errors_total{class}            counter
+#   fks_bot_funding_settlements_total            counter
+#   fks_bot_funding_coverage_missing_total{coverage} counter
+#
+# Routing: every rule is severity=critical → Alertmanager `discord-critical`
+# receiver (the same Discord path every other FKS critical uses; see
+# alertmanager.yml.tmpl:73-77). team=trading, component=bot-money-path.
+# ============================================================================
+
+groups:
+    # ========================================================================
+    # CRITICAL — the LIVE money path (mode="live" only)
+    # ========================================================================
+    - name: armed-path-critical
+      rules:
+          # ------------------------------------------------------------------
+          # 1. Session-PnL daily-loss halt active on a live symbol. The halt is
+          #    the rail working — but on a LIVE money bot it is page-worthy: the
+          #    operator should know within minutes that a symbol locked out for
+          #    the UTC day on a session loss. A halt is expected to CLEAR at the
+          #    00:00 UTC rollover; one that persists across a rollover is a
+          #    stuck-flag / persistence bug (worse). `for: 30m` debounces the
+          #    settle after a trip; the gauge is re-rendered every scrape while
+          #    set, so it does not go stale between trades.
+          # ------------------------------------------------------------------
+          - alert: LiveSessionHalted
+            expr: fks_bot_session_halt_active{mode="live"} == 1
+            for: 30m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE session halt active on {{ $labels.symbol }} ({{ $labels.container_name }})"
+                description: >
+                    fks_bot_session_halt_active{{"{"}}symbol="{{ $labels.symbol }}"{{"}"}}
+                    = 1 on live bot {{ $labels.bot_id }} — the per-symbol
+                    session-PnL daily-loss halt is engaged, so no new entry on
+                    this symbol reaches the venue until the 00:00 UTC rollover
+                    (reduce-only EXITS are still allowed by the exit exemption).
+                    Expected on an honest session loss; if it persists ACROSS a
+                    00:00 UTC boundary the halt failed to roll over — investigate
+                    the gate-state persistence.
+                runbook: >
+                    Check the bot logs for "decision blocked: session PnL halted"
+                    and the framework_risk_state row for this symbol; confirm the
+                    loss is real (not an execution defect) before the next session.
+
+          # ------------------------------------------------------------------
+          # 2. Circuit breaker tripped on a live symbol — the loss-streak
+          #    breaker fired (default 4 losses in the window). On live money
+          #    that is a cluster of losers: page. Auto-clears after the cooldown;
+          #    `for: 5m` avoids paging on a trip that clears within a cooldown.
+          # ------------------------------------------------------------------
+          - alert: LiveCircuitBreakerTripped
+            expr: fks_bot_circuit_breaker_tripped{mode="live"} == 1
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE circuit breaker tripped on {{ $labels.symbol }} ({{ $labels.container_name }})"
+                description: >
+                    fks_bot_circuit_breaker_tripped{{"{"}}symbol="{{ $labels.symbol }}"{{"}"}}
+                    = 1 on live bot {{ $labels.bot_id }} — the loss-streak
+                    circuit breaker fired and is blocking new entries on this
+                    symbol until its cooldown elapses. A real loss cluster (or,
+                    at size, partial-fill breaker inflation — rustrade §1.7.1).
+                runbook: >
+                    Review the last window of closes for this symbol; confirm
+                    they are honest losses, not an execution/partial-fill defect.
+
+          # ------------------------------------------------------------------
+          # 3. Sustained order-submit errors on the live bot. Any order-op error
+          #    (a protective-stop place/cancel that failed at the venue) is
+          #    serious; >2 in 10m is a sustained venue/credential/connectivity
+          #    problem, not a blip. `for: 5m` requires it to persist.
+          # ------------------------------------------------------------------
+          - alert: LiveSustainedOrderErrors
+            expr: sum by (bot_id, container_name) (increase(fks_bot_order_errors_total{mode="live"}[10m])) > 2
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE bot {{ $labels.container_name }} order errors sustained (>2 in 10m)"
+                description: >
+                    increase(fks_bot_order_errors_total{{"{"}}mode="live"{{"}"}}[10m])
+                    = {{ $value }} on {{ $labels.bot_id }} — protective-stop
+                    order operations (place/cancel) are failing at the venue. A
+                    live position may be relying on the in-process synthetic stop
+                    alone. Check venue connectivity / credentials / rate limits.
+                runbook: >
+                    Tail the bot logs for "resting-stop: PLACEMENT FAILED" /
+                    "exit cancel failed"; verify the venue is reachable and the
+                    API key is valid + trade-enabled.
+
+          # ------------------------------------------------------------------
+          # 4. Resting protective stop divergence — an open position that WANTS a
+          #    venue stop (expected>0) has NONE resting (present==0): the position
+          #    is unprotected at the exchange. `for: 5m` clears the ~60s
+          #    place-before-cancel reconcile window (RECONCILE_MS) so only a real,
+          #    persistent gap pages. The two gauges share identical target+symbol
+          #    labels, so `and` matches element-wise.
+          # ------------------------------------------------------------------
+          - alert: LiveRestingStopDivergence
+            expr: (fks_bot_resting_stop_expected{mode="live"} > 0) and (fks_bot_resting_stop_present{mode="live"} == 0)
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE position on {{ $labels.symbol }} is UNPROTECTED at the venue"
+                description: >
+                    {{ $labels.symbol }} on live bot {{ $labels.bot_id }} holds an
+                    open position that expects a resting protective stop, but zero
+                    stops are resting on the venue (present==0) — the reconcile
+                    loop has not converged for >5m. The position is protected only
+                    by the in-process synthetic stop, which dies with the process.
+                runbook: >
+                    Check "resting-stop" log lines; if placement keeps failing,
+                    consider the kill-switch (live_flatten) to de-risk manually.
+
+          # ------------------------------------------------------------------
+          # 5. Positioned but the exit never filled ("no fills while positioned").
+          #    The strategy's max hold is 24h; a live position open >26h means the
+          #    time-box exit did not fill — a wedged/missed-exit position. The
+          #    entry-time gauge is stable (rendered every scrape), so this is
+          #    robust to counter resets. `for: 30m` guards the boundary.
+          # ------------------------------------------------------------------
+          - alert: LivePositionStuckNoFill
+            expr: (time() - fks_bot_open_position_entry_unix{mode="live"}) > 93600
+            for: 30m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE position on {{ $labels.symbol }} open >26h — exit never filled"
+                description: >
+                    {{ $labels.symbol }} on live bot {{ $labels.bot_id }} has been
+                    open for over 26h (max hold is 24h) — the time-box exit's
+                    reduce-only close has not filled. Likely a missed exit fill /
+                    wedged close-confirmation. Reconcile venue vs the open-trade
+                    record and flatten manually if the venue is actually flat.
+                runbook: >
+                    Compare the venue position to the bot's open-trade record;
+                    if divergent, use the kill-switch procedure (live_flatten).
+
+          # ------------------------------------------------------------------
+          # 6. Funding settlement not booked — a live close booked with partial /
+          #    no funding coverage, i.e. a funding-history gap left the settlement
+          #    unaccounted. The ledger row is then understated. `[1h] > 0` catches
+          #    any such close in the last hour.
+          # ------------------------------------------------------------------
+          - alert: LiveFundingNotBooked
+            expr: sum by (bot_id, container_name) (increase(fks_bot_funding_coverage_missing_total{mode="live"}[1h])) > 0
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE close booked with incomplete funding coverage ({{ $labels.container_name }})"
+                description: >
+                    increase(fks_bot_funding_coverage_missing_total{{"{"}}mode="live"{{"}"}}[1h])
+                    = {{ $value }} on {{ $labels.bot_id }} — a live close booked
+                    with partial/none funding coverage (a funding-history fetch
+                    gap), so its settlement did not book and the ledger row is
+                    understated. Backfill the settlement before trusting the P&L.
+                runbook: >
+                    Check the close record's funding_coverage flag and re-fetch
+                    the funding history for the hold window; reconcile the row.

@@ -367,10 +367,14 @@ services:
             - BRAIN_HEARTBEAT_MS=${BRAIN_HEARTBEAT_MS:-5000}
             - BRAIN_WATCHDOG_CHECK_INTERVAL_MS=${BRAIN_WATCHDOG_CHECK_INTERVAL_MS:-5000}
             - BRAIN_WATCHDOG_DEAD_THRESHOLD=${BRAIN_WATCHDOG_DEAD_THRESHOLD:-10}
-            # Bearer token protecting the brain kill-switch / affinity-reset
-            # endpoints. UNSET = fail-OPEN (those endpoints are unauthenticated).
-            # Set BRAIN_API_TOKEN in .env to require auth. Empty default keeps
-            # current behaviour so this passthrough is a no-op until you opt in.
+            # DEPRECATED / no-op: janus no longer reads BRAIN_API_TOKEN. The
+            # brain kill-switch and affinity-reset endpoints are POSTs, so they
+            # are now gated by JANUS_API_TOKEN (below) via the single janus-auth
+            # layer. The old separate BRAIN_API_TOKEN layer was retired because
+            # two independently-keyed layers could not both be satisfied by one
+            # Authorization header and could lock out the kill-switch. Left here
+            # only so a stale value in an existing .env is harmless; you may
+            # remove it. Use JANUS_API_TOKEN instead.
             - BRAIN_API_TOKEN=${BRAIN_API_TOKEN:-}
             # Bearer token required on ALL mutating (non-GET) routes of both
             # janus HTTP surfaces — the forward REST server (risk-config PUT,
@@ -385,9 +389,13 @@ services:
             # warning; reads are unaffected. Set JANUS_API_TOKEN in .env to a
             # strong random value to enable writes. The in-stack caller that
             # needs it — the webui, which proxies the risk-config and optimizer
-            # PUTs — receives the SAME token below. (This supersedes the
-            # narrower BRAIN_API_TOKEN above; leave that one unset to avoid a
-            # double-bearer conflict on the kill-switch routes.)
+            # PUTs — receives the SAME token below. This is the ONE janus write
+            # token: it also gates the brain kill-switch / affinity routes, so
+            # the deprecated BRAIN_API_TOKEN above is no longer needed.
+            #
+            # NOTE: the paper-trading deploy script's POST /api/services/start
+            # calls (and the mid-run standby auto-restart) forward this token, so
+            # setting it does not leave janus stuck in STANDBY on (re)deploy.
             - JANUS_API_TOKEN=${JANUS_API_TOKEN:-}
             - RUST_LOG=info,janus=debug,sqlx=debug,janus_backward=debug
             - RUST_BACKTRACE=1

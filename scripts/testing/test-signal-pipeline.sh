@@ -64,6 +64,10 @@ step()    { echo -e "${DIM}  →${RESET} $*"; }
 ALERTMANAGER_URL="${ALERTMANAGER_URL:-http://localhost:9093}"
 RUBY_URL="${RUBY_URL:-http://localhost:8050}"
 JANUS_FORWARD_URL="${JANUS_FORWARD_URL:-http://localhost:7001}"
+# Bearer for janus's mutating routes (janus-auth). The affinity/record POSTs
+# below are non-GET and return 401 once JANUS_API_TOKEN is set on the stack, so
+# forward it when present. Empty (default) = no header, unchanged behaviour.
+JANUS_API_TOKEN="${JANUS_API_TOKEN:-}"
 REDIS_HOST="${REDIS_HOST:-localhost}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 POLL_TIMEOUT=15
@@ -140,9 +144,14 @@ _curl() {
   local url="$1";    shift
   local tmp
   tmp=$(mktemp)
+  # Attach the janus-auth bearer on mutating requests when configured. Harmless
+  # on GETs (janus only enforces on non-GET), so applied uniformly.
+  local auth_args=()
+  [ -n "${JANUS_API_TOKEN:-}" ] && auth_args=(-H "Authorization: Bearer ${JANUS_API_TOKEN}")
   LAST_HTTP_CODE=$(curl -s -o "$tmp" -w "%{http_code}" \
     -X "$method" "$url" \
     -H "Content-Type: application/json" \
+    ${auth_args[@]+"${auth_args[@]}"} \
     "$@")
   # Write code to temp file so parent shell can read it after subshell returns
   printf '%s' "$LAST_HTTP_CODE" > "$_HTTP_CODE_TMP"

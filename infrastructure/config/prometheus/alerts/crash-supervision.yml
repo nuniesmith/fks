@@ -11,11 +11,14 @@
 #   • keys prune on FINISHED time and QUARANTINES live/crashed containers
 #     (they are no longer removed within ~60s), and
 #   • exports `fks_spawner_crashed_bots` — the count of spawner-managed bots
-#     currently retained after an UNEXPECTED exit (an exited container whose
-#     bot_runs row was never closed via the API). Any exit that wasn't an
-#     operator stop (panic, OOM-kill, host reboot) leaves that row open, so
-#     this gauge is the absence-ROBUST crash signal: it does not depend on the
-#     bot's own `up` series still existing.
+#     currently DOWN after an UNEXPECTED exit: a container that exited NON-ZERO
+#     (panic, OOM-kill, fatal signal, host reboot) while its bot_runs row was
+#     never closed via the API, AND whose bot has not since come back up. A
+#     clean exit (code 0 — graceful stop / self-exit) is NOT counted even with
+#     an open row, and a bot that recovered (a new running container for the
+#     same bot_id, via auto-restart or an operator respawn) drops back out of
+#     the count. This gauge is the absence-ROBUST crash signal: it does not
+#     depend on the bot's own `up` series still existing.
 #
 # Two complementary page-worthy alerts:
 #   1. LiveBotCrashed        — the spawner detected an unexpected exit
@@ -40,11 +43,13 @@ groups:
     - name: crash-supervision-critical
       rules:
           # ------------------------------------------------------------------
-          # A bot crashed and is being quarantined for forensics. Stays firing
-          # until the operator investigates and removes the container (which
-          # drops the gauge to 0 and resolves the alert). `for: 1m` requires the
-          # gauge to persist one scrape cycle so a same-tick detect/clear can't
-          # flap it.
+          # A bot crashed and is being quarantined for forensics. Resolves when
+          # the gauge returns to 0 — either the operator removes the container
+          # after triage, OR the bot comes back up (a successful bounded
+          # auto-restart / an operator respawn drops the crashed container out
+          # of the count even while it stays retained for forensics). `for: 1m`
+          # requires the gauge to persist one scrape cycle so a same-tick
+          # detect/clear can't flap it.
           # ------------------------------------------------------------------
           - alert: LiveBotCrashed
             expr: fks_spawner_crashed_bots > 0

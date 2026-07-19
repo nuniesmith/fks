@@ -26,10 +26,11 @@
 #   fks_bot_open_notional_usd                    gauge
 #   fks_bot_open_position_entry_unix{symbol}     gauge      (entry, unix s)
 #   fks_bot_fills_total                          counter
-#   fks_bot_fill_anomalies_total{kind}           counter
+#   fks_bot_fill_anomalies_total{kind}           counter    (invalid/unrecorded/position_refresh)
 #   fks_bot_order_errors_total{class}            counter
 #   fks_bot_funding_settlements_total            counter
 #   fks_bot_funding_coverage_missing_total{coverage} counter
+#   fks_bot_fill_coverage_missing_total{coverage}    counter (none = paper-model fallback)
 #
 # Routing: every rule is severity=critical → Alertmanager `discord-critical`
 # receiver (the same Discord path every other FKS critical uses; see
@@ -46,11 +47,13 @@ groups:
           # 1. Session-PnL daily-loss halt active on a live symbol. The halt is
           #    the rail working — but on a LIVE money bot it is page-worthy: the
           #    operator should know within minutes that a symbol locked out for
-          #    the UTC day on a session loss. A halt is expected to CLEAR at the
-          #    00:00 UTC rollover; one that persists across a rollover is a
-          #    stuck-flag / persistence bug (worse). `for: 30m` debounces the
-          #    settle after a trip; the gauge is re-rendered every scrape while
-          #    set, so it does not go stale between trades.
+          #    the UTC day on a session loss. The exporter renders this gauge
+          #    LIVE against the 00:00 UTC rollover (it clears the halt on its own
+          #    at the daily boundary even without a fresh persist), so a `1` here
+          #    is always a GENUINE current-session halt, never a stuck flag left
+          #    over from a prior day. `for: 30m` debounces the settle after a
+          #    trip; the gauge is re-rendered every scrape, so it never goes
+          #    stale between trades.
           # ------------------------------------------------------------------
           - alert: LiveSessionHalted
             expr: fks_bot_session_halt_active{mode="live"} == 1
@@ -67,9 +70,10 @@ groups:
                     session-PnL daily-loss halt is engaged, so no new entry on
                     this symbol reaches the venue until the 00:00 UTC rollover
                     (reduce-only EXITS are still allowed by the exit exemption).
-                    Expected on an honest session loss; if it persists ACROSS a
-                    00:00 UTC boundary the halt failed to roll over — investigate
-                    the gate-state persistence.
+                    Expected on an honest session loss. The gauge is
+                    rollover-aware (it clears at 00:00 UTC on its own), so a halt
+                    still showing active after the boundary is a GENUINE new-day
+                    halt, not a stuck flag — confirm the loss is real.
                 runbook: >
                     Check the bot logs for "decision blocked: session PnL halted"
                     and the framework_risk_state row for this symbol; confirm the
@@ -78,8 +82,11 @@ groups:
           # ------------------------------------------------------------------
           # 2. Circuit breaker tripped on a live symbol — the loss-streak
           #    breaker fired (default 4 losses in the window). On live money
-          #    that is a cluster of losers: page. Auto-clears after the cooldown;
-          #    `for: 5m` avoids paging on a trip that clears within a cooldown.
+          #    that is a cluster of losers: page. The exporter renders this gauge
+          #    LIVE against the breaker cooldown (it clears once now - tripped_at
+          #    >= cooldown even without a fresh persist), so a `1` here means the
+          #    breaker is still ACTIVELY blocking. `for: 5m` avoids paging on a
+          #    trip that clears within a cooldown.
           # ------------------------------------------------------------------
           - alert: LiveCircuitBreakerTripped
             expr: fks_bot_circuit_breaker_tripped{mode="live"} == 1
@@ -203,3 +210,69 @@ groups:
                 runbook: >
                     Check the close record's funding_coverage flag and re-fetch
                     the funding history for the hold window; reconcile the row.
+
+          # ------------------------------------------------------------------
+          # 7. Fill-pipeline anomaly on the live bot — a fill the risk layer
+          #    never recorded (`unrecorded`: a symbol not in BotConfig.symbols,
+          #    so its loss never counts toward the halt/breaker), a non-finite
+          #    fill dropped at the ingestion boundary (`invalid`), or a position
+          #    refresh error (`position_refresh`). Any of these is a ledger-
+          #    integrity event on the money path: the realised-PnL / risk-gate
+          #    accounting is now suspect. `[10m] > 0` catches any occurrence;
+          #    `for: 2m` requires it to survive a scrape so a single transient
+          #    blip doesn't page, while still paging promptly.
+          # ------------------------------------------------------------------
+          - alert: LiveFillAnomaly
+            expr: sum by (bot_id, container_name, kind) (increase(fks_bot_fill_anomalies_total{mode="live"}[10m])) > 0
+            for: 2m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE bot {{ $labels.container_name }} fill anomaly ({{ $labels.kind }})"
+                description: >
+                    increase(fks_bot_fill_anomalies_total{{"{"}}mode="live",kind="{{ $labels.kind }}"{{"}"}}[10m])
+                    = {{ $value }} on {{ $labels.bot_id }} — a fill was not cleanly
+                    recorded by the risk layer (kind={{ $labels.kind }}). An
+                    `unrecorded` fill's loss never reaches the session-halt /
+                    circuit-breaker; an `invalid` fill was dropped as non-finite.
+                    Either way the ledger + risk accounting for this bot is now
+                    suspect and must be reconciled.
+                runbook: >
+                    Grep the bot logs for "auto-PnL: fill for a symbol not in the
+                    risk-state map" / "non-finite fill" / position-refresh errors;
+                    confirm every traded symbol is in BotConfig.symbols and
+                    reconcile the realised ledger against the venue fills.
+
+          # ------------------------------------------------------------------
+          # 8. Live close booked from the PAPER MODEL (fill_coverage=none). When
+          #    a live close cannot be booked from ACTUAL venue fills/settlements
+          #    (REST error, or the fills aged out of the query window), the brain
+          #    books a paper-MODEL estimate and flags the row fill_coverage:none
+          #    — "NOT an actual live number". This is orthogonal to funding
+          #    coverage (which the model still reports full), so LiveFundingNotBooked
+          #    does NOT catch it. It is arguably the most important live-accounting
+          #    anomaly: a "live" P&L row that is actually an estimate. `[1h] > 0`
+          #    catches any such close in the last hour.
+          # ------------------------------------------------------------------
+          - alert: LiveCloseBookedFromModel
+            expr: sum by (bot_id, container_name) (increase(fks_bot_fill_coverage_missing_total{mode="live",coverage="none"}[1h])) > 0
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: bot-money-path
+            annotations:
+                summary: "LIVE close booked from the paper model on {{ $labels.container_name }} (not an actual number)"
+                description: >
+                    increase(fks_bot_fill_coverage_missing_total{{"{"}}mode="live",coverage="none"{{"}"}}[1h])
+                    = {{ $value }} on {{ $labels.bot_id }} — a LIVE close had no
+                    usable venue fills, so its P&L row was booked from the paper
+                    MODEL (fill_coverage:none) and is an ESTIMATE, not an actual
+                    live number. The realised ledger for this bot is overstated /
+                    understated by the modelling error until reconciled.
+                runbook: >
+                    Find the close record flagged fill_coverage:none, pull the
+                    actual venue fills + settlements for that order, and rebook
+                    the row from the real execution before trusting the P&L.

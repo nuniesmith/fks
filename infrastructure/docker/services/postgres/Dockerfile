@@ -32,6 +32,7 @@
 #   30     — Edge factory         (edges registry + backtest_runs ledger)
 #   31     — UI layouts           (ui_layouts — server-side saved dock layouts)
 #   32     — Backtest role        (fks_backtest — scoped creds for backtest containers)
+#   33     — WebUI auth           (webui_users/sessions/audit + fks_webui role)
 #
 # ⚠️ Every src/sql/{janus,spawner}/*.sql file MUST be COPY'd below — initdb
 # only runs on an EMPTY volume, so a missing script here means a fresh-host
@@ -46,6 +47,8 @@
 #   JANUS_DB           — Janus database name               (default: janus_db)
 #   RUBY_DB            — Spawner database name (legacy name) (default: ruby_db)
 #   BACKTEST_DB_PASSWORD — password for the scoped fks_backtest role (009);
+#                        empty/unset = role created but not loggable-into
+#   WEBUI_DB_PASSWORD    — password for the scoped fks_webui role (010);
 #                        empty/unset = role created but not loggable-into
 # =============================================================================
 
@@ -113,3 +116,12 @@ COPY src/sql/spawner/005_ui_layouts.sql                   /docker-entrypoint-ini
 # Must run AFTER 30-edge-factory.sql, which creates backtest_runs.)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/009_backtest_role.sql                /docker-entrypoint-initdb.d/32-backtest-role.sql
+
+# ---------------------------------------------------------------------------
+# Phase 11 — WebUI auth (cluster + ruby_db) — webui_users/sessions/audit +
+# the scoped fks_webui LOGIN role (SELECT/INSERT/UPDATE/DELETE on the three
+# webui_* tables + USAGE on their sequences ONLY — never the spawner's full
+# fks_user creds). Companion to fks-web #47 so a fresh host boots auth-ready
+# instead of fail-closed 503. Runs AFTER 02-spawner-init.sql (creates ruby_db).
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/010_webui_auth.sql                   /docker-entrypoint-initdb.d/33-webui-auth.sql

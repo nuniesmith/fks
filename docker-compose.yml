@@ -94,6 +94,11 @@ services:
             # consumed via psql \getenv). Empty = role is created without a
             # usable password (fails closed); re-apply the script to set it.
             - BACKTEST_DB_PASSWORD=${BACKTEST_DB_PASSWORD:-}
+            # Password for the scoped fks_webui role (33-webui-auth.sql, consumed
+            # via psql \getenv). Same fail-closed contract as fks_backtest: empty
+            # = role created but not loggable-into; re-apply the script to set/
+            # rotate it. Must equal the webui's WEBUI_DATABASE_URL password.
+            - WEBUI_DB_PASSWORD=${WEBUI_DB_PASSWORD:-}
             - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
         ports:
             - "127.0.0.1:5432:5432"
@@ -604,7 +609,34 @@ services:
             # /sse/bars/{symbol} endpoint (janus PR #106), set in .env:
             #   JANUS_BARS_SSE_URL=http://fks_janus:8080/sse/bars
             - JANUS_BARS_SSE_URL=${JANUS_BARS_SSE_URL:-}
-            - ORIGIN=http://localhost:3001
+            # ── Phase-1 auth (fks-web #47) companion wiring ──────────────────
+            # Auth store: the scoped fks_webui LOGIN role (010_webui_auth.sql),
+            # NOT the spawner's fks_user. WEBUI_DB_PASSWORD must match the value
+            # the postgres service applied to the role (fails closed if unset:
+            # the webui 503s until schema+role+password exist). In-container DNS
+            # host is fks_postgres:5432, database ruby_db (RUBY_DB).
+            - WEBUI_DATABASE_URL=postgres://fks_webui:${WEBUI_DB_PASSWORD:-}@fks_postgres:5432/${RUBY_DB:-ruby_db}
+            # Service-identity token the adapter re-mints on its spawner-bound
+            # calls (secrets/notifications/capabilities + the /bots page). MUST
+            # equal the spawner's NGINX_INTERNAL_TOKEN or every spawner call 401s
+            # once #47's strip-set lands (auth-chain H5). Never sent to janus /
+            # the browser (server-side only).
+            - INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
+            # CSRF origin (M7): SvelteKit's built-in form-action origin check
+            # rejects the login POST as "cross-site" when a static ORIGIN
+            # (http://localhost:3001) != the real browser origin (the tailnet
+            # hostname via nginx TLS) — i.e. you cannot log in at all. Derive the
+            # origin per-request from the proxy headers nginx already sends
+            # (X-Forwarded-Proto + Host, conf:321/324) instead of pinning ORIGIN.
+            # NB: adapter-node ignores PROTOCOL/HOST_HEADER when ORIGIN is set, so
+            # ORIGIN is deliberately REMOVED here.
+            - PROTOCOL_HEADER=x-forwarded-proto
+            - HOST_HEADER=host
+            # Real client IP (M8): behind nginx getClientAddress() would otherwise
+            # be the nginx container IP for every device — collapsing the per-IP
+            # login limiter to one global bucket and blinding the audit log. nginx
+            # sets X-Real-IP (conf:322); trust it for the true client address.
+            - ADDRESS_HEADER=X-Real-IP
         networks:
             - fks-network
         healthcheck:

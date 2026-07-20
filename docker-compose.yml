@@ -622,15 +622,27 @@ services:
             # once #47's strip-set lands (auth-chain H5). Never sent to janus /
             # the browser (server-side only).
             - INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}
-            # CSRF origin (M7): SvelteKit's built-in form-action origin check
-            # rejects the login POST as "cross-site" when a static ORIGIN
-            # (http://localhost:3001) != the real browser origin (the tailnet
-            # hostname via nginx TLS) — i.e. you cannot log in at all. Derive the
-            # origin per-request from the proxy headers nginx already sends
-            # (X-Forwarded-Proto + Host, conf:321/324) instead of pinning ORIGIN.
-            # NB: adapter-node ignores PROTOCOL/HOST_HEADER when ORIGIN is set, so
-            # ORIGIN is deliberately REMOVED here.
-            - PROTOCOL_HEADER=x-forwarded-proto
+            # CSRF origin (M1/M7): SvelteKit's built-in form-action origin check
+            # rejects the login POST as "cross-site" unless the app origin it
+            # computes equals the browser's Origin header. The browser always
+            # loads the tailnet host over HTTPS (tailscale terminates TLS), so
+            # the app origin MUST resolve to https://<tailnet-host>.
+            #   • HOST_HEADER=host → adapter-node takes the host from nginx's
+            #     forwarded Host header ($host = the tailnet hostname, conf:109),
+            #     not the internal container name.
+            #   • PROTOCOL_HEADER is deliberately LEFT UNSET. nginx is HTTP-only
+            #     behind tailscale (listen 80; health body reports "ssl":"off"),
+            #     so it stamps `X-Forwarded-Proto $scheme` = "http" on EVERY
+            #     webui location (conf:112 for the /login page route). Wiring
+            #     PROTOCOL_HEADER=x-forwarded-proto would feed that "http" into
+            #     adapter-node's get_origin() → app origin http://<host>, which
+            #     mismatches the browser's https://<host> → 403 "Cross-site POST
+            #     form submissions are forbidden": login is bricked on the real
+            #     access path. With PROTOCOL_HEADER unset, get_origin() defaults
+            #     the scheme to "https" (adapter-node handler.js), i.e. the true
+            #     external scheme. Do NOT set ORIGIN either — adapter-node ignores
+            #     HOST_HEADER once ORIGIN is pinned, re-creating the localhost bug.
+            #   Regression guard: scripts/testing/verify_webui_csrf_origin.py.
             - HOST_HEADER=host
             # Real client IP (M8): behind nginx getClientAddress() would otherwise
             # be the nginx container IP for every device — collapsing the per-IP

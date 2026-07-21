@@ -595,6 +595,13 @@ services:
             # janus metrics remap and alertmanager).
             - CRYPTO_SPOT_INTERNAL_URL=${CRYPTO_SPOT_INTERNAL_URL:-}
             - CRYPTO_FUNDING_INTERNAL_URL=${CRYPTO_FUNDING_INTERNAL_URL:-}
+            # LIVE funding twin /status for the cockpit's live unrealized feed
+            # (fks-web /api/cockpit/live-status). Deliberately EMPTY default —
+            # "not configured" is the honest state until Gate-A arms a live
+            # twin. Never point this at the paper container: the webui flags a
+            # non-live BotStatus.mode as a red mismatch, but the guard exists
+            # precisely because that mistake would render paper PnL as live.
+            - CRYPTO_FUNDING_LIVE_INTERNAL_URL=${CRYPTO_FUNDING_LIVE_INTERNAL_URL:-}
             - PUBLIC_JANUS_URL=http://fks_janus:7000
             # Bearer token the SvelteKit server attaches to its mutating janus
             # proxy calls (the /settings risk-config PUT → forward, and the

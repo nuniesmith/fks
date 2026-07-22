@@ -1420,6 +1420,14 @@ services:
             # Fail closed (refuse to boot) when the internal token is unset,
             # instead of the silent dev-passthrough. Off by default.
             - REQUIRE_INTERNAL_TOKEN=${REQUIRE_INTERNAL_TOKEN:-false}
+            # Scoped bot->spawner ingest token (fks-spawner #25): accepted ONLY
+            # by POST /events (dual-auth with the internal token; constant-time;
+            # fail-closed when empty). When set, the spawner injects
+            # SPAWNER_EVENTS_URL + SPAWNER_EVENTS_TOKEN into spawned-bot env so
+            # bots can emit risk_halt through the notification pipeline — a
+            # bot-held token opens nothing but the events mailbox. Rotate via
+            # openssl rand -hex 32 + recreate spawner + respawn bots.
+            - EVENTS_TOKEN=${EVENTS_TOKEN:-}
             # Edge-decay: weekly re-run of every active edge's backtest so the
             # Sunday advisor report can show drift vs the prior run. Default
             # OFF; the schedule (UTC) defaults to Sun 16:00 (~6h before the

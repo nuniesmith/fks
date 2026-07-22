@@ -3,7 +3,7 @@
 -- =============================================================================
 -- Creates the fks_backtest LOGIN role: the credentials handed to one-shot
 -- edge-factory backtest containers (BACKTEST_DB_URL) instead of the spawner's
--- own fks_user URL, which carries full read/write over ALL of ruby_db —
+-- own fks_user URL, which carries full read/write over ALL of fks_db —
 -- exchange_secrets, transfers, accounts, net_worth_snapshots, edges included
 -- (2026-07-11 audit, api-security MEDIUM).
 --
@@ -17,7 +17,7 @@
 --      WHERE id = $1
 --
 -- So the role gets, and ONLY gets:
---   • CONNECT on ruby_db + USAGE on schema public
+--   • CONNECT on fks_db + USAGE on schema public
 --   • SELECT on backtest_runs            (the UPDATE's WHERE reads `id`)
 --   • UPDATE (status, results, finished_at) on backtest_runs — the exact
 --     columns the container-side protocol writes; params/edge_id/container_id
@@ -42,20 +42,20 @@
 --   role creation is existence-guarded, ALTER ROLE/GRANT are idempotent.
 --
 -- Prerequisites:
---   • 001_init.sql        — creates ruby_db.
+--   • 001_init.sql        — creates fks_db.
 --   • 008_edge_factory.sql — creates backtest_runs (lexicographic order:
 --     30-edge-factory.sql lands before 32-backtest-role.sql).
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once, with
 -- the password injected into the exec env; -d postgres because role creation
--- is cluster-wide and the script \connects to ruby_db itself):
+-- is cluster-wide and the script \connects to fks_db itself):
 --   docker exec -i -e BACKTEST_DB_PASSWORD="$BACKTEST_DB_PASSWORD" \
 --     fks_postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres' \
 --     < src/sql/spawner/009_backtest_role.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
 -- Default the password to '' so the script also runs where the env var is
 -- absent entirely (\getenv leaves the variable untouched when unset).
@@ -80,9 +80,9 @@ WHERE length(:'backtest_password') > 0\gexec
 -- ---------------------------------------------------------------------------
 -- Minimal privileges (see header). GRANTs are idempotent.
 -- ---------------------------------------------------------------------------
-GRANT CONNECT ON DATABASE :ruby_db TO fks_backtest;
+GRANT CONNECT ON DATABASE :fks_db TO fks_backtest;
 
-\connect :ruby_db
+\connect :fks_db
 
 GRANT USAGE ON SCHEMA public TO fks_backtest;
 

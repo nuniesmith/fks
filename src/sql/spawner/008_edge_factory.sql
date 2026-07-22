@@ -1,8 +1,8 @@
 -- =============================================================================
 -- 008-edge_factory.sql — Edge factory: edge registry + backtest-run ledger
 -- =============================================================================
--- Creates the edges and backtest_runs tables in ruby_db (see 001_init.sql for
--- why the database keeps the ruby_db name). Owned by the fks_bot_spawner
+-- Creates the edges and backtest_runs tables in fks_db (see 001_init.sql for
+-- why the database keeps the fks_db name). Owned by the fks_bot_spawner
 -- service (fks-spawner crates/spawner/), which exposes:
 --   GET    /edges                     — list the registry (active first)
 --   POST   /edges                     — UPSERT one edge by edge_id
@@ -49,13 +49,13 @@
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once):
 --   docker exec -i fks_postgres sh -c \
---     'psql -U "$POSTGRES_USER" -d ruby_db' < src/sql/spawner/008_edge_factory.sql
+--     'psql -U "$POSTGRES_USER" -d fks_db' < src/sql/spawner/008_edge_factory.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- =============================================================================
 -- edges — the edge registry: the edge portfolio's source of truth

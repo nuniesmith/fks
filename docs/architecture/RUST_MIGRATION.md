@@ -31,11 +31,11 @@ let the repo become the lean janus-centric orchestrator it's heading toward
 ruby/trainer Prometheus jobs + alerts + Grafana dashboards, the `python.yml` CI
 workflow, the root `pyproject.toml`, and all the run.sh / `.env.example` wiring.
 
-**Preserved (critical):** the Bot Spawner's `ruby_db` schema —
+**Preserved (critical):** the Bot Spawner's spawner schema —
 `bot_configs` / `bot_runs` — was relocated out of `src/ruby/sql/` into
 [`src/sql/spawner/`](../../src/sql/spawner/) and the postgres init image now
-bakes it from there. The database keeps the `ruby_db` name (env `RUBY_DB`) for
-backward compatibility; the spawner is untouched.
+bakes it from there. The database was renamed `fks_db` (from `ruby_db`,
+2026-07-21); the env var name `RUBY_DB` is retained; the spawner is untouched.
 
 **Consequences (now tracked as follow-ups, see §12):** janus ingests market
 data natively, so dropping `PYTHON_DATA_SERVICE_URL` is fine; but the WebUI's
@@ -50,8 +50,8 @@ janus demo.
 > `TRAINER_API_KEY` in `run.sh`, and the dead WebUI `/trainer` iframe route. The
 > remaining `fks_ruby` references are the **repoints** in §12-C (nginx ×74,
 > `vite.config.ts` ×9, WebUI `ruby_signal` ×10), which are gated on janus serving
-> the data contract — see the janus `TODO.md` Track D. `ruby_db` (spawner schema)
-> is intentionally kept.
+> the data contract — see the janus `TODO.md` Track D. `fks_db` (spawner schema,
+> renamed from `ruby_db` 2026-07-21) is intentionally kept.
 
 ### The burn-native ML track is already substantially built
 
@@ -389,8 +389,10 @@ remaining work splits into **ML parity/polish** (inside janus) and
    config needs a rewrite to a janus + spawner + monitoring topology.
 8. **Test harness scripts.** `scripts/testing/{monitor-test,run-integration-tests,
    test-signal-pipeline}.sh` still probe `fks_ruby`; update or retire them.
-9. **(Optional) rename `ruby_db` → `spawner_db`.** Cosmetic; the spawner is the
-   only consumer now. Kept as `ruby_db` for backward compatibility.
+9. **Rename `ruby_db` → done (`fks_db`, 2026-07-21).** The database was renamed
+   from `ruby_db` to `fks_db`; the `RUBY_DB` env var name is retained to avoid
+   churn across compose/run.sh/SQL `\getenv`. A `spawner_db` rename remains an
+   optional future cosmetic step.
 
 ### D. Execution-gate + safety (§6 Phase 3)
 10. **Port the 9-check execution gate to Rust** with exhaustive parity tests

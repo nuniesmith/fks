@@ -96,7 +96,7 @@ Tailscale-served nginx edge only).
 | orb-briefing | `fks_orb_briefing` | fks-state `crates/orb-briefing` (**`state`** profile, local sibling build) | — | weekday pre-market briefing + sized ORB day-plan to Discord |
 | rithmic-connector | `fks_rithmic_connector` | fks-state `crates/rithmic-connector` (**`rithmic`** profile; runtime-gated `RITHMIC_ENABLED`) | 9091 (opt-in) | read-only futures feed (foundation; idle without creds) |
 | nginx | `fks_nginx` | in-tree config | 80 | TLS edge, `X-Internal-Token` injection |
-| postgres | `fks_postgres` | custom image | 5432 | `janus_db` + `ruby_db` (spawner schema) |
+| postgres | `fks_postgres` | custom image | 5432 | `janus_db` + `fks_db` (spawner schema) |
 | redis | `fks_redis` | custom image | 6379 | signals cache, kill switch, pub/sub, state |
 | questdb | `fks_questdb` | custom image | 9000/9009/8812 | market-data time series (`candles_crypto`) |
 | qdrant | `fks_qdrant` | upstream | 6333/6334 | vector store (schema/memory research) |
@@ -321,7 +321,7 @@ klines (Binance WS) → MarketDataBus → forward strategy consensus
 ```
 /settings card (submit-only) → webui adapter /api/settings/{exchange}-keys
   → nginx X-Internal-Token → spawner POST /secrets
-  → ChaCha20-Poly1305 encrypt (SPAWNER_SECRETS_KEY) → Postgres ruby_db
+  → ChaCha20-Poly1305 encrypt (SPAWNER_SECRETS_KEY) → Postgres fks_db
   → (spawn with secrets:[...]) → decrypt at BotRunStore boundary
   → container env {EXCHANGE}_API_* → exchange-apiws authenticated path
 ```

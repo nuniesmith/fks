@@ -428,7 +428,7 @@ async function riskConfigPost(event: RequestEvent): Promise<Response> {
   }
 }
 
-// ── /settings exchange API keys → the spawner's secret store (Postgres ruby_db).
+// ── /settings exchange API keys → the spawner's secret store (Postgres fks_db).
 // SECURITY: the browser only ever SUBMITS credentials here; they are never read
 // back. The spawner persists them server-side behind X-Internal-Token; the
 // status endpoint reports only WHICH exchanges are configured (never the keys).

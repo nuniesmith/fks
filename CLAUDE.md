@@ -61,7 +61,7 @@ data/engine/trainer service was removed — janus is the platform now. See
 | **Janus** | `nuniesmith/janus` (git-clone image) | 7000 / 7001 / 8080 / 8180 | Rust trading brain + native data ingestion + burn ML. The platform. |
 | **WebUI** | `src/web/` (or `nuniesmith/fks-web`) | 3001 | SvelteKit 5 dashboard. Includes `/bots` for spawner control. |
 | **Spawner** | `fks-spawner` repo (git-clone build via `SPAWNER_REPO`) | 8090 | Bot container lifecycle. Mounts `/var/run/docker.sock`, writes Prometheus SD. |
-| **Postgres** | — | 5432 | `janus_db` + `ruby_db` on one instance (`ruby_db` = spawner schema). |
+| **Postgres** | — | 5432 | `janus_db` + `fks_db` on one instance (`fks_db` = spawner schema; renamed from `ruby_db` 2026-07-21, env var `RUBY_DB` retained). |
 | **Redis** | — | 6379 | Shared pub/sub, state, caching. |
 | **QuestDB** | — | 9000 / 9009 / 8812 | Time-series market data. |
 | **Qdrant** | — | 6333 / 6334 | Vector embeddings (optional). |
@@ -144,7 +144,7 @@ removed; don't add a second data path elsewhere.
 | DB | Schema location | Used by |
 |--|--|--|
 | `janus_db` (Postgres) | janus repo `sql/` + `src/sql/janus/` bootstrap | Janus services |
-| `ruby_db` (Postgres) | `src/sql/spawner/` (`002`–`009`: `bot_runs`/`bot_configs`, secrets, notifications, `ui_layouts`, `net_worth_snapshots`, treasury, edge factory + the scoped `fks_backtest` role) | Spawner (legacy DB name) |
+| `fks_db` (Postgres) | `src/sql/spawner/` (`002`–`011`: `bot_runs`/`bot_configs`, secrets, notifications, `ui_layouts`, `net_worth_snapshots`, treasury, edge factory, the scoped `fks_backtest` role, webui auth + `webui_alert_acks`) | Spawner (renamed from `ruby_db` 2026-07-21; env var `RUBY_DB` retained) |
 | QuestDB | — | Tick / bar storage |
 | Qdrant | — | Vector embeddings (optional) |
 
@@ -183,6 +183,14 @@ exchange-apiws = "0.9"
 - **No `slot="..."`** — use snippets.
 - **`api` from `$lib/api/client.ts` is an object**, not a callable. `api.get(url)`, `api.post(url, body)`, …
 - **Adapter:** `@sveltejs/adapter-node`. Dev on 5173, prod container on 3000 (mapped to host 3001).
+- **WebUI M0–M3 buildout (landed 2026-07, in `nuniesmith/fks-web`):** installable
+  iPhone PWA (manifest/icons/iOS meta/safe-areas); RBAC at the `routeRequest` seam
+  (viewer < operator < admin — kill = operator+, rearm/keys/notifications/risk =
+  admin-only); cockpit live-status (three-state `/status` live-twin feed +
+  mode-mismatch guard) + alert-ack inbox (`webui_alert_acks`, sha256(labels+activeAt)
+  identity); Money-snapshot landing panel. Auth Phase 1 (scrypt + DB sessions,
+  scoped `fks_webui` role) is live. SQL for auth + acks: `010_webui_auth.sql`,
+  `011_webui_alert_acks.sql`.
 
 ### Protocol Buffers
 

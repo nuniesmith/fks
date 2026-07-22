@@ -1,7 +1,7 @@
 # fks — TODO (orchestration / cross-cutting)
 
 > **Repo:** `github.com/nuniesmith/fks`
-> **Last synced:** 2026-07-13 — see **🗺️ NEXT PHASES** below for the current plan
+> **Last synced:** 2026-07-21 — see **🗺️ NEXT PHASES** below for the current plan
 >
 > This file covers **cross-cutting** orchestration work — consuming the
 > external repos/crates, docker-compose, Dockerfiles, CI/CD, Postgres
@@ -21,7 +21,8 @@
 > the `trainer` container / `src/ruby/sql/` are **stale** — the equivalents are
 > being rebuilt natively in janus. The plan + remaining follow-ups are in
 > [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).
-> The spawner's `ruby_db` schema now lives in `src/sql/spawner/`.
+> The spawner's `fks_db` schema (renamed from `ruby_db` 2026-07-21; env var
+> `RUBY_DB` retained) now lives in `src/sql/spawner/`.
 
 ---
 
@@ -273,6 +274,23 @@ infra, and `bots/` (with `strategies/` to come). The two reference bots
 ---
 
 ## WebUI buildout — status (2026-06-09)
+
+> **Update 2026-07-21 — webui M0–M3 landed (in `nuniesmith/fks-web`, this repo
+> only carries the SQL + compose passthrough):**
+> - **M0** — notification event-kind fix + PWA static allowlist + e2e env.
+> - **M1** — installable iPhone app (manifest / icons / iOS meta / safe-areas).
+> - **M2 Phase A** — RBAC at the `routeRequest` seam (viewer < operator < admin;
+>   kill = operator+, rearm/keys/notifications/risk = admin-only).
+> - **M3** — Money-snapshot landing panel (Phase D); cockpit e2e kill-flow guards
+>   (Phase C); live-twin `/status` three-state feed + mode-mismatch guard (Phase A,
+>   `CRYPTO_FUNDING_LIVE_INTERNAL_URL` passthrough via fks #220); alert-ack inbox
+>   (Phase B) — `webui_alert_acks` (`src/sql/spawner/011_webui_alert_acks.sql`,
+>   fks #221), `/monitoring` UI + StatusBar chip + cockpit armed panel.
+> - Auth Phase 1 (scrypt + DB sessions, scoped `fks_webui` role,
+>   `010_webui_auth.sql`) was already live.
+> - **DB rename (2026-07-21):** the spawner DB is now `fks_db` (was `ruby_db`); the
+>   `RUBY_DB` env var name is retained. Pre-2026-07-21 state snapshots carry
+>   `db/ruby_db.sql` — see `docs/STATE_BACKUP.md` for the restore rename hop.
 
 The `src/web` SvelteKit dashboard buildout (plan:
 [`docs/architecture/WEBUI_BUILDOUT_PLAN.md`](docs/architecture/WEBUI_BUILDOUT_PLAN.md),

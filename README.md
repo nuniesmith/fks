@@ -82,7 +82,7 @@ Roughly 20 containers (the core ones):
 | Janus | `fks_janus` | 7000/7001/8080/8180 | Native data ingestion + burn ML + brain REST/gRPC |
 | WebUI | `fks_webui` | 3001 | SvelteKit frontend |
 | Spawner | `fks_bot_spawner` | 8090 | Bot container lifecycle (Docker socket) |
-| Postgres | `fks_postgres` | 5432 | Persistent storage (janus_db, ruby_db=spawner) |
+| Postgres | `fks_postgres` | 5432 | Persistent storage (janus_db, fks_db=spawner) |
 | Redis | `fks_redis` | 6379 | State, caching, pub/sub |
 | QuestDB | `fks_questdb` | 9000/9009 | Time-series data |
 | Qdrant | `fks_qdrant` | 6333/6334 | Vector embeddings (optional) |

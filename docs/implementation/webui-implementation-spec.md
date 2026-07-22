@@ -2933,7 +2933,7 @@ DEFAULT_PANELS = [
             {"label": "CPU",          "q": "rate(process_cpu_seconds_total{job='data-service'}[1m])*100", "unit": "%",  "warn": 70, "crit": 90},
             {"label": "Memory",       "q": "process_resident_memory_bytes{job='data-service'}/1024/1024",  "unit": "MB", "warn": 2048, "crit": 3500},
             {"label": "Redis ops/s",  "q": "instantaneous_ops_per_sec",                                   "unit": "",   "warn": None, "crit": None},
-            {"label": "PG conns",     "q": "pg_stat_activity_count{datname='ruby_db'}",                   "unit": "",   "warn": 80, "crit": 95},
+            {"label": "PG conns",     "q": "pg_stat_activity_count{datname='fks_db'}",                   "unit": "",   "warn": 80, "crit": 95},
         ],
     },
     {

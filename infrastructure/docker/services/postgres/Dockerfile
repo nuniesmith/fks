@@ -133,3 +133,12 @@ COPY src/sql/spawner/010_webui_auth.sql                   /docker-entrypoint-ini
 # name. Must run AFTER 33-webui-auth.sql, which creates the fks_webui role.)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/011_webui_alert_acks.sql             /docker-entrypoint-initdb.d/34-webui-alert-acks.sql
+
+# ---------------------------------------------------------------------------
+# Phase 14 — Notification delivery ledger (fks_db) — notification_log
+# (every webhook delivery attempt gets a row: event, channel, outcome,
+# status; detail never contains the URL. Written best-effort/off-path by
+# the spawner's fks_user; pruned by the spawner, not SQL. Initdb slot 36 —
+# 35 is reserved by 012_webui_invites (fks #223).)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/013_notification_log.sql             /docker-entrypoint-initdb.d/36-notification-log.sql

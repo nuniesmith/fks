@@ -428,8 +428,8 @@ with 30-day retention (§1.3) — fine for ops, wrong for a years-horizon
 net-worth backbone. Design:
 
 - **`net_worth_snapshots` table** (Postgres — schema shipped from this
-  repo's `src/sql/`, either `ruby_db` next to the spawner's tables or the
-  `fks-state` StateStore's schema; decided: `ruby_db`, spawner-side — §8.4):
+  repo's `src/sql/`, either `fks_db` next to the spawner's tables or the
+  `fks-state` StateStore's schema; decided: `fks_db`, spawner-side — §8.4):
   `(ts, source, exchange, currency, balance, usd_value, net_worth_usd)` at
   a coarse cadence (e.g. every 15 min + on-demand).
 - **Writer:** a small sampler that polls each registered bot's `/status`
@@ -641,7 +641,7 @@ except where noted. Effort tags are honest single-person estimates —
 | P2 | **Indicator discovery** | indicators-ta 0.3 descriptors (§6.1); janus catalog+compute API (§6.2); adapter merge + routing + parity fixture (§6.3) | indicators-ta, janus, fks-web | **~1.5–2 weeks** across 3 PRs, each shippable | — |
 | P3 | **Panel extraction** | `src/lib/panels/` + registry; recompose 3–4 pages (charts, signals, exchanges, bots) as panels; poll-dedupe in `$stores/poll.ts` | fks-web | **~2 weeks** (refactor-heavy; per-page PRs) | — |
 | P4 | **`/workspace` docking** — **✅ shipped 2026-07** (fks-web `/workspace` route; server-side layouts via the spawner `ui_layouts` table + API, fks #184, schema `005_ui_layouts.sql`) | dockview-core + Svelte 5 adapter; layout persist (localStorage → `ui_layouts` + adapter routes); 3 preset layouts | fks-web, fks (sql) | — (done) | P3 |
-| P5 | **Net-worth history** — **✅ shipped 2026-07** (fks #188/#189 + fks-web panel) | `net_worth_snapshots` schema; spawner-side `/status` sampler; `NetWorthHistoryPanel` | fks, fks-web | — (done) | schema home resolved: spawner `ruby_db` |
+| P5 | **Net-worth history** — **✅ shipped 2026-07** (fks #188/#189 + fks-web panel) | `net_worth_snapshots` schema; spawner-side `/status` sampler; `NetWorthHistoryPanel` | fks, fks-web | — (done) | schema home resolved: spawner `fks_db` |
 | P6 | **Secret kinds + webhooks** — **partially shipped 2026-07**: Discord-webhook notifications landed via a dedicated `notification_channels` store + management API (fks #179, schema `004_notifications.sql`) and a spawner-side sender firing on bot lifecycle events (fks #181) — **not** via the §5.1 kind-aware secret store, which remains open | `kind` column + `fields` v2 API (§5.1); Discord-webhook provider in picker; spawn/stop/live-flip notifications | fks (spawner, sql), fks-web | remaining: the §5.1 schema evolution | — |
 | P7 | **Capabilities gating** | `/api/capabilities` + capabilities store; Rithmic-gated nav/panels | fks-web | **days (2–3)** | P6 for kinds (soft) |
 | P8 | **Signed credential verify** | spawner `POST /secrets/{name}/verify` via exchange-apiws; settings-page verification state | fks (spawner), fks-web | **~1 week** (new dep in spawner + per-venue calls + rate limiting) | — |
@@ -676,9 +676,9 @@ creds-present-but-no-connector) degrades gracefully until it lands.
    feeds) vs. a paid API with symbol tagging. Cost/ToS/quality tradeoff —
    pick during P10 planning, and design `news_items` so the source is just
    a column.
-4. **Schema home for `net_worth_snapshots`** — spawner's `ruby_db` schema
+4. **Schema home for `net_worth_snapshots`** — spawner's `fks_db` schema
    vs. the `fks-state` StateStore's schema. **Resolved 2026-07:** the
-   spawner owns the writes, so the schema landed in `ruby_db`
+   spawner owns the writes, so the schema landed in `fks_db`
    (`src/sql/spawner/006_net_worth_snapshots.sql`, fks #188).
 5. **Rithmic book-data volume.** Depth updates for even a few CME symbols
    dwarf kline traffic; whether QuestDB ILP on this host absorbs full depth

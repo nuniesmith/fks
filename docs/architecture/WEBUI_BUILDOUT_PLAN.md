@@ -124,7 +124,7 @@
 ### Phase E — API key management (secure, server-side)  *(webui + spawner)*  — **decision made: spawner → Postgres**
 - [x] **E1** Settings form → `POST /api/settings/kraken-keys {api_key, api_secret}`
   → adapter forwards to the spawner's **`POST /secrets`**, which UPSERTs into
-  `ruby_db.exchange_secrets` (new `003_secrets.sql`, gated on the spawner `db`
+  `fks_db.exchange_secrets` (new `003_secrets.sql`, gated on the spawner `db`
   feature, behind `X-Internal-Token`). The write is **awaited** (honest save, no
   fake "Saved ✓"); inputs are masked (`type="password"`) and **cleared on save**
   so the browser submits then forgets. The secret is never returned.
@@ -135,7 +135,7 @@
   `exchange-apiws` authenticated account/balance calls behind the badge.)*
 - [x] **E3** `src/web/CLAUDE.md` policy note updated to document submit-only
   server-side storage.
-- **Decision (made):** storage target = the **spawner's Postgres `ruby_db`**
+- **Decision (made):** storage target = the **spawner's Postgres `fks_db`**
   (reuses the existing pool/`BotRunStore`; no new service). Plaintext-at-rest for
   now — internal/Tailscale-only; pgcrypto column encryption is a tracked
   follow-up. Keys enable the live order path → stays behind the execution gate.
@@ -203,7 +203,7 @@
 ## Resolved decisions
 1. **A1 — keep `journal` + `db`.** Both stay as URL-routable shells for a later
    janus-backed rebuild; neither carries a dead Ruby backend call. *(Confirmed 2026-06-09.)*
-2. **E — API-key storage = the spawner's Postgres `ruby_db`.** The browser only
+2. **E — API-key storage = the spawner's Postgres `fks_db`.** The browser only
    *submits* keys (`POST /api/settings/kraken-keys` → spawner `POST /secrets`,
    behind `X-Internal-Token`); the secret is never returned. Plaintext-at-rest for
    now (internal / Tailscale-only); pgcrypto column encryption is a tracked follow-up.

@@ -1,8 +1,8 @@
 -- =============================================================================
 -- 002-spawner.sql — Bot Spawner schema (SPAWN-C)
 -- =============================================================================
--- Creates bot_configs and bot_runs tables in ruby_db (see 001_init.sql for why
--- the database keeps the ruby_db name). Owned by the fks_bot_spawner service
+-- Creates bot_configs and bot_runs tables in fks_db (see 001_init.sql for why
+-- the database keeps the fks_db name). Owned by the fks_bot_spawner service
 -- (crates/spawner/) and the Bot Manager WebUI.
 --
 -- Prerequisites: 001_init.sql (creates the database). Self-contained otherwise —
@@ -13,13 +13,13 @@
 --
 -- Manual execution:
 --   docker compose exec postgres \
---     psql -U fks_user -d ruby_db -f /docker-entrypoint-initdb.d/25-spawner.sql
+--     psql -U fks_user -d fks_db -f /docker-entrypoint-initdb.d/25-spawner.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- =============================================================================
 -- bot_configs — reusable bot configuration profiles

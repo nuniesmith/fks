@@ -169,7 +169,7 @@ fks-web **#24** (merged 2026-07-06) ships the Rithmic option. Verified in
 The storage side is also verified as ready-enough: the spawner secret store
 already carries `api_passphrase` as an optional third slot
 (`crates/spawner/src/models.rs:71`; encrypted with ChaCha20-Poly1305 into
-`ruby_db`). So a Rithmic credential is **storable today** — no schema change is
+`fks_db`). So a Rithmic credential is **storable today** — no schema change is
 required just to hold it. (The `kind`-aware secret-store cleanup in roadmap §5.1
 is a *nicety* that renames the slots honestly — `broker: user+password+system` —
 but is **not a blocker** for this spike.)

@@ -25,7 +25,7 @@
 -- database (baked initdb scripts only run on an EMPTY volume).
 --
 -- Prerequisites:
---   • 001_init.sql — creates ruby_db.
+--   • 001_init.sql — creates fks_db.
 --   • 010_webui_auth.sql — creates the fks_webui role this script GRANTs to.
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once):
@@ -34,9 +34,9 @@
 --     < src/sql/spawner/011_webui_alert_acks.sql
 -- =============================================================================
 
-\getenv ruby_db RUBY_DB
+\getenv fks_db RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- ---------------------------------------------------------------------------
 -- Schema (BYTE-IDENTICAL to fks-web src/lib/server/alertAck/schema.sql).

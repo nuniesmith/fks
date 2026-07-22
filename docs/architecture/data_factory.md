@@ -13,7 +13,7 @@ Good, got the high-level structure. Let me drill into the actual Python source, 
 **What's missing / brittle based on what I can infer:**
 
 1. **No factory coordinator** — backfill is triggered imperatively via API calls, not driven by a scheduled pipeline that owns state
-2. **Three-store consistency gap** — Postgres (`ruby_db`), QuestDB, and Redis can drift out of sync with no reconciliation pass
+2. **Three-store consistency gap** — Postgres (`fks_db`), QuestDB, and Redis can drift out of sync with no reconciliation pass
 3. **No gap scan schedule** — gap detection exists but appears reactive (triggered on demand), not proactive
 4. **Redis warming is implicit** — the fallback chain warms Redis lazily on reads, not proactively at startup or after backfill completion
 5. **No chunk-level retry state** — with 12+ chunks per symbol (365/30), a mid-run failure likely restarts from scratch
@@ -191,7 +191,7 @@ class GapScanner:
         bar count vs actual count across rolling windows.
 
         You'll adapt this to your actual bars table schema —
-        this queries ruby_db.bars (or whatever your table is named).
+        this queries fks_db.bars (or whatever your table is named).
         """
         gaps: list[GapWindow] = []
         cutoff = datetime.now(timezone.utc) - timedelta(days=self._days_back)
@@ -483,7 +483,7 @@ class BackfillManager:
         self, symbol: str, interval: str, bars: list[dict]
     ) -> None:
         """
-        Upsert bars into ruby_db.bars.
+        Upsert bars into fks_db.bars.
         Adapt column names to match your actual schema.
         Uses ON CONFLICT DO NOTHING for idempotency.
         """

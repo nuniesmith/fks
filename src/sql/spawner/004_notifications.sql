@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 004-notifications.sql — Operator-configured notification channels
 -- =============================================================================
--- Creates the notification_channels table in ruby_db. Owned by the
+-- Creates the notification_channels table in fks_db. Owned by the
 -- fks_bot_spawner service (crates/spawner/), which exposes:
 --   POST   /notifications        — create/UPSERT a channel (by name)
 --   GET    /notifications        — which channels exist (name/kind/events;
@@ -44,13 +44,13 @@
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once):
 --   docker compose exec postgres \
---     psql -U fks_user -d ruby_db -f /docker-entrypoint-initdb.d/27-notifications.sql
+--     psql -U fks_user -d fks_db -f /docker-entrypoint-initdb.d/27-notifications.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- =============================================================================
 -- notification_channels — one row per operator-configured channel

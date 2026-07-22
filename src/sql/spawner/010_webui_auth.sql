@@ -7,7 +7,7 @@
 -- into the fresh-host initdb path so a volume-loss / new-host bootstrap comes up
 -- auth-ready, and documents the by-hand apply for the existing live volume.
 --
--- SCHEMA (design §4.1): three tables in ruby_db —
+-- SCHEMA (design §4.1): three tables in fks_db —
 --   • webui_users        — accounts (scrypt hash, role, lockout, must-change)
 --   • webui_sessions      — opaque-token sessions (sha256 at rest, idle+abs TTL)
 --   • webui_auth_audit    — append-only login/rotation audit trail
@@ -20,7 +20,7 @@
 -- ROLE (009 pattern): fks_webui is the LOGIN role the webui connects as
 -- (WEBUI_DATABASE_URL), NOT the spawner's full-access fks_user. It gets, and
 -- ONLY gets:
---   • CONNECT on ruby_db + USAGE on schema public
+--   • CONNECT on fks_db + USAGE on schema public
 --   • SELECT,INSERT,UPDATE,DELETE on the three webui_* tables
 --   • USAGE,SELECT on the three webui_*_id_seq sequences ONLY
 --
@@ -45,18 +45,18 @@
 -- idempotent.
 --
 -- Prerequisites:
---   • 001_init.sql — creates ruby_db (02-spawner-init.sql, runs first).
+--   • 001_init.sql — creates fks_db (02-spawner-init.sql, runs first).
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once, with the
 -- password injected into the exec env; -d postgres because role creation is
--- cluster-wide and the script \connects to ruby_db itself):
+-- cluster-wide and the script \connects to fks_db itself):
 --   docker exec -i -e WEBUI_DB_PASSWORD="$WEBUI_DB_PASSWORD" \
 --     fks_postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d postgres' \
 --     < src/sql/spawner/010_webui_auth.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
 -- Default the password to '' so the script also runs where the env var is
 -- absent entirely (\getenv leaves the variable untouched when unset).
@@ -78,9 +78,9 @@ SELECT format('ALTER ROLE fks_webui WITH LOGIN PASSWORD %L',
               :'webui_password')
 WHERE length(:'webui_password') > 0\gexec
 
-GRANT CONNECT ON DATABASE :ruby_db TO fks_webui;
+GRANT CONNECT ON DATABASE :fks_db TO fks_webui;
 
-\connect :ruby_db
+\connect :fks_db
 
 -- ---------------------------------------------------------------------------
 -- Schema (BYTE-IDENTICAL to fks-web src/lib/server/auth/schema.sql). Created as

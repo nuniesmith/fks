@@ -142,3 +142,11 @@ COPY src/sql/spawner/011_webui_alert_acks.sql             /docker-entrypoint-ini
 # the role itself.)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/012_webui_invites.sql                /docker-entrypoint-initdb.d/35-webui-invites.sql
+
+# ---------------------------------------------------------------------------
+# Phase 14 — Notification delivery ledger (fks_db) — notification_log
+# (every webhook delivery attempt gets a row: event, channel, outcome,
+# status; detail never contains the URL. Written best-effort/off-path by
+# the spawner's fks_user; pruned by the spawner, not SQL.)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/013_notification_log.sql             /docker-entrypoint-initdb.d/36-notification-log.sql

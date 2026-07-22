@@ -133,3 +133,12 @@ COPY src/sql/spawner/010_webui_auth.sql                   /docker-entrypoint-ini
 # name. Must run AFTER 33-webui-auth.sql, which creates the fks_webui role.)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/011_webui_alert_acks.sql             /docker-entrypoint-initdb.d/34-webui-alert-acks.sql
+
+# ---------------------------------------------------------------------------
+# Phase 13 — WebUI invites (fks_db) — webui_invites
+# (one-time signup URLs: token sha256 at rest, single-use enforced atomically
+# by the webui, no admin-by-invite. fks_webui gets SELECT/INSERT/UPDATE,
+# sequence by name. Must run AFTER 33-webui-auth.sql — FK to webui_users +
+# the role itself.)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/012_webui_invites.sql                /docker-entrypoint-initdb.d/35-webui-invites.sql

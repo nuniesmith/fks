@@ -1,8 +1,8 @@
 -- =============================================================================
 -- 006-net_worth_snapshots.sql — Durable net-worth history backbone
 -- =============================================================================
--- Creates the net_worth_snapshots table in ruby_db (see 001_init.sql for why
--- the database keeps the ruby_db name). Owned by the fks_bot_spawner service
+-- Creates the net_worth_snapshots table in fks_db (see 001_init.sql for why
+-- the database keeps the fks_db name). Owned by the fks_bot_spawner service
 -- (crates/spawner/), whose periodic sampler polls each running bot's /status
 -- endpoint (:9091 on fks_network) and appends one row per bot per interval.
 --
@@ -34,13 +34,13 @@
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once):
 --   docker exec -i fks_postgres sh -c \
---     'psql -U "$POSTGRES_USER" -d ruby_db' < src/sql/spawner/006_net_worth_snapshots.sql
+--     'psql -U "$POSTGRES_USER" -d fks_db' < src/sql/spawner/006_net_worth_snapshots.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- =============================================================================
 -- net_worth_snapshots — one row per bot per sample tick

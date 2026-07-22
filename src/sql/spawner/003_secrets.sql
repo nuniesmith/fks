@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 003-secrets.sql — Exchange API credential storage (WebUI Phase E)
 -- =============================================================================
--- Creates the exchange_secrets table in ruby_db. Owned by the fks_bot_spawner
+-- Creates the exchange_secrets table in fks_db. Owned by the fks_bot_spawner
 -- service (crates/spawner/), which exposes:
 --   POST /secrets         — store/UPSERT credentials for one exchange
 --   GET  /secrets/status  — which exchanges are configured (never the secrets)
@@ -28,13 +28,13 @@
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once):
 --   docker compose exec postgres \
---     psql -U fks_user -d ruby_db -f /docker-entrypoint-initdb.d/26-secrets.sql
+--     psql -U fks_user -d fks_db -f /docker-entrypoint-initdb.d/26-secrets.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- =============================================================================
 -- exchange_secrets — one row per exchange (kraken, kucoin, binance, …)

@@ -196,7 +196,7 @@ src/ruby/               — Python ML & data services (Ruby)
   src/entrypoints/      — Docker service entrypoints
   models/               — Trained ML model artifacts
 src/proto/              — fks-proto Rust crate (protobuf build integration)
-src/sql/                — SQL schemas + migrations (janus_db + ruby_db)
+src/sql/                — SQL schemas + migrations (janus_db + fks_db)
 proto/fks/              — .proto definitions: common, janus, execution
 infrastructure/
   compose/              — Docker Compose overrides (prod, trainer)
@@ -220,7 +220,7 @@ run.sh                  — Main management script
             "fks_web   (HTMX dashboard, :8080)",
             "fks_charting (TradingView, :8003)",
             "fks_trainer (GPU CNN, :8200, profile=training)",
-            "fks_postgres (janus_db + ruby_db, :5432)",
+            "fks_postgres (janus_db + fks_db, :5432)",
             "fks_redis (:6379)",
             "fks_questdb (:9000/:9009)",
             "fks_qdrant (:6333/:6334)",

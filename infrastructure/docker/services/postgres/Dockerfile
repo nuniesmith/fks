@@ -12,12 +12,12 @@
 # from its own repo — runs its detailed migrations at startup):
 #
 #   src/sql/janus/     — janus_db bootstrap  (db + user + api_keys)
-#   src/sql/spawner/   — ruby_db schema      (Bot Spawner: bot_configs/bot_runs)
+#   src/sql/spawner/   — fks_db schema      (Bot Spawner: bot_configs/bot_runs)
 #
 # NOTE: the Python "Ruby" service was removed (docs/architecture/RUST_MIGRATION.md).
-# Its ruby_db schema is gone EXCEPT the bootstrap + spawner tables the Bot
+# Its fks_db schema is gone EXCEPT the bootstrap + spawner tables the Bot
 # Spawner service still needs — those now live in src/sql/spawner/. The database
-# keeps the ruby_db name (env RUBY_DB) for backward compatibility.
+# was renamed fks_db (from ruby_db) on 2026-07-21; the env var name RUBY_DB is retained.
 #
 # Init scripts are copied into /docker-entrypoint-initdb.d/ with a numeric
 # prefix that controls lexicographic run order:
@@ -45,7 +45,7 @@
 #   POSTGRES_USER      — shared DB user for all databases  (default: fks_user)
 #   POSTGRES_PASSWORD  — shared password
 #   JANUS_DB           — Janus database name               (default: janus_db)
-#   RUBY_DB            — Spawner database name (legacy name) (default: ruby_db)
+#   RUBY_DB            — Spawner database name (var name retained) (default: fks_db)
 #   BACKTEST_DB_PASSWORD — password for the scoped fks_backtest role (009);
 #                        empty/unset = role created but not loggable-into
 #   WEBUI_DB_PASSWORD    — password for the scoped fks_webui role (010);
@@ -66,36 +66,36 @@ COPY src/sql/spawner/001_init.sql                         /docker-entrypoint-ini
 COPY src/sql/janus/002_api_keys.sql                       /docker-entrypoint-initdb.d/10-janus-api-keys.sql
 
 # ---------------------------------------------------------------------------
-# Phase 3 — Spawner schema (ruby_db) — bot_configs / bot_runs
+# Phase 3 — Spawner schema (fks_db) — bot_configs / bot_runs
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/002_spawner.sql                      /docker-entrypoint-initdb.d/25-spawner.sql
 
 # ---------------------------------------------------------------------------
-# Phase 4 — Exchange secrets (ruby_db) — exchange_secrets (WebUI Phase E)
+# Phase 4 — Exchange secrets (fks_db) — exchange_secrets (WebUI Phase E)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/003_secrets.sql                      /docker-entrypoint-initdb.d/26-secrets.sql
 
 # ---------------------------------------------------------------------------
-# Phase 5 — Notification channels (ruby_db) — notification_channels
+# Phase 5 — Notification channels (fks_db) — notification_channels
 # (Discord webhooks; store + management API only, sending is a follow-up)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/004_notifications.sql                /docker-entrypoint-initdb.d/27-notifications.sql
 
 # ---------------------------------------------------------------------------
-# Phase 6 — Net-worth history (ruby_db) — net_worth_snapshots
+# Phase 6 — Net-worth history (fks_db) — net_worth_snapshots
 # (durable, append-only; written by the spawner's periodic /status sampler)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/006_net_worth_snapshots.sql          /docker-entrypoint-initdb.d/28-net-worth-snapshots.sql
 
 # ---------------------------------------------------------------------------
-# Phase 7 — Treasury (ruby_db) — transfers ledger + accounts registry
+# Phase 7 — Treasury (fks_db) — transfers ledger + accounts registry
 # (deposit/withdrawal ledger so net-worth drift decomposes into deposits vs
 # profit, plus the multi-account topology's source of truth)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/007_treasury.sql                     /docker-entrypoint-initdb.d/29-treasury.sql
 
 # ---------------------------------------------------------------------------
-# Phase 8 — Edge factory (ruby_db) — edges registry + backtest_runs ledger
+# Phase 8 — Edge factory (fks_db) — edges registry + backtest_runs ledger
 # (the edge-portfolio's source of truth plus the factory's backtest run
 # ledger: spawner inserts a run, the one-shot backtest container reports
 # its own results back)
@@ -103,13 +103,13 @@ COPY src/sql/spawner/007_treasury.sql                     /docker-entrypoint-ini
 COPY src/sql/spawner/008_edge_factory.sql                 /docker-entrypoint-initdb.d/30-edge-factory.sql
 
 # ---------------------------------------------------------------------------
-# Phase 9 — UI layouts (ruby_db) — ui_layouts
+# Phase 9 — UI layouts (fks_db) — ui_layouts
 # (server-side saved dock layouts so /workspace layouts follow the operator)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/005_ui_layouts.sql                   /docker-entrypoint-initdb.d/31-ui-layouts.sql
 
 # ---------------------------------------------------------------------------
-# Phase 10 — Backtest role (cluster + ruby_db) — fks_backtest
+# Phase 10 — Backtest role (cluster + fks_db) — fks_backtest
 # (scoped LOGIN role handed to one-shot factory backtest containers via
 # BACKTEST_DB_URL: SELECT + UPDATE(status,results,finished_at) on
 # backtest_runs ONLY — never the spawner's full fks_user credentials.
@@ -118,16 +118,16 @@ COPY src/sql/spawner/005_ui_layouts.sql                   /docker-entrypoint-ini
 COPY src/sql/spawner/009_backtest_role.sql                /docker-entrypoint-initdb.d/32-backtest-role.sql
 
 # ---------------------------------------------------------------------------
-# Phase 11 — WebUI auth (cluster + ruby_db) — webui_users/sessions/audit +
+# Phase 11 — WebUI auth (cluster + fks_db) — webui_users/sessions/audit +
 # the scoped fks_webui LOGIN role (SELECT/INSERT/UPDATE/DELETE on the three
 # webui_* tables + USAGE on their sequences ONLY — never the spawner's full
 # fks_user creds). Companion to fks-web #47 so a fresh host boots auth-ready
-# instead of fail-closed 503. Runs AFTER 02-spawner-init.sql (creates ruby_db).
+# instead of fail-closed 503. Runs AFTER 02-spawner-init.sql (creates fks_db).
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/010_webui_auth.sql                   /docker-entrypoint-initdb.d/33-webui-auth.sql
 
 # ---------------------------------------------------------------------------
-# Phase 12 — WebUI alert acks (ruby_db) — webui_alert_acks
+# Phase 12 — WebUI alert acks (fks_db) — webui_alert_acks
 # (alert-ack inbox: incident identity = sha256(labels + activeAt), acks are
 # irrevocable audit rows — fks_webui gets SELECT/INSERT only, sequence by
 # name. Must run AFTER 33-webui-auth.sql, which creates the fks_webui role.)

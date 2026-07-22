@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 005-ui_layouts.sql — Operator-saved WebUI dock layouts
 -- =============================================================================
--- Creates the ui_layouts table in ruby_db. Owned by the fks_bot_spawner
+-- Creates the ui_layouts table in fks_db. Owned by the fks_bot_spawner
 -- service (crates/spawner/), which exposes:
 --   GET    /ui/layouts        — list saved layout names (+ updated_at); NOT the
 --                               full layout blobs (keeps the list light)
@@ -32,13 +32,13 @@
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once):
 --   docker exec -i fks_postgres sh -c \
---     'psql -U "$POSTGRES_USER" -d ruby_db' < src/sql/spawner/005_ui_layouts.sql
+--     'psql -U "$POSTGRES_USER" -d fks_db' < src/sql/spawner/005_ui_layouts.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- =============================================================================
 -- ui_layouts — one row per operator-saved dock layout

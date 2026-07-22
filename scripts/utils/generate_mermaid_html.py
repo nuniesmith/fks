@@ -174,7 +174,7 @@ flowchart TD
             direction LR
             PG["PostgreSQL  :5432
 fks_postgres
-Databases: janus_db + ruby_db
+Databases: janus_db + fks_db
 trades · journal · risk_events
 bars · audit · orb_events
 src/sql/"]
@@ -328,7 +328,7 @@ services/data/resolver.py"]
 Bar caches · focus assets · daily plan
 risk state · Ruby signals · model events
 live risk · swing states"]
-        D["Postgres :5432  (ruby_db)
+        D["Postgres :5432  (fks_db)
 trades · journal · orb_events
 risk_events · bars · audit
 core/models.py + core/db/"]

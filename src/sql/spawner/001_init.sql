@@ -4,12 +4,12 @@
 -- Creates the shared application database on the FKS PostgreSQL instance and
 -- grants fks_user full access with proper schema defaults.
 --
--- NOTE: the database is still named `ruby_db` (env var RUBY_DB) for backward
--- compatibility — the Python "Ruby" service that originally owned it has been
--- removed (see docs/architecture/RUST_MIGRATION.md), but the Bot Spawner
--- service (crates/spawner/) persists bot_runs/bot_configs here. The name is
--- retained so existing volumes + connection strings keep working; renaming to
--- `spawner_db` is an optional future cleanup.
+-- NOTE: the database is named `fks_db` (renamed from ruby_db 2026-07-21; the
+-- RUBY_DB env var name is retained). The Python "Ruby" service that originally
+-- owned it has been removed (see docs/architecture/RUST_MIGRATION.md), but the
+-- Bot Spawner service (crates/spawner/) persists bot_runs/bot_configs here. The
+-- RUBY_DB env var name is retained so compose/run.sh/SQL \getenv keep working
+-- without churn; only the database name and defaults flipped.
 --
 -- Prerequisites:
 --   • 01-janus-init.sql must have run first (creates fks_user).
@@ -21,34 +21,34 @@
 --     -f /docker-entrypoint-initdb.d/02-spawner-init.sql
 --
 -- Databases managed here:
---   ruby_db — Spawner persistence (bot_configs, bot_runs); see 002_spawner.sql
+--   fks_db — Spawner persistence (bot_configs, bot_runs); see 002_spawner.sql
 -- =============================================================================
 
 \getenv fks_user    POSTGRES_USER
-\getenv ruby_db RUBY_DB
+\getenv fks_db RUBY_DB
 
 -- ---------------------------------------------------------------------------
--- Create ruby_db if it does not already exist.
+-- Create fks_db if it does not already exist.
 -- The SELECT … \gexec pattern is the idiomatic "CREATE DATABASE IF NOT EXISTS"
 -- because CREATE DATABASE cannot run inside a transaction block.
 -- ---------------------------------------------------------------------------
 SELECT
-    'CREATE DATABASE ' || quote_ident(:'ruby_db') ||
+    'CREATE DATABASE ' || quote_ident(:'fks_db') ||
     ' WITH OWNER '     || quote_ident(:'fks_user')    ||
     ' ENCODING ''UTF8'' LC_COLLATE ''C'' LC_CTYPE ''C'' TEMPLATE template0'
 WHERE NOT EXISTS (
-    SELECT FROM pg_database WHERE datname = :'ruby_db'
+    SELECT FROM pg_database WHERE datname = :'fks_db'
 )\gexec
 
 -- Grant database-level privileges (idempotent).
-GRANT ALL PRIVILEGES ON DATABASE :ruby_db TO :fks_user;
+GRANT ALL PRIVILEGES ON DATABASE :fks_db TO :fks_user;
 
 -- ---------------------------------------------------------------------------
--- Switch to ruby_db and apply schema-level configuration.
+-- Switch to fks_db and apply schema-level configuration.
 -- All objects created by Rails/Ruby migrations will be owned by fks_user
 -- and remain accessible to it automatically via the defaults below.
 -- ---------------------------------------------------------------------------
-\connect :ruby_db
+\connect :fks_db
 
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

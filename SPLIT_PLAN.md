@@ -219,7 +219,8 @@ self-contained — readable without any context from `fks`.
       now; the Python service was deleted rather than carried as a git-clone build.
       Rebuild whatever long-tail features you need as janus crates (or a Rithmic
       sidecar). See [`docs/architecture/RUST_MIGRATION.md`](docs/architecture/RUST_MIGRATION.md).
-      The spawner's `ruby_db` schema was preserved in `src/sql/spawner/`.
+      The spawner's `fks_db` schema (renamed from `ruby_db` 2026-07-21; env var
+      `RUBY_DB` retained) was preserved in `src/sql/spawner/`.
 - [x] `src/web/` → `github.com/nuniesmith/fks-web` — done; `WEB_REPO` defaults
       to the fks-web git-clone build. The in-tree `src/web` survives only as a
       dev fallback (removal tracked in `docs/GO_PUBLIC.md` §4).

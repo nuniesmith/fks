@@ -27,7 +27,7 @@ RUN curl -fsSL \
 FROM alpine:3.21 AS runtime
 
 LABEL maintainer="nuniesmith" \
-      description="Postgres Prometheus Exporter — scrapes janus_db and ruby_db metrics"
+      description="Postgres Prometheus Exporter — scrapes janus_db and fks_db metrics"
 
 RUN apk add --no-cache ca-certificates wget \
     && adduser --disabled-password --gecos '' --uid 1000 exporter

@@ -41,6 +41,13 @@ templates (`.env.example`, `state.manifest.example`) and the tool below.
   before overwriting; `--dry-run` previews without touching anything.
 - The tool **never prints secret values** — only paths, sizes, and counts.
 
+> **DB rename (2026-07-21):** the spawner database was renamed `ruby_db` → `fks_db`
+> (env var name `RUBY_DB` retained). Snapshots taken **before 2026-07-21** contain
+> `db/ruby_db.sql` payloads keyed to the old database name — restoring one onto a
+> `fks_db` instance needs a manual rename hop (restore into a `ruby_db` first, then
+> `ALTER DATABASE ruby_db RENAME TO fks_db`, or rewrite the dump's target). New
+> snapshots write `db/fks_db.sql`.
+
 > Status: **live + restore-verified** (2026-07-12). Snapshots made before the
 > 2026-07-12 fixes captured the DB dumps but silently skipped every file —
 > re-`export` if your latest snapshot predates that.
@@ -56,7 +63,7 @@ which is gitignored). Defaults:
 | Strategy configs (the edge) | the sibling bot repos' tuned configs — `../fks-state/bots/crypto-futures/…`, `../fks-spawner/bots/spot-portfolio/…` |
 | Live state | journals, open-position JSON (also sibling-repo paths) |
 | Model weights | `models/*.bin`, `*.safetensors` |
-| DB tables (runtime secret store + account state) | `ruby_db:exchange_secrets`, `janus_db:api_keys` |
+| DB tables (runtime secret store + account state) | `fks_db:exchange_secrets`, `janus_db:api_keys` |
 
 This *repopulates the secret store you already have* — the spawner's
 `exchange_secrets` table and janus's Fernet-`api_keys` table — rather than

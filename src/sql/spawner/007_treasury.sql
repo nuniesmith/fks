@@ -1,8 +1,8 @@
 -- =============================================================================
 -- 007-treasury.sql — Treasury layer: deposit/transfer ledger + account registry
 -- =============================================================================
--- Creates the transfers and accounts tables in ruby_db (see 001_init.sql for
--- why the database keeps the ruby_db name). Owned by the fks_bot_spawner
+-- Creates the transfers and accounts tables in fks_db (see 001_init.sql for
+-- why the database keeps the fks_db name). Owned by the fks_bot_spawner
 -- service (crates/spawner/), which exposes:
 --   POST   /transfers      — append one signed cash-flow row
 --   GET    /transfers      — list a window of the ledger
@@ -41,13 +41,13 @@
 --
 -- Manual execution (existing volumes skip initdb — apply by hand once):
 --   docker exec -i fks_postgres sh -c \
---     'psql -U "$POSTGRES_USER" -d ruby_db' < src/sql/spawner/007_treasury.sql
+--     'psql -U "$POSTGRES_USER" -d fks_db' < src/sql/spawner/007_treasury.sql
 -- =============================================================================
 
 \getenv fks_user  POSTGRES_USER
-\getenv ruby_db   RUBY_DB
+\getenv fks_db   RUBY_DB
 
-\connect :ruby_db
+\connect :fks_db
 
 -- =============================================================================
 -- transfers — the cash-flow ledger: one row per deposit/withdrawal/payout/sweep

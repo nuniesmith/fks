@@ -348,11 +348,11 @@ setup_env_file() {
 # Compose project name — keeps bare docker-compose in sync with ./run.sh (-p fks).
 COMPOSE_PROJECT_NAME=fks
 
-# --- Postgres (shared instance: janus_db + ruby_db) ---
+# --- Postgres (shared instance: janus_db + fks_db) ---
 POSTGRES_USER=fks_user
 POSTGRES_PASSWORD=$(generate_password)
 JANUS_DB=janus_db
-RUBY_DB=ruby_db
+RUBY_DB=fks_db
 
 # --- Redis ---
 REDIS_PASSWORD=$(generate_password)
@@ -525,8 +525,8 @@ EOF
     fi
 
     if ! grep -q "^RUBY_DB=" "$env_file"; then
-        _env_set RUBY_DB ruby_db
-        warn "Added RUBY_DB=ruby_db"
+        _env_set RUBY_DB fks_db
+        warn "Added RUBY_DB=fks_db"
         needs_update=true
     fi
 
@@ -815,7 +815,7 @@ ensure_databases() {
     local pg_user="${POSTGRES_USER:-fks_user}"
     local pg_container="fks_postgres"
     local janus_db="${JANUS_DB:-janus_db}"
-    local ruby_db="${RUBY_DB:-ruby_db}"
+    local fks_db="${RUBY_DB:-fks_db}"
 
     if ! _wait_for_postgres; then
         warn "postgres not ready after 30s — skipping database bootstrap"
@@ -826,7 +826,7 @@ ensure_databases() {
     ok "postgres is accepting connections"
 
     _ensure_single_db "$janus_db" "$pg_user" "$pg_container"
-    _ensure_single_db "$ruby_db"  "$pg_user" "$pg_container"
+    _ensure_single_db "$fks_db"  "$pg_user" "$pg_container"
 
     # Apply bot_configs / bot_runs schema (idempotent — uses CREATE TABLE IF NOT EXISTS)
     local bot_sql="infrastructure/config/postgres/09-init-bots.sql"
@@ -834,9 +834,9 @@ ensure_databases() {
         log "Applying bot schema (09-init-bots.sql) ..."
         if docker exec -i "$pg_container" \
             psql -U "$pg_user" \
-            -d "$ruby_db" \
+            -d "$fks_db" \
             -v POSTGRES_USER="$pg_user" \
-            -v RUBY_DB="$ruby_db" \
+            -v RUBY_DB="$fks_db" \
             < "$bot_sql" >/dev/null 2>&1; then
             ok "Bot schema applied (bot_configs, bot_runs)"
         else
@@ -845,7 +845,7 @@ ensure_databases() {
     fi
 
     local all_ok=true
-    for db in "$janus_db" "$ruby_db"; do
+    for db in "$janus_db" "$fks_db"; do
         if docker exec -i "$pg_container" \
             psql -U "$pg_user" -d "$db" -tAc "SELECT 1" 2>/dev/null | grep -q "1"; then
             true
@@ -856,7 +856,7 @@ ensure_databases() {
     done
 
     if [ "$all_ok" = true ]; then
-        ok "All databases verified: ${janus_db}, ${ruby_db}"
+        ok "All databases verified: ${janus_db}, ${fks_db}"
     else
         warn "Some databases failed verification — check postgres logs"
         warn "  ./run.sh logs postgres"
@@ -1042,7 +1042,7 @@ cmd_all() {
     # Build the postgres image BEFORE its first start: on a fresh host, `up`
     # would otherwise pull/start a stale image and initialize the data volume
     # without the baked /docker-entrypoint-initdb.d schema scripts — leaving
-    # janus_db/ruby_db present but EMPTY (initdb only runs on an empty volume,
+    # janus_db/fks_db present but EMPTY (initdb only runs on an empty volume,
     # so the later build never gets a second chance). cmd_fresh already does
     # this; cmd_all was the remaining path with the trap.
     log "Building postgres image (bakes the DB init scripts) ..."

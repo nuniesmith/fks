@@ -10,12 +10,13 @@
 #
 # NOTE: the Python "Ruby" data/engine/trainer services were removed — janus is
 # the platform now. See docs/architecture/RUST_MIGRATION.md. The only Ruby
-# remnant is the ruby_db Postgres database, retained (name + schema) for the
+# remnant is the fks_db Postgres database (renamed from ruby_db 2026-07-21;
+# RUBY_DB env var name retained), retained (schema) for the
 # Bot Spawner's bot_configs/bot_runs tables (src/sql/spawner/).
 #
 # Postgres: two logical databases on one instance
 #   - janus_db       — Janus schema (signals, regime, backtest tables)
-#   - ruby_db        — Spawner schema (bot_configs, bot_runs) — legacy name
+#   - fks_db         — Spawner schema (bot_configs, bot_runs) — env var RUBY_DB
 #   - Single FKS redis (custom image with kernel tuning), three DBs:
 #       db 0 — janus_db + ruby (shared trading state)
 #   - Single RUSTCODE redis  (Alpine, for caching)
@@ -32,7 +33,7 @@
 #
 #   ── Trading Platform ──────────────────────────────────────────────────────
 #   80         nginx reverse proxy
-#   5432       postgres (janus_db + ruby_db)
+#   5432       postgres (janus_db + fks_db)
 #   6379       redis (shared — janus / ruby pub-sub + state)
 #   7000       janus HTTP API
 #   8200       trainer
@@ -89,7 +90,7 @@ services:
             - JANUS_DB=${JANUS_DB:-janus_db}
             - POSTGRES_USER=${POSTGRES_USER:-fks_user}
             - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
-            - RUBY_DB=${RUBY_DB:-ruby_db}
+            - RUBY_DB=${RUBY_DB:-fks_db}
             # Password for the scoped fks_backtest role (32-backtest-role.sql,
             # consumed via psql \getenv). Empty = role is created without a
             # usable password (fails closed); re-apply the script to set it.
@@ -621,8 +622,8 @@ services:
             # NOT the spawner's fks_user. WEBUI_DB_PASSWORD must match the value
             # the postgres service applied to the role (fails closed if unset:
             # the webui 503s until schema+role+password exist). In-container DNS
-            # host is fks_postgres:5432, database ruby_db (RUBY_DB).
-            - WEBUI_DATABASE_URL=postgres://fks_webui:${WEBUI_DB_PASSWORD:-}@fks_postgres:5432/${RUBY_DB:-ruby_db}
+            # host is fks_postgres:5432, database fks_db (RUBY_DB).
+            - WEBUI_DATABASE_URL=postgres://fks_webui:${WEBUI_DB_PASSWORD:-}@fks_postgres:5432/${RUBY_DB:-fks_db}
             # Service-identity token the adapter re-mints on its spawner-bound
             # calls (secrets/notifications/capabilities + the /bots page). MUST
             # equal the spawner's NGINX_INTERNAL_TOKEN or every spawner call 401s
@@ -1405,14 +1406,14 @@ services:
             # Postgres persistence — writes spawn/stop/remove to bot_runs.
             # Empty/unset = stateless mode (the spawner still runs).
             # Schema: src/sql/ruby/007_spawner.sql
-            - SPAWNER_DATABASE_URL=postgres://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${RUBY_DB:-ruby_db}?sslmode=disable
+            - SPAWNER_DATABASE_URL=postgres://${POSTGRES_USER:-fks_user}:${POSTGRES_PASSWORD}@postgres:5432/${RUBY_DB:-fks_db}?sslmode=disable
             # Scoped URL handed to one-shot factory backtest containers instead
             # of the spawner's own full-privilege URL above. The fks_backtest
             # role (src/sql/spawner/009_backtest_role.sql) can ONLY read
             # backtest_runs and update its status/results/finished_at — no
             # exchange_secrets, no treasury tables. Consumed by the spawner
             # since fks-spawner #4 (unset = loud degraded-fallback warning).
-            - BACKTEST_DB_URL=postgresql://fks_backtest:${BACKTEST_DB_PASSWORD:-}@fks_postgres:5432/${RUBY_DB:-ruby_db}
+            - BACKTEST_DB_URL=postgresql://fks_backtest:${BACKTEST_DB_PASSWORD:-}@fks_postgres:5432/${RUBY_DB:-fks_db}
             # Shared secret nginx forwards on every proxied request.
             # Empty = dev mode (auth disabled).
             - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN:-}

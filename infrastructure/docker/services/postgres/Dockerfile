@@ -125,3 +125,11 @@ COPY src/sql/spawner/009_backtest_role.sql                /docker-entrypoint-ini
 # instead of fail-closed 503. Runs AFTER 02-spawner-init.sql (creates ruby_db).
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/010_webui_auth.sql                   /docker-entrypoint-initdb.d/33-webui-auth.sql
+
+# ---------------------------------------------------------------------------
+# Phase 12 — WebUI alert acks (ruby_db) — webui_alert_acks
+# (alert-ack inbox: incident identity = sha256(labels + activeAt), acks are
+# irrevocable audit rows — fks_webui gets SELECT/INSERT only, sequence by
+# name. Must run AFTER 33-webui-auth.sql, which creates the fks_webui role.)
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/011_webui_alert_acks.sql             /docker-entrypoint-initdb.d/34-webui-alert-acks.sql

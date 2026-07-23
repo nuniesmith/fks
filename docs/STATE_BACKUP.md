@@ -52,6 +52,14 @@ templates (`.env.example`, `state.manifest.example`) and the tool below.
 > 2026-07-12 fixes captured the DB dumps but silently skipped every file —
 > re-`export` if your latest snapshot predates that.
 
+> **Export fix (2026-07-23):** the DB dump loop drained its own stdin (`docker
+> compose exec -T` inside a `while read` consumed the manifest), so only the
+> **first** `db:` line (`exchange_secrets`) was ever dumped — every other
+> table (funding risk/ledger, webui auth/audit, janus `api_keys`) was silently
+> absent. Fixed in `fks-state.sh` (union all tables per db, `pg_dump` with
+> `</dev/null`). **Any snapshot taken before 2026-07-23 is DB-incomplete —
+> re-`export` and confirm every `db/*.sql` payload is present.**
+
 ## What's in a snapshot
 
 Coverage is **whatever `state.manifest` lists — nothing more**. Copy

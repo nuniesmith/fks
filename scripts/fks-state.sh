@@ -95,6 +95,49 @@ cmd_init() {
   log "init complete. Next: review $MANIFEST, then  $0 export"
 }
 
+# Drift guard (review M17): the manifest is hand-maintained, so a new table — a
+# migration (010–013 were all missed once) or a runtime-created table — is
+# silently absent from backup until someone lists it. Enumerate the LIVE fks_db
+# public tables and WARN on any not covered by a `db:fks_db:` manifest line: an
+# unlisted table is a backup gap. Read-only + non-fatal — some tables may be
+# deliberately excluded, so this warns and lets the operator decide; it never
+# fails status. Assumes the caller already confirmed postgres is reachable;
+# a psql failure is downgraded to a skip note (like the export path).
+status_drift_check() {
+  local -A covered=(); local whole_db=0
+  local spec db tables t
+  while IFS= read -r spec; do
+    [[ -z "$spec" ]] && continue
+    db="${spec%%:*}"; tables="${spec#*:}"
+    [[ "$db" == "fks_db" ]] || continue
+    if [[ "$tables" == "$spec" || -z "$tables" ]]; then whole_db=1; continue; fi  # bare db:fks_db = whole db
+    IFS=',' read -ra _T <<<"$tables"
+    for t in "${_T[@]}"; do [[ -n "$t" ]] && covered["$t"]=1; done
+  done < <(manifest_dbs)
+
+  local live
+  if ! live="$($FKS_COMPOSE exec -T "$POSTGRES_SERVICE" \
+        psql -tAqX -U "$POSTGRES_USER" -d fks_db \
+        -c "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename" \
+        </dev/null 2>/dev/null)"; then
+    warn "could not list fks_db tables (psql query failed) — drift check skipped"
+    return 0
+  fi
+  if [[ "$whole_db" == 1 ]]; then
+    echo "    (drift check: fks_db backed up whole — all public tables covered)"
+    return 0
+  fi
+  local unlisted=0
+  while IFS= read -r t; do
+    [[ -z "$t" ]] && continue
+    [[ -n "${covered[$t]+x}" ]] || { warn "fks_db table not in manifest (backup gap): $t"; unlisted=1; }
+  done <<<"$live"
+  # Explicit return 0: a non-fatal advisory must never abort `status` under
+  # `set -e` (the "all covered" print is skipped when there ARE gaps).
+  [[ "$unlisted" == 0 ]] && echo "    (drift check: every fks_db public table is covered by the manifest)"
+  return 0
+}
+
 # ── status ───────────────────────────────────────────────────────────────────
 cmd_status() {
   [[ -f "$MANIFEST" ]] || die "no manifest at $MANIFEST (run: $0 init)"
@@ -114,7 +157,12 @@ cmd_status() {
   done < <(manifest_paths)
   echo "  database tables:"
   while IFS= read -r spec; do [[ -n "$spec" ]] && printf "    • %s\n" "$spec"; done < <(manifest_dbs)
-  if $FKS_COMPOSE ps "$POSTGRES_SERVICE" >/dev/null 2>&1; then echo "    (postgres reachable via '$FKS_COMPOSE exec $POSTGRES_SERVICE')"; else warn "postgres container not up — DB tables will be skipped on export"; fi
+  if $FKS_COMPOSE ps "$POSTGRES_SERVICE" >/dev/null 2>&1; then
+    echo "    (postgres reachable via '$FKS_COMPOSE exec $POSTGRES_SERVICE')"
+    status_drift_check
+  else
+    warn "postgres container not up — DB tables will be skipped on export (drift check skipped)"
+  fi
   [[ -d "$FKS_STATE_DIR/snapshots" ]] && log "snapshots: $(ls -1 "$FKS_STATE_DIR"/snapshots/*.tar.age 2>/dev/null | wc -l) in $FKS_STATE_DIR"
 }
 

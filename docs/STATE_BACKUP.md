@@ -54,20 +54,49 @@ templates (`.env.example`, `state.manifest.example`) and the tool below.
 
 ## What's in a snapshot
 
-Driven by `state.manifest` (copy `state.manifest.example` → `state.manifest`,
-which is gitignored). Defaults:
+Coverage is **whatever `state.manifest` lists — nothing more**. Copy
+`state.manifest.example` → `state.manifest` (gitignored) and keep it in step with
+the schema: a snapshot only captures the files/tables named in it, silently, so
+an unlisted table or cert is simply absent from DR with no error. Don't assume
+"full coverage" — audit the manifest against the live schema when either changes.
+
+The `state.manifest.example` defaults capture:
 
 | Category | Examples |
 |---|---|
-| Secrets & TLS | `.env`, `infrastructure/certs/` |
+| Secrets & TLS | `.env`, `.env.secrets`, `infrastructure/certs/` |
 | Strategy configs (the edge) | the sibling bot repos' tuned configs — `../fks-state/bots/crypto-futures/…`, `../fks-spawner/bots/spot-portfolio/…` |
 | Live state | journals, open-position JSON (also sibling-repo paths) |
-| Model weights | `models/*.bin`, `*.safetensors` |
-| DB tables (runtime secret store + account state) | `fks_db:exchange_secrets`, `janus_db:api_keys` |
+| Model weights | `models/*.bin`, `*.safetensors`, `*.pt`, `*.onnx` |
+| DB — secret store | `fks_db:exchange_secrets`, `janus_db:api_keys,api_key_audit` |
+| DB — funding bot | `fks_db:framework_risk_state,funding_kill_switch` (LIVE risk state — the SessionPnl/CircuitBreaker halt + kill sentinel), `funding_open_trades,funding_paper_records` (open positions + paper PnL ledger) |
+| DB — WebUI auth & audit | `fks_db:webui_users,webui_sessions,webui_auth_audit,webui_invites,webui_alert_acks`, `fks_db:notification_log` |
 
-This *repopulates the secret store you already have* — the spawner's
-`exchange_secrets` table and janus's Fernet-`api_keys` table — rather than
-inventing a new one.
+This *repopulates the state you already have* — the spawner's `exchange_secrets`
+table, janus's Fernet-`api_keys` table, the funding bot's risk/ledger tables, and
+the webui auth tables — rather than inventing a new one.
+
+> **A --data-only restore needs the table's schema to already exist** on the
+> target (it replays `COPY`/`INSERT`, not `CREATE`). Every table listed above is
+> backed by a `src/sql/spawner/` migration baked into the postgres image
+> (`014_funding_state.sql` added the funding tables + the scoped `fks_funding`
+> role for exactly this reason — review H1/H3), so a fresh-host bootstrap creates
+> them before `import` loads the data. Only list a table here once its CREATE
+> lives in `src/sql/`.
+
+### Restore notes (what each table brings back)
+
+- **`framework_risk_state` / `funding_kill_switch`** — the funding bot's live
+  halt state. Restoring them means a bot that had **tripped its circuit breaker
+  or been manually killed comes back HALTED**, as it should. Omitting them (the
+  pre-H3 gap) silently re-armed a halted strategy with a cleared loss window.
+- **`webui_users`** — restores the **admin account**. Without it a restore boots
+  to **bootstrap mode**: fks-web reseeds a CSPRNG admin (password printed to the
+  log) when the users table is empty, so you are never locked out — but the
+  original operators, their roles, and the pending invites are **gone**.
+- **`webui_auth_audit` / `notification_log`** — append-only forensic ledgers
+  ("did the crash-page send at 3am?"). Excluding them loses the audit trail for
+  the very incident a restore is consulted about.
 
 ## First-time setup
 

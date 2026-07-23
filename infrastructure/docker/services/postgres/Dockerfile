@@ -150,3 +150,16 @@ COPY src/sql/spawner/012_webui_invites.sql                /docker-entrypoint-ini
 # the spawner's fks_user; pruned by the spawner, not SQL.)
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/013_notification_log.sql             /docker-entrypoint-initdb.d/36-notification-log.sql
+
+# ---------------------------------------------------------------------------
+# Phase 15 — Funding state (cluster + fks_db) — the private crypto-futures
+# funding bot's four self-owned tables (framework_risk_state,
+# funding_open_trades, funding_paper_records, funding_kill_switch) + the scoped
+# fks_funding LOGIN role (SELECT/INSERT/UPDATE/DELETE on those four + USAGE on
+# funding_paper_records_id_seq ONLY — never the spawner's full fks_user creds,
+# never exchange_secrets/treasury/webui_*). Review H1: swaps the funding bot off
+# the superuser URL. Pre-creating the tables (H3) also lets a --data-only DR
+# restore load the runtime-created breaker + kill-switch state onto a fresh host.
+# Self-contained — only needs 02-spawner-init.sql (creates fks_db).
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/014_funding_state.sql                /docker-entrypoint-initdb.d/37-funding-state.sql

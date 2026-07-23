@@ -149,15 +149,38 @@ cmd_export() {
   done < <(manifest_paths)
 
   # DB tables: pg_dump --data-only inside the postgres container.
+  #
+  # Two bugs lived here (fixed 2026-07-23, review H3): (1) `docker compose
+  # exec -T` reads stdin, and inside `while read … done < <(...)` it DRAINED
+  # the loop's own input — so only the FIRST db: line ever ran. (2) the
+  # `> $db.sql` truncate ran per-line, so multiple db:<same-db>: lines would
+  # overwrite each other. Net effect: every snapshot contained only the first
+  # db line's tables (exchange_secrets) and nothing else. Fix: collect the
+  # whole manifest into an array first (no exec during the read), UNION all
+  # table lists per db, then ONE pg_dump per db with </dev/null so exec can
+  # never eat anything.
   if $FKS_COMPOSE ps "$POSTGRES_SERVICE" >/dev/null 2>&1; then
+    local -A _db_tables=()
+    local -a _db_order=()
+    local spec db tables
     while IFS= read -r spec; do
       [[ -z "$spec" ]] && continue
-      local db tables targs; db="${spec%%:*}"; tables="${spec#*:}"; targs=()
-      [[ "$tables" != "$spec" && -n "$tables" ]] && IFS=',' read -ra T <<<"$tables" && for t in "${T[@]}"; do targs+=(-t "$t"); done
-      log "+ db   $db (${tables:-all tables})"
-      $FKS_COMPOSE exec -T "$POSTGRES_SERVICE" pg_dump -U "$POSTGRES_USER" -d "$db" --data-only --no-owner "${targs[@]}" \
-        > "$payload/db/$db.sql" || warn "pg_dump failed for $db (skipped)"
+      db="${spec%%:*}"; tables="${spec#*:}"
+      [[ "$tables" == "$spec" ]] && tables=""   # bare "db:<name>" = whole db
+      [[ -z "${_db_tables[$db]+x}" ]] && _db_order+=("$db")
+      _db_tables[$db]="${_db_tables[$db]:+${_db_tables[$db]},}${tables}"
     done < <(manifest_dbs)
+    for db in "${_db_order[@]}"; do
+      local targs=() t
+      if [[ -n "${_db_tables[$db]}" ]]; then
+        IFS=',' read -ra T <<<"${_db_tables[$db]}"
+        for t in "${T[@]}"; do [[ -n "$t" ]] && targs+=(-t "$t"); done
+      fi
+      log "+ db   $db (${_db_tables[$db]:-all tables})"
+      $FKS_COMPOSE exec -T "$POSTGRES_SERVICE" pg_dump -U "$POSTGRES_USER" -d "$db" \
+        --data-only --no-owner "${targs[@]}" </dev/null \
+        > "$payload/db/$db.sql" || warn "pg_dump failed for $db (skipped)"
+    done
   else
     warn "postgres not up — DB tables skipped this snapshot"
   fi

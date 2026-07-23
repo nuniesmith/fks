@@ -41,11 +41,29 @@ models/*.onnx
 # ../fks-state/bots/crypto-futures/funding-state-*.json
 # ../fks-spawner/bots/spot-portfolio/spot-trades.jsonl
 
-# ── Database tables — the runtime secret store + account/PnL state ───────────
-# Dumped data-only (schema lives in src/sql/, applied at container init).
+# ── Database tables — the runtime secret store + account/PnL/risk/auth state ─
+# Dumped data-only (schema lives in src/sql/, applied at container init). A
+# --data-only restore requires the table's CREATE to exist on the target, so
+# ONLY list tables backed by a src/sql/spawner migration (or janus bootstrap).
 db:fks_db:exchange_secrets
 db:janus_db:api_keys,api_key_audit
-# Add account / position / pnl tables as your schema grows, e.g.:
+# Funding bot state (schema: 014_funding_state.sql). framework_risk_state +
+# funding_kill_switch are the LIVE risk state — the SessionPnl/CircuitBreaker
+# halt and the kill sentinel; excluding them means a DR restore silently
+# re-arms a halted strategy with a cleared loss window (review H3). The two
+# ledger tables carry the paper PnL + open positions.
+db:fks_db:framework_risk_state,funding_kill_switch
+db:fks_db:funding_open_trades,funding_paper_records
+# WebUI auth + audit (schema: 010/011/012 + 013). webui_users restores the
+# admin account (without it a restore boots to bootstrap mode — a CSPRNG admin
+# is reseeded, but the operators/invites/history are gone); webui_auth_audit +
+# notification_log are append-only forensic ledgers. webui_sessions +
+# webui_alert_acks included so a restore preserves live sessions + the
+# ack inbox rather than logging everyone out / re-surfacing acked alerts.
+db:fks_db:webui_users,webui_sessions,webui_auth_audit
+db:fks_db:webui_invites,webui_alert_acks
+db:fks_db:notification_log
+# Add more account / position / pnl tables as your schema grows, e.g.:
 # db:fks_db:bot_configs,bot_runs
 # db:fks_db:accounts,transfers,net_worth_snapshots     (treasury layer)
 # db:fks_db:edges,backtest_runs                        (edge factory)

@@ -100,6 +100,13 @@ services:
             # = role created but not loggable-into; re-apply the script to set/
             # rotate it. Must equal the webui's WEBUI_DATABASE_URL password.
             - WEBUI_DB_PASSWORD=${WEBUI_DB_PASSWORD:-}
+            # Password for the scoped fks_funding role (37-funding-state.sql,
+            # consumed via psql \getenv). Same fail-closed contract as
+            # fks_backtest/fks_webui: empty = role created but not loggable-into;
+            # re-apply the script to set/rotate it. Must equal the funding bot's
+            # FR_DATABASE_URL password (review H1 — swaps the funding bot off the
+            # fks_user superuser URL onto this scoped role).
+            - FUNDING_DB_PASSWORD=${FUNDING_DB_PASSWORD:-}
             - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
         ports:
             - "127.0.0.1:5432:5432"
@@ -1380,6 +1387,19 @@ services:
         # inside the container should then list it as a supplementary group.
         group_add:
             - "${DOCKER_GID:-987}"
+        # Stack-wide security defaults — this block was the ONE service missing
+        # them (2026-07-23 review H2; it violated the CLAUDE.md §Security invariant
+        # "All containers run with no-new-privileges:true and cap_drop: ALL").
+        # SAFE with the docker.sock mount below: Docker-daemon reachability comes
+        # from `group_add` (membership in the host docker GID) — a supplementary
+        # GROUP, not a Linux capability — so dropping ALL caps does NOT sever
+        # socket access. no-new-privileges blocks setuid privesc inside the
+        # container. (The durable fix — a docker-socket-proxy so an RCE can't
+        # `docker inspect` a bot's plaintext exchange keys — is tracked separately.)
+        security_opt:
+            - no-new-privileges:true
+        cap_drop:
+            - ALL
         ports:
             - "127.0.0.1:8090:8090"
         environment:

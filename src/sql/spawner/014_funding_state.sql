@@ -185,3 +185,32 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON funding_kill_switch    TO fks_funding;
 -- "ALL SEQUENCES IN SCHEMA public"). The other three tables have TEXT primary
 -- keys and own no sequence.
 GRANT USAGE, SELECT ON SEQUENCE funding_paper_records_id_seq TO fks_funding;
+
+-- ---------------------------------------------------------------------------
+-- OWNERSHIP + CREATE (the runtime-DDL contract — added 2026-07-23 after the
+-- live role swap panicked without it; H1 deploy).
+--
+-- The funding bot re-runs its OWN idempotent DDL at every startup:
+--   CREATE TABLE IF NOT EXISTS …   (state_store.rs / framework_state_store.rs)
+--   CREATE INDEX IF NOT EXISTS …   (on funding_paper_records)
+-- and it ABORTS if that DDL errors (FR_STATE_BACKEND must never silently fall
+-- back to file). Two Postgres facts make table-level DML grants insufficient:
+--   1. CREATE TABLE IF NOT EXISTS checks CREATE-on-schema BEFORE the
+--      "already exists" short-circuit — so USAGE alone → "permission denied
+--      for schema public" even when the table exists.
+--   2. CREATE INDEX / ALTER require table OWNERSHIP — so a non-owner → "must
+--      be owner of table funding_paper_records".
+-- The tightest correct model is therefore: the bot's role OWNS its own state
+-- tables (nothing else) and may CREATE in public. This grants NO access to any
+-- other role's tables (exchange_secrets, webui_*, treasury, other DBs stay
+-- unreachable — the H1 win holds): ownership + CREATE-on-schema only lets it
+-- manage its OWN four tables and make new tables in public, never read others'.
+-- (A dedicated `funding` schema owned by the role would avoid CREATE-on-public
+-- entirely; deferred — the tables already hold live paper-soak data in public.)
+GRANT CREATE ON SCHEMA public TO fks_funding;
+
+ALTER TABLE framework_risk_state          OWNER TO fks_funding;
+ALTER TABLE funding_open_trades           OWNER TO fks_funding;
+ALTER TABLE funding_paper_records         OWNER TO fks_funding;
+ALTER TABLE funding_kill_switch           OWNER TO fks_funding;
+ALTER SEQUENCE funding_paper_records_id_seq OWNER TO fks_funding;

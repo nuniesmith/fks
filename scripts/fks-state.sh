@@ -61,8 +61,16 @@ need_age() {
 # so the remainder is a bare glob. Without the strip, `compgen -G "file:.env"`
 # matched nothing and every file — incl. .env + the live bot configs — was
 # silently skipped while the DB dump succeeded (looked like a working backup).
-manifest_paths() { grep -vE '^\s*(#|$|db:)' "$MANIFEST" 2>/dev/null | sed -E 's/^\s*file:\s*//' || true; }
+# NOTE the exclusion list here must name EVERY other prefix (db:, vol:) — a
+# missing one makes those lines fall through and be globbed as file paths.
+manifest_paths() { grep -vE '^\s*(#|$|db:|vol:)' "$MANIFEST" 2>/dev/null | sed -E 's/^\s*file:\s*//' || true; }
 manifest_dbs()   { grep -E '^\s*db:' "$MANIFEST" 2>/dev/null | sed -E 's/^\s*db:\s*//' || true; }
+# `vol:<docker volume name>` — whole named volumes (janus checkpoints, redis
+# RDB holding the gate metrics, …). Tables live in db: lines; anything a
+# service keeps on disk instead of in Postgres needs a vol: line or it is
+# simply not backed up (the drift check only ever looked at tables, so this
+# gap was invisible by construction until the 2026-07-26 review).
+manifest_vols()  { grep -E '^\s*vol:' "$MANIFEST" 2>/dev/null | sed -E 's/^\s*vol:\s*//' | awk 'NF' || true; }
 
 # ── init ─────────────────────────────────────────────────────────────────────
 cmd_init() {
@@ -157,6 +165,28 @@ cmd_status() {
   done < <(manifest_paths)
   echo "  database tables:"
   while IFS= read -r spec; do [[ -n "$spec" ]] && printf "    • %s\n" "$spec"; done < <(manifest_dbs)
+  echo "  docker volumes:"
+  local anyvol=0
+  while IFS= read -r vol; do
+    [[ -z "$vol" ]] && continue
+    anyvol=1
+    if docker volume inspect "$vol" >/dev/null 2>&1; then
+      printf "    ✓ %-28s %s\n" "$vol" "$(docker run --rm -v "$vol":/v:ro alpine du -sh /v 2>/dev/null | cut -f1)"
+    else
+      printf "    · %-28s (no such volume — skipped)\n" "$vol"
+    fi
+  done < <(manifest_vols)
+  [[ "$anyvol" == "0" ]] && printf "    (none listed — service on-disk state is NOT backed up)\n"
+  # Volume drift: a named fks_* volume that no vol: line covers is an
+  # invisible backup gap (the table drift check never looked at volumes).
+  if command -v docker >/dev/null 2>&1; then
+    local listed unlisted
+    listed="$(manifest_vols | sort -u)"
+    unlisted="$(docker volume ls -q 2>/dev/null | grep -E '^fks' | sort -u | comm -23 - <(printf '%s\n' "$listed") 2>/dev/null || true)"
+    if [[ -n "${unlisted// /}" ]]; then
+      warn "volumes NOT in the manifest (not backed up): $(echo "$unlisted" | tr '\n' ' ')"
+    fi
+  fi
   if $FKS_COMPOSE ps "$POSTGRES_SERVICE" >/dev/null 2>&1; then
     echo "    (postgres reachable via '$FKS_COMPOSE exec $POSTGRES_SERVICE')"
     status_drift_check
@@ -175,7 +205,7 @@ cmd_export() {
 
   local ts stage; ts="$(date -u +%Y%m%dT%H%M%SZ)"
   stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
-  local payload="$stage/payload"; mkdir -p "$payload/files" "$payload/db"
+  local payload="$stage/payload"; mkdir -p "$payload/files" "$payload/db" "$payload/vol"
 
   # Files: copy each manifest match, preserving relative path.
   while IFS= read -r pat; do
@@ -233,9 +263,33 @@ cmd_export() {
     warn "postgres not up — DB tables skipped this snapshot"
   fi
 
+  # Named docker volumes: tar each one via a throwaway alpine with the volume
+  # mounted read-only, so nothing depends on the owning service being up (and
+  # a running service cannot be disturbed). REDIS CONSISTENCY: redis persists
+  # on its own schedule, so the RDB on disk can trail memory by up to the save
+  # interval; trigger a BGSAVE first when the redis container is up, and give
+  # it a moment, so the gate metrics in the snapshot are current.
+  local vols; vols="$(manifest_vols)"
+  if [[ -n "$vols" ]]; then
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'fks_redis' && grep -q 'redis' <<<"$vols"; then
+      docker exec fks_redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning BGSAVE' >/dev/null 2>&1 \
+        && sleep 3 && log "  (redis BGSAVE flushed before volume copy)"
+    fi
+    while IFS= read -r vol; do
+      [[ -z "$vol" ]] && continue
+      if ! docker volume inspect "$vol" >/dev/null 2>&1; then
+        warn "skip (no such volume): $vol"; continue
+      fi
+      log "+ vol  $vol"
+      docker run --rm -v "$vol":/v:ro alpine tar czf - -C / v 2>/dev/null \
+        > "$payload/vol/$vol.tar.gz" || warn "volume archive failed for $vol (skipped)"
+    done <<<"$vols"
+  fi
+
   # Provenance (no secrets): what's in the snapshot + the git SHA it was taken at.
   { echo "created_utc=$ts"; echo "host=$(hostname)"; echo "repo_sha=$(git rev-parse --short HEAD 2>/dev/null || echo n/a)";
-    echo "files=$(find "$payload/files" -type f | wc -l)"; echo "dbs=$(ls -1 "$payload/db" 2>/dev/null | wc -l)"; } > "$payload/MANIFEST.txt"
+    echo "files=$(find "$payload/files" -type f | wc -l)"; echo "dbs=$(ls -1 "$payload/db" 2>/dev/null | wc -l)";
+    echo "vols=$(ls -1 "$payload/vol" 2>/dev/null | wc -l)"; } > "$payload/MANIFEST.txt"
 
   # Tar + age-encrypt to every recipient.
   local out="$FKS_STATE_DIR/snapshots/fks-state-$ts.tar.gz.age"
@@ -291,6 +345,25 @@ cmd_import() {
     done
   else
     warn "DB dumps present but postgres not up — start the stack and re-run, or load $stage manually"
+  fi
+
+  # Named volumes. Restoring INTO a volume whose service is running would race
+  # the service (and for redis would simply be overwritten on its next save),
+  # so refuse unless the owning containers are down. The operator restores
+  # volumes during a rebuild, which is exactly when nothing is up.
+  if compgen -G "$stage/vol/*.tar.gz" >/dev/null; then
+    for f in "$stage"/vol/*.tar.gz; do
+      local vol; vol="$(basename "$f" .tar.gz)"
+      local users; users="$(docker ps --format '{{.Names}}' --filter "volume=$vol" 2>/dev/null | tr '\n' ' ')"
+      if [[ -n "${users// /}" ]]; then
+        warn "skip volume $vol — in use by running container(s): ${users}. Stop them and re-run to restore it."
+        continue
+      fi
+      log "restoring volume → $vol"
+      docker volume create "$vol" >/dev/null 2>&1
+      docker run --rm -v "$vol":/v -i alpine sh -c 'rm -rf /v/* /v/.[!.]* 2>/dev/null; tar xzf - -C /' < "$f" \
+        || warn "volume restore failed for $vol"
+    done
   fi
   trap - EXIT; rm -rf "$stage"
   log "import complete."

@@ -81,11 +81,27 @@ groups:
   # ─────────────────────────────────────────────────────────────────────────
   - name: bot-activity
     rules:
+      # CADENCE (fixed 2026-07-26 review): a 15m window is meaningless for
+      # every bot actually deployed, so this fired CONTINUOUSLY — on the LIVE
+      # spot bot since 2026-07-15 and on the Gate-A funding bot during its
+      # measurement window. A permanently-red money channel trains the operator
+      # to ignore it, which is worse than no alert.
+      #   • bot="spot-portfolio" is a drift REBALANCER: it emits a signal only
+      #     when portfolio drift crosses the trigger. Verified healthy while
+      #     "silent" — cycling all 3 venues every 5 min, drift 8-12% under
+      #     threshold, 2016 log lines/24h, signals_total=0 over 11 days. For
+      #     this strategy "no signals" is normal operation, not a fault, so it
+      #     is excluded rather than given a longer window.
+      #   • the funding bot emits ~2 signals/DAY, so it is measured over 24h.
+      # Real liveness for both is already covered by LiveBotMetricsDown
+      # (up == 0) and LiveBotCrashed. TODO: a fks_bot_cycles_total heartbeat
+      # would let us detect a WEDGED-but-alive decision loop, which neither
+      # signals nor trades can express for a low-cadence strategy.
       - alert: BotNoSignals
         expr: >
-          rate(fks_bot_signals_total{job="fks-bots"}[15m]) == 0
-          and fks_bot_uptime_seconds{job="fks-bots"} > 300
-        for: 15m
+          increase(fks_bot_signals_total{job="fks-bots",bot!="spot-portfolio"}[24h]) == 0
+          and fks_bot_uptime_seconds{job="fks-bots",bot!="spot-portfolio"} > 86400
+        for: 1h
         labels:
           severity: warning
           team: trading
@@ -96,11 +112,14 @@ groups:
             over 5 minutes but emitted no signals in the last 15 minutes.
             The bot may be stalled, waiting for data, or have a configuration issue.
 
+      # Same cadence problem (2026-07-26): the only live bot IS the rebalancer,
+      # so this fired for 11 days straight. A HODL/DCA rebalancer legitimately
+      # places no trades for days — that is the strategy, not an incident.
       - alert: BotNoTrades
         expr: >
-          rate(fks_bot_trades_total{job="fks-bots",mode="live"}[30m]) == 0
-          and fks_bot_uptime_seconds{job="fks-bots"} > 600
-        for: 30m
+          increase(fks_bot_trades_total{job="fks-bots",mode="live",bot!="spot-portfolio"}[24h]) == 0
+          and fks_bot_uptime_seconds{job="fks-bots",mode="live",bot!="spot-portfolio"} > 86400
+        for: 1h
         labels:
           severity: info
           team: trading

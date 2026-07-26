@@ -33,11 +33,26 @@ scrape_configs:
   # ========================================================================
   - job_name: docker
     docker_sd_configs:
+      # Two SD entries, deliberately: docker_sd filters within ONE entry are
+      # AND-ed, and the two sets of containers we need are disjoint.
+      #   1. the compose stack — project is `fks` (COMPOSE_PROJECT_NAME in
+      #      run.sh). This said `compose` for three weeks, matched nothing, and
+      #      Loki ingested ZERO log lines the whole time (2026-07-26 review).
+      #   2. the spawner-launched bots — created via the docker API, NOT by
+      #      compose, so their com.docker.compose.project label is EMPTY and a
+      #      project filter can never match them. They carry `fks.bot=true`
+      #      (set in docker_client.rs build_bot_labels). These are the money
+      #      containers; a project-only fix would have silently kept missing them.
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
         filters:
           - name: label
-            values: ["com.docker.compose.project=compose"]
+            values: ["com.docker.compose.project=fks"]
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["fks.bot=true"]
 
     relabel_configs:
       # Container name

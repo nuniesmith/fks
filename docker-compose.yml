@@ -410,7 +410,13 @@ services:
             # calls (and the mid-run standby auto-restart) forward this token, so
             # setting it does not leave janus stuck in STANDBY on (re)deploy.
             - JANUS_API_TOKEN=${JANUS_API_TOKEN:-}
-            - RUST_LOG=info,janus=debug,sqlx=debug,janus_backward=debug
+            # Configurable like the spawner/bot services (janus was the only
+            # one hardcoded). NOTE `janus=debug` does NOT cover the
+            # `janus_forward::*` crate — EnvFilter matches crate names, and
+            # `janus_forward` is a distinct name, not a child of `janus`. To
+            # debug the forward risk path use e.g.
+            #   JANUS_LOG_LEVEL="info,janus_forward::risk=debug"
+            - RUST_LOG=${JANUS_LOG_LEVEL:-info,janus=debug,sqlx=debug,janus_backward=debug}
             - RUST_BACKTRACE=1
             - JANUS_CONFIG_PATH=/app/config/janus.toml
             - JANUS_ENABLE_BACKWARD=${JANUS_ENABLE_BACKWARD:-true}

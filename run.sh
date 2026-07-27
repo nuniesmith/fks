@@ -1186,6 +1186,9 @@ cmd_fresh() {
     fi
 
     log "Removing old containers ..."
+    # name=fks_ ONLY — this rebuilds the compose stack. The spawner-managed
+    # fks-bot-* containers (fks.bot=true) are intentionally NOT swept: they may
+    # hold live positions and are the spawner's to stop, not ours.
     docker ps -a --filter "name=fks_" -q | xargs -r docker rm -f 2>/dev/null || true
     ok "Old containers removed"
     echo ""
@@ -1378,12 +1381,39 @@ cmd_logs() {
     fi
 }
 
+# Every container this operator cares about: the compose STACK (name=fks_)
+# PLUS the spawner-launched bots (label fks.bot=true, named fks-bot-*), which
+# live outside the compose file and so are invisible to `compose ps` and to a
+# bare `name=fks_` filter. READ-ONLY visibility only. Destructive commands
+# (fresh / force-clean / network-cleanup) deliberately DO NOT use this — they
+# scope to name=fks_ so they rebuild the stack WITHOUT sweeping the bots, which
+# are lifecycle-managed by the spawner and may hold LIVE positions. run.sh must
+# never rm -f a money bot out from under the spawner.
+fks_visible_containers() {
+    {
+        docker ps -a --filter "name=fks_"          --format '{{.Names}}' 2>/dev/null
+        docker ps -a --filter "label=fks.bot=true" --format '{{.Names}}' 2>/dev/null
+    } | sort -u
+}
+
 cmd_status() {
     local mode="${1:-dev}"
     if [ "$mode" = "prod" ]; then
         $DC -f "$COMPOSE_FILE" -f "$PROD_COMPOSE_FILE" ps
     else
         $DC -f "$COMPOSE_FILE" ps
+    fi
+
+    # `compose ps` shows only stack services; the spawner-managed bots are not
+    # in the compose file. Surface them so `status` is the whole picture.
+    local bots
+    bots=$(docker ps -a --filter "label=fks.bot=true" \
+             --format '{{.Names}}\t{{.Status}}\t{{.Label "fks.mode"}}' 2>/dev/null)
+    if [ -n "$bots" ]; then
+        printf '\nSpawner-managed bots (not in compose):\n'
+        printf '%s\n' "$bots" | while IFS=$'\t' read -r name st mode_lbl; do
+            printf '  %-28s %-22s [%s]\n' "$name" "$st" "${mode_lbl:-?}"
+        done
     fi
 }
 
@@ -1396,7 +1426,7 @@ cmd_health() {
     local any_unhealthy=false
 
     local containers
-    containers=$(docker ps -a --filter "name=fks_" --format "{{.Names}}" 2>/dev/null | sort)
+    containers=$(fks_visible_containers)
     while IFS= read -r ctr; do
         [ -z "$ctr" ] && continue
         local label="${ctr#fks_}"
@@ -1623,11 +1653,22 @@ cmd_force_clean() {
     $DC -f "$COMPOSE_FILE" \
         down --volumes --remove-orphans --timeout 5 2>/dev/null || true
 
+    # Stack only (name=fks_). The spawner-managed fks-bot-* containers are NOT
+    # torn down here — a blanket rm -f on a live-money bot skips its graceful
+    # shutdown. Stop those via the spawner. Report any left running so a "force
+    # clean" that leaves a bot alive isn't a silent surprise.
     docker ps -a --filter "name=fks_" -q | xargs -r docker rm -f || true
     docker images --filter "reference=nuniesmith/fks*" -q | xargs -r docker rmi -f || true
     docker images --filter "reference=fks:*" -q          | xargs -r docker rmi -f || true
     docker network ls --filter "name=fks" -q | xargs -r docker network rm || true
     docker network prune -f || true
+
+    local spared
+    spared=$(docker ps --filter "label=fks.bot=true" --format '{{.Names}}' 2>/dev/null)
+    if [ -n "$spared" ]; then
+        warn "Spawner-managed bots left RUNNING (stop via the spawner, not here):"
+        printf '%s\n' "$spared" | sed 's/^/    /'
+    fi
 
     ok "Force clean complete"
 }
@@ -1635,6 +1676,7 @@ cmd_force_clean() {
 cmd_network_cleanup() {
     header "Network Cleanup"
     $DC -f "$COMPOSE_FILE" down --remove-orphans --timeout 5 2>/dev/null || true
+    # Stack only — see cmd_force_clean: never rm -f a spawner-managed money bot.
     docker ps -a --filter "name=fks_" -q | xargs -r docker rm -f || true
     docker network ls --filter "name=fks" -q | xargs -r docker network rm || true
     docker network prune -f || true

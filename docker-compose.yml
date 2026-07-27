@@ -1377,6 +1377,14 @@ services:
                 REPO_COMMIT: ${SPAWNER_COMMIT:-}
         image: nuniesmith/fks:spawner
         container_name: fks_bot_spawner
+        # The spawner degrades to STATELESS if it cannot reach Postgres at boot —
+        # no bot_runs ledger, no notification channels (they live in fks_db) and
+        # therefore NO live-bot crash paging, while /health still answers 200. It
+        # now retries the connect (fks-spawner #28), but gate startup on a healthy
+        # database too so the race cannot happen on `compose up`. (2026-07-26 review)
+        depends_on:
+            postgres:
+                condition: service_healthy
         restart: unless-stopped
         # Grant access to the bind-mounted /var/run/docker.sock. On the host the
         # socket is 0660 root:docker, so the in-container appuser (uid 1000) must

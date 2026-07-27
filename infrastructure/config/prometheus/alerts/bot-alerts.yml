@@ -151,3 +151,84 @@ groups:
       # is never exported by the spawner (siblings fks_spawner_running_bots etc.
       # are), so the >= comparison matched nothing and the alert could never
       # fire. Restore once the spawner exports its max-bots limit.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Venue freshness (P-26)
+  #
+  # Source: fks_bot_venue_status_age_seconds{bot_id,exchange,mode}, exported by
+  # the SPAWNER from each bot's own /status stamp — not by the scraper. That
+  # distinction is the point: a bot whose venue connections are all dead still
+  # answers /metrics and still looks `up`. On 2026-07-22 the live spot bot lost
+  # DNS to every venue for 65 minutes and nothing fired; the outage was found
+  # five days later, in the database, as 15 identical net-worth rows.
+  #
+  # Two rules, because the shape of the failure tells you where to look:
+  # every venue climbing together = connectivity/DNS; one venue alone = that
+  # venue (API outage, expired key, rate-limit ban).
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: bot-venue-freshness
+    rules:
+      - alert: BotAllVenuesStale
+        # Every venue this bot reports is stale => the bot is blind, and its
+        # net worth is frozen. Live-mode only: a paper bot going quiet is not
+        # a money event.
+        expr: |
+          count by (bot_id) (fks_bot_venue_status_age_seconds{mode="live"} > 900)
+            == on (bot_id)
+          count by (bot_id) (fks_bot_venue_status_age_seconds{mode="live"})
+        for: 5m
+        labels:
+          severity: critical
+          team: trading
+          channel: money
+        annotations:
+          summary: "Bot {{ $labels.bot_id }}: ALL live venues stale — bot is blind"
+          description: >
+            Every live venue on {{ $labels.bot_id }} has failed to refresh for
+            over 15 minutes. The bot is still running and still serving its last
+            known figures, so `up` is green and net worth looks unchanged — it is
+            simply not being updated. This is the 2026-07-22 DNS-blackout
+            signature. Any position it holds is unmanaged until this clears.
+          runbook: >
+            1) docker exec <bot> getent hosts api.kraken.com  (DNS resolving?)
+            2) docker logs <bot> --since 20m | grep -iE 'dns|resolve|timeout'
+            3) check host resolver + Docker embedded DNS (127.0.0.11)
+            4) net-worth sampling is CORRECTLY paused meanwhile — see
+               fks_spawner_net_worth_stale_skipped_total; the gap is deliberate.
+
+      - alert: BotVenueStale
+        # A single venue lagging while its siblings tick.
+        expr: fks_bot_venue_status_age_seconds{mode="live"} > 900
+        for: 10m
+        labels:
+          severity: warning
+          team: trading
+          channel: money
+        annotations:
+          summary: "Bot {{ $labels.bot_id }}: venue {{ $labels.exchange }} stale for >15m"
+          description: >
+            {{ $labels.exchange }} has not refreshed its account snapshot in over
+            15 minutes while other venues on {{ $labels.bot_id }} are current.
+            Net worth is a SUM across venues, so the reported total is wrong
+            while this persists, and net-worth sampling is paused.
+          runbook: >
+            Check that venue's API status, key validity/permissions, and whether
+            the account is rate-limited or geo-blocked.
+
+      - alert: NetWorthSamplingPausedTooLong
+        # The staleness guard is protecting the series — but a long pause means
+        # the treasury history is going dark and needs a human.
+        expr: increase(fks_spawner_net_worth_stale_skipped_total[30m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: trading
+          channel: money
+        annotations:
+          summary: "Net-worth sampling paused: >5 stale readings refused in 30m"
+          description: >
+            The sampler is refusing to record net worth because bots are serving
+            stale figures. This is the guard working as designed (a gap is
+            honest; a fabricated flat line is not) — but the treasury series is
+            accumulating a hole. Resolve the underlying venue staleness.
+          runbook: "Check BotAllVenuesStale / BotVenueStale for the cause."

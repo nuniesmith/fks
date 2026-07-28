@@ -665,7 +665,11 @@ preflight_check() {
     available_gb=$(df / | tail -1 | awk '{print int($4/1024/1024)}')
     if [ "$available_gb" -lt 10 ]; then
         err "Low disk space: ${available_gb}GB (need ≥ 10GB)"
-        warn "Run: docker system prune -af --volumes"
+        # NOT `docker system prune -af --volumes`: that is host-wide and would
+        # take the running money bots' images plus every unreferenced volume,
+        # including the per-bot fks-bot-state-* state volumes. Suggest the
+        # bounded version instead.
+        warn "Run: ./run.sh clean   (or: docker image prune -af)"
         ((errors++))
     else
         ok "Disk space: ${available_gb}GB available"
@@ -1628,9 +1632,26 @@ cmd_shell() {
 
 cmd_clean() {
     header "Cleaning Docker Resources + Build Caches"
-    docker container prune -f
+    # `docker container prune -f` is HOST-WIDE and unconfirmed. A spawner-managed
+    # bot sits in the exited state in several normal situations (crashed
+    # overnight with no restart policy, stopped for a key rotation, awaiting
+    # auto_prune), and this command's name and header both read as routine
+    # housekeeping — so the operator gets no signal that a money bot is about to
+    # be hard-removed out from under the spawner, losing its container and
+    # leaving its bot_runs row open.
+    #
+    # label!= keeps the intent (clear stopped containers) while making the
+    # money bots unreachable from here. Stopping a bot remains the spawner's job.
+    local spared
+    spared=$(docker ps -a --filter "label=fks.bot=true" --filter "status=exited" \
+               --format '{{.Names}}' 2>/dev/null)
+    docker container prune -f --filter "label!=fks.bot=true"
     docker image prune -f
     ok "Cleaned stopped containers and dangling images"
+    if [ -n "$spared" ]; then
+        warn "Spared stopped bot container(s) — remove via the spawner, not here:"
+        printf '%s\n' "$spared" | sed 's/^/    /'
+    fi
     log "Cleaning Python build caches..."
     find . -name ".mypy_cache"   -type d -exec rm -rf {} + 2>/dev/null || true
     find . -name "__pycache__"   -type d -exec rm -rf {} + 2>/dev/null || true

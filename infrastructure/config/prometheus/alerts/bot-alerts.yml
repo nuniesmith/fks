@@ -162,6 +162,12 @@ groups:
   # DNS to every venue for 65 minutes and nothing fired; the outage was found
   # five days later, in the database, as 15 identical net-worth rows.
   #
+  # SCOPE IS mode!="paper", NOT mode="live". A spot venue reports `dry-run`
+  # when it is outside the live_venues allowlist or when the drawdown breaker
+  # has halted it (vlive = venue.live && !halted) — and it still holds REAL
+  # balances. Scoping to "live" silenced these alerts at the exact moment a
+  # venue was halted. Paper bots stay excluded: going quiet is not a money event.
+  #
   # Two rules, because the shape of the failure tells you where to look:
   # every venue climbing together = connectivity/DNS; one venue alone = that
   # venue (API outage, expired key, rate-limit ban).
@@ -169,22 +175,22 @@ groups:
   - name: bot-venue-freshness
     rules:
       - alert: BotAllVenuesStale
-        # Every venue this bot reports is stale => the bot is blind, and its
-        # net worth is frozen. Live-mode only: a paper bot going quiet is not
-        # a money event.
+        # Every real-money venue this bot reports is stale => the bot is blind,
+        # and its net worth is frozen. Paper is excluded: a paper bot going quiet
+        # is not a money event. dry-run is NOT excluded — it holds real balances.
         expr: |
-          count by (bot_id) (fks_bot_venue_status_age_seconds{mode="live"} > 900)
+          count by (bot_id) (fks_bot_venue_status_age_seconds{mode!="paper"} > 900)
             == on (bot_id)
-          count by (bot_id) (fks_bot_venue_status_age_seconds{mode="live"})
+          count by (bot_id) (fks_bot_venue_status_age_seconds{mode!="paper"})
         for: 5m
         labels:
           severity: critical
           team: trading
           channel: money
         annotations:
-          summary: "Bot {{ $labels.bot_id }}: ALL live venues stale — bot is blind"
+          summary: "Bot {{ $labels.bot_id }}: ALL real-money venues stale — bot is blind"
           description: >
-            Every live venue on {{ $labels.bot_id }} has failed to refresh for
+            Every real-money venue on {{ $labels.bot_id }} (live or dry-run) has failed to refresh for
             over 15 minutes. The bot is still running and still serving its last
             known figures, so `up` is green and net worth looks unchanged — it is
             simply not being updated. This is the 2026-07-22 DNS-blackout
@@ -197,8 +203,8 @@ groups:
                fks_spawner_net_worth_stale_skipped_total; the gap is deliberate.
 
       - alert: BotVenueStale
-        # A single venue lagging while its siblings tick.
-        expr: fks_bot_venue_status_age_seconds{mode="live"} > 900
+        # A single real-money venue lagging while its siblings tick.
+        expr: fks_bot_venue_status_age_seconds{mode!="paper"} > 900
         for: 10m
         labels:
           severity: warning

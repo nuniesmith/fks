@@ -221,6 +221,42 @@ groups:
             Check that venue's API status, key validity/permissions, and whether
             the account is rate-limited or geo-blocked.
 
+      - alert: BotVenueFreshnessMissing
+        # The gauge going ABSENT is now the honest signal for "cannot see this
+        # bot's venues" — the spawner retires the series when /status is
+        # unreachable, non-2xx, or unparseable, rather than leaving a frozen
+        # age that reads as healthy.
+        #
+        # Without this rule that honesty is silent: BotAllVenuesStale and
+        # BotVenueStale both match ON the series, so no series means no alert.
+        # A running bot exporting no venue freshness is a blind spot, not a
+        # clean bill of health.
+        expr: |
+          up{job="fks-bots"} == 1
+            unless on (bot_id)
+          count by (bot_id) (fks_bot_venue_status_age_seconds)
+        for: 15m
+        labels:
+          severity: warning
+          team: trading
+          channel: money
+        annotations:
+          summary: "Bot {{ $labels.bot_id }} is up but reports no venue freshness"
+          description: >
+            {{ $labels.bot_id }} answers /metrics but the spawner is exporting no
+            fks_bot_venue_status_age_seconds series for it — its /status is
+            unreachable, non-2xx, or no longer parseable. The freshness alerts
+            match on that series, so while it is absent this bot has NO staleness
+            coverage at all. This is the shape a /status schema change takes
+            (an `updated` field renamed or dropped): everything looks green
+            because nothing is being measured.
+          runbook: >
+            1) curl the bot's :9091/status and check exchanges[] still carries
+               `updated` per venue
+            2) docker logs <bot> for probe failures
+            3) fks_spawner_net_worth_stale_skipped_total shows whether sampling
+               is also paused
+
       - alert: NetWorthSamplingPausedTooLong
         # The staleness guard is protecting the series — but a long pause means
         # the treasury history is going dark and needs a human.

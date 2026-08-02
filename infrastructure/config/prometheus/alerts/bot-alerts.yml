@@ -288,22 +288,49 @@ groups:
                is also paused
 
       - alert: NetWorthSamplingPausedTooLong
-        # The staleness guard is protecting the series — but a long pause means
-        # the treasury history is going dark and needs a human.
-        expr: increase(fks_spawner_net_worth_stale_skipped_total[30m]) > 5
+        # The guard is protecting the series — but a long pause means the
+        # treasury history is going dark and needs a human.
+        #
+        # sum() IS LOad-BEARING. fks_spawner_net_worth_stale_skipped_total gained
+        # a `reason` label (fks-spawner #42) because FOUR different refusals feed
+        # it: stale, incomplete, fake_paper, unaccounted. Without sum() the
+        # threshold applies PER REASON, so it would take 6 refusals of the SAME
+        # kind to fire instead of 6 refusals total — a silent weakening of an
+        # alert about money, introduced by adding the label.
+        expr: sum(increase(fks_spawner_net_worth_stale_skipped_total[30m])) > 5
         for: 5m
         labels:
           severity: warning
           team: trading
           channel: money
         annotations:
-          summary: "Net-worth sampling paused: >5 stale readings refused in 30m"
+          summary: "Net-worth sampling paused: >5 samples refused in 30m"
           description: >
-            The sampler is refusing to record net worth because bots are serving
-            stale figures. This is the guard working as designed (a gap is
-            honest; a fabricated flat line is not) — but the treasury series is
-            accumulating a hole. Resolve the underlying venue staleness.
-          runbook: "Check BotAllVenuesStale / BotVenueStale for the cause."
+            The sampler is refusing to record net worth. This is the guard
+            working as designed (a gap is honest; a fabricated flat line is not)
+            — but the treasury series is accumulating a hole.
+            THE CAUSE IS NOT NECESSARILY STALENESS. Four refusals share this
+            counter and only one of them is about venue age:
+              stale       — the bot-stamped figure is older than tolerated
+              incomplete  — a venue is missing, so the total is a partial sum
+              fake_paper  — a real-money bot reports a PAPER venue, i.e. a key
+                            check failed and it is running on fabricated cash
+              unaccounted — the bot holds an open position it will not vouch for
+            An earlier version of this alert asserted staleness unconditionally
+            and sent the operator to venue alerts that cannot fire for three of
+            the four. Read the reason before acting.
+          runbook: >
+            1) Break down the cause first:
+               sum by (reason) (increase(fks_spawner_net_worth_stale_skipped_total[30m]))
+            2) reason="stale"       -> BotAllVenuesStale / BotVenueStale
+               reason="incomplete"  -> a venue never checked in; compare the bot's
+                                       /status exchanges[] against expected_venues
+               reason="fake_paper"  -> CREDENTIALS. A live bot degraded a venue to
+                                       paper; its balances are invented. Check the
+                                       venue's API key, then respawn.
+               reason="unaccounted" -> the bot reports an open position it cannot
+                                       price into net worth; check positions[].
+            3) The gap in the treasury series is deliberate in every case.
 
   # ─────────────────────────────────────────────────────────────────────────
   # Net-worth sampler liveness — the failure class where every guard is green

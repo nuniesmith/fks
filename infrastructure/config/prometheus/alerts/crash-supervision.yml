@@ -24,11 +24,43 @@
 #   1. LiveBotCrashed        — the spawner detected an unexpected exit
 #                              (`fks_spawner_crashed_bots > 0`). Robust to the
 #                              target vanishing; this is the 3am-panic page.
-#   2. LiveBotMetricsDown     — a LIVE bot's metrics target is present in the SD
-#                              file but unreachable/scrape-failing for >2m
-#                              (the "goes down" half — process wedged, not yet
-#                              exited). The existing BotStopped (warning, any
-#                              mode) stays; this is the live-money CRITICAL.
+#   2. LiveBotMetricsDown     — a REAL-MONEY bot's metrics target is present in
+#                              the SD file but unreachable/scrape-failing for
+#                              >2m (the "goes down" half — process wedged, not
+#                              yet exited). The existing BotStopped (warning,
+#                              any mode) stays; this is the money CRITICAL.
+#
+# SCOPE FOR (2) IS mode!="paper",mode!="backtest" — NOT mode="live". This is the
+# same defect bot-alerts.yml fixed on its venue-freshness rules (see the SCOPE
+# note above BotAllVenuesStale); crash-supervision.yml was missed at the time.
+# `mode` here is the BOT-level label the spawner writes into the Prometheus SD
+# file, and a real-money bot reports "dry-run" whenever it is outside the
+# live_venues allowlist or its drawdown breaker has halted it — while still
+# holding REAL balances. Scoping to mode="live" therefore DISENGAGES this page
+# at exactly the moments a real-money bot is most likely to be misbehaving.
+#
+# Not hypothetical. Measured against this Prometheus (30d retention) while
+# writing this change: the only real-money bot, crypto-spot, carried
+# mode="dry-run" from 2026-07-06T20:38Z until it flipped to mode="live" at
+# 2026-07-07T18:05:45Z — 21h27m. Across that entire span
+# `count(up{job="fks-bots", mode="live"})` returned NOTHING, so `== 0` matched
+# an empty vector and this CRITICAL could not fire, for any reason, for the
+# whole day. `count(up{job="fks-bots", mode!="paper", mode!="backtest"})`
+# returns 1 at the same timestamps.
+#
+# The exclusions are a DENY list, deliberately, so that a real-money mode string
+# nobody has invented yet ("reduce-only", "halted", …) is covered by default
+# instead of being silently outside an allow-list regex:
+#   • paper    — fabricated money; going quiet is not a money event.
+#   • backtest — one-shot containers that finish and exit. They are the reason
+#                a bare mode!="paper" is NOT the right fix here: on
+#                2026-07-14 bt-funding-reversion-6 sat at up==0 for 5.2 minutes
+#                (01:41:45Z→01:47:00Z) after completing, which is longer than
+#                `for: 2m`, so a bare mode!="paper" would have paged CRITICAL
+#                "real-money bot DOWN" for a backtest that finished normally.
+#                Venue-freshness rules in bot-alerts.yml do not need this
+#                exclusion because backtest bots export no venue gauges; `up`
+#                exists for every SD target, so this rule does.
 #
 # Routing: severity=critical → Alertmanager `discord-critical` receiver (same
 # Discord path every other critical FKS alert uses; see alertmanager.yml.tmpl).
@@ -73,24 +105,31 @@ groups:
                     this alert once triaged.
 
           # ------------------------------------------------------------------
-          # A LIVE bot's metrics target is present but unreachable (process
-          # wedged / metrics port hung) for >2m. The exited-and-vanished case is
-          # covered by LiveBotCrashed above; this catches the still-present-but-
-          # dead case that `up` can see.
+          # A REAL-MONEY bot's metrics target is present but unreachable
+          # (process wedged / metrics port hung) for >2m. The exited-and-vanished
+          # case is covered by LiveBotCrashed above; this catches the
+          # still-present-but-dead case that `up` can see.
+          #
+          # mode!="paper",mode!="backtest" — see the SCOPE block in this file's
+          # header. dry-run is IN: it holds real balances. The alert name is
+          # kept as-is on purpose; renaming it would orphan existing
+          # Alertmanager silences and the cross-reference in bot-alerts.yml.
           # ------------------------------------------------------------------
           - alert: LiveBotMetricsDown
-            expr: up{job="fks-bots", mode="live"} == 0
+            expr: up{job="fks-bots", mode!="paper", mode!="backtest"} == 0
             for: 2m
             labels:
                 severity: critical
                 team: trading
                 component: bot-lifecycle
             annotations:
-                summary: "Live bot {{ $labels.container_name }} metrics target is DOWN"
+                summary: "Real-money bot {{ $labels.container_name }} (mode={{ $labels.mode }}) metrics target is DOWN"
                 description: >
-                    Live-money bot {{ $labels.bot_id }}
-                    ({{ $labels.container_name }}) has been unreachable at its
-                    :9091/metrics endpoint for over 2 minutes while still present
-                    in the spawner SD file — the process may be wedged. If it has
-                    actually exited, LiveBotCrashed will also fire.
+                    Real-money bot {{ $labels.bot_id }}
+                    ({{ $labels.container_name }}, mode={{ $labels.mode }}) has
+                    been unreachable at its :9091/metrics endpoint for over 2
+                    minutes while still present in the spawner SD file — the
+                    process may be wedged. dry-run counts as real money: it holds
+                    real balances, it is only barred from placing orders. If the
+                    bot has actually exited, LiveBotCrashed will also fire.
                 runbook: "Check logs: curl http://spawner:8090/container/{{ $labels.container_name }}/logs"

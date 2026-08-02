@@ -1,0 +1,261 @@
+# =============================================================================
+# promtool unit tests for the alert rules in ../alerts/
+#
+# Run:
+#   docker run --rm -v "$PWD/infrastructure/config/prometheus:/p:ro" \
+#     --entrypoint promtool nuniesmith/fks:prometheus \
+#     test rules /p/tests/alert-rules.test.yml
+#
+# This directory is NOT part of the Prometheus image: the Dockerfile copies
+# only `infrastructure/config/prometheus/alerts/` to /etc/prometheus/alerts/,
+# and prometheus.yml globs `/etc/prometheus/alerts/*.yml`. Nothing here is ever
+# loaded as a rule file.
+#
+# Every case below was verified NON-VACUOUS by stubbing the fix and confirming
+# the test fails — an alert-rule test that passes against the broken rule is
+# just as much a fabricated authoritative claim as the alerts it guards.
+# =============================================================================
+rule_files:
+  - ../alerts/bot-alerts.yml
+  - ../alerts/crash-supervision.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ===========================================================================
+  # LiveBotMetricsDown — scope is mode!="paper",mode!="backtest"
+  # ===========================================================================
+
+  # The 2026-07-06/07 regression, replayed. crypto-spot ran mode="dry-run" for
+  # 21h27m holding REAL balances; under the old `mode="live"` selector this
+  # CRITICAL matched an empty vector and could not fire for any reason.
+  - interval: 1m
+    name: LiveBotMetricsDown fires for a DOWN dry-run bot (real balances)
+    input_series:
+      - series: 'up{job="fks-bots",bot_id="crypto-spot",container_name="fks-bot-crypto-spot",mode="dry-run"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: LiveBotMetricsDown
+        exp_alerts: [] # `for: 2m` not yet satisfied
+      - eval_time: 5m
+        alertname: LiveBotMetricsDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              component: bot-lifecycle
+              job: fks-bots
+              bot_id: crypto-spot
+              container_name: fks-bot-crypto-spot
+              mode: dry-run
+            exp_annotations:
+              summary: "Real-money bot fks-bot-crypto-spot (mode=dry-run) metrics target is DOWN"
+              description: "Real-money bot crypto-spot (fks-bot-crypto-spot, mode=dry-run) has been unreachable at its :9091/metrics endpoint for over 2 minutes while still present in the spawner SD file — the process may be wedged. dry-run counts as real money: it holds real balances, it is only barred from placing orders. If the bot has actually exited, LiveBotCrashed will also fire.\n"
+              runbook: "Check logs: curl http://spawner:8090/container/fks-bot-crypto-spot/logs"
+
+  # Pre-existing coverage must survive the scope change.
+  - interval: 1m
+    name: LiveBotMetricsDown still fires for a DOWN live bot
+    input_series:
+      - series: 'up{job="fks-bots",bot_id="crypto-spot",container_name="fks-bot-crypto-spot",mode="live"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LiveBotMetricsDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              component: bot-lifecycle
+              job: fks-bots
+              bot_id: crypto-spot
+              container_name: fks-bot-crypto-spot
+              mode: live
+            exp_annotations:
+              summary: "Real-money bot fks-bot-crypto-spot (mode=live) metrics target is DOWN"
+              description: "Real-money bot crypto-spot (fks-bot-crypto-spot, mode=live) has been unreachable at its :9091/metrics endpoint for over 2 minutes while still present in the spawner SD file — the process may be wedged. dry-run counts as real money: it holds real balances, it is only barred from placing orders. If the bot has actually exited, LiveBotCrashed will also fire.\n"
+              runbook: "Check logs: curl http://spawner:8090/container/fks-bot-crypto-spot/logs"
+
+  # Paper is fabricated money; a paper bot going quiet is not a money event.
+  - interval: 1m
+    name: LiveBotMetricsDown ignores a DOWN paper bot
+    input_series:
+      - series: 'up{job="fks-bots",bot_id="crypto-funding",container_name="fks-bot-crypto-funding",mode="paper"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LiveBotMetricsDown
+        exp_alerts: []
+
+  # The reason a bare mode!="paper" is the WRONG fix here. Backtest containers
+  # are one-shot: they finish and exit. On 2026-07-14 bt-funding-reversion-6
+  # sat at up==0 for 5.2 minutes after completing normally — longer than
+  # `for: 2m`. Without this exclusion that is a CRITICAL page for a healthy
+  # backtest, i.e. the fix would have traded one blind spot for a false page.
+  - interval: 1m
+    name: LiveBotMetricsDown ignores a finished backtest container
+    input_series:
+      - series: 'up{job="fks-bots",bot_id="bt-funding-reversion-6",container_name="fks-bot-bt-funding-reversion-6",mode="backtest"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: LiveBotMetricsDown
+        exp_alerts: []
+
+  # ===========================================================================
+  # BotNoTrades — same scope defect, same fix
+  # ===========================================================================
+  # interval MUST be <= 5m here: the harness evaluates rules every
+  # `evaluation_interval` (1m), and input samples further apart than the 5m
+  # staleness lookback make the series vanish between samples, which resets the
+  # `for: 1h` state and the alert never fires. That is a property of the test
+  # harness, not of the rule.
+  - interval: 5m
+    name: BotNoTrades selects a dry-run bot (was invisible under mode=live)
+    input_series:
+      - series: 'fks_bot_trades_total{job="fks-bots",bot_id="fut-momentum",container_name="fks-bot-fut-momentum",bot="fut-momentum",mode="dry-run"}'
+        values: "0x312"
+      - series: 'fks_bot_uptime_seconds{job="fks-bots",bot_id="fut-momentum",container_name="fks-bot-fut-momentum",bot="fut-momentum",mode="dry-run"}'
+        values: "90000+300x312"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: BotNoTrades
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              team: trading
+              job: fks-bots
+              bot_id: fut-momentum
+              container_name: fks-bot-fut-momentum
+              bot: fut-momentum
+              mode: dry-run
+            exp_annotations:
+              summary: "Real-money bot fks-bot-fut-momentum has placed no trades in 24h"
+              description: "Real-money bot fut-momentum (mode: dry-run) has been running for over 24 hours but placed no trades in the last 24 hours. This may be expected outside market hours or if the strategy is waiting for a setup. dry-run counts as real money here: it holds real balances and is only barred from placing orders.\n"
+
+  - interval: 5m
+    name: BotNoTrades ignores the paper funding bot
+    input_series:
+      - series: 'fks_bot_trades_total{job="fks-bots",bot_id="crypto-funding",container_name="fks-bot-crypto-funding",bot="kucoin-futures",mode="paper"}'
+        values: "0x312"
+      - series: 'fks_bot_uptime_seconds{job="fks-bots",bot_id="crypto-funding",container_name="fks-bot-crypto-funding",bot="kucoin-futures",mode="paper"}'
+        values: "90000+300x312"
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: BotNoTrades
+        exp_alerts: []
+
+  # ===========================================================================
+  # NetWorthSamplerNotWriting — the sampler CEASING TO WRITE
+  # ===========================================================================
+
+  # The failure the rule exists for: spawner up, bots running, no refusals, and
+  # the snapshots counter simply stops moving (persistent Docker-API or
+  # Postgres-insert failure). Every other guard reads green in this state.
+  - interval: 1m
+    name: NetWorthSamplerNotWriting fires when the counter goes flat
+    input_series:
+      - series: 'fks_spawner_net_worth_snapshots_total{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "1200x90"
+      - series: 'fks_spawner_running_bots{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "2x90"
+    alert_rule_test:
+      # Before the 45m window has fully elapsed there is no sample at
+      # `offset 45m`, so the rule is correctly silent.
+      - eval_time: 40m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+      # Condition true from 45m; `for: 10m` means not yet firing at 50m.
+      - eval_time: 50m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              channel: money
+              job: fks-spawner
+              instance: fks_bot_spawner:8090
+              component: bot-lifecycle
+              service: fks-spawner
+            exp_annotations:
+              summary: "Net-worth sampler has written NOTHING for 45m while bots are running"
+              description: "fks_spawner_net_worth_snapshots_total has not moved for 45 minutes while the spawner is up and reporting running bots. The sampler is not appending rows and is not refusing them either — the refusal counter is the OTHER alert. Suspect the Docker API (a failed list_bots aborts the sweep with no counter and no log-visible gauge change) or the Postgres insert path. While this persists the treasury series has a hole AND every venue-freshness age is frozen at its last value, which means BotAllVenuesStale, BotVenueStale and BotVenueFreshnessMissing are all reading green on stale data and are NOT covering the bots right now. Treat every other bot alert as unreliable until this clears.\n"
+              runbook: "1) Is it refusals after all? increase(fks_spawner_net_worth_stale_skipped_total[45m]) — if that is climbing the cause is venue staleness, not the write path; work BotAllVenuesStale / BotVenueStale instead.\n2) Docker API: docker logs fks_bot_spawner --since 1h | grep -iE 'failed to list bots|list_bots'\n3) Postgres write path: same logs, grep -i 'insert failed'; then check the fks_db connection pool and disk.\n4) Confirm the hole: SELECT max(ts) FROM net_worth_snapshots;\n5) fks_bot_venue_status_age_seconds is FROZEN, not fresh — do not read it as evidence the venues are healthy.\n"
+
+  # THE RESTART CASE, replayed from real history. On 2026-07-08 the spawner was
+  # down until 23:44Z, came back with the counter reset to 0, and did not write
+  # until 23:54Z. Over that gap the window contains only post-restart zeros, so
+  # a bare `increase(...[45m]) == 0` legitimately evaluates to 0 and pages a
+  # spawner that had just recovered and was working fine. Measured against live
+  # Prometheus: the unguarded form matches for 8 minutes there (23:45Z–23:53Z).
+  # The `offset 45m` existence guard is what suppresses it.
+  - interval: 1m
+    name: NetWorthSamplerNotWriting tolerates a spawner restart (no false page)
+    input_series:
+      - series: 'fks_spawner_net_worth_snapshots_total{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "_x50 0x25"
+      - series: 'fks_spawner_running_bots{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "_x50 2x25"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+
+  # A counter RESET with writing continuing must not fire. increase() applies
+  # reset correction; delta() or `x - x offset 45m` would go negative here and
+  # page on every spawner rebuild (there was one on 2026-07-31).
+  - interval: 1m
+    name: NetWorthSamplerNotWriting tolerates a counter reset while still writing
+    input_series:
+      - series: 'fks_spawner_net_worth_snapshots_total{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "1200+2x20 0+2x70"
+      - series: 'fks_spawner_running_bots{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "2x91"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+      - eval_time: 90m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+
+  # Healthy steady state: 2 rows per 5-minute sweep. Must stay silent.
+  - interval: 1m
+    name: NetWorthSamplerNotWriting stays silent while the sampler writes
+    input_series:
+      - series: 'fks_spawner_net_worth_snapshots_total{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "1200+0x4 1202+0x4 1204+0x4 1206+0x4 1208+0x4 1210+0x4 1212+0x4 1214+0x4 1216+0x4 1218+0x4 1220+0x4 1222+0x4 1224+0x4 1226+0x4 1228+0x4 1230+0x4 1232+0x4 1234+0x4"
+      - series: 'fks_spawner_running_bots{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "2x90"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+      - eval_time: 88m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+
+  # No bots running => zero rows is CORRECT, not a fault. Without this guard
+  # every maintenance window pages, and a channel that is red during planned
+  # work is a channel the operator learns to ignore.
+  - interval: 1m
+    name: NetWorthSamplerNotWriting stays silent when no bots are running
+    input_series:
+      - series: 'fks_spawner_net_worth_snapshots_total{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "1200x90"
+      - series: 'fks_spawner_running_bots{job="fks-spawner",instance="fks_bot_spawner:8090",component="bot-lifecycle",service="fks-spawner"}'
+        values: "0x90"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []
+      - eval_time: 88m
+        alertname: NetWorthSamplerNotWriting
+        exp_alerts: []

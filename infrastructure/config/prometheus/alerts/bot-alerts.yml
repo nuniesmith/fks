@@ -106,29 +106,59 @@ groups:
           severity: warning
           team: trading
         annotations:
-          summary: "Bot {{ $labels.container_name }} has produced no signals in 15 min"
+          # These strings said "15 min" / "5 minutes" long after the 2026-07-26
+          # cadence fix moved the expr to 24h/86400s. An alert body that states
+          # a window the expr does not measure is the same failure as a frozen
+          # gauge reading fresh — the operator triages against a number nothing
+          # computed. Kept in sync with the expr above.
+          summary: "Bot {{ $labels.container_name }} has produced no signals in 24h"
           description: >
             Bot {{ $labels.bot_id }} (mode: {{ $labels.mode }}) has been running for
-            over 5 minutes but emitted no signals in the last 15 minutes.
+            over 24 hours but emitted no signals in the last 24 hours.
             The bot may be stalled, waiting for data, or have a configuration issue.
 
       # Same cadence problem (2026-07-26): the only live bot IS the rebalancer,
       # so this fired for 11 days straight. A HODL/DCA rebalancer legitimately
       # places no trades for days — that is the strategy, not an incident.
+      #
+      # SCOPE (fixed 2026-08-02): was mode="live", which is the same disengaged
+      # -selector defect the venue-freshness rules below already fixed and which
+      # crash-supervision.yml's LiveBotMetricsDown carried too. A real-money bot
+      # reports mode="dry-run" whenever it is outside the live_venues allowlist
+      # or its drawdown breaker has halted it, and it still holds REAL balances.
+      # Measured on this Prometheus: crypto-spot carried mode="dry-run" for
+      # 21h27m (2026-07-06T20:38Z → 2026-07-07T18:05:45Z) during which
+      # up{job="fks-bots",mode="live"} matched NOTHING at all. A deny list, not
+      # an allow-list regex, so a real-money mode nobody has invented yet is
+      # covered by default. backtest is excluded because those are one-shot
+      # containers, not a trading strategy that has gone quiet.
+      #
+      # HONEST LIMIT: fixing the mode scope does NOT make this rule live for
+      # today's fleet. crypto-spot — the only real-money bot — carries
+      # bot="spot-portfolio" and is excluded by the matcher above for the
+      # cadence reason, and crypto-funding is paper. So this rule still selects
+      # nothing until a non-rebalancer real-money bot exists. The scope fix is
+      # here so that bot is covered on day one instead of being silently outside
+      # a mode="live" selector, which is exactly how the 21h27m hole happened.
+      # Do not read a green BotNoTrades as evidence that trading is healthy.
       - alert: BotNoTrades
         expr: >
-          increase(fks_bot_trades_total{job="fks-bots",mode="live",bot!="spot-portfolio"}[24h]) == 0
-          and fks_bot_uptime_seconds{job="fks-bots",mode="live",bot!="spot-portfolio"} > 86400
+          increase(fks_bot_trades_total{job="fks-bots",mode!="paper",mode!="backtest",bot!="spot-portfolio"}[24h]) == 0
+          and fks_bot_uptime_seconds{job="fks-bots",mode!="paper",mode!="backtest",bot!="spot-portfolio"} > 86400
         for: 1h
         labels:
           severity: info
           team: trading
         annotations:
-          summary: "Live bot {{ $labels.container_name }} has placed no trades in 30 min"
+          # Same annotation/expr drift as BotNoSignals above: this said
+          # "30 min" / "10 minutes" against a 24h/86400s expr.
+          summary: "Real-money bot {{ $labels.container_name }} has placed no trades in 24h"
           description: >
-            Live bot {{ $labels.bot_id }} has been running for over 10 minutes
-            but placed no trades in the last 30 minutes. This may be expected
-            outside market hours or if the strategy is waiting for a setup.
+            Real-money bot {{ $labels.bot_id }} (mode: {{ $labels.mode }}) has been
+            running for over 24 hours but placed no trades in the last 24 hours.
+            This may be expected outside market hours or if the strategy is
+            waiting for a setup. dry-run counts as real money here: it holds real
+            balances and is only barred from placing orders.
 
   # ─────────────────────────────────────────────────────────────────────────
   # Spawner service health
@@ -274,3 +304,135 @@ groups:
             honest; a fabricated flat line is not) — but the treasury series is
             accumulating a hole. Resolve the underlying venue staleness.
           runbook: "Check BotAllVenuesStale / BotVenueStale for the cause."
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Net-worth sampler liveness — the failure class where every guard is green
+  #
+  # Every existing rule that could notice the treasury going dark counts
+  # REFUSALS. NetWorthSamplingPausedTooLong reads
+  # fks_spawner_net_worth_stale_skipped_total, which only moves when the sampler
+  # DECIDED not to write. Two paths in fks-spawner's net_worth.rs produce no
+  # refusal at all:
+  #
+  #   • `docker.list_bots()` fails → the sweep returns early. It deliberately
+  #     does NOT retire fks_bot_venue_status_age_seconds, because retiring the
+  #     series on a transient Docker error would flap it (and
+  #     BotVenueFreshnessMissing) once a minute. That is the right call — but
+  #     its consequence is that a PERSISTENT Docker-API failure leaves every
+  #     venue age FROZEN at whatever fresh-looking value it last held.
+  #   • `record_net_worth()` insert fails → `warn!` only, no counter, no gauge.
+  #
+  # In either case the entire guard set reads green while the treasury series
+  # stops and the bot's blindness becomes unobservable:
+  #     BotAllVenuesStale             ages frozen BELOW 900   → green
+  #     BotVenueStale                 same                    → green
+  #     BotVenueFreshnessMissing      series present, frozen  → green
+  #     NetWorthSamplingPausedTooLong skip counter flat       → green
+  #     SpawnerDown                   spawner is up (up=1)    → green
+  # That is the 2026-07-27 symptom with ZERO alerts instead of 17.5 hours of
+  # firing. So this rule reads the WRITE side — the sampler ceasing to append
+  # rows — instead of the refusal side.
+  #
+  # ── Threshold ────────────────────────────────────────────────────────────
+  # The sampler sweeps every NET_WORTH_SAMPLE_INTERVAL_SECS (default 300) and
+  # writes one row per running bot that reports net worth. Measured steady state
+  # on this Prometheus: increase(...[1h]) = 24, i.e. 2 bots × 12 sweeps/h.
+  # A 45m window is 9 consecutive missed sweeps; `for: 10m` puts total required
+  # silence at ~55m. Slow on purpose — the thing it replaces was 17.5h.
+  #
+  # ── Why increase(), and why the two `and` guards ──────────────────────────
+  # `increase()` and not `delta()`/`x - x offset 45m`: the counter RESETS to 0
+  # every time the spawner container is recreated (there was a rebuild on
+  # 2026-07-31). A subtraction goes NEGATIVE across a reset and would fire;
+  # increase() applies reset correction and stays positive. Verified against
+  # the 2026-07-09T00:39Z reset (18 → 0, no scrape gap): expr stays empty.
+  #
+  # Reset correction is NOT enough on its own, because a spawner OUTAGE longer
+  # than the window leaves the window containing only post-restart zeros, and
+  # increase() over an all-zero window is a legitimate 0. Replayed against real
+  # history: on 2026-07-08 the spawner was down from before 22:30Z until
+  # 23:44Z, restarted at counter=0, and did not write until 23:54Z. The bare
+  # `increase(...[45m]) == 0` MATCHES for 8 minutes there (23:45Z–23:53Z) — a
+  # page for a spawner that had just come back and was working fine.
+  #   guard 1: `fks_spawner_net_worth_snapshots_total offset 45m` — a set
+  #            operator, so it tests EXISTENCE, not value. It says "the spawner
+  #            was already being scraped at the far edge of the window", which
+  #            is precisely what makes a flat counter meaningful. Empty during
+  #            that replay → suppressed. Scrape-interval independent, unlike a
+  #            count_over_time() sample-count guard, which would silently
+  #            disarm the whole rule if the scrape interval were ever raised.
+  #   guard 2: `fks_spawner_running_bots > 0` — no bots running means zero rows
+  #            is correct, not a fault; without it every maintenance window
+  #            pages, and a channel that is red during maintenance is a channel
+  #            the operator learns to ignore.
+  #            IMPORTANT COUPLING: this guard is safe for the Docker-API failure
+  #            above only because supervisor::tick() returns WITHOUT touching
+  #            RUNNING_BOTS when list_bots() fails, so the gauge FREEZES at its
+  #            last value rather than dropping to 0. If fks-spawner is ever
+  #            changed to zero that gauge on a Docker error, this guard becomes
+  #            a silencer for the exact incident the rule exists to catch.
+  #
+  # Backtested over the full 30d retention at 60s resolution: the guarded expr
+  # matches at 0 eval points; the unguarded form matches at 9.
+  #
+  # ── What this rule does NOT cover (say it out loud) ───────────────────────
+  # fks_spawner_net_worth_snapshots_total is UNLABELLED, so this can only see a
+  # TOTAL stop. If the sampler keeps writing for the paper funding bot while it
+  # stops writing for the real-money spot bot, the counter keeps climbing and
+  # this rule stays green. Closing that needs a per-bot counter in fks-spawner
+  # (fks_spawner_net_worth_snapshots_total{bot_id=...}); until that exists this
+  # rule is honestly scoped to global cessation and this paragraph is the
+  # record of the remaining hole.
+  #
+  # That hole is not theoretical, and the 2026-07-27 incident is the proof:
+  # increase(fks_spawner_net_worth_snapshots_total[1h]) fell from 24/h to 12/h
+  # and STAYED there, because one bot was still being sampled while the other
+  # was refused. This rule would NOT have fired that day. 2026-07-27 was the
+  # REFUSAL path — fks_spawner_net_worth_stale_skipped_total was climbing from
+  # 05:30Z to 00:30Z, ~19h — and NetWorthSamplingPausedTooLong covered it
+  # correctly. What is added here is coverage for the SILENT variant of the same
+  # symptom, which nothing could see before. The two rules are complements, not
+  # duplicates; neither one is a substitute for the other.
+  #
+  # Rejected alternative for that hole: detect the frozen gauge directly with
+  # `changes(fks_bot_venue_status_age_seconds[30m]) == 0`. Measured against 7
+  # days of live data, that predicate is already true at 476 of 2016 5-minute
+  # eval points for crypto-spot/KuCoin-spot (23.6%), 283 for Crypto.com and 215
+  # for Kraken — because age = now - updated can land on the same integer across
+  # consecutive probes. A rule that is true a quarter of the time is worse than
+  # no rule, so it is not here.
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: net-worth-sampler-liveness
+    rules:
+      - alert: NetWorthSamplerNotWriting
+        expr: |
+          increase(fks_spawner_net_worth_snapshots_total[45m]) == 0
+            and (fks_spawner_net_worth_snapshots_total offset 45m)
+            and (fks_spawner_running_bots > 0)
+        for: 10m
+        labels:
+          severity: critical
+          team: trading
+          channel: money
+        annotations:
+          summary: "Net-worth sampler has written NOTHING for 45m while bots are running"
+          description: >
+            fks_spawner_net_worth_snapshots_total has not moved for 45 minutes
+            while the spawner is up and reporting running bots. The sampler is
+            not appending rows and is not refusing them either — the refusal
+            counter is the OTHER alert. Suspect the Docker API (a failed
+            list_bots aborts the sweep with no counter and no log-visible gauge
+            change) or the Postgres insert path. While this persists the
+            treasury series has a hole AND every venue-freshness age is frozen
+            at its last value, which means BotAllVenuesStale, BotVenueStale and
+            BotVenueFreshnessMissing are all reading green on stale data and are
+            NOT covering the bots right now. Treat every other bot alert as
+            unreliable until this clears.
+          # Literal block: one numbered step per line, so the Discord payload is
+          # a readable checklist and the promtool test can pin the exact string.
+          runbook: |
+            1) Is it refusals after all? increase(fks_spawner_net_worth_stale_skipped_total[45m]) — if that is climbing the cause is venue staleness, not the write path; work BotAllVenuesStale / BotVenueStale instead.
+            2) Docker API: docker logs fks_bot_spawner --since 1h | grep -iE 'failed to list bots|list_bots'
+            3) Postgres write path: same logs, grep -i 'insert failed'; then check the fks_db connection pool and disk.
+            4) Confirm the hole: SELECT max(ts) FROM net_worth_snapshots;
+            5) fks_bot_venue_status_age_seconds is FROZEN, not fresh — do not read it as evidence the venues are healthy.

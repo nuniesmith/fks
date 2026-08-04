@@ -1310,12 +1310,18 @@ cmd_start() {
         ok "Images pulled"
         echo ""
         header "Starting Production Services"
+        warn "STANDING GUARD: fks_postgres deliberately lags its image tag (see CLAUDE.md)."
+        warn "A bare up -d WILL recreate the live ledger DB. Type RECREATE-DB to proceed:"
+        read -r _guard && [ "$_guard" = "RECREATE-DB" ] || { err "Refused. Deploy single services by name."; return 1; }
         $DC -f "$COMPOSE_FILE" -f "$PROD_COMPOSE_FILE" up -d "$@"
     else
         $DC -f "$COMPOSE_FILE" build "$@"
         ok "Build complete"
         echo ""
         header "Starting Development Services"
+        warn "STANDING GUARD: fks_postgres deliberately lags its image tag (see CLAUDE.md)."
+        warn "A bare up -d WILL recreate the live ledger DB. Type RECREATE-DB to proceed:"
+        read -r _guard && [ "$_guard" = "RECREATE-DB" ] || { err "Refused. Deploy single services by name."; return 1; }
         $DC -f "$COMPOSE_FILE" up -d "$@"
     fi
 
@@ -1343,8 +1349,14 @@ cmd_up() {
     ensure_volumes
     echo ""
     if [ "$mode" = "prod" ]; then
+        warn "STANDING GUARD: fks_postgres deliberately lags its image tag (see CLAUDE.md)."
+        warn "A bare up -d WILL recreate the live ledger DB. Type RECREATE-DB to proceed:"
+        read -r _guard && [ "$_guard" = "RECREATE-DB" ] || { err "Refused. Deploy single services by name."; return 1; }
         $DC -f "$COMPOSE_FILE" -f "$PROD_COMPOSE_FILE" up -d "$@"
     else
+        warn "STANDING GUARD: fks_postgres deliberately lags its image tag (see CLAUDE.md)."
+        warn "A bare up -d WILL recreate the live ledger DB. Type RECREATE-DB to proceed:"
+        read -r _guard && [ "$_guard" = "RECREATE-DB" ] || { err "Refused. Deploy single services by name."; return 1; }
         $DC -f "$COMPOSE_FILE" up -d "$@"
     fi
     ok "Services up"

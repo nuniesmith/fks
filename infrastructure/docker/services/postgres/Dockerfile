@@ -163,3 +163,4 @@ COPY src/sql/spawner/013_notification_log.sql             /docker-entrypoint-ini
 # Self-contained — only needs 02-spawner-init.sql (creates fks_db).
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/014_funding_state.sql                /docker-entrypoint-initdb.d/37-funding-state.sql
+COPY src/sql/spawner/015_net_worth_stale_provenance.sql   /docker-entrypoint-initdb.d/38-net-worth-stale-provenance.sql

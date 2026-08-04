@@ -38,6 +38,15 @@
 -- Idempotent: only rows still labelled 'bot_status' are touched.
 -- =============================================================================
 
+-- Bootstrap preamble (matches every sibling migration): initdb runs these
+-- connected to the DEFAULT database (janus_db). Without the \connect, a fresh
+-- host aborts bootstrap on "relation net_worth_snapshots does not exist" —
+-- the exact drift class the 2026-07-26 DR rehearsal caught (missing 33-37).
+-- On a fresh, empty database the UPDATE below matches zero rows: harmless and
+-- idempotent. The 24 marks themselves travel with restored DATA, not this file.
+\getenv fks_db RUBY_DB
+\connect :fks_db
+
 BEGIN;
 
 WITH s AS (

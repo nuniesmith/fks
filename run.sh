@@ -32,7 +32,9 @@
 #   clean                 Remove stopped containers and dangling images
 #   force-clean           ⚠️  Remove ALL FKS resources including volumes
 #   fix-db                Bootstrap all databases (idempotent — safe to re-run)
-#   network-cleanup       Fix Docker network conflicts
+#   network-cleanup       ⚠️  Fix Docker network conflicts — stops the FULL fks_
+#                         stack, removes every fks_* container + fks* network
+#                         (prompts y/N; spawner-managed fks-bot-* left running)
 #   setup-kernel          Install sysctl tuning (fd limits, net, inotify) — run once per host
 #   setup-hosts           Add fkstrading.local entries to /etc/hosts — run once per host
 #   diagnose              Show detailed system diagnostics
@@ -1708,6 +1710,24 @@ cmd_force_clean() {
 
 cmd_network_cleanup() {
     header "Network Cleanup"
+    # No prior confirmation existed here (2026-08-04 audit finding) even though
+    # this is a full-stack teardown, not a scoped network fix: it runs
+    # `compose down` on the WHOLE stack, force-removes every fks_* container,
+    # and removes/prunes every fks* Docker network. Scoped to name=fks_ only —
+    # see cmd_force_clean / fks_visible_containers above — so spawner-managed
+    # money bots (fks-bot-*) are never rm -f'd here, but every OTHER FKS
+    # service stops. Guard it the same way the postgres RECREATE-DB prompt
+    # (cmd_start/cmd_up) does: warn, then require explicit input, default no.
+    warn "This stops the FULL fks_ stack (docker compose down), force-removes"
+    warn "every fks_* container, and removes/prunes every fks* Docker network —"
+    warn "not a scoped fix. Spawner-managed bots (fks-bot-*) are left alone,"
+    warn "but every other FKS service (janus, webui, postgres, redis, ...) stops."
+    printf "Continue? [y/N]: "
+    read -r _confirm
+    case "$_confirm" in
+        y|Y|yes|YES) ;;
+        *) err "Refused."; return 1 ;;
+    esac
     $DC -f "$COMPOSE_FILE" down --remove-orphans --timeout 5 2>/dev/null || true
     # Stack only — see cmd_force_clean: never rm -f a spawner-managed money bot.
     docker ps -a --filter "name=fks_" -q | xargs -r docker rm -f || true
@@ -1954,7 +1974,9 @@ ${BLUE}Utilities:${NC}
   ./run.sh web-hash-password      Generate bcrypt hash for WEB_PASSWORD_HASH
   ./run.sh clean                  Remove stopped containers + dangling images
   ./run.sh force-clean            ⚠️  Remove ALL FKS resources + volumes
-  ./run.sh network-cleanup        Fix Docker network conflicts
+  ./run.sh network-cleanup        ⚠️  Fix Docker network conflicts — stops the FULL
+                                   fks_ stack + removes every fks_* container and
+                                   fks* network (prompts y/N; fks-bot-* untouched)
   ./run.sh diagnose               Detailed system diagnostics
   ./run.sh help                   Show this message
 

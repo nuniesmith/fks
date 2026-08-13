@@ -201,6 +201,20 @@ groups:
   # Two rules, because the shape of the failure tells you where to look:
   # every venue climbing together = connectivity/DNS; one venue alone = that
   # venue (API outage, expired key, rate-limit ban).
+  #
+  # ── Threshold: 540s, not 900s (fixed 2026-08-13 audit) ────────────────────
+  # The spawner's own net-worth sampler (fks-spawner net_worth.rs
+  # reading_is_stale) REFUSES to record a reading once it is older than
+  # `NET_WORTH_SAMPLE_INTERVAL_SECS * 2` — 600s at the default 300s cadence.
+  # The old 900s threshold here fired 5 minutes AFTER the sampler had already
+  # given up and started skipping writes (visible as
+  # fks_spawner_net_worth_stale_skipped_total climbing), so the operator was
+  # always chasing a treasury gap that had existed for a while. 540s (9
+  # minutes) is a leading indicator instead of a trailing one: it fires ~60s
+  # BEFORE the sampler's own 600s refusal point, with a small margin rather
+  # than cutting it exactly at 600 (scrape jitter / eval-interval rounding).
+  # If NET_WORTH_SAMPLE_INTERVAL_SECS is ever changed from its 300s default,
+  # re-derive this as roughly (interval * 2) - 60.
   # ─────────────────────────────────────────────────────────────────────────
   - name: bot-venue-freshness
     rules:
@@ -209,7 +223,7 @@ groups:
         # and its net worth is frozen. Paper is excluded: a paper bot going quiet
         # is not a money event. dry-run is NOT excluded — it holds real balances.
         expr: |
-          count by (bot_id) (fks_bot_venue_status_age_seconds{mode!="paper"} > 900)
+          count by (bot_id) (fks_bot_venue_status_age_seconds{mode!="paper"} > 540)
             == on (bot_id)
           count by (bot_id) (fks_bot_venue_status_age_seconds{mode!="paper"})
         for: 5m
@@ -221,10 +235,12 @@ groups:
           summary: "Bot {{ $labels.bot_id }}: ALL real-money venues stale — bot is blind"
           description: >
             Every real-money venue on {{ $labels.bot_id }} (live or dry-run) has failed to refresh for
-            over 15 minutes. The bot is still running and still serving its last
-            known figures, so `up` is green and net worth looks unchanged — it is
-            simply not being updated. This is the 2026-07-22 DNS-blackout
-            signature. Any position it holds is unmanaged until this clears.
+            over 9 minutes — at or before the point the net-worth sampler's own
+            600s staleness guard starts refusing to record this bot's readings.
+            The bot is still running and still serving its last known figures,
+            so `up` is green and net worth looks unchanged — it is simply not
+            being updated. This is the 2026-07-22 DNS-blackout signature. Any
+            position it holds is unmanaged until this clears.
           runbook: >
             1) docker exec <bot> getent hosts api.kraken.com  (DNS resolving?)
             2) docker logs <bot> --since 20m | grep -iE 'dns|resolve|timeout'
@@ -234,19 +250,21 @@ groups:
 
       - alert: BotVenueStale
         # A single real-money venue lagging while its siblings tick.
-        expr: fks_bot_venue_status_age_seconds{mode!="paper"} > 900
+        expr: fks_bot_venue_status_age_seconds{mode!="paper"} > 540
         for: 10m
         labels:
           severity: warning
           team: trading
           channel: money
         annotations:
-          summary: "Bot {{ $labels.bot_id }}: venue {{ $labels.exchange }} stale for >15m"
+          summary: "Bot {{ $labels.bot_id }}: venue {{ $labels.exchange }} stale for >9m"
           description: >
             {{ $labels.exchange }} has not refreshed its account snapshot in over
-            15 minutes while other venues on {{ $labels.bot_id }} are current.
-            Net worth is a SUM across venues, so the reported total is wrong
-            while this persists, and net-worth sampling is paused.
+            9 minutes while other venues on {{ $labels.bot_id }} are current —
+            at or before the point the net-worth sampler's own 600s staleness
+            guard starts refusing to record this bot's readings. Net worth is a
+            SUM across venues, so the reported total is wrong while this
+            persists, and net-worth sampling is paused.
           runbook: >
             Check that venue's API status, key validity/permissions, and whether
             the account is rate-limited or geo-blocked.
@@ -293,18 +311,45 @@ groups:
         #
         # sum() IS LOad-BEARING. fks_spawner_net_worth_stale_skipped_total gained
         # a `reason` label (fks-spawner #42) because FOUR different refusals feed
-        # it: stale, incomplete, fake_paper, unaccounted. Without sum() the
-        # threshold applies PER REASON, so it would take 6 refusals of the SAME
-        # kind to fire instead of 6 refusals total — a silent weakening of an
-        # alert about money, introduced by adding the label.
-        expr: sum(increase(fks_spawner_net_worth_stale_skipped_total[30m])) > 5
-        for: 5m
+        # it: stale, incomplete, fake_paper, unaccounted. Without sum() this
+        # would evaluate PER REASON, splitting one "the treasury is going dark"
+        # money alert into up to four concurrent per-reason alert instances —
+        # sum() keeps this a single unified signal; the runbook below is the
+        # per-reason breakdown step instead.
+        #
+        # ── Threshold rewrite (fixed 2026-08-13 audit: "blackout detector one
+        #    cadence bump from unfirable") ─────────────────────────────────────
+        # The OLD expr was `sum(increase(...[30m])) > 5`: a bare count of
+        # refusals in a fixed 30m window, implicitly assuming the sampler's
+        # sweep cadence (NET_WORTH_SAMPLE_INTERVAL_SECS, default 300s = 6
+        # sweeps/30m). With 1 bot in TOTAL, CONTINUOUS blackout for the full
+        # 30m, that is at most 6 refusals — just barely > 5. Any cadence
+        # increase (a very plausible future change — raising the interval to
+        # cut load/DB writes) shrinks sweeps-per-window and this becomes
+        # permanently unfirable for exactly the incident it exists to catch:
+        # at a 600s cadence a single bot in total 30m blackout produces only 3
+        # refusals, and `> 5` can never be reached no matter how long the
+        # blackout runs.
+        #
+        # NEW expr asks a time-window question instead of a magic count: has
+        # the sampler been refusing samples continuously for a sustained
+        # period? `increase(...[15m]) > 0` is "at least one refusal happened in
+        # every rolling 15-minute lookback" — true for as long as refusals keep
+        # recurring, and it self-clears within 15m of the LAST refusal (so a
+        # single isolated blip cannot satisfy `for: 20m` and cannot page). This
+        # is independent of bot count (fires on even a single bot's blackout)
+        # and tolerant of a cadence bump up to ~15m before needing revisiting —
+        # a 3x cushion over today's 300s default, vs. the old expr's zero
+        # cushion. If NET_WORTH_SAMPLE_INTERVAL_SECS is ever raised past ~7m,
+        # widen the 15m inner window to stay comfortably above the new cadence.
+        expr: sum(increase(fks_spawner_net_worth_stale_skipped_total[15m])) > 0
+        for: 20m
         labels:
           severity: warning
           team: trading
           channel: money
         annotations:
-          summary: "Net-worth sampling paused: >5 samples refused in 30m"
+          summary: "Net-worth sampling paused: refusals sustained for 20m+"
           description: >
             The sampler is refusing to record net worth. This is the guard
             working as designed (a gap is honest; a fabricated flat line is not)
@@ -351,7 +396,7 @@ groups:
   #
   # In either case the entire guard set reads green while the treasury series
   # stops and the bot's blindness becomes unobservable:
-  #     BotAllVenuesStale             ages frozen BELOW 900   → green
+  #     BotAllVenuesStale             ages frozen BELOW 540   → green
   #     BotVenueStale                 same                    → green
   #     BotVenueFreshnessMissing      series present, frozen  → green
   #     NetWorthSamplingPausedTooLong skip counter flat       → green

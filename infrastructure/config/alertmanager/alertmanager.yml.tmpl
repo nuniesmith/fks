@@ -60,6 +60,32 @@ route:
     # Child routes with specific matching rules
     routes:
         # ========================================================================
+        # Money Alerts - real-money bot / treasury alerts (channel: money)
+        #
+        # Placed FIRST + `continue: true` so a channel:money alert always hits
+        # this route regardless of its severity/category, instead of relying on
+        # a severity match to carry it there by coincidence (2026-08-04 audit
+        # finding: these had no route of their own). Same Discord destination as
+        # every other route below — the alertmanager-discord bridge only
+        # inspects `category`, not `channel`, so an unmatched channel falls
+        # through to DISCORD_WEBHOOK_GENERAL exactly like discord-critical /
+        # discord-warnings already do. This does not introduce a new channel; it
+        # guarantees delivery + gives money alerts their own group/repeat timing.
+        #
+        # Do NOT remove or rename the `channel: money` label on the alert rules
+        # themselves (bot-alerts.yml) — the webui cockpit's isArmedAlert filter
+        # keys off that exact label to find CRITICAL money alerts.
+        # ========================================================================
+        - match:
+              channel: money
+          receiver: "discord-money"
+          group_by: ["alertname", "bot_id"]
+          group_wait: 10s
+          group_interval: 5m
+          repeat_interval: 1h
+          continue: true # severity-based routes below still also apply
+
+        # ========================================================================
         # Critical Alerts - Page immediately
         # ========================================================================
         - match:
@@ -215,6 +241,22 @@ receivers:
     # Discord - Critical Alerts (via bridge)
     # ==========================================================================
     - name: "discord-critical"
+      webhook_configs:
+          - url: "http://alertmanager-discord:9094/"
+            send_resolved: true
+
+    # ==========================================================================
+    # Discord - Money Alerts (via bridge)
+    #
+    # Same "/" endpoint as discord-critical/discord-warnings — the bridge only
+    # auto-routes on `category` (trade-signal/performance/quality), not
+    # `channel`, so a channel:money alert falls through to
+    # DISCORD_WEBHOOK_GENERAL exactly like everything else that hits "/". This
+    # receiver exists to give channel:money alerts a guaranteed, distinctly
+    # named route (see the `channel: money` match block above) rather than a
+    # new destination.
+    # ==========================================================================
+    - name: "discord-money"
       webhook_configs:
           - url: "http://alertmanager-discord:9094/"
             send_resolved: true

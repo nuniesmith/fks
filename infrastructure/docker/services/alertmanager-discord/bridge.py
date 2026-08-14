@@ -26,6 +26,9 @@ Features:
     - Resolved alert notifications
     - Runbook and dashboard links
     - Error handling and retry logic
+    - /health reports "degraded" (still HTTP 200) when Discord delivery is
+      disabled/unconfigured, so an unpaged blind spot is visible in the body
+      even though the process itself is up
 """
 
 import json
@@ -327,6 +330,38 @@ def send_to_discord(embeds: list[dict[str, Any]], webhook_url: str, enabled: boo
         return False
 
 
+def get_health_status(discord_enabled: bool) -> dict[str, Any]:
+    """Build the ``/health`` response body.
+
+    The process being up and the Discord delivery path being usable are two
+    different things. Collapsing them into a single ``"ok"`` meant a
+    disabled/misconfigured webhook — which makes ``send_to_discord`` silently
+    acknowledge and drop every alert (see its ``not enabled or not
+    webhook_url`` short-circuit) — looked byte-for-byte identical to a fully
+    working bridge. Discord is the platform's only out-of-band paging path,
+    so that blind spot is real: something could break delivery and the
+    health check would never say so.
+
+    Reports ``"degraded"`` (still HTTP 200 — the *process* is healthy; a
+    container restart cannot fix a missing webhook env var, so this must not
+    look like a process failure to a Docker healthcheck) when Discord is
+    disabled/unconfigured, ``"ok"`` otherwise. A Prometheus alert rule can
+    still distinguish the two by inspecting the response body.
+    """
+    status_info: dict[str, Any] = {
+        "status": "ok" if discord_enabled else "degraded",
+        "discord_enabled": discord_enabled,
+        "channels": {
+            "general": bool(DISCORD_WEBHOOK_GENERAL),
+            "signals": bool(DISCORD_WEBHOOK_SIGNALS),
+            "analysis": bool(DISCORD_WEBHOOK_ANALYSIS),
+        },
+    }
+    if not discord_enabled:
+        status_info["reason"] = "discord webhook not configured"
+    return status_info
+
+
 class WebhookHandler(BaseHTTPRequestHandler):
     """HTTP request handler for Alertmanager webhooks."""
 
@@ -340,18 +375,13 @@ class WebhookHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Handle GET requests (health check)."""
         if self.path == "/health":
+            status_info = get_health_status(self.discord_enabled)
+            # Always HTTP 200 here — see get_health_status() docstring: a
+            # degraded Discord delivery path is not a process failure, so it
+            # must not trip a Docker healthcheck restart loop.
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            status_info = {
-                "status": "ok",
-                "discord_enabled": self.discord_enabled,
-                "channels": {
-                    "general": bool(DISCORD_WEBHOOK_GENERAL),
-                    "signals": bool(DISCORD_WEBHOOK_SIGNALS),
-                    "analysis": bool(DISCORD_WEBHOOK_ANALYSIS),
-                },
-            }
             _ = self.wfile.write(json.dumps(status_info).encode())
         else:
             self.send_response(404)

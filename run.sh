@@ -30,11 +30,16 @@
 #   ssl-local             Force-regenerate internal service TLS certs
 #   shell <svc>           Open a shell in a running container
 #   clean                 Remove stopped containers and dangling images
+#                         (spawner-managed fks-bot-* money bots are excluded —
+#                         stop those via the spawner, not here)
 #   force-clean           ⚠️  Remove ALL FKS resources including volumes
+#                         (spawner-managed fks-bot-* money bots are SPARED —
+#                         stop those via the spawner, not here)
 #   fix-db                Bootstrap all databases (idempotent — safe to re-run)
 #   network-cleanup       ⚠️  Fix Docker network conflicts — stops the FULL fks_
-#                         stack, removes every fks_* container + fks* network
-#                         (prompts y/N; spawner-managed fks-bot-* left running)
+#                         stack INCLUDING fks_janus, removes every fks_*
+#                         container + fks* network (prompts y/N; spawner-managed
+#                         fks-bot-* money bots left running)
 #   setup-kernel          Install sysctl tuning (fd limits, net, inotify) — run once per host
 #   setup-hosts           Add fkstrading.local entries to /etc/hosts — run once per host
 #   diagnose              Show detailed system diagnostics
@@ -1973,10 +1978,15 @@ ${BLUE}Utilities:${NC}
   ./run.sh shell <svc>            Open shell in a container
   ./run.sh web-hash-password      Generate bcrypt hash for WEB_PASSWORD_HASH
   ./run.sh clean                  Remove stopped containers + dangling images
+                                   (spawner-managed fks-bot-* money bots excluded —
+                                   stop those via the spawner, not here)
   ./run.sh force-clean            ⚠️  Remove ALL FKS resources + volumes
+                                   (spawner-managed fks-bot-* money bots SPARED —
+                                   stop those via the spawner, not here)
   ./run.sh network-cleanup        ⚠️  Fix Docker network conflicts — stops the FULL
-                                   fks_ stack + removes every fks_* container and
-                                   fks* network (prompts y/N; fks-bot-* untouched)
+                                   fks_ stack INCLUDING fks_janus + removes every
+                                   fks_* container and fks* network (prompts y/N;
+                                   spawner-managed fks-bot-* money bots untouched)
   ./run.sh diagnose               Detailed system diagnostics
   ./run.sh help                   Show this message
 

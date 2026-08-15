@@ -24,10 +24,10 @@ data/engine/trainer service was removed — janus is the platform now. See
 
 | Repo | Role | Consumed as |
 |------|------|-------------|
-| [`rustrade`](https://github.com/nuniesmith/rustrade) | trading framework | crates.io `rustrade-framework` 0.4 (imports as `rustrade`) |
+| [`rustrade`](https://github.com/nuniesmith/rustrade) | trading framework | crates.io `rustrade-framework` 0.5.2 (imports as `rustrade`) |
 | [`janus`](https://github.com/nuniesmith/janus) | trading brain | Docker image (`git clone` at `JANUS_REF`) + `jflow-*` crates |
 | [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | TA math | crates.io `indicators-ta` 0.2 (imports as `indicators`) |
-| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.9 |
+| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | exchange REST/WS | crates.io `exchange-apiws` 0.11.0 |
 | [`fks-web`](https://github.com/nuniesmith/fks-web) | SvelteKit UI | Docker image (`git clone` at `WEB_REF`) |
 | [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) | the **bot factory**: spawner lifecycle service + `crypto-bot-core` SDK + the bots (`spot-portfolio` **production**, `crypto-demo`, `fks-bot-example`, `rustrade-exchange-apiws`) | spawner image via `git clone` (`SPAWNER_REPO`); bot images build from the sibling checkout (`docker build -f bots/spot-portfolio/Dockerfile …` from its root) |
 | `fks-state` *(private)* | trading edges (`bots/crypto-futures` funding bot), `crates/{rithmic-connector,advisor,orb,orb-backtest,orb-briefing}` (read-only Rithmic feed + Discord advisor/ORB decision-support), encrypted state snapshots, strategy docs (`docs/ARCHITECTURE.md`) | local checkout only — `advisor`/`orb-briefing` build via the compose `state` profile, `rithmic-connector` via `rithmic`; the funding image builds there; snapshots via `scripts/fks-state.sh` |
@@ -118,6 +118,16 @@ cd src/web         && npm run check && npm run build
 | `rithmic` | `rithmic-connector` (read-only futures feed, fks-state) — additionally runtime-gated on `RITHMIC_ENABLED=true` |
 | `qdrant` | Qdrant vector database (now always-on; profile is legacy) |
 
+### Cleanup commands
+
+Neither `./run.sh clean` nor `./run.sh force-clean` can remove a
+spawner-managed bot (`fks-bot-*`, `label=fks.bot=true`) — both explicitly
+exclude/spare them, spared/left-running containers are reported, not silently
+dropped. Stopping a money bot is the spawner's job, via
+`POST /container/{id}/stop`, never these commands. `./run.sh network-cleanup`
+also leaves `fks-bot-*` untouched, but it DOES stop every other stack
+service including `fks_janus` — it prompts `[y/N]` before doing so.
+
 ---
 
 ## Architecture principles
@@ -176,9 +186,9 @@ When `janus` or a `bots/*` crate needs the framework, TA, or exchange code,
 depend on crates.io — never re-vendor:
 
 ```toml
-rustrade       = { package = "rustrade-framework", version = "0.4" }  # import as `rustrade`
-indicators-ta  = "0.2"                                                # import as `indicators` (0.2.2)
-exchange-apiws = "0.9"
+rustrade       = { package = "rustrade-framework", version = "0.5.2" }  # import as `rustrade`
+indicators-ta  = "0.2"                                                  # import as `indicators` (0.2.2)
+exchange-apiws = "0.11.0"
 ```
 
 ### Rust

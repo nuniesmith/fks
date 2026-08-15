@@ -152,7 +152,8 @@ Supersedes the "transitional systemd" row in
   fks-spawner root (post-#196) — and the funding image from the `fks-state`
   root). No `spot-portfolio`/`funding-paper` user systemd units remain on
   this host; the desktop units are disabled.
-- **Spot is deliberately dry-run:** the spot `Dockerfile` (now
+- **Spot is deliberately dry-run (real balances, orders suppressed — never
+  equivalent to `paper`):** the spot `Dockerfile` (now
   `fks-spawner/bots/spot-portfolio/Dockerfile` after the #196 prune) bakes the
   spot TOML with `live = false` and documents that going live *"must be an
   explicit, deliberate override — never the default of whatever someone

@@ -27,10 +27,10 @@ service) plus the bits that stay here.
 
 | Repo | Role | Consumed as |
 |------|------|-------------|
-| [`rustrade`](https://github.com/nuniesmith/rustrade) | **Trading framework** (`Bot`, `Brain`, supervisor, risk, backtest) | crates.io — `rustrade-framework` 0.4 (imports as `rustrade`) |
+| [`rustrade`](https://github.com/nuniesmith/rustrade) | **Trading framework** (`Bot`, `Brain`, supervisor, risk, backtest) | crates.io — `rustrade-framework` 0.5.2 (imports as `rustrade`) |
 | [`janus`](https://github.com/nuniesmith/janus) | **Trading brain** (neuromorphic + strategies + signals) | Docker image (`git clone` at `JANUS_REF`) + `jflow-*` crates |
 | [`indicators-ta`](https://github.com/nuniesmith/indicators-ta) | **TA math** (indicators + regime detection) | crates.io — `indicators-ta` 0.2 |
-| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange APIs/WS** (5 exchanges, REST + WebSocket) | crates.io — `exchange-apiws` 0.9 |
+| [`exchange-apiws`](https://github.com/nuniesmith/exchange-apiws) | **Exchange APIs/WS** (5 exchanges, REST + WebSocket) | crates.io — `exchange-apiws` 0.11.0 |
 
 Other service repos built via `git clone` at a pinned ref:
 [`fks-spawner`](https://github.com/nuniesmith/fks-spawner) (bot factory: spawner

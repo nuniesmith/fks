@@ -18,7 +18,10 @@
 --   nullable — a bot-level total spans venues (NULL); it exists so a future
 --   per-venue breakdown, or the planned on-chain xpub watcher, can write finer
 --   rows into the SAME table (`source` distinguishes writers: 'bot_status' now,
---   'onchain' later — see docs/architecture/WEBUI_PLATFORM_ROADMAP.md §4.2/§4.3).
+--   'onchain' later — see docs/architecture/WEBUI_PLATFORM_ROADMAP.md §4.2/§4.3
+--   — plus 'bot_status_stale', a mark-not-delete provenance re-label applied
+--   retroactively by 015_net_worth_stale_provenance.sql, never written directly
+--   by the sampler).
 --
 -- ID CHOICE: unlike bot_configs/bot_runs (UUID) this is a high-frequency,
 --   append-only time series, so it uses a monotonic BIGINT identity PK — lighter
@@ -72,8 +75,18 @@ CREATE TABLE IF NOT EXISTS net_worth_snapshots (
     -- (which spans venues).
     venue       TEXT,
 
-    -- Which writer produced the row: 'bot_status' (the spawner sampler polling
-    -- a bot's /status) today; 'onchain' (the future xpub watcher) later.
+    -- Which writer produced the row / how it got its provenance:
+    --   'bot_status'       — the spawner sampler polling a bot's /status (today).
+    --   'onchain'          — the future xpub watcher (later).
+    --   'bot_status_stale' — a 'bot_status' row re-labelled, never written
+    --                        directly, by 015_net_worth_stale_provenance.sql
+    --                        (a frozen /status reading recorded as if it were
+    --                        a live one; mark-not-delete, see 015 for why).
+    --                        Readers exclude it — see NET_WORTH_WINDOW_SQL and
+    --                        siblings in crates/spawner.
+    -- No CHECK constraint: 006 is `CREATE TABLE IF NOT EXISTS`, so adding one
+    -- here would not reach the already-live production table without a
+    -- separate ALTER TABLE migration — deferred, not skipped by oversight.
     source      TEXT        NOT NULL DEFAULT 'bot_status'
 );
 
@@ -83,7 +96,7 @@ COMMENT ON COLUMN net_worth_snapshots.ts        IS 'Instant the reading was take
 COMMENT ON COLUMN net_worth_snapshots.net_worth IS 'Total account value at ts, in `currency`; NUMERIC to avoid float drift over a years horizon';
 COMMENT ON COLUMN net_worth_snapshots.currency  IS 'Denomination of net_worth (USD for the aggregate bot total)';
 COMMENT ON COLUMN net_worth_snapshots.venue     IS 'Optional venue/exchange for a per-venue row; NULL for a bot-level total';
-COMMENT ON COLUMN net_worth_snapshots.source    IS 'Row writer: bot_status (spawner sampler) | onchain (future xpub watcher)';
+COMMENT ON COLUMN net_worth_snapshots.source    IS 'Row writer/provenance: bot_status (spawner sampler) | onchain (future xpub watcher) | bot_status_stale (bot_status re-labelled by 015, never written directly — excluded by readers)';
 
 -- =============================================================================
 -- Indexes

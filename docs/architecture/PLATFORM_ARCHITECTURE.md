@@ -300,6 +300,37 @@ completeness SLI), the paper gets a reconciliation PR.
    `fks_bot_pnl_dollars`, `fks_bot_signals_total`, `fks_bot_trades_total`,
    `fks_bot_win_rate`, `fks_bot_uptime_seconds` (the crypto bots add net-worth
    / per-exchange / position gauges + `GET /status`).
+2b. **Any bot that reports money** (i.e. serves `GET /status`) MUST carry
+    these fields — they are not optional decoration, they are what the
+    spawner's net-worth truth guards (`fks-spawner` `net_worth.rs`) key on,
+    and each one **fails open** (silently disables its guard, not an error)
+    when absent:
+    - `expected_venues` (int) — how many venues the bot is CONFIGURED with,
+      not how many are currently reporting. Without it, a venue that never
+      checks in is invisible and `net_worth_usd` is a partial sum that looks
+      complete.
+    - `exchanges[].mode` (`"paper"` \| `"dry-run"` \| `"live"`) — lets the
+      guard tell a real venue from a fabricated-cash one. `dry-run` holds
+      REAL balances (orders only are suppressed) and must never be treated
+      as equivalent to `paper`; a venue silently degraded to `paper` after a
+      failed key check must be catchable from this field alone.
+    - `exchanges[].updated` (epoch seconds) — per-venue staleness. Freshness
+      is judged **per venue** (the MIN across `exchanges[]`), never from a
+      root-level timestamp — a production bot may not publish one at all,
+      and its absence must not read as "fresh by default."
+    - `exchanges[]` itself, present-but-empty (`[]`) vs. absent — the two
+      mean different things (see `fks-spawner`'s
+      `crates/spawner/CLAUDE.md` "Bot-status contract & the net-worth truth
+      guards" for the guard-chain detail) and a bot's HTTP server can start
+      answering `exchanges: []` before its engine has completed a single
+      venue cycle.
+
+    A bot that satisfies point 2 above (health/metrics only) but skips these
+    `/status` fields is fully spawnable and looks healthy in every dashboard
+    while receiving **zero** staleness, completeness, or fabricated-cash
+    protection on its treasury figures. Reference implementation:
+    `fks-spawner` `crates/crypto-bot-core/src/status.rs` (`VenueStatus`,
+    `expected_venues`).
 3. All config via env. Spawner sets `FKS_BOT_ID`/`FKS_BOT_MODE`; requesting
    `secrets: ["kraken", …]` at spawn injects stored credentials as
    `{EXCHANGE}_API_KEY/_API_SECRET(/_API_PASSPHRASE)` — decrypted from the

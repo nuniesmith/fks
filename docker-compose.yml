@@ -1436,6 +1436,15 @@ services:
             - BOT_METRICS_PORT=9091
             - PRUNE_AFTER_SECS=${BOT_PRUNE_AFTER_SECS:-300}
             - PRUNE_INTERVAL_SECS=60
+            # Per-bot mark cadence, `bot_id=seconds[,…]` (fks-spawner #49). The
+            # net-worth sampler refuses a reading older than 2x the bot's
+            # cadence; unlisted bots use the global sample interval, so this is
+            # opt-in and can only ever LOOSEN the named bot. crypto-funding
+            # marks its positions on HOURLY candles (granularity=60min in
+            # funding.toml), so the flat 600s tolerance refused it ~50 min of
+            # every hour and left NetWorthSamplingPausedTooLong firing forever.
+            # Empty by default — an unset value changes nothing.
+            - NET_WORTH_BOT_CADENCE_SECS=${NET_WORTH_BOT_CADENCE_SECS:-}
             - RUST_LOG=${SPAWNER_LOG_LEVEL:-info,spawner=debug}
             # Postgres persistence — writes spawn/stop/remove to bot_runs.
             # Empty/unset = stateless mode (the spawner still runs).

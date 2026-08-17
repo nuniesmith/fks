@@ -304,15 +304,44 @@ groups:
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-latency-high.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
 
+      # ── Relative collapse, not an absolute floor (recalibrated 2026-08-17) ──
+      # The old rule was `< 50` trades/sec. Measured against 24h of HEALTHY
+      # traffic: median 46.9/s, p5 19.4/s, p95 122.4/s — a ~6x natural range,
+      # with the median BELOW the threshold. It was therefore true for 59.4%
+      # of the day. An alert that fires more often than not is not a detector;
+      # it is the alert-blindness that let a real 43-hour treasury blackout sit
+      # unactioned (2026-08-14..16).
+      #
+      # No absolute number can work against that much variance, and any number
+      # picked today drifts out of calibration as volume changes — which is how
+      # the 50 got here. So this asks a relative question: has throughput
+      # COLLAPSED against its own recent baseline?
+      #
+      #   clamp_min(0.20 * <6h mean>, 5)
+      #
+      # The 20% arm catches a real collapse at any volume level (a drop from
+      # 200/s to 60/s is a 70% failure the old rule ignored entirely, since 60
+      # > 50). The clamp_min(…, 5) floor is load-bearing and NOT redundant: a
+      # pure relative test goes SILENT once an outage outlives its own baseline
+      # window — after 6h dead the 6h mean is also ~0, so 20% of it is ~0 and
+      # nothing fires. The floor guarantees a dead feed keeps paging forever.
+      #
+      # Validated on the same 24h of healthy data: true 0.35% of the day (from
+      # 59.4%), and those are brief dips that `for: 15m` damps. Headroom check:
+      # the lowest 5m rate seen in 24h was 10.2/s, so the 5/s floor sits ~2x
+      # below anything healthy traffic has actually done.
+      #
+      # Re-derive (don't guess) if the venue set or symbol count changes:
+      #   quantile_over_time(0.05, sum(rate(trades_ingested_total[5m]))[24h:5m])
       - alert: IngestionThroughputLow
-        expr: sum(rate(trades_ingested_total[5m])) < 50
-        for: 10m
+        expr: sum(rate(trades_ingested_total[5m])) < clamp_min(0.20 * avg_over_time(sum(rate(trades_ingested_total[5m]))[6h:5m]), 5)
+        for: 15m
         labels:
           severity: warning
           component: data-factory
         annotations:
-          summary: "Trade ingestion throughput is low"
-          description: "Only {{ $value }} trades/sec are being ingested (expected: >50). Market data ingestion may be impaired."
+          summary: "Trade ingestion throughput has collapsed vs its own baseline"
+          description: "Ingestion is {{ $value }} trades/sec — under 20% of the trailing 6h average (or below the 5/s floor). Sustained 15m. Market data ingestion may be impaired. NOTE: this is a RELATIVE test; a low absolute number alone is normal (24h median is ~47/s with a 6x range)."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/low-throughput.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
 

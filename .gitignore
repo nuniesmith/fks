@@ -327,6 +327,12 @@ coverage/
 .env.*.local
 .env.secrets
 .env.*.secrets
+# CATCH-ALL (2026-08-18): the exact-name patterns above did NOT match
+# `.env.bak.<timestamp>`, so a full backup of .env — 110 populated secrets —
+# was committed to this PUBLIC repo on 2026-08-02 and stayed for 16 days.
+# Match every .env variant and re-admit only the example.
+.env*
+!.env.example
 !.env.example
 !.env.template
 

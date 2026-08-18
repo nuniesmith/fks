@@ -248,6 +248,53 @@ groups:
             4) net-worth sampling is CORRECTLY paused meanwhile — see
                fks_spawner_net_worth_stale_skipped_total; the gap is deliberate.
 
+      # ── A venue that cannot trade is invisible today (added 2026-08-17) ──
+      # Caught after the fact: crypto-spot's Crypto.com venue was emptied by an
+      # operator withdrawal on 2026-08-05 and then sat at $0.12 with every
+      # target weight at 0%, so it was permanently `triggered=true` with
+      # max_drift=100% and could NEVER execute — the bot logged
+      # "venue STUCK - triggered but no executable trade" for 1152+ consecutive
+      # cycles (~4 days) and nothing alerted. It was found by hand on 08-17,
+      # 13 days later, while investigating an unrelated number.
+      #
+      # A venue holding less than its `min_trade_usd` (5.0 for both live
+      # venues) is STRUCTURALLY unable to rebalance: every cycle it computes a
+      # 100% drift, triggers, and no order clears the minimum. That is a dead
+      # venue, not a quiet one, and it silently drags the basket out of its
+      # target weights for as long as it persists.
+      #
+      # Validated against the real incident: this expr matches Crypto.com from
+      # 2026-08-05 (the day it emptied) through 08-17, and matches neither live
+      # venue today (Kraken $77.67, KuCoin $72.39). `for: 6h` so a venue that
+      # is briefly drained mid-rebalance does not page.
+      #
+      # Resolution is a decision, not a restart: either refund the venue or
+      # remove it from `live_venues` + its `[[exchange]]` block and respawn
+      # (which is what was done for Crypto.com on 2026-08-18).
+      - alert: BotVenueBelowMinTrade
+        expr: fks_bot_exchange_total_usd{mode!="paper"} < 5
+        for: 6h
+        labels:
+          severity: warning
+          team: trading
+          channel: money
+        annotations:
+          summary: "Bot {{ $labels.bot_id }}: venue {{ $labels.exchange }} holds ${{ $value }} — below min trade size, cannot rebalance"
+          description: >
+            {{ $labels.exchange }} on {{ $labels.bot_id }} has held under $5 for
+            6h+. It is below `min_trade_usd`, so every rebalance cycle triggers
+            at up to 100% drift and no order can clear the venue minimum — the
+            venue is structurally dead, not merely idle, and the basket sits off
+            its target weights while it persists. This is NOT self-healing.
+          runbook: >
+            1) docker logs <bot> | grep "venue STUCK"   (confirms the trigger loop)
+            2) Decide: refund the venue, OR retire it — remove from live_venues
+               and delete its [[exchange]] block in spot-portfolio.toml, rebuild,
+               respawn. Retiring also corrects expected_venues.
+            3) If funds were withdrawn, record them in the transfers ledger
+               (POST /transfers) or /profit will book the withdrawal as a
+               trading loss forever.
+
       - alert: BotVenueStale
         # A single real-money venue lagging while its siblings tick.
         expr: fks_bot_venue_status_age_seconds{mode!="paper"} > 540

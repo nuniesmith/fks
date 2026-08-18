@@ -197,6 +197,25 @@ cmd_status() {
 }
 
 # ── export ───────────────────────────────────────────────────────────────────
+# Emit a node_exporter textfile metric so a FAILED BACKUP IS ALERTABLE.
+# There was no backup metric and no backup alert at all — which is the second
+# half of why the 2026-08-07 breakage ran 12 days unseen (the first half being
+# that the error was discarded). Writes atomically; a no-op if the textfile
+# directory isn't mounted, so this can never fail a backup.
+_emit_backup_metric() {
+  local ok="$1" dir="${FKS_TEXTFILE_DIR:-/var/lib/node_exporter/textfile}"
+  [[ -d "$dir" && -w "$dir" ]] || return 0
+  local f="$dir/fks_state_backup.prom"
+  {
+    echo "# HELP fks_state_backup_last_push_success_timestamp_seconds Unix time of the last snapshot push that actually reached the remote."
+    echo "# TYPE fks_state_backup_last_push_success_timestamp_seconds gauge"
+    if [[ "$ok" == "1" ]]; then echo "fks_state_backup_last_push_success_timestamp_seconds $(date +%s)"; fi
+    echo "# HELP fks_state_backup_push_ok Whether the most recent snapshot push succeeded (1) or failed (0)."
+    echo "# TYPE fks_state_backup_push_ok gauge"
+    echo "fks_state_backup_push_ok $ok"
+  } > "$f.tmp" && mv -f "$f.tmp" "$f"
+}
+
 cmd_export() {
   need_age; need git; need tar
   [[ -f "$MANIFEST" ]] || die "no manifest at $MANIFEST (run: $0 init)"
@@ -304,9 +323,33 @@ cmd_export() {
   # a plain push is rejected non-fast-forward. Rebase our snapshot commit onto
   # the remote first (snapshots touch only snapshots/, code touches only
   # crates//bots/ — they never conflict) so the backup stays automatable.
+  # PUSH FAILURE MUST BE LOUD (2026-08-18). This previously ran
+  #   git push -q origin HEAD 2>/dev/null || warn "...push failed"
+  # which discarded the server's reason AND returned success, so the unit
+  # stayed green. Result: the push broke on 2026-08-07 when the artifact
+  # crossed GitHub's hard 100 MiB per-blob limit, and NOBODY NOTICED FOR 12
+  # DAYS — 12 days of snapshots existing only on the same LV they back up.
+  # On 9 of those days the script logged neither success nor failure.
+  # Keep stderr, surface it, and exit non-zero so systemd marks the unit
+  # failed and `systemctl --failed` shows it.
+  local push_rc=0 push_err
   ( cd "$FKS_STATE_DIR" && git add -A && git commit -q -m "snapshot $ts (${1:-manual})" \
-      && { local br; br="$(git rev-parse --abbrev-ref HEAD)"; git pull -q --rebase origin "$br" 2>/dev/null || true; } \
-      && { git push -q origin HEAD 2>/dev/null && log "pushed to $FKS_STATE_REPO" || warn "commit done; push failed (run: git -C $FKS_STATE_DIR pull --rebase && git push)"; } )
+      && { local br; br="$(git rev-parse --abbrev-ref HEAD)"; git pull -q --rebase origin "$br" 2>/dev/null || true; } )
+  push_err="$(cd "$FKS_STATE_DIR" && git push origin HEAD 2>&1)" || push_rc=$?
+  if (( push_rc == 0 )); then
+    log "pushed to $FKS_STATE_REPO"
+    _emit_backup_metric 1
+  else
+    _emit_backup_metric 0
+    warn "PUSH FAILED (rc=$push_rc) — the snapshot is committed LOCALLY ONLY and is NOT off-host."
+    # Reproduce the server's own words; they name the cause (size limit,
+    # auth, non-fast-forward) and were previously thrown away.
+    printf '%s\n' "$push_err" | sed 's/^/    git: /' >&2
+    warn "unpushed commits: $(cd "$FKS_STATE_DIR" && git rev-list --count @{u}..HEAD 2>/dev/null || echo '?')"
+    warn "if this is the 100 MiB blob limit, the artifact has outgrown git transport — see docs/STATE_BACKUP.md"
+    trap - EXIT; rm -rf "$stage"
+    return 1
+  fi
   trap - EXIT; rm -rf "$stage"
 }
 

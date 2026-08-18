@@ -333,6 +333,46 @@ groups:
       #
       # Re-derive (don't guess) if the venue set or symbol count changes:
       #   quantile_over_time(0.05, sum(rate(trades_ingested_total[5m]))[24h:5m])
+      # ── The backup is the last line of defence; alert on it (2026-08-18) ──
+      # There was NO backup alert anywhere in ~120 rules. The scheduled
+      # snapshot committed daily, encrypted fine, and FAILED TO PUSH from
+      # 2026-08-07 (artifact crossed GitHub's hard 100 MiB per-blob limit),
+      # reporting success the whole time because it ran
+      # `git push -q ... 2>/dev/null`. Twelve days of snapshots existed only
+      # on the same LV they were backing up, and it was found by a review, not
+      # by monitoring. Fed by fks-state.sh via the node_exporter textfile
+      # collector.
+      #
+      # ABSENT is deliberately treated as FAILING: if the metric stops being
+      # written the backup is not running, which is the same operational state
+      # as a failing one. A rule that goes quiet when its subject disappears is
+      # the failure mode this platform keeps re-learning.
+      - alert: StateBackupNotReachingRemote
+        expr: |
+          fks_state_backup_push_ok == 0
+          or (time() - fks_state_backup_last_push_success_timestamp_seconds) > 129600
+          or absent(fks_state_backup_push_ok)
+        for: 30m
+        labels:
+          severity: critical
+          component: backup
+          channel: money
+        annotations:
+          summary: "Off-host state backup is NOT reaching the remote"
+          description: >
+            The encrypted state snapshot has not successfully pushed in over
+            36h, or the last push explicitly failed, or the metric has stopped
+            being written entirely. Snapshots may still be committing LOCALLY —
+            which is worthless, because local snapshots live on the same
+            filesystem they exist to protect.
+          runbook: >
+            1) journalctl -u fks-state-snapshot --since '2 days ago'   (the push
+               error is now logged verbatim; it was previously discarded)
+            2) git -C ~/.local/share/fks-state rev-list --count @{u}..HEAD
+            3) If blobs exceed 100 MiB, the artifact has outgrown git transport.
+               fks_qdrant_data (419 MB raw, derived vectors) is the driver; the
+               irreplaceable ledger is only ~6 MB. See docs/STATE_BACKUP.md.
+
       - alert: IngestionThroughputLow
         expr: sum(rate(trades_ingested_total[5m])) < clamp_min(0.20 * avg_over_time(sum(rate(trades_ingested_total[5m]))[6h:5m]), 5)
         for: 15m

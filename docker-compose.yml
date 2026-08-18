@@ -1196,8 +1196,16 @@ services:
         command:
             - "--path.rootfs=/host"
             - "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|run/.+)($|/)"
+            # Textfile collector (2026-08-18). Lets host-side scripts that
+            # Prometheus cannot scrape directly publish a metric. First
+            # consumer: fks-state.sh's backup push result. Before this there
+            # was NO backup metric and NO backup alert anywhere, which is half
+            # of why a push that broke on 08-07 ran 12 days unnoticed.
+            - "--collector.textfile.directory=/var/lib/node_exporter/textfile"
         volumes:
             - /:/host:ro,rslave
+            # Read-only: node_exporter only ever reads these .prom files.
+            - ${FKS_TEXTFILE_DIR:-/var/lib/node_exporter/textfile}:/var/lib/node_exporter/textfile:ro
         ports:
             - "127.0.0.1:9100:9100"
         networks:

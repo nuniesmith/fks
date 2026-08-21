@@ -79,16 +79,6 @@ Spawned `fks-bot-*` containers go on `fks_network` with `cap_drop: ALL`,
 
 ---
 
-## ⚠ STANDING DEPLOY WARNING (2026-08-04, until the scheduled postgres recreate)
-
-**Do not run `./run.sh all`, `./run.sh fresh`, or a bare `docker compose up -d`.**
-`fks_postgres` deliberately runs an older container than its image tag (the tag
-moved twice: the 07-26 DR rebuild and the 08-04 migration-015 bake). Any bare
-`up -d` recreates the LIVE ledger database mid-write, under both money bots —
-which run `RestartPolicy=no`. Deploy single services by name only:
-`docker compose up -d --force-recreate --no-deps <service>`. The recreate into
-the (now-complete) image is a scheduled maintenance action; when it is done,
-delete this block.
 
 ## Build & run commands (top level)
 

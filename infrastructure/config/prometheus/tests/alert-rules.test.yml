@@ -259,3 +259,57 @@ tests:
       - eval_time: 88m
         alertname: NetWorthSamplerNotWriting
         exp_alerts: []
+
+  # ===========================================================================
+  # BotVenueUnexplainedFlow — replayed against the 2026-07-27 Kraken incident
+  # (MONEY_REVIEW.md §4.3): Kraken 75->36 (-52%) over 5 minutes while its
+  # sibling KuCoin-spot sat flat at 72 throughout. Step lands at t=125m so
+  # that `offset 2h` (120m) still resolves to pre-step data from t=0 onward.
+  # ===========================================================================
+  - interval: 5m
+    name: BotVenueUnexplainedFlow fires when one venue steps and its sibling holds steady
+    input_series:
+      - series: 'fks_bot_exchange_total_usd{job="fks-bots",bot_id="crypto-spot",exchange="Kraken",mode="live"}'
+        values: "75x24 36x11"
+      - series: 'fks_bot_exchange_total_usd{job="fks-bots",bot_id="crypto-spot",exchange="KuCoin-spot",mode="live"}'
+        values: "72x36"
+    alert_rule_test:
+      # Condition true from t=125m; `for: 15m` means not yet firing at 130m.
+      - eval_time: 130m
+        alertname: BotVenueUnexplainedFlow
+        exp_alerts: []
+      - eval_time: 140m
+        alertname: BotVenueUnexplainedFlow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              channel: money
+              job: fks-bots
+              bot_id: crypto-spot
+              exchange: Kraken
+              mode: live
+            exp_annotations:
+              summary: "Bot crypto-spot: Kraken total stepped 52% in 2h with no sibling move — unrecorded flow?"
+              description: "Kraken on crypto-spot moved 52% against its own value 2 hours ago, sustained for 15+ minutes, while every OTHER live venue on this bot stayed under the same threshold. All live venues hold the same basket, so a real market move hits them proportionally — this venue moving alone is the signature of a deposit or withdrawal that was never recorded, not a price move and not ordinary trading (a trade moves cash<->assets within a venue and barely changes the total). This does NOT check the `transfers` table — Prometheus cannot see Postgres — so it alerts on the step alone and leaves confirmation to the operator.\n"
+              runbook: "1) Check GET /transfers (or the webui /treasury page) for a row on this account_id near this timestamp — it may already be recorded.\n2) If NOT recorded and this was a real operator action: POST /transfers with source=manual, e.g. curl -X POST http://spawner:8090/transfers -H 'Content-Type: application/json' -d '{\"account_id\":\"<bot_id>\",\"amount\":<signed USD, + in/- out>,\"kind\":\"withdrawal|deposit\",\"source\":\"manual\",\"note\":\"...\"}'\n3) If NOT recorded and no operator action is known: it is still a real, unexplained step — record it provisionally with source=bot_detected (see the two Crypto.com rows from 2026-08-18 for the note format) so /profit stops silently booking it as a trading result, then investigate the cause (exchange-side earn/staking reallocation, a partial balance read, an API key/permission change) with that venue directly.\n4) Confirm it truly was NOT proportional: compare against sibling venues' fks_bot_exchange_total_usd over the same window.\n5) Forgetting step 2/3 is the exact bug this rule exists to catch (Crypto.com's ledger entries were 13-17 days late) — do not close this out without a transfers row either way.\n"
+
+  # A market-wide move must NOT fire: both venues step by a comparable
+  # fraction together (same basket, proportional response), so neither is the
+  # lone mover the rule looks for. Verified non-vacuous by temporarily
+  # dropping the `== 1` sibling-exclusivity clause and confirming this case
+  # then (incorrectly) fires for both venues.
+  - interval: 5m
+    name: BotVenueUnexplainedFlow stays silent on a proportional market move
+    input_series:
+      - series: 'fks_bot_exchange_total_usd{job="fks-bots",bot_id="crypto-spot",exchange="Kraken",mode="live"}'
+        values: "75x24 52x11"
+      - series: 'fks_bot_exchange_total_usd{job="fks-bots",bot_id="crypto-spot",exchange="KuCoin-spot",mode="live"}'
+        values: "72x24 50x11"
+    alert_rule_test:
+      - eval_time: 140m
+        alertname: BotVenueUnexplainedFlow
+        exp_alerts: []
+      - eval_time: 180m
+        alertname: BotVenueUnexplainedFlow
+        exp_alerts: []

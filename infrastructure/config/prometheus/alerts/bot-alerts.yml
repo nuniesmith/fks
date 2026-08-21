@@ -425,6 +425,146 @@ groups:
             3) The gap in the treasury series is deliberate in every case.
 
   # ─────────────────────────────────────────────────────────────────────────
+  # Unexplained venue flow — the highest-value item in the 2026-08-18 review
+  # (SYNTHESIS.md §2.1: "the precondition for every future money statement,
+  # including Gate-B's verdict"). Three consecutive money errors on this
+  # platform share one root cause: a number computed from an incomplete flow
+  # ledger, then reasoned about as a trading result. This rule targets that
+  # root cause directly instead of the symptom.
+  #
+  # ── The two incidents this was built and validated against ────────────────
+  # A) Crypto.com withdrawal (MONEY_REVIEW.md §4.2). Two unbooked legs on
+  #    fks_bot_exchange_total_usd{exchange="Crypto.com"}: 54.9→30.66 (2026-08-01
+  #    05:10-07:10Z, -44%) and 30.66→0.12 (2026-08-04 08:55-10:55Z, -99.6%).
+  #    Kraken and KuCoin-spot were flat throughout both. No offsetting increase
+  #    anywhere, no `transfers` row until an operator manually backfilled two
+  #    `source=bot_detected` rows on 2026-08-18 — 13 and 17 days late.
+  #  B) The Kraken excursion (MONEY_REVIEW.md §4.3), found by review, not by
+  #     monitoring: total dropped 74.5→35.8 (2026-07-27 00:05-02:00Z, -52%,
+  #     pro-rata across cash AND all three assets) then recovered 35.3→77.3
+  #     (2026-07-30 00:40-02:35Z, +115%). KuCoin-spot moved <1% both times.
+  #     STILL not in `transfers` as of this rule (root cause undetermined —
+  #     candidate is a Kraken-side earn/bonded allocation dropping out of the
+  #     balance read, but that requires Kraken's own tx history to confirm).
+  #     This rule fires on it regardless of cause: an unexplained step is
+  #     exactly what it is built to catch, root-caused or not.
+  #
+  # ── Why total_usd, not cash or asset value separately ──────────────────────
+  # A trade moves value BETWEEN cash and assets within a venue and barely
+  # moves the sum; a flow changes the sum with nothing to offset it. Summing
+  # cash+assets (which fks_bot_exchange_total_usd already does) is what makes
+  # trades invisible to this rule and flows visible — using either component
+  # alone would need two rules and would false-fire on ordinary rebalancing.
+  #
+  # ── Why compare against SIBLING venues, not a fixed % or the book total ────
+  # All live venues on a bot hold the same basket (BTC/ETH/SOL), so a real
+  # market move hits every venue's total proportionally — verified on
+  # 2026-08-19 15:45Z, the largest non-incident move in the 30d window, where
+  # Kraken (+5.17%) and KuCoin-spot (+4.91%) moved TOGETHER within 1 point of
+  # each other. A flow hits exactly one venue and leaves its siblings flat.
+  # So: this venue stepped by more than the threshold, AND it is the ONLY
+  # venue on this bot that did — that second clause is what a bare "> 15%"
+  # threshold cannot express and is what makes this a flow detector instead of
+  # a volatility detector.
+  #
+  # ── Threshold and window, derived from real data, not guessed ─────────────
+  # `offset 2h` / `> 15%`: replayed against the full 30-day retention window
+  # at 5-minute resolution (25,069 venue-timestamps across Crypto.com, Kraken,
+  # KuCoin-spot): the worst ordinary (non-incident) 2h move was 5.17%
+  # (Kraken, the paired market move above) — 15% sits ~3x above that ceiling.
+  # All four incident legs cleared it by 3x-20x (44%, 99.6%, 52%, 115%) and
+  # each stayed continuously true for 115-120 minutes, so `for: 15m` is a
+  # comfortable trigger with margin to spare, not a hair-trigger.
+  #
+  # ── Validation (the acceptance test, not a spot-check) ─────────────────────
+  # Ran the full compound expr (step + sibling-exclusivity) as a range query
+  # over the entire 30-day retention window at 5-minute resolution:
+  #   total eval points (3 venues x 30d x 5m):  25,069
+  #   points where the rule condition was true:     98  (0.39% duty cycle)
+  #   ALL 98 fall inside the four known incident windows above, 0 elsewhere
+  #   -> measured false-positive rate: 0.00% over 30 days of real operation
+  #   -> measured true-positive rate: fires on both incidents, both directions
+  #      (Kraken's drop AND its recovery both correctly flag as unexplained
+  #      flows, since neither has a transfers row)
+  # Re-run this validation query if the live venue set changes — the 5.17%
+  # noise ceiling is specific to today's basket and venue count.
+  #
+  # ── Why this stays in Prometheus instead of joining `transfers` ────────────
+  # The honest options were: (a) have the spawner emit a metric that already
+  # nets out recorded transfers, or (b) alert on the unexplained step alone
+  # and let the runbook say "check /transfers; if it was you, record it."
+  # Chose (b). Prometheus cannot see the `transfers` table (it lives in
+  # fks_db/Postgres) short of a new spawner-exported metric and schema
+  # coupling for a single alert; (b) is simpler, ships now, and — per
+  # MONEY_REVIEW.md §4.7 — a low true-positive rate that prompts a ledger
+  # entry is exactly the desired behaviour, since the missing ledger entry
+  # IS the bug both incidents above share. If this rule's false-positive rate
+  # ever climbs (e.g. more venues, more legitimate one-off venue-specific
+  # events like earn/staking allocations), that is the trigger to revisit (a).
+  #
+  # ── Known, accepted limitations (say them out loud) ────────────────────────
+  #  - A bot with only ONE live venue gets NO market-move discrimination from
+  #    this rule (there is no sibling to compare against) — it degrades to a
+  #    bare volatility trip-wire for that bot. Not today's fleet (crypto-spot
+  #    carries 2 live venues; the only single-venue bot, crypto-funding, is
+  #    mode="paper" and already excluded). Would need a price-benchmark-based
+  #    approach instead if a single-venue live bot is ever added.
+  #  - `== 1` (exactly one venue moved) means TWO simultaneous, independent,
+  #    unrelated flows on different venues of the same bot in the same 2h
+  #    window would both go undetected (count would be 2, read as a market
+  #    move). Accepted as rare; a `<` formulation closes this but silently
+  #    can never fire for the single-venue case above, which is the more
+  #    likely gap given today's fleet — see the trade-off note kept alongside
+  #    this rule in the PR that introduced it.
+  #  - A flow spread across many small increments, each under 15% within any
+  #    given 2h window, will not cross the threshold. Same shape of gap as
+  #    IngestionThroughputLow's sudden-collapse-only coverage.
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: bot-flow-detection
+    rules:
+      - alert: BotVenueUnexplainedFlow
+        expr: |
+          (
+            abs(fks_bot_exchange_total_usd{mode!="paper"} - (fks_bot_exchange_total_usd{mode!="paper"} offset 2h))
+            /
+            (fks_bot_exchange_total_usd{mode!="paper"} offset 2h)
+          ) > 0.15
+          and on (bot_id)
+          count by (bot_id) (
+            (
+              abs(fks_bot_exchange_total_usd{mode!="paper"} - (fks_bot_exchange_total_usd{mode!="paper"} offset 2h))
+              /
+              (fks_bot_exchange_total_usd{mode!="paper"} offset 2h)
+            ) > 0.15
+          ) == 1
+        for: 15m
+        labels:
+          severity: warning
+          team: trading
+          channel: money
+        annotations:
+          summary: "Bot {{ $labels.bot_id }}: {{ $labels.exchange }} total stepped {{ $value | humanizePercentage }} in 2h with no sibling move — unrecorded flow?"
+          description: >
+            {{ $labels.exchange }} on {{ $labels.bot_id }} moved {{ $value | humanizePercentage }}
+            against its own value 2 hours ago, sustained for 15+ minutes, while
+            every OTHER live venue on this bot stayed under the same threshold.
+            All live venues hold the same basket, so a real market move hits
+            them proportionally — this venue moving alone is the signature of
+            a deposit or withdrawal that was never recorded, not a price move
+            and not ordinary trading (a trade moves cash<->assets within a
+            venue and barely changes the total). This does NOT check the
+            `transfers` table — Prometheus cannot see Postgres — so it alerts
+            on the step alone and leaves confirmation to the operator.
+          # Literal block: one numbered step per line, so the Discord payload
+          # is a readable checklist (same convention as NetWorthSamplerNotWriting).
+          runbook: |
+            1) Check GET /transfers (or the webui /treasury page) for a row on this account_id near this timestamp — it may already be recorded.
+            2) If NOT recorded and this was a real operator action: POST /transfers with source=manual, e.g. curl -X POST http://spawner:8090/transfers -H 'Content-Type: application/json' -d '{"account_id":"<bot_id>","amount":<signed USD, + in/- out>,"kind":"withdrawal|deposit","source":"manual","note":"..."}'
+            3) If NOT recorded and no operator action is known: it is still a real, unexplained step — record it provisionally with source=bot_detected (see the two Crypto.com rows from 2026-08-18 for the note format) so /profit stops silently booking it as a trading result, then investigate the cause (exchange-side earn/staking reallocation, a partial balance read, an API key/permission change) with that venue directly.
+            4) Confirm it truly was NOT proportional: compare against sibling venues' fks_bot_exchange_total_usd over the same window.
+            5) Forgetting step 2/3 is the exact bug this rule exists to catch (Crypto.com's ledger entries were 13-17 days late) — do not close this out without a transfers row either way.
+
+  # ─────────────────────────────────────────────────────────────────────────
   # Net-worth sampler liveness — the failure class where every guard is green
   #
   # Every existing rule that could notice the treasury going dark counts

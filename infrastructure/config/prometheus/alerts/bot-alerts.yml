@@ -706,3 +706,111 @@ groups:
             3) Postgres write path: same logs, grep -i 'insert failed'; then check the fks_db connection pool and disk.
             4) Confirm the hole: SELECT max(ts) FROM net_worth_snapshots;
             5) fks_bot_venue_status_age_seconds is FROZEN, not fresh — do not read it as evidence the venues are healthy.
+
+      # ======================================================================
+      # Wholesale venue flow detection (added 2026-08-22)
+      #
+      # The gap this closes: THREE consecutive money errors on this platform
+      # share one root cause — a number computed from an incomplete flow
+      # ledger, then reasoned about as a trading result. Until an unrecorded
+      # deposit or withdrawal is DETECTABLE, no money statement the platform
+      # makes is trustworthy, including a Gate-B verdict.
+      #
+      # THE DISCRIMINATOR. A TRADE moves cash and holdings in OPPOSITE
+      # directions (sell BTC → less BTC, more cash) and touches one asset at a
+      # time. A FLOW — deposit, withdrawal, transfer, or a change in what the
+      # balance query can see — moves EVERY holding on the venue the SAME way
+      # at once. So: alert when every asset on a venue steps >10% in the same
+      # direction inside 15m. That is not something trading can produce.
+      #
+      # Why QUANTITY and not USD value: quantities are immune to price. A 10%
+      # market crash moves every USD value on the venue together and would fool
+      # a value-based rule; it does not change how many coins are held.
+      #
+      # Why not gate on a trade counter: fks_bot_trades_total is NOT monotonic —
+      # it was observed going 3 → 0 with the bot up and RestartCount=0, so
+      # increase() over it is meaningless. Do not build on it without checking.
+      #
+      # VALIDATED against ~28 days of retained history. Three firings, all three
+      # genuine money events, ZERO false positives:
+      #   2026-07-27 00:15  Kraken      3 assets  −50%  (the unexplained excursion)
+      #   2026-07-30 00:45  Kraken      3 assets  +~2x  (its reversal, 3 days later)
+      #   2026-08-04 09:00  Crypto.com  4 assets  −     (the withdrawal, found by
+      #                                                  hand 13 days later)
+      # The >= 2 clause keeps a single-asset venue from firing on any one move.
+      # A one-sample glitch cannot fire it either: the 07-27 event included a
+      # scrape where BTC alone read 0, which fails the ALL-assets requirement.
+      # ======================================================================
+      - alert: BotVenueWholesaleOutflow
+        expr: |
+          (
+            count by (bot_id,exchange) (
+              (
+                (fks_bot_asset_qty{mode!="paper"} - (fks_bot_asset_qty{mode!="paper"} offset 15m))
+                / ((fks_bot_asset_qty{mode!="paper"} offset 15m) > 0)
+              ) < -0.10
+            )
+            == on (bot_id,exchange)
+            count by (bot_id,exchange) ((fks_bot_asset_qty{mode!="paper"} offset 15m) > 0)
+          ) >= 2
+        for: 10m
+        labels:
+          severity: critical
+          team: trading
+          component: flow-detection
+        annotations:
+          summary: "ALL {{ $value }} holdings on {{ $labels.exchange }} ({{ $labels.bot_id }}) dropped >10% at once — unexplained outflow"
+          description: >
+            Every one of the {{ $value }} assets held on {{ $labels.exchange }} for
+            {{ $labels.bot_id }} fell more than 10% in quantity within 15 minutes.
+            Trading cannot do this — a sell moves ONE asset down and cash UP. A
+            simultaneous wholesale drop means value LEFT the venue, or the balance
+            query stopped seeing part of the account. Either way the flow ledger is
+            now behind reality, and every downstream money number (/profit, net
+            worth, any gate verdict) is wrong until it is reconciled.
+          runbook: >
+            1. Check the venue's own transaction history for the window — that is the
+            only authoritative source; the host cannot see it.
+            2. If it was a real transfer, RECORD IT: POST /transfers with a signed
+            amount (negative = withdrawal), kind, and source=manual if you are stating
+            it or bot_detected if it was inferred from samples. Skipping this is the
+            exact bug that made /profit report a $52 trading loss when the real result
+            was -$9.78.
+            3. If the venue history shows NO transfer, treat it as a balance-visibility
+            fault, not a flow — the bot has been sizing trades off a partial view of
+            the account, which is a live-money correctness bug.
+            4. Do not "wait and see". The 2026-07-27 Kraken excursion reverted 3 days
+            later on its own and still has no explanation on record.
+
+      - alert: BotVenueWholesaleInflow
+        expr: |
+          (
+            count by (bot_id,exchange) (
+              (
+                (fks_bot_asset_qty{mode!="paper"} - (fks_bot_asset_qty{mode!="paper"} offset 15m))
+                / ((fks_bot_asset_qty{mode!="paper"} offset 15m) > 0)
+              ) > 0.10
+            )
+            == on (bot_id,exchange)
+            count by (bot_id,exchange) ((fks_bot_asset_qty{mode!="paper"} offset 15m) > 0)
+          ) >= 2
+        for: 10m
+        labels:
+          severity: warning
+          team: trading
+          component: flow-detection
+        annotations:
+          summary: "ALL {{ $value }} holdings on {{ $labels.exchange }} ({{ $labels.bot_id }}) rose >10% at once — unrecorded inflow"
+          description: >
+            Every one of the {{ $value }} assets held on {{ $labels.exchange }} for
+            {{ $labels.bot_id }} rose more than 10% in quantity within 15 minutes.
+            Trading cannot do this. Value ARRIVED at the venue, or a previously
+            invisible part of the account became visible again. An unrecorded deposit
+            is not harmless: it inflates apparent trading performance, so it flatters
+            rather than alarms — which is precisely why it survives unnoticed.
+          runbook: >
+            Same as BotVenueWholesaleOutflow, with a positive amount. If this fires
+            shortly after a BotVenueWholesaleOutflow on the same venue, the pair is
+            almost certainly one round trip (funds moved out and back, or the balance
+            query lost and regained visibility) rather than two independent events —
+            record it as such rather than as a deposit.

@@ -393,3 +393,88 @@ tests:
       - eval_time: 15m
         alertname: PaperSessionHaltActive
         exp_alerts: []
+
+  # ===========================================================================
+  # Wholesale venue flow detection (added 2026-08-22)
+  #
+  # The rule's whole claim is that it separates a FLOW (every holding moves the
+  # same way at once) from a TRADE (one asset moves, cash moves the other way).
+  # The rebalance case below is therefore the load-bearing test — a rule that
+  # fired on rebalancing would be useless on a bot whose entire job is to
+  # rebalance.
+  # ===========================================================================
+
+  # Replays the 2026-07-27 Kraken excursion in miniature: all three holdings
+  # roughly halve in one step. Verified non-vacuous by deleting the
+  # `== on(bot_id,exchange) count(...)` clause, which makes the rebalance case
+  # below fire and fail.
+  - interval: 5m
+    name: BotVenueWholesaleOutflow fires when EVERY holding drops at once
+    input_series:
+      - series: 'fks_bot_asset_qty{bot_id="crypto-spot",exchange="Kraken",asset="BTC",mode="live"}'
+        values: "1 1 1 1 1 1 0.47 0.47 0.47 0.47 0.47 0.47"
+      - series: 'fks_bot_asset_qty{bot_id="crypto-spot",exchange="Kraken",asset="ETH",mode="live"}'
+        values: "1 1 1 1 1 1 0.42 0.42 0.42 0.42 0.42 0.42"
+      - series: 'fks_bot_asset_qty{bot_id="crypto-spot",exchange="Kraken",asset="SOL",mode="live"}'
+        values: "1 1 1 1 1 1 0.52 0.52 0.52 0.52 0.52 0.52"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: BotVenueWholesaleOutflow
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              component: flow-detection
+              bot_id: crypto-spot
+              exchange: Kraken
+            exp_annotations:
+              summary: "ALL 3 holdings on Kraken (crypto-spot) dropped >10% at once — unexplained outflow"
+              description: "Every one of the 3 assets held on Kraken for crypto-spot fell more than 10% in quantity within 15 minutes. Trading cannot do this — a sell moves ONE asset down and cash UP. A simultaneous wholesale drop means value LEFT the venue, or the balance query stopped seeing part of the account. Either way the flow ledger is now behind reality, and every downstream money number (/profit, net worth, any gate verdict) is wrong until it is reconciled.\n"
+              runbook: "1. Check the venue's own transaction history for the window — that is the only authoritative source; the host cannot see it. 2. If it was a real transfer, RECORD IT: POST /transfers with a signed amount (negative = withdrawal), kind, and source=manual if you are stating it or bot_detected if it was inferred from samples. Skipping this is the exact bug that made /profit report a $52 trading loss when the real result was -$9.78. 3. If the venue history shows NO transfer, treat it as a balance-visibility fault, not a flow — the bot has been sizing trades off a partial view of the account, which is a live-money correctness bug. 4. Do not \"wait and see\". The 2026-07-27 Kraken excursion reverted 3 days later on its own and still has no explanation on record.\n"
+
+  # THE LOAD-BEARING CASE. A rebalance sells BTC and buys ETH: one holding down
+  # 20%, one up 20%, one flat. Only 1 of 3 assets dropped, so the ALL-assets
+  # equality fails and nothing fires. Without that clause this fires and the
+  # detector would be useless on a rebalancing bot.
+  - interval: 5m
+    name: BotVenueWholesaleOutflow stays silent on an ordinary rebalance
+    input_series:
+      - series: 'fks_bot_asset_qty{bot_id="crypto-spot",exchange="Kraken",asset="BTC",mode="live"}'
+        values: "1 1 1 1 1 1 0.8 0.8 0.8 0.8 0.8 0.8"
+      - series: 'fks_bot_asset_qty{bot_id="crypto-spot",exchange="Kraken",asset="ETH",mode="live"}'
+        values: "1 1 1 1 1 1 1.2 1.2 1.2 1.2 1.2 1.2"
+      - series: 'fks_bot_asset_qty{bot_id="crypto-spot",exchange="Kraken",asset="SOL",mode="live"}'
+        values: "1 1 1 1 1 1 1 1 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: BotVenueWholesaleOutflow
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: BotVenueWholesaleInflow
+        exp_alerts: []
+
+  # A single venue holding only ONE asset must not fire — otherwise the
+  # "every holding moved" test is trivially satisfied by any single move.
+  # Verified non-vacuous by dropping the `>= 2` clause, which makes this fire.
+  - interval: 5m
+    name: BotVenueWholesaleOutflow stays silent on a single-asset venue
+    input_series:
+      - series: 'fks_bot_asset_qty{bot_id="crypto-spot",exchange="Kraken",asset="BTC",mode="live"}'
+        values: "1 1 1 1 1 1 0.4 0.4 0.4 0.4 0.4 0.4"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: BotVenueWholesaleOutflow
+        exp_alerts: []
+
+  # PAPER bots are excluded — a paper twin's synthetic balances are not money.
+  - interval: 5m
+    name: BotVenueWholesaleOutflow ignores paper bots
+    input_series:
+      - series: 'fks_bot_asset_qty{bot_id="crypto-funding",exchange="KuCoin",asset="BTC",mode="paper"}'
+        values: "1 1 1 1 1 1 0.4 0.4 0.4 0.4 0.4 0.4"
+      - series: 'fks_bot_asset_qty{bot_id="crypto-funding",exchange="KuCoin",asset="ETH",mode="paper"}'
+        values: "1 1 1 1 1 1 0.4 0.4 0.4 0.4 0.4 0.4"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: BotVenueWholesaleOutflow
+        exp_alerts: []

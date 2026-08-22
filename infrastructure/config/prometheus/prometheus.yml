@@ -183,16 +183,28 @@ scrape_configs:
     # metrics endpoint on :9092 (BOT_RISK_METRICS_PORT) — halt / breaker / fill /
     # resting-stop / order-error / funding series that the shared :9091 contract
     # (crypto-bot-core) does NOT expose. This job reuses the SAME spawner file_sd
-    # but is deliberately SCOPED so it never produces down-target noise:
-    #   • keep only mode="live" targets (the paper twin is never scraped), AND
+    # but is SCOPED so it never produces down-target noise:
+    #   • keep mode="live" OR mode="paper" targets, AND
     #   • keep only funding-bot images (only that bot serves :9092),
     # then rewrites the target port :9091 → :9092 (same container, reachable
     # container-to-container on fks_network — no publish/EXPOSE needed).
     #
-    # Consequence: the job has ZERO targets until a LIVE funding bot is built +
-    # armed (M2), so the `armed-path.yml` rules that select mode="live" stay inert
-    # through the Gate-A window. The `mode`/`bot_id`/`container_name` labels are
-    # relabeled identically to the fks-bots job so the rules read the same labels.
+    # WIDENED 2026-08-22 to include mode="paper". It was live-only, which meant
+    # the PAPER bot's halt/breaker gauges were served but never scraped — so a
+    # daily-loss halt during a paper measurement window would fire INVISIBLY.
+    # That matters because a halt suppresses entries for the rest of the UTC day,
+    # making an unrecorded halt an unrecorded SELECTION EFFECT on the trade
+    # population a Gate-B verdict is computed over. 2026-08-21 closed at
+    # −442.47 USDT against a ≈−500/day halt: 58 USDT of margin.
+    #
+    # Widening this is SAFE because the armed-path.yml rules are guarded by their
+    # own `mode="live"` expression selectors — all 8 of them, verified — not by
+    # this scrape scoping. The scoping was defence-in-depth, not the guard.
+    # INVARIANT FOR FUTURE RULES: any rule in armed-path.yml MUST carry
+    # mode="live" in its expr, or it will now also fire on the paper twin.
+    #
+    # The `mode`/`bot_id`/`container_name` labels are relabeled identically to the
+    # fks-bots job so the rules read the same labels.
     # ============================================================================
     - job_name: "fks-bots-risk"
       scrape_interval: 30s
@@ -211,9 +223,11 @@ scrape_configs:
             target_label: mode
           - source_labels: [container_name]
             target_label: container_name
-          # Scope: LIVE targets only (paper twin never scraped here) …
+          # Scope: live AND paper funding targets (widened 2026-08-22 — see the
+          # note above). The armed-path rules are guarded by their own
+          # mode="live" expression selectors, NOT by this scrape scoping.
           - source_labels: [mode]
-            regex: "live"
+            regex: "live|paper"
             action: keep
           # … and only the funding bot (the only bot serving :9092).
           - source_labels: [__meta_fks_image]

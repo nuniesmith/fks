@@ -225,35 +225,31 @@ groups:
           summary: "Redis evicting keys"
           description: "Redis has evicted {{ $value }} keys in the last 5 minutes due to memory pressure"
 
-      - alert: RedisLowHitRatio
-        # $value must bind to the ratio, not the request count: PromQL `A and B`
-        # returns A's value, so the percentage has to be the LEFT operand. The old
-        # expr put the count-guard first, so the description rendered "3104%" (the
-        # raw lifetime request count) instead of a ratio. rate() over the counters
-        # also reflects recent behaviour rather than a since-boot average that
-        # never dips on a long-lived Redis.
-        #
-        # Threshold is 50%, not 80%: janus uses this Redis as a persistence +
-        # pub/sub + coordination store, NOT primarily a cache. A large share of
-        # the "misses" are legitimate existence-checks (kill-switch key before
-        # it is set, signal/param GETs on keys not yet written, pubsub), so a
-        # steady ~75-80% ratio is healthy and "consider cache tuning" is not an
-        # actionable response. Only a genuinely low ratio (<50% — half of all
-        # reads missing) indicates real thrashing/misconfiguration worth paging.
-        expr: |
-          100 * (
-            rate(redis_keyspace_hits_total[5m])
-            / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]))
-          ) < 50
-          and
-          (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) > 1
-        for: 15m
-        labels:
-          severity: warning
-          service: redis
-        annotations:
-          summary: "Redis hit ratio unexpectedly low"
-          description: 'Redis hit ratio is {{ $value | printf "%.1f" }}% (janus uses Redis for persistence + pub/sub, not just caching; <50% suggests genuine thrashing/misconfig, not routine existence-checks)'
+      # RedisLowHitRatio — REMOVED 2026-08-22. Do not re-add.
+      #
+      # It fired, and it could never have meant anything. Measured live:
+      #   GET janus:kill_switch   1.00 miss/sec   (janus polls it at 1 Hz)
+      #   all other keyspace ops  0.02 hit/sec
+      # The kill-switch key does not exist while the platform is HEALTHY, so
+      # every one of those polls is a keyspace MISS. That single health check is
+      # ~98% of all keyspace traffic, which pins the hit ratio near 2% forever.
+      #
+      # The threshold could not be fixed by lowering it. `redis_keyspace_*` are
+      # global counters with no per-key breakdown, so the poll cannot be excluded;
+      # and any threshold below 2% would invert the alert's meaning — it would
+      # then fire when the ratio ROSE, i.e. when the kill switch got TRIPPED or
+      # janus STOPPED polling. Both of those already have direct alerts.
+      #
+      # An earlier revision half-found this ("a large share of the misses are
+      # legitimate existence-checks") but assumed they were a minority and set
+      # 50%. They are the overwhelming majority, permanently.
+      #
+      # Nothing is lost: this Redis is a persistence/pub-sub/coordination store,
+      # not a cache. Real cache pressure is RedisEvictingKeys; availability is
+      # RedisDown; memory is RedisHigh/CriticalMemoryUsage; durability is
+      # RedisNotPersisting. A warning that fires forever is worse than no
+      # warning — it trains the inbox to be ignored, which is the mechanism
+      # behind this platform's 43-hour treasury blackout.
 
       - alert: RedisBlockedClients
         expr: redis_blocked_clients > 10

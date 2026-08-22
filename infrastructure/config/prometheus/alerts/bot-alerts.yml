@@ -53,12 +53,23 @@ groups:
           severity: critical
           team: trading
         annotations:
-          summary: "Bot {{ $labels.container_name }} has high drawdown: ${{ $value | humanize }}"
+          summary: "Bot {{ $labels.container_name }} cumulative P&L below -$500: ${{ $value | humanize }}"
           description: >
-            Bot {{ $labels.bot_id }} (mode: {{ $labels.mode }}) has an unrealised
-            P&L of ${{ $value | humanize }}. Drawdown threshold: -$500.
-            Consider stopping this bot via the spawner API or web UI.
-          runbook: "Stop bot: curl -X POST http://spawner:8090/container/{{ $labels.container_name }}/stop"
+            Bot {{ $labels.bot_id }} (mode: {{ $labels.mode }}) has a CUMULATIVE
+            realised P&L of ${{ $value | humanize }} since inception, below the
+            -$500 threshold. This is fks_bot_pnl_dollars — a lifetime running
+            total, NOT unrealised P&L and NOT peak-to-trough drawdown, despite
+            the alert name. For open-position exposure read
+            fks_bot_unrealized_pnl_usd instead; the two routinely differ by
+            orders of magnitude. Because the metric is cumulative it does not
+            recover on its own, so this alert stays firing until the bot trades
+            back above the threshold or is stopped.
+          runbook: >
+            First confirm which quantity moved: compare fks_bot_pnl_dollars
+            (lifetime) against fks_bot_unrealized_pnl_usd (open) before acting —
+            a large cumulative loss with a small open position is a history, not
+            an emergency. To stop: curl -X POST
+            http://spawner:8090/container/{{ $labels.container_name }}/stop
 
       - alert: BotLowWinRate
         # Guard: a bot with no trades reports win_rate=0.0 and would false-fire;

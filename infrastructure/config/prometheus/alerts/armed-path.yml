@@ -10,11 +10,19 @@
 #
 # The funding bot (fks-state `bots/crypto-futures`) now exports a money-path
 # series set on a SECOND port (:9092, `BOT_RISK_METRICS_PORT`), scraped by the
-# `fks-bots-risk` job (see prometheus.yml). That job is scoped to mode="live"
-# funding targets, so these rules are INERT until a live bot is built + armed:
-#   • the running PAPER twin is mode="paper" → never scraped by fks-bots-risk,
+# `fks-bots-risk` job (see prometheus.yml). These rules are INERT until a live
+# bot is built + armed, and the guard is EXPRESSION-LEVEL:
 #   • every rule selects mode="live" → nothing matches until a live bot emits.
-# So this file can ship now and simply not fire during the Gate-A window.
+# So this file can ship now and simply not fire during a paper window.
+#
+# ⚠ CHANGED 2026-08-22 — the mode="live" selectors are now the ONLY guard.
+# The fks-bots-risk job used to also drop paper targets at scrape time, so a
+# rule that forgot its selector still could not fire. That scoping was widened
+# to `live|paper` (prometheus.yml) because the paper bot's halt/breaker gauges
+# were invisible, which would let a daily-loss halt silently bias a Gate-B
+# measurement window. Consequence for anyone editing this file:
+#   EVERY rule here MUST carry mode="live" in its expr. There is no longer a
+#   second net. Paper-scoped money-path rules belong in gate-b-window.yml.
 #
 # Emitted money-path series (fks_bot_* on :9092, mode/bot_id/container_name
 # injected by the spawner file-SD relabeling — see prometheus.yml):

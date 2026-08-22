@@ -1,0 +1,99 @@
+# ============================================================================
+# gate-b-window.yml — make PAPER money-path halts visible during a measurement
+# window (Gate-B). Added 2026-08-22.
+# ============================================================================
+# Why this exists, and why it is not in armed-path.yml:
+#
+# armed-path.yml pages when REAL MONEY misbehaves — every rule there selects
+# mode="live" and is severity=critical. These rules are the opposite case: the
+# bot is PAPER, no money is at risk, and the concern is not loss but
+# MEASUREMENT VALIDITY.
+#
+# The mechanism. The funding bot runs a UTC daily-loss halt at
+# −(balance × max_daily_loss_pct) ≈ −500 USDT/day on the 10,000 paper balance,
+# plus a loss-streak circuit breaker. When either trips it SUPPRESSES NEW
+# ENTRIES for the rest of the day / the cooldown. That is correct risk
+# behaviour, but it means the trades that would have been taken are absent from
+# the ledger — and they are absent NON-RANDOMLY, precisely after losses.
+#
+# A verdict computed over that ledger is computed over a censored population.
+# If nobody recorded that the censoring happened, the censoring is invisible and
+# the verdict silently overstates the strategy. This platform has now made three
+# separate errors of exactly that shape (a number computed from an incomplete
+# ledger, then reasoned about as a trading result) — see the 2026-08-18 review
+# synthesis, Tier 2.1.
+#
+# This is not hypothetical: 2026-08-21 closed at −442.47 USDT, within 58 USDT of
+# tripping the halt, during the worst week the strategy has recorded.
+#
+# ⚠ RETENTION CAVEAT — READ BEFORE RELYING ON THESE FOR A VERDICT.
+# Prometheus retention is 30d (docker-compose.yml: --storage.tsdb.retention.time).
+# A Gate-B window at N≈236-300 closed trades and ~1.6 exits/day runs ~5-6 MONTHS.
+# So these series WILL AGE OUT before the verdict is computed: an early-window
+# halt is gone by the time anyone scores it.
+#
+# These alerts therefore deliver TIMELY NOTIFICATION ("a halt happened today"),
+# NOT the durable accounting record the verdict needs. Those are different jobs
+# and only one is solved here. The durable record has to live in the ledger
+# (fks_db) alongside the exits it censors. Until that exists, an operator who
+# sees one of these MUST record it by hand in the window's log, or the
+# information is lost at 30 days.
+# ============================================================================
+
+groups:
+    # ========================================================================
+    # WARNING — paper measurement integrity (mode="paper" only)
+    # ========================================================================
+    - name: gate-b-window-integrity
+      rules:
+          - alert: PaperSessionHaltActive
+            expr: fks_bot_session_halt_active{mode="paper"} == 1
+            for: 1m
+            labels:
+                severity: warning
+                team: trading
+                component: measurement-integrity
+            annotations:
+                summary: "PAPER daily-loss halt active on {{ $labels.bot_id }} ({{ $labels.symbol }}) — entries suppressed"
+                description: >
+                    The UTC daily-loss halt has tripped on the PAPER funding bot
+                    ({{ $labels.bot_id }}, symbol {{ $labels.symbol }}). No money is
+                    at risk. The reason this pages at all is MEASUREMENT INTEGRITY:
+                    the halt suppresses new entries for the remainder of the UTC day,
+                    so the trades that would have followed are missing from the
+                    ledger, and they are missing NON-RANDOMLY (only after a losing
+                    day). Any verdict computed over this window is computed over a
+                    censored sample unless the censoring is recorded.
+                runbook: >
+                    1. RECORD IT BY HAND in the measurement window's log — date, symbol,
+                    realised PnL for the UTC day, and roughly how many hours of entries
+                    were suppressed. Prometheus retention is 30d and a Gate-B window runs
+                    ~5-6 months, so this series will be GONE by verdict time and the
+                    hand record is the only thing that survives.
+                    2. Do NOT change fr_stop_pct, max_consec_losses or max_daily_loss_pct
+                    in response — they are inside the Gate-B hashed decision surface and
+                    changing them VOIDS the window and restarts the clock.
+                    3. Confirm the halt clears at the UTC rollover; if it does not, that
+                    is a separate bug worth chasing.
+
+          - alert: PaperCircuitBreakerTripped
+            expr: fks_bot_circuit_breaker_tripped{mode="paper"} == 1
+            for: 1m
+            labels:
+                severity: warning
+                team: trading
+                component: measurement-integrity
+            annotations:
+                summary: "PAPER loss-streak breaker tripped on {{ $labels.bot_id }} ({{ $labels.symbol }}) — entries paused"
+                description: >
+                    The loss-streak circuit breaker has tripped on the PAPER funding bot
+                    ({{ $labels.bot_id }}, symbol {{ $labels.symbol }}), pausing new
+                    entries for the cooldown. Same measurement-integrity concern as
+                    PaperSessionHaltActive: entries are suppressed non-randomly, right
+                    after a run of losses, so the resulting ledger under-represents
+                    exactly the conditions that caused the trip.
+                runbook: >
+                    Record it by hand in the window log (see PaperSessionHaltActive —
+                    the 30d retention vs ~6 month window problem applies identically).
+                    Do not retune the breaker mid-window: max_consec_losses is inside the
+                    Gate-B hashed decision surface and changing it VOIDS the window.

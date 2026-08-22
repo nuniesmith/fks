@@ -18,6 +18,8 @@
 rule_files:
   - ../alerts/bot-alerts.yml
   - ../alerts/crash-supervision.yml
+  - ../alerts/armed-path.yml
+  - ../alerts/gate-b-window.yml
 
 evaluation_interval: 1m
 
@@ -312,4 +314,82 @@ tests:
         exp_alerts: []
       - eval_time: 180m
         alertname: BotVenueUnexplainedFlow
+        exp_alerts: []
+
+  # ===========================================================================
+  # Paper measurement-integrity rules + the invariant they depend on
+  # (added 2026-08-22 with gate-b-window.yml)
+  #
+  # Context: the fks-bots-risk scrape job was widened from mode="live" to
+  # "live|paper" so the paper bot's halt/breaker gauges stop being invisible.
+  # That REMOVED a second net — armed-path.yml's mode="live" expression
+  # selectors are now the only thing keeping CRITICAL money alerts off the
+  # paper twin. The pair of tests below is what makes that invariant testable
+  # rather than merely commented.
+  # ===========================================================================
+
+  # Verified non-vacuous: temporarily changing the rule's selector to
+  # mode="paper" makes this case fire and the test fail.
+  # NB eval_time MUST exceed LiveSessionHalted's `for: 30m`. An earlier version
+  # of this test evaluated at 15m and was VACUOUS: with the selector stubbed to
+  # mode="paper" the alert was still only PENDING at 15m, so exp_alerts: []
+  # passed against the broken rule. Caught by the stub-and-confirm-failure step
+  # this file's header mandates. 45m > 30m, and the series runs 60m.
+  - interval: 1m
+    name: LiveSessionHalted does NOT fire on a PAPER halt (the widened-scrape invariant)
+    input_series:
+      - series: 'fks_bot_session_halt_active{job="fks-bots-risk",bot_id="crypto-funding",container_name="fks-bot-crypto-funding",mode="paper",symbol="ADAUSDTM"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: LiveSessionHalted
+        exp_alerts: []
+
+  # LiveCircuitBreakerTripped is `for: 5m`, so 45m clears it with margin.
+  - interval: 1m
+    name: LiveCircuitBreakerTripped does NOT fire on a PAPER breaker trip
+    input_series:
+      - series: 'fks_bot_circuit_breaker_tripped{job="fks-bots-risk",bot_id="crypto-funding",container_name="fks-bot-crypto-funding",mode="paper",symbol="ADAUSDTM"}'
+        values: "1x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: LiveCircuitBreakerTripped
+        exp_alerts: []
+
+  # The positive case. Without this the pair above would pass trivially on a
+  # rule set where NOTHING fires — which is exactly the vacuous-test failure
+  # this file's header warns about.
+  - interval: 1m
+    name: PaperSessionHaltActive DOES fire on a paper halt
+    input_series:
+      - series: 'fks_bot_session_halt_active{job="fks-bots-risk",bot_id="crypto-funding",container_name="fks-bot-crypto-funding",mode="paper",symbol="ADAUSDTM"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PaperSessionHaltActive
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: measurement-integrity
+              job: "fks-bots-risk"
+              bot_id: crypto-funding
+              container_name: fks-bot-crypto-funding
+              mode: paper
+              symbol: ADAUSDTM
+            exp_annotations:
+              summary: "PAPER daily-loss halt active on crypto-funding (ADAUSDTM) — entries suppressed"
+              description: "The UTC daily-loss halt has tripped on the PAPER funding bot (crypto-funding, symbol ADAUSDTM). No money is at risk. The reason this pages at all is MEASUREMENT INTEGRITY: the halt suppresses new entries for the remainder of the UTC day, so the trades that would have followed are missing from the ledger, and they are missing NON-RANDOMLY (only after a losing day). Any verdict computed over this window is computed over a censored sample unless the censoring is recorded.\n"
+              runbook: "1. RECORD IT BY HAND in the measurement window's log — date, symbol, realised PnL for the UTC day, and roughly how many hours of entries were suppressed. Prometheus retention is 30d and a Gate-B window runs ~5-6 months, so this series will be GONE by verdict time and the hand record is the only thing that survives. 2. Do NOT change fr_stop_pct, max_consec_losses or max_daily_loss_pct in response — they are inside the Gate-B hashed decision surface and changing them VOIDS the window and restarts the clock. 3. Confirm the halt clears at the UTC rollover; if it does not, that is a separate bug worth chasing.\n"
+
+  # A paper bot running NORMALLY must stay silent — guards against a rule that
+  # fires on gauge presence rather than on the == 1 value.
+  - interval: 1m
+    name: PaperSessionHaltActive stays silent when the halt is clear
+    input_series:
+      - series: 'fks_bot_session_halt_active{job="fks-bots-risk",bot_id="crypto-funding",container_name="fks-bot-crypto-funding",mode="paper",symbol="ADAUSDTM"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PaperSessionHaltActive
         exp_alerts: []

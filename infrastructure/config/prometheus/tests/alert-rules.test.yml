@@ -23,6 +23,7 @@ rule_files:
   - ../alerts/discord-digests.yml
   - ../alerts/questdb-integrity.yml
   - ../alerts/market-data-pipeline.yml
+  - ../alerts/data.yml
 
 evaluation_interval: 1m
 
@@ -722,4 +723,69 @@ tests:
     alert_rule_test:
       - eval_time: 75m
         alertname: IngestionRateDropped
+        exp_alerts: []
+
+  # ===========================================================================
+  # DataCompletenessZero (added 2026-08-23) — covers the value DataCompletenessLow
+  # deliberately excludes. The `> 0` guard there dates from when the gauge was
+  # unwired; measurement showed it is wired now (six distinct values over 7d),
+  # so the guard had turned from a false-positive suppressor into a blind spot
+  # over the metric's WORST value.
+  # ===========================================================================
+
+  # Verified non-vacuous by changing the expr to `== 1`, which stops it firing.
+  - interval: 1m
+    name: DataCompletenessZero fires on a sustained zero
+    input_series:
+      - series: 'data_completeness_percent'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: DataCompletenessZero
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              component: data-factory
+              slo: completeness
+            exp_annotations:
+              summary: "Data completeness is ZERO — the ingestion SLI reports total loss"
+              description: "data_completeness_percent has been exactly 0 for 15 minutes. This is total loss of the ingestion completeness SLI, not a degradation: DataCompletenessLow deliberately excludes zero (its `> 0` guard dates from when this gauge was unwired), so this rule is the only thing covering the metric's worst value. Either market data has stopped reaching the completeness calculation entirely, or the SLI producer has died while the rest of janus stays up.\n"
+              runbook: "1. Check ingestion is actually flowing — sum(rate(trades_ingested_total[5m])) should be ~100+/s. If it is healthy, the SLI producer is broken rather than the data, which is the less urgent of the two. 2. Startup transients are expected and were measured at ~5 minutes; a reading that survives 15m is not a restart. 3. If janus was just recreated, confirm the value recovers to 100 on its own before investigating further.\n"
+              runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
+
+  # THE LOAD-BEARING CASE. The only zero observed in 7 days was a 5-minute run
+  # at a container start. `for: 15m` exists to let those pass; if this fires,
+  # every janus restart pages someone at 3am and the rule gets muted.
+  #
+  # NB eval_time must land INSIDE the zero window. A first version evaluated at
+  # 19m, by which point the value was back to 100 and no `for:` duration could
+  # have fired — so shortening `for:` to 1m still passed and the test guarded
+  # nothing. Caught by the stub step, not by reading it. Evaluating at 4m means
+  # `for: 15m` is unsatisfied (correct) while `for: 1m` would already be firing.
+  - interval: 1m
+    name: DataCompletenessZero ignores a 5-minute startup zero
+    input_series:
+      - series: 'data_completeness_percent'
+        values: "0 0 0 0 0 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: DataCompletenessZero
+        exp_alerts: []
+      # ...and confirm it has still not fired by the time the zero has passed.
+      - eval_time: 19m
+        alertname: DataCompletenessZero
+        exp_alerts: []
+
+  # Healthy steady state must be silent for BOTH completeness rules.
+  - interval: 1m
+    name: completeness rules stay silent at 100 percent
+    input_series:
+      - series: 'data_completeness_percent'
+        values: "100x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: DataCompletenessZero
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: DataCompletenessLow
         exp_alerts: []

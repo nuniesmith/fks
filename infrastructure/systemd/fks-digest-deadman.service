@@ -1,0 +1,11 @@
+[Unit]
+Description=FKS Discord digest dead-man (orb-briefing + advisor next-due/last-send gauges)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=FKS_TEXTFILE_DIR=/home/jordan/.local/share/node_exporter/textfile
+Environment=FKS_DIGEST_SERVICES=fks_orb_briefing=orb-briefing,fks_advisor=advisor
+ExecStart=/home/jordan/github/fks/scripts/discord-digest-deadman.sh

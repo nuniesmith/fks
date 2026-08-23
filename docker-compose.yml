@@ -1833,7 +1833,17 @@ services:
             questdb:
                 condition: service_started
         ports:
-            - "127.0.0.1:9092:9091" # /health + /status (9092 host to avoid the bot :9091)
+            # /health + /status. Host 9094, NOT 9092.
+            #
+            # 9092 was chosen to dodge the bot metrics port :9091 — but janus
+            # already publishes 9090/tcp -> 127.0.0.1:9092, so the two collided
+            # and `docker compose --profile rithmic up` would have failed with a
+            # bind error. janus is always running, so this was a guaranteed
+            # failure on the exact day the Rithmic credentials arrive and someone
+            # first tries to start the connector. Caught 2026-08-23 by diffing
+            # published ports across every profile; 9094 is free in the full
+            # config (rithmic + state + demo) and unused on the host.
+            - "127.0.0.1:9094:9091"
         networks:
             - fks-network
         restart: unless-stopped

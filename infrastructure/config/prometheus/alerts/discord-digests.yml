@@ -1,0 +1,121 @@
+# ============================================================================
+# discord-digests.yml — dead-man for the scheduled Discord digests
+# (added 2026-08-22 as orb-briefing.yml; generalised same day to cover advisor)
+# ============================================================================
+# WHAT IS WATCHED
+#   orb-briefing  briefing 08:30 ET + trade plan 10:00 ET, trading days
+#   advisor       daily digest 17:30 ET (plus a weekly)
+#
+# The ORB plan is a LIVE DECISION INPUT — real prop-firm money is traded against
+# it, one manual futures position per morning in the 9-11 AM ET window.
+#
+# THE GAP THIS CLOSES. Neither service published a port, exposed /metrics, was
+# scraped, or was named by any alert rule. Their only evidence of life was a
+# Discord message arriving. A wedged scheduler or a dead webhook means the
+# message never comes — easy to miss on a busy morning, and the same silent
+# shape as the venue that sat dead for 13 days behind a green badge.
+#
+# HOW IT WORKS. scripts/discord-digest-deadman.sh (systemd user timer, every
+# 10 min) parses each service's OWN scheduler line —
+#     next: briefing at Mon 2026-08-24 08:30 ET
+#     next: daily at Sun 2026-08-23 17:30 ET
+# — and publishes it via the node_exporter textfile collector.
+#
+# Keying off the service's own next-due time makes this CALENDAR-AWARE for free:
+# orb-briefing computes that line with its trading calendar and holiday table,
+# advisor with its own (it runs weekends). Re-deriving "should it have run
+# today?" in PromQL would duplicate both calendars, the copies would drift, and
+# a dead-man that cries wolf on Thanksgiving is one that gets muted. It also
+# checks the OUTCOME (a message went out) rather than process liveness — a
+# wedged scheduler inside a healthy process is exactly what liveness misses.
+#
+# NOTE the label is `digest_service`, not `service`. These arrive via the
+# node_exporter textfile collector, whose scrape job sets a static target label
+# service="node-exporter"; target labels win, so a metric label called `service`
+# is renamed to `exported_service` and every series reports the exporter's name
+# instead of the digest's. Caught only by reading the deployed label set.
+#
+# NOTE one next_due series PER SERVICE, not per kind. Each scheduler keeps a
+# single forward event and rewrites it after every send (orb-briefing alternates
+# briefing -> plan). An earlier draft emitted a series per kind, which left the
+# just-superseded kind permanently in the past — 37h overdue with nothing wrong,
+# firing daily until muted.
+# ============================================================================
+
+groups:
+    - name: discord-digest-deadman
+      rules:
+          - alert: DiscordDigestOverdue
+            # 30 min grace: observed sends land within ~2 seconds of schedule
+            # (08:30:02, 10:00:02, 17:30:01), so this is ~900x normal jitter and
+            # cannot be tripped by ordinary lateness.
+            expr: time() - fks_digest_next_due_timestamp_seconds > 1800
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "{{ $labels.digest_service }} {{ $labels.kind }} is {{ $value | humanizeDuration }} overdue — a scheduled digest did not arrive"
+                description: >
+                    {{ $labels.digest_service }} said its next {{ $labels.kind }} was due
+                    {{ $value | humanizeDuration }} ago and no send has been recorded since.
+                    For orb-briefing this is the input the operator trades one manual
+                    futures position against each morning, so a missing message means
+                    trading blind or not at all. The due time comes from the service's own
+                    calendar, so this is NOT a weekend or market holiday.
+                runbook: >
+                    1. docker logs <container> --tail 50 — look for a panic, a wedged
+                    scheduler, or Discord send failures (HTTP 4xx/5xx).
+                    2. Check the Discord webhook is alive; a revoked or rotated webhook
+                    fails silently from the service's point of view.
+                    3. For orb-briefing the upstream data source is Yahoo Finance, which
+                    rate-limits and blocks non-browser user agents — a fetch failure
+                    renders INTO the message rather than blocking it, so a total absence
+                    points at the scheduler or Discord, not at data.
+                    4. If the service is simply down, restart it; schedules are recomputed
+                    on boot and a missed slot is not retried.
+
+          - alert: DiscordDigestProbeBlind
+            expr: fks_digest_probe_ok == 0
+            for: 20m
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "Digest dead-man cannot see {{ $labels.digest_service }}"
+                description: >
+                    scripts/discord-digest-deadman.sh ran but could not read logs from
+                    {{ $labels.digest_service }}'s container — stopped, removed, or renamed. The
+                    digest may or may not be broken; what is certain is that
+                    DiscordDigestOverdue has gone blind for this service.
+                runbook: >
+                    docker ps -a | grep -E 'orb|advisor'. If the container is gone the
+                    `state` compose profile is not up: docker compose --profile state up -d.
+                    If it was renamed, update FKS_DIGEST_SERVICES in
+                    ~/.config/systemd/user/fks-digest-deadman.service.
+
+          - alert: DiscordDigestProbeNotRunning
+            # absent() so a probe that STOPS is loud. A dead-man whose own
+            # absence is silent is not a dead-man — the same failure the state
+            # backup metric hit, where the emitter shipped but the collector was
+            # never wired and nothing noticed for weeks.
+            expr: absent(fks_digest_probe_ok)
+            for: 1h
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "Discord digest dead-man is not reporting at all"
+                description: >
+                    fks_digest_probe_ok has been absent for an hour. The systemd timer that
+                    emits it is not running, or the node_exporter textfile collector is not
+                    reading its directory. Nothing is watching either scheduled digest.
+                runbook: >
+                    systemctl --user status fks-digest-deadman.timer && systemctl --user
+                    start fks-digest-deadman.service. Then confirm the .prom file exists in
+                    $FKS_TEXTFILE_DIR and that node_exporter carries
+                    --collector.textfile.directory — that flag is baked at container-create
+                    time, so editing .env alone does nothing.

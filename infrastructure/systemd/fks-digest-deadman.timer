@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Discord digest dead-man every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+# The alert grace is 30 min, so 10 min sampling puts ~3 samples inside it —
+# a single missed run cannot delay detection past the grace.
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

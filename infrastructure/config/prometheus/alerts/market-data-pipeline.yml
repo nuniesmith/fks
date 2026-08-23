@@ -115,10 +115,36 @@ groups:
           # ------------------------------------------------------------------
           # Ingestion Rate Drop
           # ------------------------------------------------------------------
+          # RECALIBRATED 2026-08-22. The old expr compared the current 5m rate
+          # to the 5m rate at ONE INSTANT an hour ago:
+          #     ... < 0.5 * sum(rate(trades_ingested_total[5m] offset 1h))
+          # Crypto trade flow is bursty, so if that single sample happened to
+          # land on a burst, an entirely healthy present looked like a 50%
+          # collapse. Measured over 7 days the condition was TRUE 11.56% of the
+          # time — roughly 2.8 hours a day of a warning that meant nothing.
+          #
+          # Comparing against the 1h MEAN instead of a point sample, at a 40%
+          # floor, gives 0.99% over the same week. Measured alternatives:
+          #     point 1h ago, 50%   11.56%   (what this was)
+          #     1h mean,      50%    3.87%
+          #     1h mean,      40%    0.99%   <- chosen
+          #     6h mean,      50%   13.10%   (worse — the 6h mean sits above
+          #                                   recent flow during quiet spells)
+          #     6h mean,      33%    1.69%
+          #
+          # This is the SHALLOW rung of a two-step ladder; IngestionThroughputLow
+          # (data.yml: < 20% of the 6h mean with a load-bearing floor, for 15m)
+          # is the deep one. They overlap only 0.05% of the week, so this is a
+          # genuine early warning rather than a duplicate page.
+          #
+          # The `> 0` guard is deliberate: a TOTAL stop is not this alert's job.
+          # A pure relative test goes silent once an outage outlives its own
+          # baseline window, which is exactly why IngestionThroughputLow carries
+          # an absolute floor.
           - alert: IngestionRateDropped
             expr: |
                 sum(rate(trades_ingested_total[5m])) <
-                0.5 * sum(rate(trades_ingested_total[5m] offset 1h))
+                0.4 * avg_over_time(sum(rate(trades_ingested_total[5m]))[1h:5m])
                 and sum(rate(trades_ingested_total[5m])) > 0
             for: 5m
             labels:
@@ -128,9 +154,11 @@ groups:
             annotations:
                 summary: "Trade ingestion rate dropped significantly"
                 description: |
-                    Current ingestion rate is less than 50% of the rate 1 hour ago.
-                    Current: {{ $value | printf "%.1f" }} trades/sec vs historical baseline.
-                    May indicate partial connectivity issues or market conditions.
+                    Current ingestion rate is below 40% of its own trailing 1-hour mean.
+                    Current: {{ $value | printf "%.1f" }} trades/sec.
+                    Ingestion has not stopped (a full stop is IngestionThroughputLow's
+                    job) — this is a partial collapse: a venue or symbol subscription
+                    dropping out, or a genuine lull in market activity.
                 runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-rate-dropped.md"
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 

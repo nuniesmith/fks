@@ -1738,6 +1738,18 @@ services:
             - RITHMIC_PASSWORD=${RITHMIC_PASSWORD:-}
             - RITHMIC_APP_NAME=${RITHMIC_APP_NAME:-fks-rithmic-connector}
             - RITHMIC_APP_VERSION=${RITHMIC_APP_VERSION:-0.1.0}
+            # The ACCOUNT TRIPLE. config.rs reads all three and `positions_ready()`
+            # requires every one of them to be non-empty; without them the PnL
+            # plant subscription is SKIPPED. Critically it is skipped SILENTLY —
+            # market data keeps flowing and the connector still reports healthy,
+            # so `GET /positions` would simply return nothing and look like
+            # "no open positions" rather than "never subscribed". These were
+            # missing from compose entirely until 2026-08-22, meaning read-only
+            # position visibility could never have worked no matter what was put
+            # in .env. Supplied by the FCM/prop firm alongside the login.
+            - RITHMIC_ACCOUNT_ID=${RITHMIC_ACCOUNT_ID:-}
+            - RITHMIC_FCM_ID=${RITHMIC_FCM_ID:-}
+            - RITHMIC_IB_ID=${RITHMIC_IB_ID:-}
             # The single instrument this foundation subscribes to (read-only).
             - RITHMIC_INSTRUMENT=${RITHMIC_INSTRUMENT:-MES}
             - RITHMIC_EXCHANGE=${RITHMIC_EXCHANGE:-CME}

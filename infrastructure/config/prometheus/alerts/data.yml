@@ -44,13 +44,25 @@ groups:
       # is watching — the same structural hole as a purely relative throughput
       # test going silent once an outage outlives its own baseline window.
       #
-      # `for: 15m` is measured, not guessed: over 7 days the only zero was a
-      # SINGLE 5-minute run at 2026-08-22 00:33Z, coincident with a container
-      # start. 15m is 3x that, so startup transients cannot trip it while any
-      # sustained total failure will.
+      # `for: 20m` is measured, and the measurement was CORRECTED once.
+      #
+      # First sizing (2026-08-23): the only zero in 7 days of history was a
+      # single 5-minute run coincident with a container start, so `for: 15m`
+      # was called "3x the transient". That was wrong — it was 3x the SMALLEST
+      # observed restart, not a representative one.
+      #
+      # Observed directly during a full stack rebuild the same day: recreating
+      # janus produced a zero lasting 9.3 MINUTES (06:37:38Z -> 06:46:58Z). The
+      # rule held — it went pending and resolved without firing — but the real
+      # margin was 5.7 minutes, not the 10 the comment implied.
+      #
+      # Widened to 20m: ~2.1x the largest transient actually observed. A
+      # restart-triggered false CRITICAL is precisely the alert-blindness this
+      # platform keeps being hurt by, and five extra minutes of detection delay
+      # on a genuine total outage costs almost nothing by comparison.
       - alert: DataCompletenessZero
         expr: data_completeness_percent == 0
-        for: 15m
+        for: 20m
         labels:
           severity: critical
           component: data-factory
@@ -58,7 +70,7 @@ groups:
         annotations:
           summary: "Data completeness is ZERO — the ingestion SLI reports total loss"
           description: >
-            data_completeness_percent has been exactly 0 for 15 minutes. This is
+            data_completeness_percent has been exactly 0 for 20 minutes. This is
             total loss of the ingestion completeness SLI, not a degradation:
             DataCompletenessLow deliberately excludes zero (its `> 0` guard
             dates from when this gauge was unwired), so this rule is the only

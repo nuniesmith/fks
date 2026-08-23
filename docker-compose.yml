@@ -969,6 +969,28 @@ services:
             - no-new-privileges:true
         volumes:
             - ./infrastructure/config/promtail/promtail.yml:/etc/promtail/config.yml:ro
+            # ⚠ THE `:ro` HERE IS SECURITY THEATRE. It makes the socket FILE
+            # read-only, which is irrelevant: Docker API access is a write to a
+            # SOCKET, not a filesystem write to the inode. PROVEN empirically
+            # 2026-08-22 — from inside this container,
+            #   POST /v1.43/containers/create  ->  HTTP 400
+            # i.e. Docker received and PARSED the write (400 came from the
+            # deliberately invalid body, not from a permission denial). Full
+            # Docker API access is full host root, and this container runs as
+            # `user: "root"`. Do not read `:ro` as a mitigation.
+            #
+            # The socket IS genuinely required: promtail.yml uses
+            # docker_sd_configs with unix:///var/run/docker.sock for service
+            # discovery, so simply deleting the mount breaks log collection.
+            #
+            # THE FIX THAT WOULD WORK HERE — and note it is the opposite of the
+            # spawner's situation (see the spawner service below): promtail only
+            # ever READS (list + inspect containers). A docker-socket-proxy with
+            # CONTAINERS=1 and POST=0 removes the host-root path COMPLETELY,
+            # because promtail never needs to create anything. Deliberately not
+            # cut over in the same change that discovered it — a broken log
+            # pipeline is a real cost and this exposure is months old, so it
+            # wants a session where the outcome can be watched.
             - /var/run/docker.sock:/var/run/docker.sock:ro
             - /var/lib/docker/containers:/var/lib/docker/containers:ro
             - /var/log:/var/log:ro
@@ -1438,6 +1460,26 @@ services:
         # socket access. no-new-privileges blocks setuid privesc inside the
         # container. (The durable fix — a docker-socket-proxy so an RCE can't
         # `docker inspect` a bot's plaintext exchange keys — is tracked separately.)
+        #
+        # ⚠ 2026-08-22, ON THAT "DURABLE FIX": a socket proxy is much WEAKER here
+        # than the note above implies, and weaker than for promtail. Audited the
+        # complete bollard surface in crates/spawner/src/docker_client.rs — the
+        # spawner uses ONLY container endpoints:
+        #   create / start / stop / restart / remove / inspect / list / stats / logs
+        # No images, no exec, no volumes, no networks, no swarm. A proxy scoped to
+        # CONTAINERS would therefore cost nothing functionally.
+        #
+        # BUT the spawner must be able to CREATE containers — that is its entire
+        # job — and proxies like tecnativa/docker-socket-proxy gate by PATH and
+        # METHOD, not by request BODY. So `POST /containers/create` carrying
+        # `Privileged: true` or `Binds: ["/:/host"]` still passes. A proxy shrinks
+        # the surface (no image pull, no exec) but does NOT close the host-root
+        # path, which is the thing the review actually cared about.
+        #
+        # Contrast promtail, which only READS: there a proxy with POST=0 closes it
+        # completely. Same tool, opposite verdict — worth doing THERE first.
+        # Genuinely closing it here needs a different shape (a broker that
+        # validates the create body, or moving spawn off the Docker API).
         security_opt:
             - no-new-privileges:true
         cap_drop:

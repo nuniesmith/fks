@@ -738,9 +738,9 @@ tests:
     name: DataCompletenessZero fires on a sustained zero
     input_series:
       - series: 'data_completeness_percent'
-        values: "0x30"
+        values: "0x40"
     alert_rule_test:
-      - eval_time: 20m
+      - eval_time: 25m
         alertname: DataCompletenessZero
         exp_alerts:
           - exp_labels:
@@ -749,13 +749,15 @@ tests:
               slo: completeness
             exp_annotations:
               summary: "Data completeness is ZERO — the ingestion SLI reports total loss"
-              description: "data_completeness_percent has been exactly 0 for 15 minutes. This is total loss of the ingestion completeness SLI, not a degradation: DataCompletenessLow deliberately excludes zero (its `> 0` guard dates from when this gauge was unwired), so this rule is the only thing covering the metric's worst value. Either market data has stopped reaching the completeness calculation entirely, or the SLI producer has died while the rest of janus stays up.\n"
+              description: "data_completeness_percent has been exactly 0 for 20 minutes. This is total loss of the ingestion completeness SLI, not a degradation: DataCompletenessLow deliberately excludes zero (its `> 0` guard dates from when this gauge was unwired), so this rule is the only thing covering the metric's worst value. Either market data has stopped reaching the completeness calculation entirely, or the SLI producer has died while the rest of janus stays up.\n"
               runbook: "1. Check ingestion is actually flowing — sum(rate(trades_ingested_total[5m])) should be ~100+/s. If it is healthy, the SLI producer is broken rather than the data, which is the less urgent of the two. 2. Startup transients are expected and were measured at ~5 minutes; a reading that survives 15m is not a restart. 3. If janus was just recreated, confirm the value recovers to 100 on its own before investigating further.\n"
               runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
 
-  # THE LOAD-BEARING CASE. The only zero observed in 7 days was a 5-minute run
-  # at a container start. `for: 15m` exists to let those pass; if this fires,
-  # every janus restart pages someone at 3am and the rule gets muted.
+  # THE LOAD-BEARING CASE, resized against a DIRECTLY OBSERVED restart rather
+  # than the 5-minute historical minimum. Recreating janus on 2026-08-23
+  # produced a 9.3-minute zero (06:37:38Z -> 06:46:58Z). The fixture models 10
+  # minutes; `for: 20m` must let it pass. If this fires, every janus restart
+  # pages someone at 3am and the rule gets muted.
   #
   # NB eval_time must land INSIDE the zero window. A first version evaluated at
   # 19m, by which point the value was back to 100 and no `for:` duration could
@@ -766,13 +768,14 @@ tests:
     name: DataCompletenessZero ignores a 5-minute startup zero
     input_series:
       - series: 'data_completeness_percent'
-        values: "0 0 0 0 0 100 100 100 100 100 100 100 100 100 100 100 100 100 100 100"
+        values: "0x10 100x20"
     alert_rule_test:
-      - eval_time: 4m
+      # inside the 10-minute zero: `for: 20m` unsatisfied, `for: 5m` would fire
+      - eval_time: 9m
         alertname: DataCompletenessZero
         exp_alerts: []
-      # ...and confirm it has still not fired by the time the zero has passed.
-      - eval_time: 19m
+      # ...and still silent after recovery
+      - eval_time: 25m
         alertname: DataCompletenessZero
         exp_alerts: []
 

@@ -8,15 +8,33 @@
 -- so a reconnect/resubscribe (or overlapping ILP writes) can never double-count
 -- a bar — exactly as migration 001 does for candles_crypto (fks #177).
 --
--- QuestDB has NO Postgres-style initdb / auto-migration mechanism: init.sql is
--- baked into conf/ for reference only and is never executed on startup, and
--- `candles_futures` is auto-created over ILP by the connector's QuestDbCandleSink
--- the first time a closed candle is written. ILP creates the table WITHOUT
--- dedup, so on a running deploy the table exists un-deduped and must be altered
--- in place. This file is that migration — apply it by hand (or from the
--- connector runbook) against the running instance. It does NOT require a
--- container restart and is idempotent (re-running ENABLE on an already-deduped
--- table is a harmless no-op).
+-- ⚠ STATUS CHANGED 2026-08-22 — READ THIS BEFORE RUNNING ANYTHING BELOW.
+-- `candles_futures` now EXISTS and was created WITH DEDUP ALREADY ENABLED,
+-- ahead of any Rithmic data. The ALTER at the bottom of this file is therefore
+-- a no-op on the current deploy, kept only as an idempotent safety net.
+--
+-- Why it was pre-created rather than left to ILP. QuestDB has NO Postgres-style
+-- initdb / auto-migration mechanism: init.sql is baked into conf/ for reference
+-- only and is never executed on startup. Left alone, `candles_futures` would be
+-- auto-created over ILP by the connector's QuestDbCandleSink on the first
+-- closed candle — and ILP creates tables WITHOUT dedup. That leaves a window
+-- where the operator must remember to run an ALTER after the first write, and a
+-- forgotten ALTER is SILENT: duplicate bars simply accumulate, and every edge
+-- measured on that data is quietly computed over double-counted candles. Given
+-- the whole point of the Rithmic path is to validate edges, that is precisely
+-- the failure this platform can least afford. Creating the table up front with
+-- dedup on removes the window entirely.
+--
+-- Verified 2026-08-22 by writing real ILP lines to :9009 against the live
+-- instance: three IDENTICAL lines collapsed to ONE row, and a line with a
+-- distinct timestamp inserted a second row (so the check is not vacuous —
+-- it proves dedup rejects duplicates rather than the write path being broken).
+-- Test rows were removed by dropping and recreating the empty table.
+--
+-- ⚠ THE REMAINING RISK, which nothing currently detects: if the table is ever
+-- DROPPED, ILP will recreate it WITHOUT dedup on the next write and duplicates
+-- will accumulate silently. There is no alert on this. Re-run the verify query
+-- below after any QuestDB volume restore, table drop, or DR rehearsal.
 --
 -- The connector's ILP line shape was verified live against QuestDB (2026-07):
 -- a scratch table created from one line came back with columns/types identical
@@ -29,13 +47,13 @@
 -- so the SAME fks-web chart reader (src/web/src/hooks.server.ts) can query
 -- candles_futures unchanged.
 --
--- Preconditions (the table must already exist — i.e. the connector has written
--- at least one candle; ILP auto-creates it WAL-enabled with `timestamp` as the
--- designated column, both of which DEDUP requires). The designated timestamp
--- MUST be one of the UPSERT keys — it is (`timestamp`).
+-- Preconditions: the table must exist, be WAL-enabled, and have `timestamp` as
+-- its designated column — DEDUP requires all three, and the designated
+-- timestamp MUST be one of the UPSERT keys (it is). All hold today.
 --
--- Canonical DDL (what ILP auto-creates; shown for reference — do not run before
--- the table exists, IF NOT EXISTS is a no-op on the live volume):
+-- Canonical DDL — this is what was actually run on 2026-08-22, and what ILP
+-- would otherwise auto-create minus the DEDUP clause. Safe to re-run
+-- (IF NOT EXISTS); use it to rebuild the table after a drop or a restore:
 --
 --   CREATE TABLE IF NOT EXISTS candles_futures (
 --       symbol    SYMBOL CAPACITY 256 CACHE,

@@ -10,6 +10,7 @@ watches disappears quietly and the gap looks identical to "all clear".
 |---|---|---|
 | `fks-state-backup` | daily encrypted snapshot → age → push to the private repo | `StateBackupNotReachingRemote` fires (the metric is `absent()`-guarded) |
 | `fks-orb-deadman` | every 10 min, publishes the ORB briefing's next-due/last-send gauges | `OrbBriefingDeadmanNotRunning` fires after 1h |
+| `fks-questdb-integrity` | hourly, publishes candle-table DEDUP/WAL state | `QuestDbIntegrityProbeNotRunning` fires after 3h |
 
 Both alerts treat a **missing** metric as failing, so a stopped timer is loud
 rather than silent. That property is deliberate and load-bearing — do not
@@ -21,7 +22,7 @@ rather than silent. That property is deliberate and load-bearing — do not
 install -d ~/.config/systemd/user
 cp infrastructure/systemd/*.service infrastructure/systemd/*.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now fks-state-backup.timer fks-orb-deadman.timer
+systemctl --user enable --now fks-state-backup.timer fks-orb-deadman.timer fks-questdb-integrity.timer
 loginctl enable-linger "$USER"      # so user timers run without an active login
 systemctl --user list-timers --no-pager
 ```

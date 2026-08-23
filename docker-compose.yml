@@ -858,7 +858,27 @@ services:
             - GF_USERS_ALLOW_SIGN_UP=false
             - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
             - GF_SERVER_SERVE_FROM_SUB_PATH=true
-            - GF_AUTH_ANONYMOUS_ENABLED=true
+            # Anonymous access DISABLED 2026-08-22. It was `true`/Viewer, which
+            # meant 18 dashboards — including "FKS Crypto Bots — Net Worth &
+            # PnL" — were readable with NO credentials, both on :3000 and
+            # through nginx at /grafana/. Verified live before the change:
+            # GET /api/search returned 200 and the full dashboard list.
+            #
+            # The justification for leaving it open was a "single-user tailnet".
+            # That premise is measurably false — the 2026-08-18 security review
+            # counted 8 owning accounts across ~20 devices. Treasury and P&L
+            # figures belong behind a login even on a private network.
+            #
+            # Safe to disable: admin credentials already exist and are strong
+            # (GRAFANA_USER / GRAFANA_PASSWORD in .env), anonymous was read-only
+            # (POST /api/dashboards/db returned 403), fks-web only LINKS to
+            # Grafana rather than embedding it, and every automated consumer
+            # hits /api/health — which Grafana keeps public regardless, so the
+            # container healthcheck is unaffected.
+            #
+            # Set GRAFANA_ANONYMOUS=true to restore the old behaviour; the
+            # default is closed so a fresh deploy is not exposed by omission.
+            - GF_AUTH_ANONYMOUS_ENABLED=${GRAFANA_ANONYMOUS:-false}
             - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
             - GF_SECURITY_ALLOW_EMBEDDING=true
         ports:

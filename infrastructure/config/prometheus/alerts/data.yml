@@ -3,15 +3,29 @@ groups:
     interval: 30s
     rules:
       - alert: DataCompletenessLow
-        # `> 0 and` guard: data_completeness_percent is currently UNWIRED in the
-        # unified janus binary — the SLI producer (services/data completeness /
-        # gap-detection calc) is not active in the live ingestion path, so the
-        # gauge sits at its hard-zero default (a `set()` exists but has no
-        # production caller: services/data/src/metrics/prometheus_exporter.rs
-        # update_data_completeness). The guard suppresses that false zero while
-        # still catching a genuine dip once the metric is wired. (The earlier
-        # "rises as the backward module persists" note was wrong — this is a
-        # services/data ingestion SLI, unrelated to the backward module.)
+        # HISTORY of the `> 0` guard. It was added when
+        # data_completeness_percent was UNWIRED in the unified janus binary —
+        # the gauge sat at its hard-zero default with no production caller, so
+        # the guard suppressed a permanent false zero.
+        #
+        # ⚠ THAT PREMISE IS NO LONGER TRUE (measured 2026-08-23). Over 7 days
+        # the gauge took SIX distinct values — 100 (99.31% of samples), 99.14,
+        # 98.86, 98.29, 94.29, and 0 — and ratios like 94.286 and 99.143 are a
+        # real computation, not a default. The SLI is wired and reporting.
+        #
+        # Consequence: the guard no longer suppresses a false zero, it creates a
+        # BLIND SPOT. A genuine 0% completeness — total data loss, the worst
+        # case this SLO exists for — matches neither this rule nor
+        # DataCompletenessWarning. Covered by DataCompletenessZero below rather
+        # than by dropping the guard, because short zeros ARE still startup
+        # artifacts: both zero samples in the last 7 days were a single 5-minute
+        # run at 2026-08-22 00:33Z, coinciding with a container start.
+        #
+        # NOT retuned here, but worth an owner's eye: `for: 1h` against observed
+        # behaviour means this critical is close to unfirable. The condition held
+        # exactly twice in 7 days, for 25 minutes each time, so it never fired.
+        # A 94% completeness dip lasting 25 minutes currently pages nobody.
+        # Changing that is an SLO decision, not a calibration fix.
         expr: data_completeness_percent > 0 and data_completeness_percent < 99.9
         for: 1h
         labels:
@@ -23,6 +37,43 @@ groups:
           description: "Data completeness is {{ $value | humanizePercentage }} (threshold: 99.9%). This indicates potential data loss or gaps in market data coverage."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-slo-error-budget"
+
+      # Covers the case DataCompletenessLow's `> 0` guard deliberately excludes:
+      # a completeness of EXACTLY zero, i.e. total loss of the ingestion SLI.
+      # Without this, the worst possible value of the metric is the one nobody
+      # is watching — the same structural hole as a purely relative throughput
+      # test going silent once an outage outlives its own baseline window.
+      #
+      # `for: 15m` is measured, not guessed: over 7 days the only zero was a
+      # SINGLE 5-minute run at 2026-08-22 00:33Z, coincident with a container
+      # start. 15m is 3x that, so startup transients cannot trip it while any
+      # sustained total failure will.
+      - alert: DataCompletenessZero
+        expr: data_completeness_percent == 0
+        for: 15m
+        labels:
+          severity: critical
+          component: data-factory
+          slo: completeness
+        annotations:
+          summary: "Data completeness is ZERO — the ingestion SLI reports total loss"
+          description: >
+            data_completeness_percent has been exactly 0 for 15 minutes. This is
+            total loss of the ingestion completeness SLI, not a degradation:
+            DataCompletenessLow deliberately excludes zero (its `> 0` guard
+            dates from when this gauge was unwired), so this rule is the only
+            thing covering the metric's worst value. Either market data has
+            stopped reaching the completeness calculation entirely, or the SLI
+            producer has died while the rest of janus stays up.
+          runbook: >
+            1. Check ingestion is actually flowing — sum(rate(trades_ingested_total[5m]))
+            should be ~100+/s. If it is healthy, the SLI producer is broken rather
+            than the data, which is the less urgent of the two.
+            2. Startup transients are expected and were measured at ~5 minutes; a
+            reading that survives 15m is not a restart.
+            3. If janus was just recreated, confirm the value recovers to 100 on
+            its own before investigating further.
+          runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
 
       - alert: IngestionLatencyHigh
         expr: histogram_quantile(0.99, rate(ingestion_latency_ms_bucket[5m])) > 1000

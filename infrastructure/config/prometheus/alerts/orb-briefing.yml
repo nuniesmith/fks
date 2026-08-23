@@ -1,0 +1,117 @@
+# ============================================================================
+# orb-briefing.yml — dead-man for the ORB morning briefing (added 2026-08-22)
+# ============================================================================
+# WHAT THIS WATCHES. `orb-briefing` (fks-state crates/orb-briefing) sends the
+# operator a Discord briefing at 08:30 ET and a trade plan at 10:00 ET on each
+# trading day. Those messages are a LIVE DECISION INPUT — real prop-firm money
+# is traded against them, one manual trade per morning in the 9-11 AM ET window.
+#
+# THE GAP IT CLOSES. Until now the service had NO monitoring whatsoever: it
+# publishes no ports, exposes no /metrics, is not scraped, and no alert rule
+# mentioned it. Its only evidence of life was a Discord message arriving. If the
+# scheduler wedged or the webhook died, the 08:30 message would simply not come
+# — on a busy morning that is easy to miss, and it is the same silent-failure
+# shape as the venue that sat dead for 13 days behind a green badge.
+#
+# HOW IT WORKS. `scripts/orb-briefing-deadman.sh` (systemd user timer, every
+# 10 min) parses the service's OWN scheduler line —
+#     next: briefing at Mon 2026-08-24 08:30 ET
+# — and publishes it as a gauge via the node_exporter textfile collector.
+#
+# Keying off the service's own next-due time makes the dead-man HOLIDAY-AWARE
+# for free: that line is computed with the service's trading calendar and
+# holiday table. Re-deriving "is today a trading day?" in PromQL would duplicate
+# holidays.rs, the two copies would drift, and a dead-man that cries wolf on
+# Thanksgiving is a dead-man that gets muted. It also checks the OUTCOME (a
+# message went out) rather than process liveness — a wedged scheduler inside a
+# healthy process is exactly what a liveness probe misses.
+#
+# NOTE there is exactly ONE next_due series. The scheduler alternates
+# briefing -> plan -> briefing and keeps a single forward event; an earlier
+# draft emitted one series per kind, which left the just-superseded kind
+# permanently in the past and would have fired every day.
+# ============================================================================
+
+groups:
+    - name: orb-briefing-deadman
+      rules:
+          - alert: OrbBriefingOverdue
+            # 30 min grace: the service sends within seconds of its scheduled
+            # time (observed 08:30:02, 10:00:02), so 30 min is ~900x the normal
+            # jitter and cannot be tripped by ordinary lateness.
+            expr: time() - fks_orb_briefing_next_due_timestamp_seconds > 1800
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "ORB {{ $labels.kind }} is {{ $value | humanizeDuration }} overdue — the morning decision input did not arrive"
+                description: >
+                    orb-briefing said its next {{ $labels.kind }} was due
+                    {{ $value | humanizeDuration }} ago and no send has been recorded
+                    since. This is the input the operator trades one manual futures
+                    position against each morning, so a missing message means trading
+                    blind or not at all. The due time comes from the service's own
+                    holiday-aware scheduler, so this is NOT a weekend or market
+                    holiday.
+                runbook: >
+                    1. docker logs fks_orb_briefing --tail 50 — look for a panic, a
+                    wedged scheduler, or Discord send failures (HTTP 4xx/5xx).
+                    2. Check the Discord webhook is alive; a revoked or rotated webhook
+                    fails silently from the service's point of view.
+                    3. The upstream data source is Yahoo Finance, which rate-limits and
+                    blocks non-browser user agents — a fetch failure renders INTO the
+                    message rather than blocking it, so a total absence points at the
+                    scheduler or Discord, not at data.
+                    4. If the service is simply down, restart it; the schedule is
+                    recomputed on boot, and a missed slot is not retried.
+
+          - alert: OrbBriefingDeadmanBlind
+            # The probe ran but could not read the service (container gone or
+            # renamed). Distinct from the probe not running at all, below.
+            expr: fks_orb_briefing_deadman_ok == 0
+            for: 20m
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "ORB briefing dead-man probe cannot see the service"
+                description: >
+                    scripts/orb-briefing-deadman.sh ran but could not read logs from the
+                    orb-briefing container — it is stopped, removed, or renamed. The
+                    briefing itself may or may not be broken; what is certain is that
+                    OrbBriefingOverdue has gone blind and can no longer protect the
+                    morning decision input.
+                runbook: >
+                    docker ps -a | grep orb — if the container is gone, the `state`
+                    compose profile is not up: docker compose --profile state up -d
+                    orb-briefing. If it was renamed, set ORB_BRIEFING_CONTAINER in
+                    ~/.config/systemd/user/fks-orb-deadman.service.
+
+          - alert: OrbBriefingDeadmanNotRunning
+            # absent() so a probe that STOPS is loud. A dead-man whose own
+            # absence is silent is not a dead-man — this is the same failure
+            # the state-backup metric hit on 2026-08-22, where the emitter
+            # shipped but the collector was never wired and nothing noticed.
+            expr: absent(fks_orb_briefing_deadman_ok)
+            for: 1h
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "ORB briefing dead-man probe is not reporting at all"
+                description: >
+                    fks_orb_briefing_deadman_ok has been absent for an hour. The systemd
+                    timer that emits it is not running, or the node_exporter textfile
+                    collector is not reading its directory. Nothing is watching the
+                    morning briefing until this is fixed.
+                runbook: >
+                    systemctl --user status fks-orb-deadman.timer && systemctl --user
+                    start fks-orb-deadman.service. Then confirm the file exists in
+                    $FKS_TEXTFILE_DIR and that node_exporter was recreated with
+                    --collector.textfile.directory pointing at it — the collector flag
+                    is baked at container-create time, so editing .env alone does
+                    nothing.

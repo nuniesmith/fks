@@ -1,0 +1,14 @@
+[Unit]
+Description=Run the ORB briefing dead-man probe every 10 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+# The alert grace is 30 min after the service's own due time, so a 10 min
+# sampling interval leaves ~3 samples inside the grace window — enough that a
+# single missed run cannot delay detection past the grace.
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

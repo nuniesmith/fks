@@ -20,6 +20,7 @@ rule_files:
   - ../alerts/crash-supervision.yml
   - ../alerts/armed-path.yml
   - ../alerts/gate-b-window.yml
+  - ../alerts/orb-briefing.yml
 
 evaluation_interval: 1m
 
@@ -477,4 +478,86 @@ tests:
     alert_rule_test:
       - eval_time: 40m
         alertname: BotVenueWholesaleOutflow
+        exp_alerts: []
+
+  # ===========================================================================
+  # ORB briefing dead-man (added 2026-08-22)
+  # ===========================================================================
+
+  # Verified non-vacuous by widening the grace to 48h, which makes this stop
+  # firing and the test fail.
+  - interval: 5m
+    name: OrbBriefingOverdue fires once the service's own due time passes the grace
+    input_series:
+      # due at t=0; the gauge holds that value while the wall clock advances.
+      - series: 'fks_orb_briefing_next_due_timestamp_seconds{kind="briefing"}'
+        values: "0x24"
+    alert_rule_test:
+      # 1800s grace + 5m `for`. At 40m elapsed the condition has held since 30m.
+      - eval_time: 40m
+        alertname: OrbBriefingOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              component: decision-input
+              kind: briefing
+            exp_annotations:
+              summary: "ORB briefing is 40m 0s overdue — the morning decision input did not arrive"
+              description: "orb-briefing said its next briefing was due 40m 0s ago and no send has been recorded since. This is the input the operator trades one manual futures position against each morning, so a missing message means trading blind or not at all. The due time comes from the service's own holiday-aware scheduler, so this is NOT a weekend or market holiday.\n"
+              runbook: "1. docker logs fks_orb_briefing --tail 50 — look for a panic, a wedged scheduler, or Discord send failures (HTTP 4xx/5xx). 2. Check the Discord webhook is alive; a revoked or rotated webhook fails silently from the service's point of view. 3. The upstream data source is Yahoo Finance, which rate-limits and blocks non-browser user agents — a fetch failure renders INTO the message rather than blocking it, so a total absence points at the scheduler or Discord, not at data. 4. If the service is simply down, restart it; the schedule is recomputed on boot, and a missed slot is not retried.\n"
+
+  # A briefing that is merely due-soon or a few minutes late must stay silent,
+  # otherwise the 08:30 send races its own alert every single morning.
+  - interval: 5m
+    name: OrbBriefingOverdue stays silent inside the grace window
+    input_series:
+      - series: 'fks_orb_briefing_next_due_timestamp_seconds{kind="briefing"}'
+        values: "0x24"
+    alert_rule_test:
+      - eval_time: 20m # 20m overdue — inside the 30m grace
+        alertname: OrbBriefingOverdue
+        exp_alerts: []
+
+  # A future due time (the normal state all day) must never fire.
+  - interval: 5m
+    name: OrbBriefingOverdue stays silent when the next send is still ahead
+    input_series:
+      - series: 'fks_orb_briefing_next_due_timestamp_seconds{kind="briefing"}'
+        values: "86400x24"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: OrbBriefingOverdue
+        exp_alerts: []
+
+  # The probe's own absence must be loud — a dead-man whose absence is silent
+  # is not a dead-man. Verified non-vacuous by changing absent() to
+  # `fks_orb_briefing_deadman_ok == 2`, which never matches.
+  - interval: 5m
+    name: OrbBriefingDeadmanNotRunning fires when the probe metric is absent
+    input_series:
+      - series: 'up{job="prometheus"}'
+        values: "1x24"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: OrbBriefingDeadmanNotRunning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: decision-input
+            exp_annotations:
+              summary: "ORB briefing dead-man probe is not reporting at all"
+              description: "fks_orb_briefing_deadman_ok has been absent for an hour. The systemd timer that emits it is not running, or the node_exporter textfile collector is not reading its directory. Nothing is watching the morning briefing until this is fixed.\n"
+              runbook: "systemctl --user status fks-orb-deadman.timer && systemctl --user start fks-orb-deadman.service. Then confirm the file exists in $FKS_TEXTFILE_DIR and that node_exporter was recreated with --collector.textfile.directory pointing at it — the collector flag is baked at container-create time, so editing .env alone does nothing.\n"
+
+  # ...and must NOT fire while the probe is reporting, even reporting 0.
+  - interval: 5m
+    name: OrbBriefingDeadmanNotRunning stays silent while the probe reports
+    input_series:
+      - series: 'fks_orb_briefing_deadman_ok'
+        values: "0x24"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: OrbBriefingDeadmanNotRunning
         exp_alerts: []

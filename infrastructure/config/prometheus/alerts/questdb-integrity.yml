@@ -1,0 +1,119 @@
+# ============================================================================
+# questdb-integrity.yml — candle-table storage properties (added 2026-08-22)
+# ============================================================================
+# WHAT IS AT STAKE. `candles_crypto` and `candles_futures` carry
+# DEDUP UPSERT KEYS(timestamp, symbol, exchange, interval) so a reconnect, a
+# resubscribe, or overlapping ILP writes can never double-count a bar. Every
+# edge measured on this data stands on that property: duplicated candles inflate
+# volume, distort ranges, and bias a backtest in a direction nobody inspects.
+#
+# WHY IT NEEDS AN ALERT RATHER THAN A RUNBOOK LINE. QuestDB has no
+# initdb/auto-migration, and **ILP auto-creates a missing table WITHOUT dedup**.
+# So if a candle table is ever dropped — a bad restore, a DR rehearsal, a manual
+# cleanup — the next write silently recreates it de-duped-off. Rows keep
+# arriving, charts keep drawing, and the corruption surfaces only much later as
+# an edge that mysteriously fails to replicate. There is no error, no gap, and
+# nothing in the logs.
+#
+# That is why the dangerous state is `dedup == 0` and NOT "table missing": a
+# missing table is loud the moment anything queries it, whereas a present table
+# with dedup off looks exactly like a healthy one. The probe deliberately omits
+# a table it cannot find rather than reporting 0 for it, so the two states stay
+# distinguishable.
+#
+# Fed by scripts/questdb-integrity-probe.sh (systemd user timer, hourly) via the
+# node_exporter textfile collector.
+# ============================================================================
+
+groups:
+    - name: questdb-integrity
+      rules:
+          - alert: QuestDbCandleDedupDisabled
+            expr: fks_questdb_table_dedup_enabled == 0
+            for: 10m
+            labels:
+                severity: critical
+                team: data
+                component: storage-integrity
+            annotations:
+                summary: "QuestDB {{ $labels.table }} has DEDUP DISABLED — duplicate bars can accumulate silently"
+                description: >
+                    {{ $labels.table }} exists but its DEDUP UPSERT KEYS are not active.
+                    Any reconnect, resubscribe, or overlapping ILP write from here on can
+                    insert a duplicate bar, and nothing downstream will notice: volume
+                    inflates, ranges distort, and every backtest or edge measurement over
+                    the affected window is quietly computed on double-counted candles.
+                    The usual cause is the table being dropped and then auto-recreated by
+                    an ILP write, because ILP creates tables WITHOUT dedup.
+                runbook: >
+                    1. Re-enable immediately — it is config-only, needs no restart, and is
+                    idempotent:
+                    curl -G 'http://localhost:9000/exec' --data-urlencode "query=ALTER TABLE
+                    {{ $labels.table }} DEDUP ENABLE UPSERT KEYS(timestamp, symbol, exchange, interval);"
+                    2. Then find out how long it was off and whether duplicates got in:
+                    SELECT count() total, count_distinct(concat(timestamp,'|',symbol,'|',exchange,'|',interval)) uniq
+                    FROM {{ $labels.table }};
+                    total > uniq means real duplicates are already stored — dedup does NOT
+                    retroactively remove them, so that window must be treated as suspect
+                    for any measurement.
+                    3. Canonical DDL and full context:
+                    infrastructure/config/questdb/migrations/002_candles_futures_dedup.sql
+
+          - alert: QuestDbCandleWalDisabled
+            # DEDUP requires WAL. A non-WAL candle table cannot be deduped at all,
+            # so this is the precondition failing rather than the feature.
+            expr: fks_questdb_table_wal_enabled == 0
+            for: 10m
+            labels:
+                severity: critical
+                team: data
+                component: storage-integrity
+            annotations:
+                summary: "QuestDB {{ $labels.table }} is not WAL-enabled — dedup cannot be applied"
+                description: >
+                    {{ $labels.table }} is not WAL-enabled. QuestDB requires WAL for DEDUP,
+                    so this table cannot be protected against duplicate bars at all until
+                    it is rebuilt. Expect QuestDbCandleDedupDisabled alongside this.
+                runbook: >
+                    A non-WAL table cannot be converted in place in general — rebuild it
+                    with the canonical DDL in
+                    infrastructure/config/questdb/migrations/002_candles_futures_dedup.sql
+                    (CREATE ... PARTITION BY DAY WAL DEDUP UPSERT KEYS(...)), copying any
+                    existing rows across first if they matter.
+
+          - alert: QuestDbIntegrityProbeBlind
+            expr: fks_questdb_integrity_probe_ok == 0
+            for: 30m
+            labels:
+                severity: warning
+                team: data
+                component: storage-integrity
+            annotations:
+                summary: "QuestDB integrity probe cannot reach QuestDB"
+                description: >
+                    scripts/questdb-integrity-probe.sh ran but could not query QuestDB's
+                    HTTP endpoint. The dedup guarantee is no longer being checked. QuestDB
+                    itself may be down — which its own alerts should also be saying; if
+                    they are silent, suspect the probe's QUESTDB_HTTP setting instead.
+
+          - alert: QuestDbIntegrityProbeNotRunning
+            # absent() so a probe that STOPS is loud. A guarantee nobody is
+            # checking is indistinguishable from a guarantee that has lapsed.
+            expr: absent(fks_questdb_integrity_probe_ok)
+            for: 3h
+            labels:
+                severity: warning
+                team: data
+                component: storage-integrity
+            annotations:
+                summary: "QuestDB integrity probe is not reporting at all"
+                description: >
+                    fks_questdb_integrity_probe_ok has been absent for three hours (the
+                    probe runs hourly). Nothing is verifying that the candle tables still
+                    dedup.
+                runbook: >
+                    systemctl --user status fks-questdb-integrity.timer && systemctl --user
+                    start fks-questdb-integrity.service. Then confirm the .prom file exists
+                    in $FKS_TEXTFILE_DIR and that node_exporter carries
+                    --collector.textfile.directory — that flag is baked at container-create
+                    time, so editing .env alone does nothing.

@@ -21,6 +21,7 @@ rule_files:
   - ../alerts/armed-path.yml
   - ../alerts/gate-b-window.yml
   - ../alerts/orb-briefing.yml
+  - ../alerts/questdb-integrity.yml
 
 evaluation_interval: 1m
 
@@ -561,3 +562,78 @@ tests:
       - eval_time: 70m
         alertname: OrbBriefingDeadmanNotRunning
         exp_alerts: []
+
+  # ===========================================================================
+  # QuestDB candle-table integrity (added 2026-08-22)
+  #
+  # The dangerous state is "table PRESENT with dedup OFF", not "table missing":
+  # a missing table is loud the moment anything queries it, whereas a present
+  # un-deduped table looks exactly like a healthy one while silently accepting
+  # duplicate bars. These cases pin that distinction.
+  # ===========================================================================
+
+  # Verified non-vacuous by flipping the rule to `== 1`, which makes this case
+  # stop firing and the test fail.
+  - interval: 5m
+    name: QuestDbCandleDedupDisabled fires when a present table has dedup off
+    input_series:
+      - series: 'fks_questdb_table_dedup_enabled{table="candles_futures"}'
+        values: "0x12"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: QuestDbCandleDedupDisabled
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: data
+              component: storage-integrity
+              table: candles_futures
+            exp_annotations:
+              summary: "QuestDB candles_futures has DEDUP DISABLED — duplicate bars can accumulate silently"
+              description: "candles_futures exists but its DEDUP UPSERT KEYS are not active. Any reconnect, resubscribe, or overlapping ILP write from here on can insert a duplicate bar, and nothing downstream will notice: volume inflates, ranges distort, and every backtest or edge measurement over the affected window is quietly computed on double-counted candles. The usual cause is the table being dropped and then auto-recreated by an ILP write, because ILP creates tables WITHOUT dedup.\n"
+              runbook: "1. Re-enable immediately — it is config-only, needs no restart, and is idempotent: curl -G 'http://localhost:9000/exec' --data-urlencode \"query=ALTER TABLE candles_futures DEDUP ENABLE UPSERT KEYS(timestamp, symbol, exchange, interval);\" 2. Then find out how long it was off and whether duplicates got in: SELECT count() total, count_distinct(concat(timestamp,'|',symbol,'|',exchange,'|',interval)) uniq FROM candles_futures; total > uniq means real duplicates are already stored — dedup does NOT retroactively remove them, so that window must be treated as suspect for any measurement. 3. Canonical DDL and full context: infrastructure/config/questdb/migrations/002_candles_futures_dedup.sql\n"
+
+  # The healthy steady state must be silent, or a critical fires forever and
+  # gets muted — the failure mode that cost this platform a 43-hour blackout.
+  - interval: 5m
+    name: QuestDbCandleDedupDisabled stays silent when dedup is on
+    input_series:
+      - series: 'fks_questdb_table_dedup_enabled{table="candles_crypto"}'
+        values: "1x12"
+      - series: 'fks_questdb_table_dedup_enabled{table="candles_futures"}'
+        values: "1x12"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: QuestDbCandleDedupDisabled
+        exp_alerts: []
+
+  # A table the probe cannot see is OMITTED, not reported as 0 — so an absent
+  # table must not trip the dedup critical. This pins the probe's contract.
+  - interval: 5m
+    name: QuestDbCandleDedupDisabled stays silent for a table that does not exist
+    input_series:
+      - series: 'fks_questdb_table_dedup_enabled{table="candles_crypto"}'
+        values: "1x12"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: QuestDbCandleDedupDisabled
+        exp_alerts: []
+
+  # Verified non-vacuous by replacing absent() with a never-matching comparison.
+  - interval: 5m
+    name: QuestDbIntegrityProbeNotRunning fires when the probe metric is absent
+    input_series:
+      - series: 'up{job="prometheus"}'
+        values: "1x48"
+    alert_rule_test:
+      - eval_time: 200m
+        alertname: QuestDbIntegrityProbeNotRunning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: data
+              component: storage-integrity
+            exp_annotations:
+              summary: "QuestDB integrity probe is not reporting at all"
+              description: "fks_questdb_integrity_probe_ok has been absent for three hours (the probe runs hourly). Nothing is verifying that the candle tables still dedup.\n"
+              runbook: "systemctl --user status fks-questdb-integrity.timer && systemctl --user start fks-questdb-integrity.service. Then confirm the .prom file exists in $FKS_TEXTFILE_DIR and that node_exporter carries --collector.textfile.directory — that flag is baked at container-create time, so editing .env alone does nothing.\n"

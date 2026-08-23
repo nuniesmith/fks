@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the QuestDB integrity probe hourly
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

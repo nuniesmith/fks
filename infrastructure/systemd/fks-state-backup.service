@@ -1,0 +1,10 @@
+[Unit]
+Description=FKS encrypted state backup (snapshot -> age-encrypt -> push to private repo)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=FKS_TEXTFILE_DIR=/home/jordan/.local/share/node_exporter/textfile
+ExecStart=/home/jordan/github/fks/scripts/fks-state.sh export scheduled

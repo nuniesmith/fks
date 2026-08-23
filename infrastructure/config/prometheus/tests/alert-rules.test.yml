@@ -22,6 +22,7 @@ rule_files:
   - ../alerts/gate-b-window.yml
   - ../alerts/orb-briefing.yml
   - ../alerts/questdb-integrity.yml
+  - ../alerts/market-data-pipeline.yml
 
 evaluation_interval: 1m
 
@@ -637,3 +638,69 @@ tests:
               summary: "QuestDB integrity probe is not reporting at all"
               description: "fks_questdb_integrity_probe_ok has been absent for three hours (the probe runs hourly). Nothing is verifying that the candle tables still dedup.\n"
               runbook: "systemctl --user status fks-questdb-integrity.timer && systemctl --user start fks-questdb-integrity.service. Then confirm the .prom file exists in $FKS_TEXTFILE_DIR and that node_exporter carries --collector.textfile.directory — that flag is baked at container-create time, so editing .env alone does nothing.\n"
+
+  # ===========================================================================
+  # IngestionRateDropped — recalibrated 2026-08-22 from a point-in-time
+  # comparison (condition true 11.56% of the week) to a trailing-mean one
+  # (0.99%). Fixtures use a 1-MINUTE input interval on purpose: at 5m spacing
+  # with 1m rule evaluation, rate() aliases and the condition flickers off for
+  # a single evaluation, silently resetting `for: 5m`. That cost a debugging
+  # round — the alert looked broken when only the fixture was.
+  # ===========================================================================
+
+  # A real partial collapse: steady 100/s for an hour, then 10/s. Verified
+  # non-vacuous by relaxing the bar to 0.05, which stops it firing.
+  - interval: 1m
+    name: IngestionRateDropped fires on a real partial collapse
+    input_series:
+      - series: 'trades_ingested_total{exchange="binance"}'
+        values: "0+6000x59 354000+600x30"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: IngestionRateDropped
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: data-factory
+              pipeline: market-data
+            exp_annotations:
+              summary: "Trade ingestion rate dropped significantly"
+              description: "Current ingestion rate is below 40% of its own trailing 1-hour mean.\nCurrent: 10.0 trades/sec.\nIngestion has not stopped (a full stop is IngestionThroughputLow's\njob) — this is a partial collapse: a venue or symbol subscription\ndropping out, or a genuine lull in market activity.\n"
+              runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/ingestion-rate-dropped.md"
+              dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
+
+  # THE CASE THE OLD RULE FAILED ON — and the load-bearing one, since it is the
+  # entire justification for the recalibration.
+  #
+  # Flow alternates in 20-MINUTE blocks of 150/s and 50/s. The block scale
+  # matters: a first attempt alternated every MINUTE, which a 5m rate() window
+  # simply averages away, so the old rule passed that fixture too and the test
+  # was VACUOUS. It was caught by the stub step below, not by reading it.
+  #
+  # With a 40-minute period, a point 60 minutes ago is always the OPPOSITE
+  # phase (60 mod 40 = 20) while the trailing mean stays ~104/s. Measured at
+  # t=110m: now 50/s, point-1h-ago 150/s, 1h-mean 103.8/s. So:
+  #   OLD  50 < 0.5 * 150  = 75    -> FIRES on healthy flow
+  #   NEW  50 < 0.4 * 103.8 = 41.5 -> silent, correctly
+  - interval: 1m
+    name: IngestionRateDropped stays silent on bursty but healthy flow
+    input_series:
+      - series: 'trades_ingested_total{exchange="binance"}'
+        values: "0 9000 18000 27000 36000 45000 54000 63000 72000 81000 90000 99000 108000 117000 126000 135000 144000 153000 162000 171000 180000 183000 186000 189000 192000 195000 198000 201000 204000 207000 210000 213000 216000 219000 222000 225000 228000 231000 234000 237000 240000 249000 258000 267000 276000 285000 294000 303000 312000 321000 330000 339000 348000 357000 366000 375000 384000 393000 402000 411000 420000 423000 426000 429000 432000 435000 438000 441000 444000 447000 450000 453000 456000 459000 462000 465000 468000 471000 474000 477000 480000 489000 498000 507000 516000 525000 534000 543000 552000 561000 570000 579000 588000 597000 606000 615000 624000 633000 642000 651000 660000 663000 666000 669000 672000 675000 678000 681000 684000 687000 690000 693000 696000 699000 702000 705000 708000 711000 714000 717000 720000 729000 738000 747000 756000 765000 774000 783000 792000 801000 810000 819000 828000 837000 846000 855000 864000 873000 882000 891000 900000"
+    alert_rule_test:
+      - eval_time: 110m
+        alertname: IngestionRateDropped
+        exp_alerts: []
+
+  # A TOTAL stop must not fire this one — that is IngestionThroughputLow's job
+  # (it carries an absolute floor for exactly this). The `> 0` guard is what
+  # keeps the two rungs of the ladder from double-paging.
+  - interval: 1m
+    name: IngestionRateDropped stays silent on a TOTAL stop (the deep alert owns that)
+    input_series:
+      - series: 'trades_ingested_total{exchange="binance"}'
+        values: "0+6000x59 354000+0x30"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: IngestionRateDropped
+        exp_alerts: []

@@ -76,6 +76,57 @@ groups:
                     4. If the service is simply down, restart it; schedules are recomputed
                     on boot and a missed slot is not retried.
 
+          - alert: DiscordDigestSendFailed
+            # THE GAP THIS CLOSES, found 2026-08-24 by reading the deployed
+            # state rather than the rules. Every alert above watches whether the
+            # SCHEDULER is healthy. None watches whether the SEND SUCCEEDED, and
+            # those are different failures.
+            #
+            # What happened: a transient DNS outage inside fks_orb_briefing at
+            # 10:00 ET killed the econ calendar, all three Yahoo fallbacks and
+            # the Discord POST. The service logged `ERROR ... plan failed:` and
+            # advanced its scheduler to the next slot. So next_due moved into
+            # the FUTURE (DiscordDigestOverdue cannot fire), the probe could
+            # still read the container (DiscordDigestProbeBlind cannot fire),
+            # and the probe was running (DiscordDigestProbeNotRunning cannot
+            # fire). Zero successful sends that day, three green rules, and the
+            # operator had no 10:00 plan — the exact silent shape this file was
+            # created to end, one level further in.
+            #
+            # 6h window: the briefing (08:30) and plan (10:00) are 90 min apart,
+            # so a morning failure stays lit across the whole 9-11 ET trading
+            # window where it changes what the operator does, then clears itself
+            # by evening rather than needing an ack. The metric ages out of the
+            # probe's own lookback independently, so this cannot latch on.
+            expr: time() - fks_digest_last_failure_timestamp_seconds < 21600
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "{{ $labels.digest_service }} FAILED to send — the message did not go out"
+                description: >
+                    {{ $labels.digest_service }} logged a failed send
+                    {{ $value | humanizeDuration }} ago. Unlike DiscordDigestOverdue this
+                    means the scheduler DID fire and the send itself broke, so the
+                    scheduler has already advanced and every other rule here reads green.
+                    For orb-briefing the missing message is the input the operator trades
+                    one manual futures position against, so treat a morning failure as
+                    "no plan today" rather than "it will be along shortly" — a missed slot
+                    is NOT retried.
+                runbook: >
+                    1. docker logs <container> --tail 80 | grep -i failed — the log names
+                    the cause on the same line.
+                    2. Most likely is egress, not the service: check DNS from INSIDE the
+                    container (docker exec <c> getent hosts discord.com), because a
+                    transient resolver failure takes out the data fetch and the webhook
+                    POST together and looks like a total outage.
+                    3. If the webhook itself is rejected (HTTP 4xx), it was rotated or
+                    revoked — re-add it via the webui notification settings.
+                    4. There is no catch-up. If the trading window has passed, the plan for
+                    that session is gone; do not trade a stale range.
+
           - alert: DiscordDigestProbeBlind
             expr: fks_digest_probe_ok == 0
             for: 20m

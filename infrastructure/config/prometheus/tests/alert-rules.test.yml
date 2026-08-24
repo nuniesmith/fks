@@ -584,6 +584,85 @@ tests:
         alertname: DiscordDigestProbeNotRunning
         exp_alerts: []
 
+  # ---------------------------------------------------------------------------
+  # DiscordDigestSendFailed (added 2026-08-24)
+  #
+  # The THIRD case below is the one that matters: it reproduces the exact
+  # 2026-08-24 production state — scheduler already advanced, probe healthy,
+  # send failed — and asserts that all three pre-existing rules stay SILENT
+  # while this one fires. Without that case a future "simplification" could
+  # delete this rule and every other test in this file would still pass.
+  #
+  # Verified non-vacuous by inverting the comparison to `> 21600`, which makes
+  # cases 1 and 3 stop firing.
+  # ---------------------------------------------------------------------------
+  - interval: 5m
+    name: DiscordDigestSendFailed fires on a recent failed send
+    input_series:
+      - series: 'fks_digest_last_failure_timestamp_seconds{digest_service="orb-briefing"}'
+        values: "0x24"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DiscordDigestSendFailed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              component: decision-input
+              digest_service: orb-briefing
+            exp_annotations:
+              summary: "orb-briefing FAILED to send — the message did not go out"
+              description: "orb-briefing logged a failed send 30m 0s ago. Unlike DiscordDigestOverdue this means the scheduler DID fire and the send itself broke, so the scheduler has already advanced and every other rule here reads green. For orb-briefing the missing message is the input the operator trades one manual futures position against, so treat a morning failure as \"no plan today\" rather than \"it will be along shortly\" — a missed slot is NOT retried.\n"
+              runbook: "1. docker logs <container> --tail 80 | grep -i failed — the log names the cause on the same line. 2. Most likely is egress, not the service: check DNS from INSIDE the container (docker exec <c> getent hosts discord.com), because a transient resolver failure takes out the data fetch and the webhook POST together and looks like a total outage. 3. If the webhook itself is rejected (HTTP 4xx), it was rotated or revoked — re-add it via the webui notification settings. 4. There is no catch-up. If the trading window has passed, the plan for that session is gone; do not trade a stale range.\n"
+
+  # Self-clearing: past the 6h window the operator can no longer act on it, so
+  # it must stop firing on its own rather than need an acknowledgement.
+  - interval: 5m
+    name: DiscordDigestSendFailed clears once the failure ages past the window
+    input_series:
+      - series: 'fks_digest_last_failure_timestamp_seconds{digest_service="orb-briefing"}'
+        values: "0x84"
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: DiscordDigestSendFailed
+        exp_alerts: []
+
+  # THE REGRESSION TEST. Scheduler advanced (next_due tomorrow), probe reading
+  # fine (probe_ok 1), send failed. Pre-2026-08-24 this state was ENTIRELY
+  # SILENT.
+  - interval: 5m
+    name: DiscordDigestSendFailed catches the state every other digest rule reads as green
+    input_series:
+      - series: 'fks_digest_last_failure_timestamp_seconds{digest_service="orb-briefing"}'
+        values: "0x24"
+      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
+        values: "86400x24"
+      - series: 'fks_digest_probe_ok{digest_service="orb-briefing"}'
+        values: "1x24"
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: DiscordDigestSendFailed
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              component: decision-input
+              digest_service: orb-briefing
+            exp_annotations:
+              summary: "orb-briefing FAILED to send — the message did not go out"
+              description: "orb-briefing logged a failed send 30m 0s ago. Unlike DiscordDigestOverdue this means the scheduler DID fire and the send itself broke, so the scheduler has already advanced and every other rule here reads green. For orb-briefing the missing message is the input the operator trades one manual futures position against, so treat a morning failure as \"no plan today\" rather than \"it will be along shortly\" — a missed slot is NOT retried.\n"
+              runbook: "1. docker logs <container> --tail 80 | grep -i failed — the log names the cause on the same line. 2. Most likely is egress, not the service: check DNS from INSIDE the container (docker exec <c> getent hosts discord.com), because a transient resolver failure takes out the data fetch and the webhook POST together and looks like a total outage. 3. If the webhook itself is rejected (HTTP 4xx), it was rotated or revoked — re-add it via the webui notification settings. 4. There is no catch-up. If the trading window has passed, the plan for that session is gone; do not trade a stale range.\n"
+      # The three rules that existed before, all green on the same input.
+      - eval_time: 30m
+        alertname: DiscordDigestOverdue
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: DiscordDigestProbeBlind
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: DiscordDigestProbeNotRunning
+        exp_alerts: []
+
   # ===========================================================================
   # QuestDB candle-table integrity (added 2026-08-22)
   #

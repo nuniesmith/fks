@@ -1867,11 +1867,26 @@ services:
             - QUESTDB_ILP_URL=${QUESTDB_ILP_URL:-}
             - RITHMIC_HEALTH_HOST=0.0.0.0
             - RITHMIC_HEALTH_PORT=9091
+            # Operator kill switch. POST /kill releases the Rithmic session so
+            # the single-session credential is free for another login (the
+            # operator's R|Trader Pro phone app); POST /resume reconnects. Both
+            # require X-Internal-Token and are FAIL-CLOSED without it.
+            #
+            # The sentinel is a FILE on a durable volume, deliberately: an
+            # in-memory flag would be cleared by any restart and the connector
+            # would silently steal the session back mid-trade. A kill switch
+            # that forgets is worse than none, because it is trusted.
+            - RITHMIC_KILL_FILE=${RITHMIC_KILL_FILE:-/state/rithmic.kill}
+            - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN}
             - RUST_LOG=${RITHMIC_LOG_LEVEL:-info,rithmic_connector=debug}
             - RUST_BACKTRACE=1
         # Read-only market data lands in QuestDB; start it first when present.
         # (condition: started, not healthy — the connector is best-effort and
         # reconnects, so it must never block on QuestDB.)
+        volumes:
+            # Durable home for the kill-switch sentinel — must outlive container
+            # recreation, or a restart silently un-kills the session.
+            - rithmic_state:/state
         depends_on:
             questdb:
                 condition: service_started
@@ -1911,6 +1926,11 @@ services:
 # VOLUMES
 # =============================================================================
 volumes:
+    # Durable home for the rithmic-connector kill-switch sentinel. A named
+    # volume (not a bind) because the only requirement is surviving container
+    # recreation — nothing outside the connector reads it.
+    rithmic_state:
+        driver: local
     postgres_data:
         driver: local
     redis_data:

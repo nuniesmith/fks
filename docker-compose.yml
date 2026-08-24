@@ -1760,6 +1760,21 @@ services:
             - ORB_OPEN_RANGE_MINS=${ORB_OPEN_RANGE_MINS:-15}
             - ORB_STOP_MODE=${ORB_STOP_MODE:-opposite}
             - ORB_TARGET_R=${ORB_TARGET_R:-2.0}
+            # Real-time Rithmic bars from candles_futures. EMPTY = Yahoo only
+            # (the prior behaviour). When set, the briefing prefers real-time
+            # and falls back to Yahoo per-request when history is too thin or
+            # QuestDB is unreachable — degrading with a disclosed "delayed"
+            # tag rather than going silent. Provenance is tagged PER SYMBOL,
+            # which matters because the Rithmic account is entitled to COMEX
+            # (GC) but not CME (ES/NQ): one message legitimately mixes
+            # real-time gold with delayed indices.
+            - ORB_QUESTDB_URL=${ORB_QUESTDB_URL:-}
+            # How much intraday history the real-time source must cover before
+            # it is preferred (default 15.5 = the overnight session). Lowering
+            # it gets real-time bars sooner at the cost of a truncated, possibly
+            # misleading overnight range — measured: at 0.5h GC reported a width
+            # of 11.9 against a true 64.9. Deliberate use only.
+            - ORB_REALTIME_MIN_SESSION_HOURS=${ORB_REALTIME_MIN_SESSION_HOURS:-}
             - RUST_LOG=info
         networks:
             - fks-network

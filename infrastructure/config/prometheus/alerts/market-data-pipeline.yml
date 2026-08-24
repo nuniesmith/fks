@@ -191,25 +191,78 @@ groups:
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
           # ------------------------------------------------------------------
-          # Single Exchange Throughput Anomaly
+          # Single Exchange Throughput COLLAPSE (per-symbol)
           # ------------------------------------------------------------------
+          # REWRITTEN 2026-08-24. Two defects, found in sequence.
+          #
+          # (1) It was `abs(deviation) > 2 * stddev` — a two-sided 2-sigma test,
+          # which on a roughly normal signal fires ~5% of the time BY
+          # CONSTRUCTION. It was the platform's top firing alert by instance
+          # count once the signal-feed noise was removed, and half its fires
+          # were volume SPIKES. A spike in trade volume is THE MARKET, not an
+          # incident — nothing downstream degrades when Bitcoin gets busy.
+          #
+          # (2) Making it down-only fixed the spikes but NOT the real problem,
+          # which only showed up when the fixed rule was watched live: it fired
+          # on binance/LINKUSDT at 44% of its own 1h mean while the whole fleet
+          # was quiet (ARB 24%, OP 31%, DOGE 48%, SOL 50%, BTC 59%). LINK fired
+          # and ARB did not purely because LINK's own stddev is tighter. A
+          # market-wide lull is not a per-symbol fault, and a rule measured only
+          # against a symbol's OWN history cannot tell the two apart.
+          #
+          # So the comparison is now FLEET-RELATIVE: each symbol's ratio to its
+          # own 1h mean, against the MEDIAN symbol's ratio. When everything
+          # slows together every ratio falls and the median falls with them, so
+          # nothing fires. One symbol breaking while the rest are fine is
+          # exactly what stands out. Measured over 24h, 10 symbols, 5m steps
+          # (2880 possible):
+          #
+          #     down-only 2sd (per-symbol, own history)   fires on a global lull
+          #     fleet-relative < 0.5x median   82 hits / 5 series
+          #     fleet-relative < 0.4x median   44 hits / 3 series
+          #     fleet-relative < 0.3x median   16 hits / 2 series  <- chosen, 0.6%
+          #
+          # 0.3x is chosen to sit with the platform's other well-calibrated
+          # rules (0-0.3% of the day); 0.4x put the threshold within a point of
+          # a symbol sitting right at it, which would flicker.
+          #
+          # WHY IT IS NOT DELETED, despite five collapse alerts existing.
+          # DataGapDurationCritical/Warning need the symbol to hit EXACTLY zero;
+          # IngestionRateDropped and IngestionThroughputLow are sum() across all
+          # symbols, so they are global. ONE symbol degrading PARTIALLY moves
+          # the global sum barely at all and never reaches zero. This rule is
+          # the only thing watching for that — but only now that it actually
+          # isolates the per-symbol case instead of re-detecting global quiet.
+          #
+          # The `> 0` clause keeps this from double-firing with the zero
+          # detectors above: at exactly zero this is DataGapDuration's incident,
+          # reported once, by the rule whose runbook actually fits.
           - alert: ExchangeThroughputAnomaly
             expr: |
-                abs(
-                    rate(trades_ingested_total[5m]) -
-                    avg_over_time(rate(trades_ingested_total[5m])[1h:5m])
-                ) > 2 * stddev_over_time(rate(trades_ingested_total[5m])[1h:5m])
+                (
+                    rate(trades_ingested_total[5m])
+                    / avg_over_time(rate(trades_ingested_total[5m])[1h:5m])
+                )
+                < 0.3 * scalar(
+                    quantile(0.5,
+                        rate(trades_ingested_total[5m])
+                        / avg_over_time(rate(trades_ingested_total[5m])[1h:5m])
+                    )
+                )
+                and rate(trades_ingested_total[5m]) > 0
             for: 10m
             labels:
                 severity: warning
                 component: data-factory
                 pipeline: market-data
             annotations:
-                summary: "Unusual trade volume for {{ $labels.exchange }}/{{ $labels.symbol }}"
+                summary: "Trade volume COLLAPSED for {{ $labels.exchange }}/{{ $labels.symbol }}"
                 description: |
-                    Trade ingestion rate for {{ $labels.exchange }}/{{ $labels.symbol }}
-                    is significantly outside normal range (>2 standard deviations).
-                    Could indicate exchange issues, unusual market activity, or data problems.
+                    Trade ingestion for {{ $labels.exchange }}/{{ $labels.symbol }} has
+                    fallen more than 2 standard deviations BELOW its own 1h average
+                    while still being non-zero — a partial degradation of one symbol,
+                    which the zero-detectors and the global sum-based rules both miss.
+                    Suspect an exchange-side subscription problem for this symbol.
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
           # ------------------------------------------------------------------

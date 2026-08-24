@@ -332,6 +332,12 @@ coverage/
 # was committed to this PUBLIC repo on 2026-08-02 and stayed for 16 days.
 # Match every .env variant and re-admit only the example.
 .env*
+
+# Host-side decrypted-secret staging directory (2026-08-24): where
+# export-secret-env writes .env-shaped credential files for non-bot services
+# (e.g. .secrets/rithmic.env), bind-mounted into fks_bot_spawner. Same
+# sensitivity class as .env — must never reach a commit.
+.secrets/
 !.env.example
 !.env.example
 !.env.template

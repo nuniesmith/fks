@@ -81,8 +81,15 @@ ENV SQLX_OFFLINE=true \
 # therefore fails with "no bin target named `spawner` in default-run packages".
 # Point cargo at the crate's own manifest; CARGO_TARGET_DIR pins the output to
 # the /build/target/release/spawner path the runtime stage copies from.
-RUN cargo build --release --manifest-path crates/spawner/Cargo.toml --bin spawner && \
-    strip /build/target/release/spawner
+# export-secret-env (2026-08-24): the bridge that lets a NON-bot service (e.g.
+# rithmic-connector, a plain compose service with no spawner lifecycle) use a
+# credential entered via the webui's exchange_secrets store. Same image, same
+# trust boundary (SPAWNER_DATABASE_URL, SPAWNER_SECRETS_KEY) as the server
+# binary — see fks-spawner crates/spawner/src/bin/export_secret_env.rs for why
+# this has to run inside THIS container rather than as an HTTP route.
+RUN cargo build --release --manifest-path crates/spawner/Cargo.toml \
+        --bin spawner --bin export-secret-env && \
+    strip /build/target/release/spawner /build/target/release/export-secret-env
 
 # ── Runtime image ─────────────────────────────────────────────────────────────
 FROM ${RUNTIME_BASE}
@@ -101,6 +108,7 @@ RUN useradd -u 1000 -m -s /bin/bash ${APP_USER}
 WORKDIR /app
 
 COPY --from=0 /build/target/release/spawner /app/spawner
+COPY --from=0 /build/target/release/export-secret-env /app/export-secret-env
 
 # Prometheus SD output directory (must be a shared volume with prometheus)
 RUN mkdir -p /prometheus-sd && chown ${APP_USER}:${APP_USER} /prometheus-sd /app

@@ -1564,6 +1564,26 @@ services:
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
             - prometheus_sd:/prometheus-sd
+            # Bind mount (NOT a named volume) so `export-secret-env` output lands
+            # on the HOST filesystem, readable directly by the operator without a
+            # `docker cp` step. `docker compose run`/`docker exec` write here as
+            # uid 1000 (appuser), which matches the typical host operator uid, so
+            # the 0600 file the binary writes is directly readable — no `sudo`,
+            # no ownership dance. Gitignored; never committed.
+            #
+            # WHY NOT `env_file:` on the consuming service instead: tested
+            # empirically 2026-08-24 — docker compose reads env_file content
+            # once, at the START of the WHOLE `up` invocation, not fresh per
+            # service just before that service's container is created. A
+            # one-shot writer + `depends_on: condition:
+            # service_completed_successfully` on the SAME `up` run therefore
+            # reads STALE (pre-write) content — confirmed with a busybox
+            # writer/reader pair. The only reliable path found was `source`ing
+            # this file into the invoking SHELL before running `docker compose
+            # up`, so compose's `${VAR:-}` interpolation (which genuinely IS
+            # re-read fresh per invocation) picks it up. See
+            # scripts/rithmic-secrets-refresh.sh.
+            - ./.secrets:/secrets
         networks:
             - fks-network
         healthcheck:
@@ -1763,10 +1783,18 @@ services:
     #     docker compose --profile rithmic up rithmic-connector
     #
     # DOCTRINE: read-only. The order plant is never opened; no execution path
-    # exists in the image. Creds (RITHMIC_USER/PASSWORD/SYSTEM_NAME) are injected
-    # from the spawner secret store like other brokers — leave them EMPTY here to
-    # keep the connector idle. Persistence to `candles_futures` is a STUB in this
-    # PR (see fks-state:crates/rithmic-connector/src/persistence.rs).
+    # exists in the image.
+    #
+    # CREDS. Enter them ONCE via the webui (Settings -> API Keys -> Rithmic) —
+    # that's the only sanctioned input path and it writes to exchange_secrets,
+    # encrypted at rest. Before each `--profile rithmic up`, run:
+    #     source scripts/rithmic-secrets-refresh.sh
+    # which decrypts that row (via fks-spawner's export-secret-env, run inside
+    # the spawner container — never over HTTP) and exports RITHMIC_USER/
+    # RITHMIC_PASSWORD/RITHMIC_SYSTEM_NAME into your shell for THIS invocation
+    # only. Leave them empty (skip the source step) to keep the connector idle.
+    # Persistence to `candles_futures` is no longer a stub — see migration 002
+    # and the DEDUP work in infrastructure/config/questdb/migrations/.
     rithmic-connector:
         profiles: ["rithmic"]
         build:

@@ -100,6 +100,31 @@ for pair in "${PAIRS[@]}"; do
     fi
   done < <(grep -oE "sent [a-z]+ to Discord" <<<"$logs" | awk '{print $2}' | sort -u)
 
+  # A send that RAN AND FAILED is invisible to every other metric here, and it
+  # is the failure that actually happened. Observed 2026-08-24: a transient DNS
+  # outage inside the container killed the econ calendar, all three Yahoo
+  # fallbacks and the Discord POST, the service logged
+  #     ERROR orb_briefing: plan failed: posting to Discord webhook: ...
+  # and then advanced its scheduler to the next slot. So next_due sat in the
+  # FUTURE, probe_ok stayed 1, and all three existing rules stayed silent while
+  # the operator got no 10:00 plan at all.
+  #
+  # Deliberately NOT inferred from last_send being stale. `docker logs` only
+  # spans the CURRENT container, so a recreate wipes the send history and an
+  # absent/old last_send cannot distinguish "never sent" from "fresh container".
+  # The explicit ERROR line has no such ambiguity: it is present only when a
+  # send genuinely failed, and it ages out of the lookback window on its own.
+  #
+  # No `kind` label. Every kind shares one series, so a failure cannot leave a
+  # superseded kind pinned in the past — the same trap documented above for
+  # next_due.
+  fail="$(grep -oE "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z +ERROR .*(briefing|plan|digest) failed" <<<"$logs" | tail -1)"
+  if [[ -n "$fail" ]]; then
+    if fe="$(date -u -d "$(awk '{print $1}' <<<"$fail")" +%s 2>/dev/null)" && [[ -n "$fe" ]]; then
+      add "fks_digest_last_failure_timestamp_seconds{digest_service=\"$service\"} $fe"
+    fi
+  fi
+
   add "fks_digest_probe_ok{digest_service=\"$service\"} 1"
 done
 
@@ -108,6 +133,8 @@ done
   echo "# TYPE fks_digest_next_due_timestamp_seconds gauge"
   echo "# HELP fks_digest_last_send_timestamp_seconds Unix time a send of this kind last reached Discord."
   echo "# TYPE fks_digest_last_send_timestamp_seconds gauge"
+  echo "# HELP fks_digest_last_failure_timestamp_seconds Unix time this service last logged a FAILED send. One series per service (no kind label)."
+  echo "# TYPE fks_digest_last_failure_timestamp_seconds gauge"
   echo "# HELP fks_digest_probe_ok Whether the probe could read this service (1) or not (0)."
   echo "# TYPE fks_digest_probe_ok gauge"
   printf '%s' "$body"

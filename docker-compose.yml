@@ -1860,6 +1860,17 @@ services:
         depends_on:
             questdb:
                 condition: service_started
+        # NOT `unless-stopped`. The connector has NO reconnect/retry loop of its
+        # own (rithmic-rs leaves reconnection to the caller — see the crate's
+        # stated limitation and this connector's own TODO), so its task simply
+        # EXITS on any connect/login failure. Paired with `unless-stopped` that
+        # turned a bad credential into an unbounded login-retry hammer against
+        # Rithmic's auth endpoint: observed 2026-08-24, 9 login attempts in ~25
+        # seconds against a wrong system name before it was killed by hand.
+        # Repeated failed logins are exactly what gets a brokerage account
+        # locked, so the restart policy is capped until a real backoff/resubscribe
+        # loop exists inside the connector.
+        restart: on-failure:3
         ports:
             # /health + /status. Host 9094, NOT 9092.
             #
@@ -1874,7 +1885,6 @@ services:
             - "127.0.0.1:9094:9091"
         networks:
             - fks-network
-        restart: unless-stopped
         logging:
             driver: "json-file"
             options:

@@ -186,32 +186,28 @@ groups:
           # crosses) were removed 2026-07-01: they matched signal_type values
           # ("bullish_confluence", "ema_golden_cross", …) that only the
           # never-instantiated SignalActor emitted. The live counter's
-          # signal_type values are buy|sell|hold|close, so they are collapsed
-          # into the two honest direction notifications below. Restore the
-          # pattern alerts from git history if per-pattern signal metrics ship.
-          - alert: BuySignalGenerated
-            expr: |
-                sum by (symbol) (increase(janus_signals_generated_total{signal_type="buy"}[5m])) > 0
-            for: 0m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bullish
-            annotations:
-                summary: "Buy signal generated for {{ $labels.symbol }}"
-                description: "The janus forward loop generated a buy signal for {{ $labels.symbol }} in the last 5 minutes."
-
-          - alert: SellSignalGenerated
-            expr: |
-                sum by (symbol) (increase(janus_signals_generated_total{signal_type="sell"}[5m])) > 0
-            for: 0m
-            labels:
-                severity: info
-                component: signal-actor
-                signal_direction: bearish
-            annotations:
-                summary: "Sell signal generated for {{ $labels.symbol }}"
-                description: "The janus forward loop generated a sell signal for {{ $labels.symbol }} in the last 5 minutes."
+          # signal_type values are buy|sell|hold|close, so they were collapsed
+          # into two direction notifications, BuySignalGenerated and
+          # SellSignalGenerated.
+          #
+          # THOSE TWO ARE NOW GONE AS WELL (2026-08-24). A signal is a FEED, not
+          # an incident, and alerting on every one of them was actively harmful:
+          # over the 7d to 2026-08-24 they were 112,971 + 34,926 of 187,339
+          # total firing samples — 78.9% of ALL alert volume on the platform,
+          # every sample severity=info with for:0m. They buried the alerts that
+          # matter. On the operator's own inbox screenshot, two of the five
+          # visible rows were SellSignalGenerated while a CRITICAL
+          # BotHighDrawdown (-$630.70) sat fourth.
+          #
+          # NOTHING IS LOST BY REMOVING THEM. Prometheus rules do not create
+          # metrics: janus_signals_generated_total is emitted by janus and is
+          # unaffected, /signals renders the live feed from janus directly, and
+          # the PATHOLOGICAL case — a signal storm, which genuinely is an
+          # incident — is still covered by UnusuallyHighSignalRate above.
+          #
+          # Do not "restore the buy/sell notifications". If per-signal delivery
+          # is wanted, it belongs on a notification channel (the spawner's
+          # Discord dispatch), not in the alerting path that pages the operator.
 
           # ========================================================================
           # Performance / Health

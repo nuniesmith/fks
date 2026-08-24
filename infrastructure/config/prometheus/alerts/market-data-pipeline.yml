@@ -191,25 +191,55 @@ groups:
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
           # ------------------------------------------------------------------
-          # Single Exchange Throughput Anomaly
+          # Single Exchange Throughput COLLAPSE (per-symbol)
           # ------------------------------------------------------------------
+          # WHY THIS IS DOWN-ONLY (changed 2026-08-24). This was `abs(deviation)
+          # > 2 * stddev` — a two-sided 2-sigma test, which on a roughly normal
+          # signal fires ~5% of the time BY CONSTRUCTION. Measured over the 24h
+          # to 2026-08-24, across 10 symbols at 5m resolution (2880 possible):
+          #
+          #     abs()      > 2 sd   262 hits   <- the old rule
+          #     down-only  > 2 sd    20 hits   <- this rule, 13x quieter
+          #     down-only  > 3 sd     1 hit    <- too deaf, would miss real ones
+          #
+          # It was the platform's top firing alert by instance count once the
+          # signal-feed noise was removed, and it never meant anything: half its
+          # fires were volume SPIKES. A spike in trade volume is THE MARKET, not
+          # an incident — nothing downstream degrades when Bitcoin gets busy.
+          # The failure this pipeline actually has is a feed going quiet.
+          #
+          # WHY IT IS NOT DELETED, despite five collapse alerts existing.
+          # DataGapDurationCritical/Warning need the symbol to hit EXACTLY zero;
+          # IngestionRateDropped and IngestionThroughputLow are sum() across all
+          # symbols, so they are global. That leaves a real hole: ONE symbol
+          # degrading PARTIALLY — say to 30% of its own normal — moves the
+          # global sum barely at all and never reaches zero. This rule is the
+          # only thing watching for that, which is why it earns its place once
+          # the spike half is gone.
+          #
+          # The `> 0` clause keeps this from double-firing with the zero
+          # detectors above: at exactly zero this is DataGapDuration's incident,
+          # reported once, by the rule whose runbook actually fits.
           - alert: ExchangeThroughputAnomaly
             expr: |
-                abs(
+                (
                     rate(trades_ingested_total[5m]) -
                     avg_over_time(rate(trades_ingested_total[5m])[1h:5m])
-                ) > 2 * stddev_over_time(rate(trades_ingested_total[5m])[1h:5m])
+                ) < -2 * stddev_over_time(rate(trades_ingested_total[5m])[1h:5m])
+                and rate(trades_ingested_total[5m]) > 0
             for: 10m
             labels:
                 severity: warning
                 component: data-factory
                 pipeline: market-data
             annotations:
-                summary: "Unusual trade volume for {{ $labels.exchange }}/{{ $labels.symbol }}"
+                summary: "Trade volume COLLAPSED for {{ $labels.exchange }}/{{ $labels.symbol }}"
                 description: |
-                    Trade ingestion rate for {{ $labels.exchange }}/{{ $labels.symbol }}
-                    is significantly outside normal range (>2 standard deviations).
-                    Could indicate exchange issues, unusual market activity, or data problems.
+                    Trade ingestion for {{ $labels.exchange }}/{{ $labels.symbol }} has
+                    fallen more than 2 standard deviations BELOW its own 1h average
+                    while still being non-zero — a partial degradation of one symbol,
+                    which the zero-detectors and the global sum-based rules both miss.
+                    Suspect an exchange-side subscription problem for this symbol.
                 dashboard_url: "https://grafana.fkstrading.xyz/d/market-data-pipeline-v1"
 
           # ------------------------------------------------------------------

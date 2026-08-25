@@ -25,6 +25,7 @@ rule_files:
   - ../alerts/market-data-pipeline.yml
   - ../alerts/data.yml
   - ../alerts/rithmic-connector.yml
+  - ../alerts/edge-factory.yml
 
 evaluation_interval: 1m
 
@@ -963,3 +964,97 @@ tests:
       - eval_time: 70m
         alertname: RithmicProbeNotRunning
         exp_alerts: []
+
+  # ===========================================================================
+  # Edge factory (added 2026-08-25)
+  #
+  # The 2026-07-19 → 08-16 outage in miniature: ten consecutive failures, then
+  # the scheduler switched off, and five weeks of silence in both states. The
+  # first two cases below are the two halves of that — a pipeline that FAILS,
+  # and one that simply STOPS — because a rule that only watches failures goes
+  # quiet the moment someone disables the thing producing them.
+  #
+  # INTERVAL IS 5m, NOT 1h, even though the scheduler this watches is WEEKLY.
+  # Samples further apart than Prometheus's 5m staleness lookback make the
+  # series VANISH between them, which resets `for:` and the alert never fires —
+  # the alert looks broken when only the fixture is. Same trap already
+  # documented on the BotNoTrades cases above; I walked into it anyway with a
+  # 1h fixture and the first run caught it.
+  #
+  # Verified non-vacuous by raising the streak threshold above the fixture and
+  # by widening the staleness window past the fixture age; each makes its own
+  # case stop firing.
+  # ===========================================================================
+  - interval: 5m
+    name: BacktestRunsFailing ignores a single transient failure
+    input_series:
+      - series: 'fks_backtest_consecutive_failures'
+        values: "1x24"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: BacktestRunsFailing
+        exp_alerts: []
+
+  - interval: 5m
+    name: BacktestRunsFailing fires once failures are a streak, not a blip
+    input_series:
+      - series: 'fks_backtest_consecutive_failures'
+        values: "10x24"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: BacktestRunsFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: edge-factory
+            exp_annotations:
+              summary: "10 backtest runs have failed since the last success"
+              description: "The edge factory is not producing results. Verdicts distilled from these runs stay at whatever they last said, and a stale verdict is invisible: orb_verdicts.toml still renders, still carries an as-of date, and still looks authoritative in the 09:47 day-plan.\n"
+              runbook: "1. SELECT id, status, results->>'error' FROM backtest_runs ORDER BY started_at DESC LIMIT 5 — the error is recorded per run. 2. The 2026-07/08 outage was a MISSING IMAGE (404 No such image). Check both exist: docker images | grep fks-bot-backtest. Build with `docker build -f crates/orb-backtest/Dockerfile -t fks-bot-backtest-orb:latest .` from the fks-state root, and `--target backtest -t fks-bot-backtest-crypto-futures:latest` from bots/crypto-futures. 3. Re-run by hand rather than waiting a week: POST /edges/{orb|funding-reversion}/backtest with X-Internal-Token.\n"
+
+  # THE CASE A FAILURE-COUNTER CANNOT SEE. Zero failures, because nothing ran
+  # at all — the exact state between 2026-08-16 and 08-25, when the scheduler
+  # was off and the verdicts aged in silence.
+  - interval: 5m
+    name: BacktestVerdictsGoingStale fires on a scheduler that STOPPED, with no failures at all
+    input_series:
+      - series: 'fks_backtest_last_success_timestamp_seconds'
+        values: "0x40"
+      - series: 'fks_backtest_consecutive_failures'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: BacktestVerdictsGoingStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: decision-input
+            exp_annotations:
+              summary: "No successful backtest in over 21 days — the go/no-go verdicts are drifting"
+              description: "Nothing has re-derived the edge verdicts in three weeks. This fires even when no run has FAILED, which is the case the failure-streak rule cannot see: a scheduler that is switched off, or one that never fires, produces no failures at all. That is exactly the state this platform sat in between 2026-08-16 and 08-25.\n"
+              runbook: "Check EDGE_DECAY_ENABLED on the spawner — it was deliberately set false after the 2026-07 failures and left that way. If it is off on purpose, run the edges manually and accept that the verdicts age; if not, re-enable it (and make sure BacktestRunsFailing above is live first, or the next outage is silent again).\n"
+      # And the failure rule stays SILENT on the same input — proving the two
+      # rules cover different failures rather than duplicating one.
+      - eval_time: 90m
+        alertname: BacktestRunsFailing
+        exp_alerts: []
+
+  - interval: 5m
+    name: BacktestProbeNotRunning fires when the probe metric is absent
+    input_series:
+      - series: 'up{job="prometheus"}'
+        values: "1x40"
+    alert_rule_test:
+      - eval_time: 150m
+        alertname: BacktestProbeNotRunning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: edge-factory
+            exp_annotations:
+              summary: "Edge-factory probe is not reporting at all"
+              description: "fks_backtest_probe_ok has been absent for two hours. The systemd timer that emits it is not running, or the node_exporter textfile collector is not reading its directory. Nothing is watching whether the verdicts are being re-derived.\n"
+              runbook: "systemctl --user status fks-backtest-probe.timer && systemctl --user start fks-backtest-probe.service. NOTE probe_ok=0 (the database is unreachable) is a DIFFERENT state and is deliberately not alerted on its own — Postgres has its own alerts, and duplicating them here would page twice for one outage.\n"

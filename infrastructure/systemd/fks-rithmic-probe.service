@@ -1,0 +1,11 @@
+[Unit]
+Description=FKS Rithmic connector health probe (session/candle/persist gauges)
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=FKS_TEXTFILE_DIR=/home/jordan/.local/share/node_exporter/textfile
+Environment=RITHMIC_STATUS_URL=http://127.0.0.1:9094/status
+ExecStart=/home/jordan/github/fks/scripts/rithmic-connector-probe.sh

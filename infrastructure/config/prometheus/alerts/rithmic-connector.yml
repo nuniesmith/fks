@@ -1,0 +1,126 @@
+# ============================================================================
+# rithmic-connector.yml — the futures feed that the morning ORB plan is built on
+# (added 2026-08-24)
+# ============================================================================
+# WHAT IS AT STAKE. fks_rithmic_connector streams GC/NQ/ES into
+# `candles_futures`, and the 09:47 ET day-plan derives the opening range —
+# entry, stop, target and POSITION SIZE — from those bars. Real prop-firm money
+# is traded against them, one manual futures position per morning.
+#
+# THE GAP THIS CLOSES. The connector was not a Prometheus target, exposed no
+# /metrics, and no alert rule named it. Its only evidence of life was bars
+# quietly appearing in QuestDB — the same silent shape as orb-briefing before
+# discord-digests.yml, and as the venue that sat dead for 13 days behind a green
+# badge.
+#
+# HOW IT WORKS. scripts/rithmic-connector-probe.sh (systemd user timer, every
+# 3 min) reads the /status the connector already serves and publishes it via the
+# node_exporter textfile collector. Deliberately an EXTERNAL probe: adding
+# /metrics to the connector would mean restarting it, and a restart costs
+# opening-range bars — Rithmic allows ONE session per credential and re-login is
+# not instant.
+#
+# THE `killed` CLAUSE IS LOAD-BEARING — DO NOT DROP IT. With a single Rithmic
+# credential the operator MUST hand the session to R|Trader Pro to place a
+# trade, so a disconnect is ROUTINE and expected, every trading day. Alerting on
+# `connected == 0` alone would page on every single trade and be muted within a
+# week. `fks_rithmic_killed` distinguishes an operator RELEASE from a fault.
+#
+# NOT INCLUDED, deliberately: a "candles stopped being written" detector. The
+# obvious form — increase(fks_rithmic_candles_written[N]) == 0 — is TRUE for
+# every CME daily maintenance halt (17:00-18:00 ET) and for the whole weekend
+# close, because no trades legitimately means no candles. Making it correct
+# needs the trading calendar, and re-deriving that in PromQL duplicates the
+# calendar orb-briefing already owns and the copies drift (see
+# discord-digests.yml for why that route was rejected there too). The case that
+# actually matters — a partial opening range — is already disclosed IN BAND by
+# the day-plan itself, which prints "(2/3 bars — window incomplete, re-check)"
+# and refuses to present it as a clean range.
+# ============================================================================
+
+groups:
+    - name: rithmic-connector
+      rules:
+          - alert: RithmicSessionLost
+            # `killed == 0` excludes the operator's own deliberate release.
+            # `for: 10m` clears the connector's own reconnect supervisor, which
+            # backs off 5s→60s and normally recovers inside a minute; this only
+            # fires once that supervisor has failed to recover, or has hit its
+            # login-war guard (3 sessions under 90s ⇒ it STOPS rather than fight
+            # the operator's phone for the credential).
+            expr: fks_rithmic_connected == 0 and fks_rithmic_killed == 0
+            for: 10m
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "Rithmic session is DOWN and was not released by the operator"
+                description: >
+                    The connector has been disconnected for over 10 minutes without the
+                    kill switch being set, so this is a fault rather than a handover to
+                    R|Trader Pro. Bars are NOT accumulating: every minute lost is a hole
+                    in the opening range the morning ORB plan is sized from, and a range
+                    missing its middle reads TOO NARROW — tighter stop, larger position.
+                runbook: >
+                    1. curl -s http://127.0.0.1:9094/status — check `killed`; if it is
+                    true someone released the session and this alert is correct but
+                    benign, just resume it.
+                    2. docker logs fks_rithmic_connector --tail 50 — the login-war guard
+                    stops the connector outright after 3 sessions under 90s, which means
+                    something else is holding the credential (usually the operator's own
+                    R|Trader Pro app). Only ONE session per credential exists.
+                    3. If it stopped, close the other login first, then
+                    POST /resume — restarting into a contested credential just restarts
+                    the fight.
+
+          - alert: RithmicPersistErrors
+            # written != persisted means candles were produced and then LOST on
+            # the way to QuestDB — invisible in the bar data itself, which simply
+            # has fewer rows than it should.
+            expr: increase(fks_rithmic_persist_errors[15m]) > 0
+            for: 5m
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "Rithmic connector is failing to write candles to QuestDB"
+                description: >
+                    {{ $value | printf "%.0f" }} QuestDB write failures in the last 15
+                    minutes. The session is fine and the connector is producing candles,
+                    but they are not landing — so the opening range will be built from an
+                    incomplete bar set with nothing in the price data to show for it.
+                runbook: >
+                    Check QuestDB health and disk (docker logs fks_questdb --tail 50;
+                    df -h). Compare fks_rithmic_candles_written against
+                    fks_rithmic_candles_persisted — the difference is the number of bars
+                    already lost, and they do NOT backfill.
+
+          - alert: RithmicProbeNotRunning
+            # absent() so a probe that STOPS is loud. A dead-man whose own
+            # absence is silent is not a dead-man — the same reasoning as
+            # DiscordDigestProbeNotRunning, and the same failure the state-backup
+            # metric hit when its emitter shipped without the collector wired.
+            expr: absent(fks_rithmic_probe_ok)
+            for: 1h
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "Rithmic connector probe is not reporting at all"
+                description: >
+                    fks_rithmic_probe_ok has been absent for an hour. The systemd timer
+                    that emits it is not running, or the node_exporter textfile collector
+                    is not reading its directory. Nothing is watching the futures feed.
+                runbook: >
+                    systemctl --user status fks-rithmic-probe.timer && systemctl --user
+                    start fks-rithmic-probe.service. Then confirm
+                    fks_rithmic_connector.prom exists in $FKS_TEXTFILE_DIR and that
+                    node_exporter carries --collector.textfile.directory — that flag is
+                    baked at container-create time, so editing .env alone does nothing.
+                    NOTE probe_ok=0 (the connector is unreachable) is a DIFFERENT state
+                    and is deliberately not alerted on its own: the connector is
+                    profile-gated and is legitimately absent whenever RITHMIC_ENABLED is
+                    off.

@@ -24,6 +24,7 @@ rule_files:
   - ../alerts/questdb-integrity.yml
   - ../alerts/market-data-pipeline.yml
   - ../alerts/data.yml
+  - ../alerts/rithmic-connector.yml
 
 evaluation_interval: 1m
 
@@ -870,4 +871,95 @@ tests:
         exp_alerts: []
       - eval_time: 25m
         alertname: DataCompletenessLow
+        exp_alerts: []
+
+  # ===========================================================================
+  # Rithmic connector (added 2026-08-24)
+  #
+  # The SECOND case is the one that earns its place. With a single Rithmic
+  # credential the operator releases the session to R|Trader Pro to place every
+  # trade, so `connected == 0` is a normal daily event. A rule without the
+  # `killed == 0` clause would page on every trade and be muted inside a week —
+  # which is how a real outage later goes unnoticed.
+  #
+  # Verified non-vacuous by deleting `and fks_rithmic_killed == 0` from the
+  # expr, which makes case 2 fire.
+  # ===========================================================================
+  - interval: 1m
+    name: RithmicSessionLost fires on an unintended disconnect
+    input_series:
+      - series: 'fks_rithmic_connected'
+        values: "0x20"
+      - series: 'fks_rithmic_killed'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RithmicSessionLost
+        exp_alerts: []   # `for: 10m` not yet satisfied
+      - eval_time: 15m
+        alertname: RithmicSessionLost
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: decision-input
+            exp_annotations:
+              summary: "Rithmic session is DOWN and was not released by the operator"
+              description: "The connector has been disconnected for over 10 minutes without the kill switch being set, so this is a fault rather than a handover to R|Trader Pro. Bars are NOT accumulating: every minute lost is a hole in the opening range the morning ORB plan is sized from, and a range missing its middle reads TOO NARROW — tighter stop, larger position.\n"
+              runbook: "1. curl -s http://127.0.0.1:9094/status — check `killed`; if it is true someone released the session and this alert is correct but benign, just resume it. 2. docker logs fks_rithmic_connector --tail 50 — the login-war guard stops the connector outright after 3 sessions under 90s, which means something else is holding the credential (usually the operator's own R|Trader Pro app). Only ONE session per credential exists. 3. If it stopped, close the other login first, then POST /resume — restarting into a contested credential just restarts the fight.\n"
+
+  # THE DAILY HANDOVER. Operator released the session to trade on their phone.
+  # This must stay SILENT or the rule is worse than useless.
+  - interval: 1m
+    name: RithmicSessionLost stays silent when the operator released the session
+    input_series:
+      - series: 'fks_rithmic_connected'
+        values: "0x20"
+      - series: 'fks_rithmic_killed'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RithmicSessionLost
+        exp_alerts: []
+
+  - interval: 1m
+    name: RithmicSessionLost stays silent while the session is up
+    input_series:
+      - series: 'fks_rithmic_connected'
+        values: "1x20"
+      - series: 'fks_rithmic_killed'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: RithmicSessionLost
+        exp_alerts: []
+
+  # A probe that STOPS must be loud; a probe reporting an unreachable connector
+  # must NOT be, because the connector is profile-gated and legitimately absent.
+  - interval: 5m
+    name: RithmicProbeNotRunning fires when the probe metric is absent
+    input_series:
+      - series: 'up{job="prometheus"}'
+        values: "1x24"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: RithmicProbeNotRunning
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: decision-input
+            exp_annotations:
+              summary: "Rithmic connector probe is not reporting at all"
+              description: "fks_rithmic_probe_ok has been absent for an hour. The systemd timer that emits it is not running, or the node_exporter textfile collector is not reading its directory. Nothing is watching the futures feed.\n"
+              runbook: "systemctl --user status fks-rithmic-probe.timer && systemctl --user start fks-rithmic-probe.service. Then confirm fks_rithmic_connector.prom exists in $FKS_TEXTFILE_DIR and that node_exporter carries --collector.textfile.directory — that flag is baked at container-create time, so editing .env alone does nothing. NOTE probe_ok=0 (the connector is unreachable) is a DIFFERENT state and is deliberately not alerted on its own: the connector is profile-gated and is legitimately absent whenever RITHMIC_ENABLED is off.\n"
+
+  - interval: 5m
+    name: RithmicProbeNotRunning stays silent while the probe reports, even at probe_ok 0
+    input_series:
+      - series: 'fks_rithmic_probe_ok'
+        values: "0x24"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: RithmicProbeNotRunning
         exp_alerts: []

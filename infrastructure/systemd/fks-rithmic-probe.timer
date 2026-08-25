@@ -1,0 +1,15 @@
+[Unit]
+Description=Probe the Rithmic connector every 3 minutes
+
+[Timer]
+OnBootSec=2min
+# RithmicSessionLost has `for: 10m`, so 3-minute sampling puts 3-4 samples
+# inside the window — one missed run cannot leave a gap long enough to reset
+# the `for` state and delay detection past the grace. Same 3:1 sample-to-grace
+# ratio the digest dead-man uses.
+OnUnitActiveSec=3min
+AccuracySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

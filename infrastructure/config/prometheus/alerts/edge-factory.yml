@@ -1,0 +1,116 @@
+# ============================================================================
+# edge-factory.yml — the backtests that produce the go/no-go verdicts
+# (added 2026-08-25)
+# ============================================================================
+# WHAT IS AT STAKE. `backtest_runs` feeds `orb_verdicts.toml`, and the 09:47 ET
+# day-plan prints one verdict line per symbol. The operator reads those before
+# placing a manual futures trade, so a frozen verdict is a live decision input
+# that has quietly stopped being re-derived.
+#
+# THE GAP THIS CLOSES. No metric and no alert rule mentioned backtest_runs.
+# TEN consecutive scheduled runs failed between 2026-07-19 and 2026-08-16 —
+# every one with `Docker API error: 404 No such image:
+# fks-bot-backtest-orb:latest`, because the image had never been built — and
+# nobody noticed for FIVE WEEKS. The ORB verdicts froze at 2026-07-13 while the
+# operator kept trading against them, and ES was never evaluated at all despite
+# being one of the three symbols in the plan.
+#
+# The scheduler was then switched off, which looked like a fix and was not: the
+# cause was never addressed, and turning off the thing that reports a problem
+# removes the report, not the problem.
+#
+# WHY A STREAK, NOT "A RUN FAILED". One failure is noise — a busy host, a
+# transient pull. Ten in a row is a broken pipeline. A naive per-failure alert
+# would have fired on 2026-07-19, been acknowledged as a blip, and then said
+# NOTHING NEW for five weeks while the situation got worse. Counting failures
+# since the last SUCCESS distinguishes the two and self-clears the moment a run
+# succeeds, with no window to tune.
+#
+# HOW IT WORKS. scripts/backtest-runs-probe.sh (systemd user timer, hourly)
+# reads `backtest_runs` and publishes via the node_exporter textfile collector.
+# Hourly is deliberate: the scheduler is WEEKLY, so a minute-resolution probe
+# would burn queries to watch something that moves once every seven days.
+# ============================================================================
+
+groups:
+    - name: edge-factory
+      rules:
+          - alert: BacktestRunsFailing
+            # >= 2 so a single transient failure never pages; the streak resets
+            # itself on the next success, so this cannot latch.
+            expr: fks_backtest_consecutive_failures >= 2
+            for: 30m
+            labels:
+                severity: warning
+                team: trading
+                component: edge-factory
+            annotations:
+                summary: "{{ $value | printf \"%.0f\" }} backtest runs have failed since the last success"
+                description: >
+                    The edge factory is not producing results. Verdicts distilled from
+                    these runs stay at whatever they last said, and a stale verdict is
+                    invisible: orb_verdicts.toml still renders, still carries an as-of
+                    date, and still looks authoritative in the 09:47 day-plan.
+                runbook: >
+                    1. SELECT id, status, results->>'error' FROM backtest_runs ORDER BY
+                    started_at DESC LIMIT 5 — the error is recorded per run.
+                    2. The 2026-07/08 outage was a MISSING IMAGE (404 No such image).
+                    Check both exist: docker images | grep fks-bot-backtest.
+                    Build with `docker build -f crates/orb-backtest/Dockerfile -t
+                    fks-bot-backtest-orb:latest .` from the fks-state root, and
+                    `--target backtest -t fks-bot-backtest-crypto-futures:latest` from
+                    bots/crypto-futures.
+                    3. Re-run by hand rather than waiting a week:
+                    POST /edges/{orb|funding-reversion}/backtest with X-Internal-Token.
+
+          - alert: BacktestVerdictsGoingStale
+            # 21 days = three missed WEEKLY runs. Tolerates one skipped week
+            # plus a retry; three in a row is a pipeline that has stopped.
+            # `== 0` covers "never succeeded", which time() arithmetic alone
+            # would render as a 56-year-old success rather than as no data.
+            expr: |
+                fks_backtest_last_success_timestamp_seconds == 0
+                or (time() - fks_backtest_last_success_timestamp_seconds) > 1814400
+            for: 1h
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "No successful backtest in over 21 days — the go/no-go verdicts are drifting"
+                description: >
+                    Nothing has re-derived the edge verdicts in three weeks. This fires
+                    even when no run has FAILED, which is the case the failure-streak
+                    rule cannot see: a scheduler that is switched off, or one that never
+                    fires, produces no failures at all. That is exactly the state this
+                    platform sat in between 2026-08-16 and 08-25.
+                runbook: >
+                    Check EDGE_DECAY_ENABLED on the spawner — it was deliberately set
+                    false after the 2026-07 failures and left that way. If it is off on
+                    purpose, run the edges manually and accept that the verdicts age; if
+                    not, re-enable it (and make sure BacktestRunsFailing above is live
+                    first, or the next outage is silent again).
+
+          - alert: BacktestProbeNotRunning
+            # absent() so a probe that STOPS is loud. A dead-man whose own
+            # absence is silent is not a dead-man — the same reasoning as
+            # DiscordDigestProbeNotRunning and RithmicProbeNotRunning.
+            expr: absent(fks_backtest_probe_ok)
+            for: 2h
+            labels:
+                severity: warning
+                team: trading
+                component: edge-factory
+            annotations:
+                summary: "Edge-factory probe is not reporting at all"
+                description: >
+                    fks_backtest_probe_ok has been absent for two hours. The systemd
+                    timer that emits it is not running, or the node_exporter textfile
+                    collector is not reading its directory. Nothing is watching whether
+                    the verdicts are being re-derived.
+                runbook: >
+                    systemctl --user status fks-backtest-probe.timer && systemctl --user
+                    start fks-backtest-probe.service. NOTE probe_ok=0 (the database is
+                    unreachable) is a DIFFERENT state and is deliberately not alerted on
+                    its own — Postgres has its own alerts, and duplicating them here
+                    would page twice for one outage.

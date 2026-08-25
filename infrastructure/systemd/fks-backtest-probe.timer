@@ -1,0 +1,15 @@
+[Unit]
+Description=Probe the edge factory's backtest runs hourly
+
+[Timer]
+OnBootSec=5min
+# HOURLY, not minutes. The edge scheduler is WEEKLY, so this watches something
+# that moves once every seven days; the alerts it feeds use `for: 30m`/`1h` and
+# thresholds measured in days. A tighter cadence would burn queries to learn
+# nothing sooner.
+OnUnitActiveSec=1h
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

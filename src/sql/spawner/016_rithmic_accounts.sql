@@ -111,4 +111,21 @@ CREATE TRIGGER trg_rithmic_accounts_updated_at
     BEFORE UPDATE ON rithmic_accounts
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- GRANTS. Two roles, different jobs.
+--
+-- `fks_webui` is the SCOPED role the settings UI connects as (created by
+-- 010_webui_auth.sql). It manages these rows, so it needs the full CRUD set —
+-- unlike 011's ack table, which is SELECT+INSERT only because acks are an
+-- irrevocable audit trail. Account metadata is ordinary editable config.
+--
+-- Granting ONLY to fks_user, as the first version of this file did, would have
+-- left the settings page with a permission error the moment it queried: the
+-- webui does not connect as fks_user and never has.
+--
+-- NOTE this table holds NO secrets — those live in `exchange_secrets` under
+-- `rithmic:<id>`, whose grants are unchanged and remain spawner-only. So full
+-- CRUD here does not widen the webui's access to any credential.
+GRANT SELECT, INSERT, UPDATE, DELETE ON rithmic_accounts TO fks_webui;
+
+-- The spawner/connector side reads which logins to open.
 GRANT SELECT, INSERT, UPDATE, DELETE ON rithmic_accounts TO fks_user;

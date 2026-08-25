@@ -164,3 +164,4 @@ COPY src/sql/spawner/013_notification_log.sql             /docker-entrypoint-ini
 # ---------------------------------------------------------------------------
 COPY src/sql/spawner/014_funding_state.sql                /docker-entrypoint-initdb.d/37-funding-state.sql
 COPY src/sql/spawner/015_net_worth_stale_provenance.sql   /docker-entrypoint-initdb.d/38-net-worth-stale-provenance.sql
+COPY src/sql/spawner/016_rithmic_accounts.sql             /docker-entrypoint-initdb.d/39-rithmic-accounts.sql

@@ -1760,6 +1760,18 @@ services:
             - ORB_OPEN_RANGE_MINS=${ORB_OPEN_RANGE_MINS:-15}
             - ORB_STOP_MODE=${ORB_STOP_MODE:-opposite}
             - ORB_TARGET_R=${ORB_TARGET_R:-2.0}
+            # TP1, the nearer scale-out target. ORB_TARGET_R above is TP2 and
+            # keeps its 2.0 default deliberately — the edge-factory verdicts
+            # were measured at 2.0R, so adding a nearer target must not move the
+            # number the backtests validated.
+            - ORB_TARGET_R_1=${ORB_TARGET_R_1:-1.0}
+            # Which symbols get a TP1 at all. Empty = all (the prior behaviour).
+            # Scaling out is NOT universally good: run 18 (2026-08-24) re-ran the
+            # edge at 1.0R against run 17's 2.0R over the same 48 days —
+            #   GC  +7.00R -> +6.54R  (-0.46R), win rate 26.7% -> 52.2%
+            #   ES  +4.15R -> +0.13R  (-4.02R)  ES's ENTIRE edge is the runner
+            # so a scale-out instruction on ES gives away roughly half of it.
+            - ORB_TP1_SYMBOLS=${ORB_TP1_SYMBOLS:-}
             # Real-time Rithmic bars from candles_futures. EMPTY = Yahoo only
             # (the prior behaviour). When set, the briefing prefers real-time
             # and falls back to Yahoo per-request when history is too thin or

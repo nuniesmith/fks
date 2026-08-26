@@ -33,10 +33,38 @@ groups:
 
           # Signal generation rate dropped significantly
           # Repointed: signal_flow_signals_received -> janus_signals_generated_total.
+          # RECALIBRATED 2026-08-25 — this was true 21.4% OF THE WEEK, which is
+          # not a detector, it is a background condition.
+          #
+          # Two separate defects, the same pair already fixed in
+          # IngestionRateDropped (fks #250):
+          #
+          #  1. It compared against a POINT SAMPLE one hour ago
+          #     (`rate(...[1h] offset 1h)`). Janus emits signals in bursts, so
+          #     whether that single historical instant landed on a cluster or a
+          #     gap decided the verdict — an entirely healthy present looked
+          #     like a 90% collapse whenever the reference happened to be busy.
+          #  2. A 5m window on a bursty signal is mostly measuring which side of
+          #     a gap the window fell on.
+          #
+          # Now a 30m rate against its own trailing 6h MEAN. Measured over 7d:
+          #
+          #     current (5m vs point 1h ago)      true 21.4%
+          #     30m vs 0.1 x 6h mean               true  0.5%   <- chosen
+          #     30m vs 0.2 x 6h mean               true  3.2%
+          #     30m vs 0.3 x 6h mean               true  9.1%
+          #
+          # NO FLOOR CLAUSE HERE, deliberately, unlike IngestionThroughputLow.
+          # A pure relative test goes SILENT once an outage outlives its
+          # baseline window — after 6h dead the 6h mean is ~0, so 10% of it is
+          # ~0 and nothing fires. That hole is covered by SignalGenerationHalted
+          # (signals == 0 while trades flow), which is the floor of the ladder.
+          # This rule is the SHALLOW rung: a partial collapse that never reaches
+          # zero. Removing either leaves half the range unwatched.
           - alert: SignalRateDropped
             expr: |
-                sum(rate(janus_signals_generated_total[5m]))
-                < 0.1 * sum(rate(janus_signals_generated_total[1h] offset 1h))
+                sum(rate(janus_signals_generated_total[30m]))
+                < 0.1 * avg_over_time(sum(rate(janus_signals_generated_total[30m]))[6h:5m])
             for: 10m
             labels:
                 severity: warning

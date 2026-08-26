@@ -151,17 +151,32 @@ groups:
           # signal_type ∈ buy|sell|hold|close, symbol, module. Gated on
           # trades_ingested_total so standby mode (no data flowing) doesn't
           # false-fire.
+          # WINDOW WIDENED 10m -> 30m (2026-08-25). Janus does not emit signals
+          # continuously; it emits them in BURSTS — ~42 in an hour, arriving in
+          # clusters — so a quiet ten minutes is normal behaviour, not a stall.
+          # Measured over 7 days with the `bool` modifier on the CONDITION (the
+          # ALERTS series is useless for this: it only exists while active, so
+          # it is always 1):
+          #
+          #     rate[10m] == 0 while trades flow   true 3.5% of the week
+          #     rate[30m] == 0 while trades flow   true 0.0%
+          #     rate[1h]  == 0 while trades flow   true 0.0%
+          #
+          # 3.5% is roughly six hours a week of a CRITICAL page on a healthy
+          # system, which is how a critical alert gets ignored. 30m costs about
+          # twenty minutes of extra detection latency on a genuine halt and buys
+          # a rule that means something when it fires.
           - alert: SignalGenerationHalted
             expr: |
-                sum(rate(janus_signals_generated_total[10m])) == 0
-                and sum(rate(trades_ingested_total[10m])) > 0
+                sum(rate(janus_signals_generated_total[30m])) == 0
+                and sum(rate(trades_ingested_total[30m])) > 0
             for: 10m
             labels:
                 severity: critical
                 component: signal-actor
             annotations:
                 summary: "Signal generation has stopped"
-                description: "No signals generated in the last 10 minutes despite active market-data ingestion. The forward signal loop may have crashed or stalled."
+                description: "No signals generated in the last 30 minutes despite active market-data ingestion. The forward signal loop may have crashed or stalled. This is the FLOOR of a two-step ladder — SignalRateDropped catches a partial collapse above it."
                 runbook_url: "https://docs.fks.io/runbooks/signal-generation-halted"
 
           # ========================================================================

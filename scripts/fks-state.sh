@@ -181,8 +181,24 @@ cmd_status() {
   # invisible backup gap (the table drift check never looked at volumes).
   if command -v docker >/dev/null 2>&1; then
     local listed unlisted
-    listed="$(manifest_vols | sort -u)"
-    unlisted="$(docker volume ls -q 2>/dev/null | grep -E '^fks' | sort -u | comm -23 - <(printf '%s\n' "$listed") 2>/dev/null || true)"
+    # LC_ALL=C ON BOTH SORTS AND ON comm — not optional.
+    #
+    # `comm` compares BYTE-wise; `sort` under a UTF-8 locale does not (it folds
+    # punctuation). Feed it locale-sorted input and it bails mid-stream with
+    # "file 1 is not in sorted order" and emits GARBAGE — listing volumes that
+    # ARE in the manifest as missing.
+    #
+    # This was latent from the start and invisible, because every manifest
+    # volume was `fks_underscored` where the two orderings happen to agree.
+    # Adding `fks-bot-state-crypto-spot` (hyphen, 0x2D vs 0x5F) diverged them
+    # and the warning immediately began naming a volume it had just ticked as
+    # covered, two lines above.
+    #
+    # comm's stderr is deliberately NOT suppressed any more: it was the only
+    # thing that said what was wrong, and `2>/dev/null` threw it away.
+    listed="$(manifest_vols | LC_ALL=C sort -u)"
+    unlisted="$(docker volume ls -q 2>/dev/null | grep -E '^fks' | LC_ALL=C sort -u \
+      | LC_ALL=C comm -23 - <(printf '%s\n' "$listed") || true)"
     if [[ -n "${unlisted// /}" ]]; then
       warn "volumes NOT in the manifest (not backed up): $(echo "$unlisted" | tr '\n' ' ')"
     fi

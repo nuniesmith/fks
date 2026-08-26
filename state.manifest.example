@@ -8,6 +8,10 @@
 #     the snapshot is anchored at the PARENT directory of this checkout, so
 #     `..` paths round-trip through export/import.
 #   • db:<database>[:table1,table2,...]           dumped via the postgres container
+#   • vol:<docker-volume-name>                     archived from a named volume
+#     Use this for on-disk state that lives ONLY in a volume — a bot journal, a
+#     checkpoint dir. `status` warns about any fks* volume no vol: line covers,
+#     so run it after adding a service.
 # Blank lines and #-comments are ignored. Missing file matches are skipped with
 # a warning, so it's safe to list paths you don't always have.
 #
@@ -64,6 +68,38 @@ db:fks_db:webui_users,webui_sessions,webui_auth_audit
 db:fks_db:webui_invites,webui_alert_acks
 db:fks_db:notification_log
 # Add more account / position / pnl tables as your schema grows, e.g.:
-# db:fks_db:bot_configs,bot_runs
+# db:fks_db:bot_configs,bot_runs,notification_channels
 # db:fks_db:accounts,transfers,net_worth_snapshots     (treasury layer)
 # db:fks_db:edges,backtest_runs                        (edge factory)
+# db:fks_db:ui_layouts                                 (saved workspace layouts)
+# db:fks_db:rithmic_accounts                           (016 — which Rithmic
+#   logins exist, what each is for, and which single account is hand-traded.
+#   No secrets: those are in exchange_secrets under `rithmic:<id>`.)
+# db:janus_db:signals                                  (the signal history the
+#   Qdrant vectors can be rebuilt from — which is WHY that 480 MB volume is
+#   deliberately not archived below.)
+
+# ── Docker volumes — state that exists ONLY on disk ──────────────────────────
+# `status` lists every fks* volume no line here covers. Most SHOULD stay
+# uncovered; the point is that the choice is deliberate rather than forgotten.
+#
+# vol:fks-bot-state-crypto-spot
+#   The live-money spot bot's `spot-trades.jsonl`. 8 KB, and the ONLY record of
+#   those fills: unlike the funding bot (FR_STATE_BACKEND=postgres ->
+#   funding_paper_records) the spot bot has no database backend, so /profit is
+#   computed from a file that exists nowhere else.
+# vol:fks_janus_checkpoints
+#   Trained model checkpoints; expensive to regenerate.
+# vol:fks_redis_data
+#   Shared state + the kill sentinel's cache layer.
+#
+# DELIBERATELY NOT ARCHIVED, and why — the snapshot travels by git, and that
+# push has already failed once at ~180 MB:
+#   fks_qdrant_data   (~480 MB) rebuildable from db:janus_db:signals
+#   fks_questdb_data  (~430 MB) dominated by candles_crypto, all re-fetchable
+#                     from the exchanges. NOTE candles_futures is the exception:
+#                     a few thousand rows, and Rithmic does NOT backfill, so
+#                     that history is gone if the volume is. It wants its own
+#                     small export rather than archiving the whole volume.
+#   prometheus/grafana/loki/alertmanager  observability, re-derivable
+#   fks_postgres_data lives in the db: dumps above, not as a raw volume

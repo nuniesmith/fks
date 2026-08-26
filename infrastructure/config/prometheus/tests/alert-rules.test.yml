@@ -923,6 +923,53 @@ tests:
         alertname: RithmicSessionLost
         exp_alerts: []
 
+  # A RELEASE IS NOT A FAULT, BUT IT IS STILL EXPENSIVE. These two rules split
+  # that: SessionLost ignores `killed` so it never pages on the daily handover;
+  # ReleasedTooLong watches ONLY `killed`, on a much longer fuse, because a
+  # release forgotten past the next open costs that morning's opening range —
+  # which is exactly what happened on 2026-08-25.
+  - interval: 5m
+    name: RithmicReleasedTooLong ignores a normal morning handover
+    input_series:
+      - series: 'fks_rithmic_killed'
+        values: "1x24"          # 2 hours — a session's worth
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: RithmicReleasedTooLong
+        exp_alerts: []
+
+  - interval: 5m
+    name: RithmicReleasedTooLong fires on a release left set past the window
+    input_series:
+      - series: 'fks_rithmic_killed'
+        values: "1x72"          # 6 hours
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: RithmicReleasedTooLong
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: decision-input
+            exp_annotations:
+              summary: "Rithmic session has been released for over 4 hours — no bars are being captured"
+              description: "The kill switch is still set. This is not a fault — someone released the credential deliberately — but nothing has streamed into candles_futures since, and the ORB day-plan builds its opening range from those bars. If this is still set at 09:30 ET the 09:47 plan will have no range and will say so, which is honest but leaves the morning without levels.\n"
+              runbook: "Close any other Rithmic login FIRST (R|Trader Pro holds the same single session), then resume: POST /api/rithmic/resume from the /futures Session control, or curl -X POST -H \"X-Internal-Token: $NGINX_INTERNAL_TOKEN\" http://127.0.0.1:9094/resume Resuming while another login holds the credential just restarts the contention the release existed to avoid.\n"
+
+  # And the two rules must not both fire on the same state, or the operator is
+  # paged twice for one situation and learns to ignore both.
+  - interval: 5m
+    name: a long release fires ReleasedTooLong but NOT SessionLost
+    input_series:
+      - series: 'fks_rithmic_killed'
+        values: "1x72"
+      - series: 'fks_rithmic_connected'
+        values: "0x72"
+    alert_rule_test:
+      - eval_time: 5h
+        alertname: RithmicSessionLost
+        exp_alerts: []
+
   - interval: 1m
     name: RithmicSessionLost stays silent while the session is up
     input_series:

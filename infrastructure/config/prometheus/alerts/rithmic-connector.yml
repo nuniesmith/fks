@@ -74,6 +74,49 @@ groups:
                     POST /resume — restarting into a contested credential just restarts
                     the fight.
 
+          - alert: RithmicReleasedTooLong
+            # THE GAP RithmicSessionLost DELIBERATELY LEAVES, and what it cost.
+            #
+            # That rule excludes `killed == 1` so it cannot page on the daily
+            # handover to R|Trader Pro — correct, and without it the rule would
+            # be muted within a week. But it means a release is invisible for as
+            # long as it lasts, and a release does not stop being expensive just
+            # because it was intentional.
+            #
+            # Observed 2026-08-25: the session was released at 05:58 ET, roughly
+            # four hours BEFORE the opening range forms. Nothing streamed into
+            # `candles_futures` for the 09:30-09:45 window, so the 09:47 day-plan
+            # had no range to build from and reported none. It stayed released
+            # for 16 hours afterwards with NOTHING firing, which would have made
+            # the NEXT morning blank in exactly the same way.
+            #
+            # 4h: comfortably longer than a morning session's handover, short
+            # enough that a release forgotten after the open is flagged the same
+            # day — while there is still time to resume before the next 09:30.
+            expr: fks_rithmic_killed == 1
+            for: 4h
+            labels:
+                severity: warning
+                team: trading
+                component: decision-input
+            annotations:
+                summary: "Rithmic session has been released for over 4 hours — no bars are being captured"
+                description: >
+                    The kill switch is still set. This is not a fault — someone released
+                    the credential deliberately — but nothing has streamed into
+                    candles_futures since, and the ORB day-plan builds its opening range
+                    from those bars. If this is still set at 09:30 ET the 09:47 plan will
+                    have no range and will say so, which is honest but leaves the morning
+                    without levels.
+                runbook: >
+                    Close any other Rithmic login FIRST (R|Trader Pro holds the same
+                    single session), then resume: POST /api/rithmic/resume from the
+                    /futures Session control, or
+                    curl -X POST -H "X-Internal-Token: $NGINX_INTERNAL_TOKEN"
+                    http://127.0.0.1:9094/resume
+                    Resuming while another login holds the credential just restarts the
+                    contention the release existed to avoid.
+
           - alert: RithmicPersistErrors
             # written != persisted means candles were produced and then LOST on
             # the way to QuestDB — invisible in the bar data itself, which simply

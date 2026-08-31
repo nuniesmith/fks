@@ -1764,8 +1764,13 @@ services:
             - ORB_BRIEFING_TIME=${ORB_BRIEFING_TIME:-08:30}
             - ORB_PLAN_TIME=${ORB_PLAN_TIME:-10:00}
             - ORB_SYMBOLS=${ORB_SYMBOLS:-GC,NQ,ES}
-            - ORB_RISK_USD=${ORB_RISK_USD:-500}
-            - ORB_MAX_CONTRACTS=${ORB_MAX_CONTRACTS:-15}
+            # Defaults are the POLICY, not the firm's ceiling. A default more
+            # permissive than the rule is a trap: unset the var and the platform
+            # silently sizes bigger than intended. 15 is what TakeProfit Trader
+            # allows; 3 is what we take. $500 is also wrong as a default — at
+            # that budget every full-size contract floors to zero.
+            - ORB_RISK_USD=${ORB_RISK_USD:-1500}
+            - ORB_MAX_CONTRACTS=${ORB_MAX_CONTRACTS:-3}
             - ORB_DAILY_LOSS_HEADROOM=${ORB_DAILY_LOSS_HEADROOM:-3000}
             - ORB_TRAILING_DD_HEADROOM=${ORB_TRAILING_DD_HEADROOM:-4500}
             - ORB_OPEN_RANGE_MINS=${ORB_OPEN_RANGE_MINS:-15}

@@ -1867,6 +1867,18 @@ services:
             # missing from compose entirely until 2026-08-22, meaning read-only
             # position visibility could never have worked no matter what was put
             # in .env. Supplied by the FCM/prop firm alongside the login.
+            # SECOND LOGIN, market data only. Rithmic allows one session per
+            # credential, so a single login cannot serve both the platform and
+            # R|Trader Pro — that cost 772 minutes of blackout on 2026-08-31,
+            # including the window containing a live position. A second prop
+            # account does NOT fix it (one login, different account number), so
+            # this has to be a different FCM. Unset = both plants share the
+            # primary, which is the old single-credential behaviour.
+            - RITHMIC_DATA_USER=${RITHMIC_DATA_USER:-}
+            - RITHMIC_DATA_PASSWORD=${RITHMIC_DATA_PASSWORD:-}
+            - RITHMIC_DATA_SYSTEM_NAME=${RITHMIC_DATA_SYSTEM_NAME:-}
+            - RITHMIC_DATA_GATEWAY_URL=${RITHMIC_DATA_GATEWAY_URL:-}
+            - RITHMIC_DATA_GATEWAY_ALT_URL=${RITHMIC_DATA_GATEWAY_ALT_URL:-}
             - RITHMIC_ACCOUNT_ID=${RITHMIC_ACCOUNT_ID:-}
             - RITHMIC_FCM_ID=${RITHMIC_FCM_ID:-}
             - RITHMIC_IB_ID=${RITHMIC_IB_ID:-}

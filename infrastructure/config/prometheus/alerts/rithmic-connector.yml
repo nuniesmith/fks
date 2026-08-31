@@ -167,3 +167,80 @@ groups:
                     and is deliberately not alerted on its own: the connector is
                     profile-gated and is legitimately absent whenever RITHMIC_ENABLED is
                     off.
+
+          # ── Account-state visibility (added 2026-08-31) ──────────────────────
+          # The rules above watch the FEED. Nothing watched the ACCOUNT, and on
+          # 2026-08-31 that is exactly what failed: the ticker plant reconnected
+          # and candles flowed all day while the PnL reader stayed dead. Every
+          # dashboard was green. The operator traded a full session with no
+          # position, no day P&L and no trailing-drawdown tracking, and the
+          # evaluation was lost.
+
+          - alert: RithmicAccountStateBlind
+            # The ASYMMETRY is the alert. Neither plant alone means anything:
+            # both down is a closed market, both up is healthy. Market data up
+            # with account state down is the state where the platform looks
+            # fine and is lying by omission.
+            expr: rithmic_account_state_blind == 1
+            for: 3m
+            labels:
+                severity: critical
+                team: trading
+                component: account-state
+            annotations:
+                summary: "Market data is flowing but ACCOUNT STATE is dead"
+                description: >
+                    The ticker plant is connected and the PnL/positions plant is not.
+                    Position, day P&L and the trailing minimum balance are all
+                    untracked while the feed looks perfectly healthy. This is the
+                    2026-08-31 shape. Do not trade against a dashboard in this state.
+                runbook: >
+                    docker logs fks_rithmic_connector --since 15m | grep -i pnl — the
+                    supervisor retries with backoff, so a single reconnect is normal and
+                    a sustained blind window is not. If it persists, the credential is
+                    almost certainly in use elsewhere (R|Trader Pro), which is the same
+                    single-credential contention that T1 exists to retire.
+
+          - alert: RithmicTrailingHeadroomLow
+            # OUR floor, not the broker's. On 08-31 the broker's field reported
+            # ~$4,500 of headroom while roughly $170 remained.
+            expr: rithmic_trailing_headroom_usd < 1000
+            for: 1m
+            labels:
+                severity: critical
+                team: trading
+                component: account-state
+            annotations:
+                summary: "Trailing drawdown headroom below $1,000"
+                description: >
+                    Equity is within $1,000 of the trailing minimum balance computed
+                    from our own high-water mark. This is the rule that liquidates the
+                    account, and it bites on UNREALISED money — an open position moves
+                    it before anything is booked.
+                runbook: >
+                    Verify against R|Trader before acting. Flatten rather than argue
+                    with this number; it is derived from observed equity and is the
+                    conservative read.
+
+          - alert: RithmicFloorDisagreement
+            # Not a risk alert — an epistemic one. If the broker's floor and
+            # ours diverge, one of us is wrong about the account-ending rule,
+            # and that is worth learning on a quiet day rather than a live one.
+            expr: abs(rithmic_floor_disagreement_usd) > 100
+            for: 30m
+            labels:
+                severity: warning
+                team: trading
+                component: account-state
+            annotations:
+                summary: "Broker's minimum balance disagrees with ours"
+                description: >
+                    The broker's reported min_account_balance differs from the floor
+                    computed from our high-water equity by more than $100. Expected
+                    while T12 is unconfirmed: on 08-31 the broker's field sat at the
+                    static starting value all session. Persistent disagreement means
+                    the model of the rule needs correcting — check which one moved.
+                runbook: >
+                    Compare /positions on the connector against the trailing drawdown
+                    shown in R|Trader. Confirm TPT's actual rule in writing before
+                    trusting either number.

@@ -1749,7 +1749,10 @@ services:
         cap_drop:
             - ALL
         environment:
-            - DISCORD_WEBHOOK=${DISCORD_WEBHOOK:-}
+            # Futures signals get their own channel; fall back to the shared
+            # webhook so an unset DISCORD_WEBHOOK_FUTURES degrades to delivery
+            # somewhere rather than to silence.
+            - DISCORD_WEBHOOK=${DISCORD_WEBHOOK_FUTURES:-${DISCORD_WEBHOOK:-}}
             - ORB_BRIEFING_TIME=${ORB_BRIEFING_TIME:-08:30}
             - ORB_PLAN_TIME=${ORB_PLAN_TIME:-10:00}
             - ORB_SYMBOLS=${ORB_SYMBOLS:-GC,NQ,ES}
@@ -1867,6 +1870,17 @@ services:
             - RITHMIC_ACCOUNT_ID=${RITHMIC_ACCOUNT_ID:-}
             - RITHMIC_FCM_ID=${RITHMIC_FCM_ID:-}
             - RITHMIC_IB_ID=${RITHMIC_IB_ID:-}
+            # Trailing drawdown, computed HERE from a high-water mark rather
+            # than read from the broker. Rithmic's own min_account_balance
+            # reported the STATIC starting floor for the whole 2026-08-31
+            # session — implying ~$4,500 of headroom while roughly $170
+            # remained — and that is the day the evaluation was lost. Unset
+            # means no floor is claimed, which is safer than a wrong one.
+            - RITHMIC_TRAILING_DD=${RITHMIC_TRAILING_DD:-}
+            # Anchors the high-water mark so a restart mid-drawdown does not
+            # hand back headroom the account does not have. Set it to the
+            # account's peak equity, not to today's balance.
+            - RITHMIC_STARTING_EQUITY=${RITHMIC_STARTING_EQUITY:-}
             # The single instrument this foundation subscribes to (read-only).
             - RITHMIC_INSTRUMENT=${RITHMIC_INSTRUMENT:-MES}
             - RITHMIC_EXCHANGE=${RITHMIC_EXCHANGE:-CME}

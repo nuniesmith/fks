@@ -136,6 +136,26 @@ scrape_configs:
                 service: "fks-spawner"
                 component: "bot-lifecycle"
 
+    # Rithmic connector. Added 2026-08-31: the existing rithmic-connector alert
+    # rules inferred health from candle freshness in QuestDB, which cannot see
+    # the ACCOUNT side at all. On 08-31 market data flowed perfectly while the
+    # PnL plant stayed dead, and the operator traded a session with the trailing
+    # drawdown untracked. These metrics make that asymmetry alertable:
+    #   rithmic_account_state_blind      market data up, account state down
+    #   rithmic_trailing_headroom_usd    dollars above OUR computed floor
+    #   rithmic_floor_disagreement_usd   broker's floor minus ours
+    # The connector is absent whenever credentials are withdrawn, so every rule
+    # over these must tolerate a missing series rather than page on scrape gaps.
+    - job_name: "rithmic-connector"
+      scrape_interval: 15s
+      scrape_timeout: 5s
+      metrics_path: "/metrics"
+      static_configs:
+          - targets: ["fks_rithmic_connector:9091"]
+            labels:
+                service: "rithmic-connector"
+                component: "market-data"
+
     # NOTE: the "fks-bots-transitional" job (host systemd bots on
     # host.docker.internal:9091/9095) was removed 2026-07-13 — both bots are
     # spawner-managed containers now, discovered via the file_sd in the

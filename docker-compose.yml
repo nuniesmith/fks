@@ -1748,11 +1748,19 @@ services:
             - no-new-privileges:true
         cap_drop:
             - ALL
+        volumes:
+            - orb_parity:/state
         environment:
             # Futures signals get their own channel; fall back to the shared
             # webhook so an unset DISCORD_WEBHOOK_FUTURES degrades to delivery
             # somewhere rather than to silence.
             - DISCORD_WEBHOOK=${DISCORD_WEBHOOK_FUTURES:-${DISCORD_WEBHOOK:-}}
+            # The Pine/FKS parity record. MUST live on a volume: it accumulates
+            # one line per session and is the evidence base for deciding when
+            # FKS can take over analysis. Written to the container filesystem it
+            # would be destroyed by the next image rebuild — which on 2026-08-31
+            # happened six times in one afternoon.
+            - ORB_PARITY_LOG=${ORB_PARITY_LOG:-/state/parity.jsonl}
             - ORB_BRIEFING_TIME=${ORB_BRIEFING_TIME:-08:30}
             - ORB_PLAN_TIME=${ORB_PLAN_TIME:-10:00}
             - ORB_SYMBOLS=${ORB_SYMBOLS:-GC,NQ,ES}
@@ -1968,6 +1976,11 @@ volumes:
     # volume (not a bind) because the only requirement is surviving container
     # recreation — nothing outside the connector reads it.
     rithmic_state:
+        driver: local
+    # Durable home for the Pine/FKS parity record — the evidence base for the
+    # analysis migration. Named volume for the same reason as rithmic_state:
+    # it only needs to survive container recreation.
+    orb_parity:
         driver: local
     postgres_data:
         driver: local

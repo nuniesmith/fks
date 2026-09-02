@@ -49,7 +49,24 @@ groups:
             # 30 min grace: observed sends land within ~2 seconds of schedule
             # (08:30:02, 10:00:02, 17:30:01), so this is ~900x normal jitter and
             # cannot be tripped by ordinary lateness.
-            expr: time() - fks_digest_next_due_timestamp_seconds > 1800
+            #
+            # The `unless` is defence in depth, and it is load-bearing. The
+            # left side alone trusts next_due to keep advancing; when the
+            # probe's log parser broke (2026-09-02) it stopped advancing, and
+            # this rule fired CRITICAL for ~23.5h a day while every digest was
+            # arriving perfectly on time. An alert that is wrong all day is not
+            # a safety net, it is training to ignore the one screen that
+            # matters.
+            #
+            # "no send has been recorded since" is what the description below
+            # has always claimed; this makes the expression actually say it.
+            # `unless` (not `and`) so a service that has NEVER sent — no
+            # last_send series at all — still fires rather than being silently
+            # excused by the missing series.
+            expr: >
+                (time() - fks_digest_next_due_timestamp_seconds > 1800)
+                unless
+                (fks_digest_last_send_timestamp_seconds >= fks_digest_next_due_timestamp_seconds)
             for: 5m
             labels:
                 severity: critical

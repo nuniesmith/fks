@@ -79,10 +79,31 @@ for pair in "${PAIRS[@]}"; do
   # the most recent line of ANY kind is the only live one. Emitting a series
   # per kind leaves the just-superseded kind stuck in the past — 37h overdue
   # while nothing is wrong, which fires daily and gets muted in a week.
-  nxt="$(grep -oE "next: [a-z]+ at [A-Za-z]{3} [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} ET" <<<"$logs" | tail -1)"
+  # The kind token is `[a-z-]+` and may carry a bracketed qualifier, because
+  # orb-briefing's scheduler emits all of:
+  #     next: briefing at Wed 2026-09-02 08:30 ET
+  #     next: feed-check at Wed 2026-09-02 08:15 ET
+  #     next: plan [08:20 session] at Wed 2026-09-02 08:37 ET
+  #
+  # The original pattern was `[a-z]+` with no qualifier, so it matched ONLY
+  # "briefing" — a hyphen or a bracket made the line invisible. When per-symbol
+  # sessions added `feed-check` and turned `plan` into `plan [08:20 session]`,
+  # every forward event except the briefing stopped parsing. next_due then
+  # froze at each morning's briefing slot, and 30 minutes later
+  # DiscordDigestOverdue fired CRITICAL and stayed lit for ~23.5h a day while
+  # nothing at all was wrong — the alert-muting failure this probe's own
+  # comment above warns about, arriving through the parser instead.
+  nxt="$(grep -oE "next: [a-z][a-z-]*( \[[^]]*\])? at [A-Za-z]{3} [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} ET" <<<"$logs" | tail -1)"
   if [[ -n "$nxt" ]]; then
+    # Bare kind, qualifier dropped: "plan [08:20 session]" and
+    # "plan [09:30 session]" are the same KIND of event, and keeping the
+    # qualifier would emit two competing series and break the one-forward-event
+    # invariant this block exists to hold.
     kind="$(awk '{print $2}' <<<"$nxt")"
-    d="$(awk '{print $5}' <<<"$nxt")"; t="$(awk '{print $6}' <<<"$nxt")"
+    # Fields shift by the bracketed qualifier, so locate the date by shape
+    # rather than by position.
+    d="$(grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" <<<"$nxt")"
+    t="$(grep -oE "[0-9]{2}:[0-9]{2} ET$" <<<"$nxt" | awk '{print $1}')"
     # America/New_York resolves EST vs EDT for the date in question — never
     # hardcode an offset, these schedules straddle both halves of the year.
     if epoch="$(TZ=America/New_York date -d "$d $t" +%s 2>/dev/null)" && [[ -n "$epoch" ]]; then

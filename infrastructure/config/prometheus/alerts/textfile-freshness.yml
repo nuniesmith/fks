@@ -1,0 +1,96 @@
+# ============================================================================
+# textfile-freshness.yml — the dead-man for the dead-men
+# ============================================================================
+# WHY THIS EXISTS. Every `*ProbeNotRunning` rule in this directory is written
+# as `absent(fks_<probe>_probe_ok)`, with a comment explaining that a dead-man
+# whose own absence is silent is not a dead-man. The reasoning is right and the
+# implementation cannot work:
+#
+#   node_exporter's textfile collector RE-READS AND RE-EXPORTS the .prom file
+#   on every scrape, regardless of its mtime. A probe that stops writing leaves
+#   its last file on disk, so its metrics keep being published forever with
+#   their final values. The series never goes absent, so absent() never fires.
+#
+# Found 2026-09-02: fks-rithmic-probe.timer had not run since 2026-08-28 —
+# nearly five days — and `fks_rithmic_probe_ok` was still being served as `1`.
+# `RithmicProbeNotRunning` was green the entire time. "Nothing is watching the
+# futures feed" is exactly what that rule exists to say, and it could not say
+# it.
+#
+# absent() IS still worth keeping: it catches a genuinely different failure —
+# the file deleted, or node_exporter started without
+# --collector.textfile.directory. That is why these rules ADD to those instead
+# of replacing them. Two failure modes, two rules:
+#
+#     absent()      the file or the collector went away
+#     stale mtime   the file is there and frozen; the timer died
+#
+# Only the second one was missing, and it is the one that actually happened.
+#
+# WHY ONE GENERIC RULE RATHER THAN ONE PER PROBE. A per-probe rule has to be
+# remembered when a probe is added, and the failure of forgetting is silence —
+# the same shape as the bug above. Keying off `node_textfile_mtime_seconds`
+# means a NEW probe is covered the moment it writes its first file, with no
+# edit here. The single exception is carved out explicitly below rather than
+# left to drift.
+# ============================================================================
+
+groups:
+    - name: textfile-freshness
+      rules:
+          - alert: TextfileProbeStale
+            # 3h against the slowest fast-cadence probe (backtest and questdb
+            # run hourly; digest every 10m; rithmic every 3m) is ~3x the
+            # slowest period — far outside ordinary jitter, and it will not
+            # flap across a single missed run.
+            #
+            # state_backup is excluded because it is deliberately DAILY; it
+            # gets its own rule below rather than being quietly exempted.
+            expr: >
+                time() - node_textfile_mtime_seconds{file!~".*fks_state_backup.prom"} > 10800
+            for: 10m
+            labels:
+                severity: warning
+                team: trading
+                component: monitoring-integrity
+            annotations:
+                summary: "{{ $labels.file }} has not been rewritten for {{ $value | humanizeDuration }} — its probe is dead"
+                description: >
+                    The systemd timer that writes {{ $labels.file }} has stopped, but
+                    node_exporter keeps re-serving the stale file, so every metric it
+                    publishes is still being scraped at its LAST KNOWN VALUE. Any alert
+                    reading those metrics is now reporting history as if it were current,
+                    and any `absent()`-based dead-man for this probe CANNOT fire.
+                    Treat every metric from this file as unknown, not as healthy.
+                runbook: >
+                    1. systemctl --user list-timers --all | grep fks- — a timer with no
+                    NEXT is stopped. 2. systemctl --user status <unit> for the failure,
+                    then systemctl --user start <unit>. 3. If the timer is stopped ON
+                    PURPOSE (e.g. the rithmic probe while the connector is
+                    profile-gated off), DELETE the stale .prom file too — leaving it
+                    means its metrics keep being served as live truth.
+
+          - alert: StateBackupTextfileStale
+            # The one deliberately-daily probe (OnCalendar 08:00). 26h allows a
+            # late run plus a DST shift without flapping, and still catches a
+            # single fully missed day.
+            expr: >
+                time() - node_textfile_mtime_seconds{file=~".*fks_state_backup.prom"} > 93600
+            for: 10m
+            labels:
+                severity: warning
+                team: trading
+                component: monitoring-integrity
+            annotations:
+                summary: "state-backup probe has not written for {{ $value | humanizeDuration }} — a daily backup run was missed"
+                description: >
+                    fks_state_backup.prom is older than a day, so the daily 08:00 backup
+                    timer did not run or did not complete. Its metrics are still being
+                    served at their last values, which means the backup freshness alerts
+                    reading them are reporting the PREVIOUS successful run and cannot
+                    distinguish that from a current one.
+                runbook: >
+                    systemctl --user status fks-state-backup.service — check the last
+                    run's exit status, then systemctl --user start
+                    fks-state-backup.service. Encrypted snapshots not taken are not
+                    recoverable after the fact.

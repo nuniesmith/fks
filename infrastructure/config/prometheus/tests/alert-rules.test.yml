@@ -16,6 +16,7 @@
 # just as much a fabricated authoritative claim as the alerts it guards.
 # =============================================================================
 rule_files:
+  - ../alerts/textfile-freshness.yml
   - ../alerts/bot-alerts.yml
   - ../alerts/crash-supervision.yml
   - ../alerts/armed-path.yml
@@ -1151,3 +1152,58 @@ tests:
               summary: "Edge-factory probe is not reporting at all"
               description: "fks_backtest_probe_ok has been absent for two hours. The systemd timer that emits it is not running, or the node_exporter textfile collector is not reading its directory. Nothing is watching whether the verdicts are being re-derived.\n"
               runbook: "systemctl --user status fks-backtest-probe.timer && systemctl --user start fks-backtest-probe.service. NOTE probe_ok=0 (the database is unreachable) is a DIFFERENT state and is deliberately not alerted on its own — Postgres has its own alerts, and duplicating them here would page twice for one outage.\n"
+
+  # ===========================================================================
+  # TextfileProbeStale — the dead-man for the dead-men.
+  #
+  # Every *ProbeNotRunning rule uses absent(), which CANNOT fire for a
+  # textfile-collector metric: node_exporter re-serves the stale .prom file
+  # forever, so the series never disappears. Verified live 2026-09-02 —
+  # fks-rithmic-probe.timer had been dead ~5 days while fks_rithmic_probe_ok
+  # was still served as 1 and RithmicProbeNotRunning was green.
+  # ===========================================================================
+  - interval: 5m
+    name: TextfileProbeStale fires when a probe stops rewriting its file
+    input_series:
+      - series: 'node_textfile_mtime_seconds{file="/var/lib/node_exporter/textfile/fks_rithmic_connector.prom"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 3h15m
+        alertname: TextfileProbeStale
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              component: monitoring-integrity
+              file: /var/lib/node_exporter/textfile/fks_rithmic_connector.prom
+            exp_annotations:
+              summary: "/var/lib/node_exporter/textfile/fks_rithmic_connector.prom has not been rewritten for 3h 15m 0s — its probe is dead"
+              description: "The systemd timer that writes /var/lib/node_exporter/textfile/fks_rithmic_connector.prom has stopped, but node_exporter keeps re-serving the stale file, so every metric it publishes is still being scraped at its LAST KNOWN VALUE. Any alert reading those metrics is now reporting history as if it were current, and any `absent()`-based dead-man for this probe CANNOT fire. Treat every metric from this file as unknown, not as healthy.\n"
+              runbook: "1. systemctl --user list-timers --all | grep fks- — a timer with no NEXT is stopped. 2. systemctl --user status <unit> for the failure, then systemctl --user start <unit>. 3. If the timer is stopped ON PURPOSE (e.g. the rithmic probe while the connector is profile-gated off), DELETE the stale .prom file too — leaving it means its metrics keep being served as live truth.\n"
+
+  - interval: 5m
+    name: TextfileProbeStale stays silent while the probe is writing
+    input_series:
+      # Rewritten every scrape, as a live 10-minute probe would be.
+      - series: 'node_textfile_mtime_seconds{file="/var/lib/node_exporter/textfile/fks_discord_digests.prom"}'
+        values: "0+300x60"
+    alert_rule_test:
+      - eval_time: 3h15m
+        alertname: TextfileProbeStale
+        exp_alerts: []
+
+  # The daily backup probe must NOT be caught by the 3h rule — it is
+  # legitimately ~24h between writes. Carved out explicitly, not left to drift.
+  - interval: 5m
+    name: TextfileProbeStale exempts the deliberately-daily state-backup probe
+    input_series:
+      - series: 'node_textfile_mtime_seconds{file="/var/lib/node_exporter/textfile/fks_state_backup.prom"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 3h15m
+        alertname: TextfileProbeStale
+        exp_alerts: []
+      # ...and its own rule is still quiet at 5h, which is a NORMAL age for it.
+      - eval_time: 5h
+        alertname: StateBackupTextfileStale
+        exp_alerts: []

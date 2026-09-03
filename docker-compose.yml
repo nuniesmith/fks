@@ -461,7 +461,7 @@ services:
             # volatility-normalized holding return. Defaults turn it ON in code;
             # listed here so operators can tune per venue (janus #145).
             - JANUS_EXPERIENCE_REWARD_HORIZON=${JANUS_EXPERIENCE_REWARD_HORIZON:-5}
-            - JANUS_EXPERIENCE_REWARD_FEE_BPS=${JANUS_EXPERIENCE_REWARD_FEE_BPS:-0}
+            - JANUS_EXPERIENCE_REWARD_FEE_BPS=${JANUS_EXPERIENCE_REWARD_FEE_BPS:-8}
             - JANUS_EXPERIENCE_REWARD_VOL_NORM=${JANUS_EXPERIENCE_REWARD_VOL_NORM:-true}
             - JANUS_EXPERIENCE_REWARD_VOL_FLOOR=${JANUS_EXPERIENCE_REWARD_VOL_FLOOR:-0.0001}
             # 9-gate ExecutionGate controls. Without these passthroughs the vars
@@ -1761,8 +1761,22 @@ services:
             # would be destroyed by the next image rebuild — which on 2026-08-31
             # happened six times in one afternoon.
             - ORB_PARITY_LOG=${ORB_PARITY_LOG:-/state/parity.jsonl}
+            # The connector's /positions, read for LIVE trailing headroom. The
+            # briefing publishes NO size when this is unreachable, so pointing
+            # it at the wrong host degrades to geometry-only rather than to a
+            # wrong number — but it still means no sizes.
+            - RITHMIC_POSITIONS_URL=${RITHMIC_POSITIONS_URL:-http://fks_rithmic_connector:9091/positions}
             - ORB_BRIEFING_TIME=${ORB_BRIEFING_TIME:-08:30}
-            - ORB_PLAN_TIME=${ORB_PLAN_TIME:-10:00}
+            # The fire time for the 09:30 RTH session. Every OTHER session's
+            # plan is derived from the LAG this implies — 09:47 is 09:30 + 17
+            # minutes, so GC's 08:20 COMEX open fires at 08:37. Changing this
+            # moves every session, not just one.
+            #
+            # Was 10:00 (a 30-minute lag) until 2026-09-02 while the deployment
+            # ran 09:47, so a rebuild from a clean checkout would have fired
+            # both plans 13 minutes late. On 2026-08-31 gold broke its real low
+            # at 08:35 — a late plan is not a cosmetic difference.
+            - ORB_PLAN_TIME=${ORB_PLAN_TIME:-09:47}
             - ORB_SYMBOLS=${ORB_SYMBOLS:-GC,NQ,ES}
             # Defaults are the POLICY, not the firm's ceiling. A default more
             # permissive than the rule is a trap: unset the var and the platform
@@ -1787,7 +1801,10 @@ services:
             #   GC  +7.00R -> +6.54R  (-0.46R), win rate 26.7% -> 52.2%
             #   ES  +4.15R -> +0.13R  (-4.02R)  ES's ENTIRE edge is the runner
             # so a scale-out instruction on ES gives away roughly half of it.
-            - ORB_TP1_SYMBOLS=${ORB_TP1_SYMBOLS:-}
+            # Matches the deployment. An empty default silently drops the
+            # nearer scale-out target on a clean checkout, so the plan renders
+            # one target where the operator expects two.
+            - ORB_TP1_SYMBOLS=${ORB_TP1_SYMBOLS:-GC}
             # Real-time Rithmic bars from candles_futures. EMPTY = Yahoo only
             # (the prior behaviour). When set, the briefing prefers real-time
             # and falls back to Yahoo per-request when history is too thin or
@@ -1796,7 +1813,7 @@ services:
             # which matters because the Rithmic account is entitled to COMEX
             # (GC) but not CME (ES/NQ): one message legitimately mixes
             # real-time gold with delayed indices.
-            - ORB_QUESTDB_URL=${ORB_QUESTDB_URL:-}
+            - ORB_QUESTDB_URL=${ORB_QUESTDB_URL:-http://fks_questdb:9000}
             # How much intraday history the real-time source must cover before
             # it is preferred (default 15.5 = the overnight session). Lowering
             # it gets real-time bars sooner at the cost of a truncated, possibly
@@ -1907,8 +1924,8 @@ services:
             # account's peak equity, not to today's balance.
             - RITHMIC_STARTING_EQUITY=${RITHMIC_STARTING_EQUITY:-}
             # The single instrument this foundation subscribes to (read-only).
-            - RITHMIC_INSTRUMENT=${RITHMIC_INSTRUMENT:-MES}
-            - RITHMIC_EXCHANGE=${RITHMIC_EXCHANGE:-CME}
+            - RITHMIC_INSTRUMENT=${RITHMIC_INSTRUMENT:-GC:COMEX,NQ:CME,ES:CME}
+            - RITHMIC_EXCHANGE=${RITHMIC_EXCHANGE:-COMEX}
             # Persistence — completed 1m candles are written to candles_futures
             # over QuestDB ILP (TCP :9009), mirroring the janus candle sink for
             # candles_crypto. Defaults to the in-network questdb service.

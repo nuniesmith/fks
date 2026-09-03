@@ -34,7 +34,7 @@ groups:
           slo: completeness
         annotations:
           summary: "Data completeness below SLO threshold"
-          description: "Data completeness is {{ $value | humanizePercentage }} (threshold: 99.9%). This indicates potential data loss or gaps in market data coverage."
+          description: "Data completeness is {{ $value | printf \"%.1f\" }}% (threshold: 99.9%). This indicates potential data loss or gaps in market data coverage."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-slo-error-budget"
 
@@ -105,6 +105,16 @@ groups:
       # wired in the unified janus binary (the only sibling metric,
       # janus_supervisor_circuit_breaker_trips_total, is unrelated).
 
+      # MISNAMED, and it matters. `questdb_disk_usage_percent` measures the HOST
+      # filesystem QuestDB writes to, not QuestDB's own data — verified
+      # 2026-09-02: the metric read 83.42% while the host / was 83% and the
+      # questdb volume held 297MB, about 0.07% of the disk. An operator sent to
+      # investigate QuestDB finds nothing wrong and loses the incident.
+      #
+      # The actual cause is almost always Docker build cache; `HostDiskSpaceCritical`
+      # below already documents that from the 2026-03-26 outage, but it does not
+      # fire until 95% used. This is the one that fires first, so it carries the
+      # remedy.
       - alert: DiskUsageHigh
         expr: questdb_disk_usage_percent > 80
         for: 5m
@@ -112,8 +122,8 @@ groups:
           severity: critical
           component: questdb
         annotations:
-          summary: "QuestDB disk usage critically high"
-          description: "QuestDB disk usage is {{ $value | humanizePercentage }} (threshold: 80%). Database writes may fail soon."
+          summary: "Host disk {{ $value | printf \"%.1f\" }}% full (the filesystem QuestDB writes to)"
+          description: "The HOST filesystem is {{ $value | printf \"%.1f\" }}% full (threshold: 80%). This is not QuestDB's own data — its volume is typically a few hundred MB. Writes across every service fail when this reaches 100%. Usual cause: Docker build cache. Check `docker system df`, then `docker builder prune -f` (reclaimed 27GB on 2026-09-02) and `docker image prune -a`."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/disk-usage-high.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
 
@@ -166,7 +176,7 @@ groups:
           slo: completeness
         annotations:
           summary: "Data completeness approaching SLO threshold"
-          description: "Data completeness is {{ $value | humanizePercentage }} (warning: <99.95%). Investigate potential gaps."
+          description: "Data completeness is {{ $value | printf \"%.1f\" }}% (warning: <99.95%). Investigate potential gaps."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/data-completeness-low.md"
 
       # Removed HighRateLimitRejectionRate (2026-07-01): no rate_limiter_*
@@ -185,7 +195,7 @@ groups:
           component: gap-detection
         annotations:
           summary: "Gap detection accuracy below expected threshold"
-          description: "Gap detection accuracy is {{ $value | humanizePercentage }} (expected: >99%). High false positive rate detected."
+          description: "Gap detection accuracy is {{ $value | printf \"%.1f\" }}% (expected: >99%). High false positive rate detected."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/gap-detection-accuracy-low.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-gap-detection"
 
@@ -221,7 +231,7 @@ groups:
           component: questdb
         annotations:
           summary: "QuestDB disk usage elevated"
-          description: "QuestDB disk usage is {{ $value | humanizePercentage }} (warning: >70%). Plan for cleanup or expansion."
+          description: "The HOST filesystem is {{ $value | printf \"%.1f\" }}% full (warning: >70%). Not QuestDB's own data. Usual cause is Docker build cache — `docker system df` then `docker builder prune -f`."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/disk-usage-high.md"
 
       - alert: HighBackfillQueueSize
@@ -315,7 +325,7 @@ groups:
           component: backfill
         annotations:
           summary: "High backfill failure rate"
-          description: "{{ $value | humanizePercentage }} of backfills are failing (threshold: 20%). Check logs for errors."
+          description: "{{ $value | printf \"%.1f\" }}% of backfills are failing (threshold: 20%). Check logs for errors."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/backfill-failures.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-backfill-orchestration"
 
@@ -462,7 +472,7 @@ groups:
           component: questdb
         annotations:
           summary: "QuestDB write error rate critically high"
-          description: "{{ $value | humanizePercentage }} of QuestDB writes are failing (threshold: 1%). Data loss possible."
+          description: "{{ $value | printf \"%.1f\" }}% of QuestDB writes are failing (threshold: 1%). Data loss possible."
           runbook_url: "https://github.com/nuniesmith/fks/blob/main/docs/runbooks/questdb-write-errors.md"
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-performance-ingestion"
 

@@ -537,6 +537,52 @@ tests:
               description: "advisor said its next daily was due 40m 0s ago and no send has been recorded since. For orb-briefing this is the input the operator trades one manual futures position against each morning, so a missing message means trading blind or not at all. The due time comes from the service's own calendar, so this is NOT a weekend or market holiday.\n"
               runbook: "1. docker logs <container> --tail 50 — look for a panic, a wedged scheduler, or Discord send failures (HTTP 4xx/5xx). 2. Check the Discord webhook is alive; a revoked or rotated webhook fails silently from the service's point of view. 3. For orb-briefing the upstream data source is Yahoo Finance, which rate-limits and blocks non-browser user agents — a fetch failure renders INTO the message rather than blocking it, so a total absence points at the scheduler or Discord, not at data. 4. If the service is simply down, restart it; schedules are recomputed on boot and a missed slot is not retried.\n"
 
+  # REGRESSION (2026-09-02). next_due is only advanced when the probe can PARSE
+  # the service's "next:" log line. Its pattern was `[a-z]+`, so when per-symbol
+  # sessions introduced `feed-check` (hyphen) and `plan [08:20 session]`
+  # (bracket), only "briefing" still matched. next_due then froze at each
+  # morning's briefing slot while every digest kept arriving on time, and this
+  # rule sat CRITICAL for ~23.5h a day.
+  #
+  # The parser is fixed, but the rule must not depend on the parser being right:
+  # a send recorded AT OR AFTER the due time means the digest arrived, full stop.
+  - interval: 5m
+    name: DiscordDigestOverdue stays silent when the send landed after a stale due time
+    input_series:
+      # Observed live: due 12:30:00Z, sent 12:30:03Z, next_due never advanced.
+      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
+        values: "0x24"
+      - series: 'fks_digest_last_send_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
+        values: "3x24"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: DiscordDigestOverdue
+        exp_alerts: []
+
+  # ...and the guard must not over-suppress: a send that predates the due slot
+  # (yesterday's digest) is NOT evidence that today's arrived.
+  - interval: 5m
+    name: DiscordDigestOverdue still fires when the only send predates the due time
+    input_series:
+      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
+        values: "0x24"
+      - series: 'fks_digest_last_send_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
+        values: "-60x24"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: DiscordDigestOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              team: trading
+              component: decision-input
+              digest_service: orb-briefing
+              kind: briefing
+            exp_annotations:
+              summary: "orb-briefing briefing is 40m 0s overdue — a scheduled digest did not arrive"
+              description: "orb-briefing said its next briefing was due 40m 0s ago and no send has been recorded since. For orb-briefing this is the input the operator trades one manual futures position against each morning, so a missing message means trading blind or not at all. The due time comes from the service's own calendar, so this is NOT a weekend or market holiday.\n"
+              runbook: "1. docker logs <container> --tail 50 — look for a panic, a wedged scheduler, or Discord send failures (HTTP 4xx/5xx). 2. Check the Discord webhook is alive; a revoked or rotated webhook fails silently from the service's point of view. 3. For orb-briefing the upstream data source is Yahoo Finance, which rate-limits and blocks non-browser user agents — a fetch failure renders INTO the message rather than blocking it, so a total absence points at the scheduler or Discord, not at data. 4. If the service is simply down, restart it; schedules are recomputed on boot and a missed slot is not retried.\n"
+
   - interval: 5m
     name: DiscordDigestOverdue stays silent inside the grace window
     input_series:

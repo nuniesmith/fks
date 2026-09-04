@@ -3,26 +3,36 @@
 # rithmic-post-reset-verify.sh — prove a freshly-reset prop account is being
 # read correctly, BEFORE trading it.
 #
-# WHY THIS EXISTS. On 2026-08-31 the platform showed roughly $4,500 of
-# headroom while about $170 actually remained, and the evaluation was lost. The
-# cause was the broker's `min_account_balance`: it reports the STATIC starting
-# floor and never trails, so as equity rose the displayed floor stayed at
-# 145,500 while the real trailing floor had climbed to ~150,175. We now compute
-# the floor ourselves from a monotonic high-water mark.
+# WHY THIS EXISTS. The connector computes the trailing floor itself rather than
+# reading the broker's `min_account_balance`, because it needs a floor between
+# account messages. Computing it means it can be computed WRONG, and wrong in a
+# way that looks perfectly healthy on screen. This asserts the arithmetic
+# instead of trusting the display.
 #
-# That fix introduces its own failure mode, and this script exists for it:
+# The rule being checked (TPT Test/evaluation, Rule 3): the minimum balance
+# trails the highest END-OF-DAY balance and stops trailing at the account's
+# ORIGINAL STARTING BALANCE. So on a freshly reset account, before any full
+# trading day has closed, the floor must be exactly
+# `starting_equity - trailing_dd` and headroom must be the full budget.
 #
-#   `high_water` is held IN MEMORY and only ever ratchets UP (`.max(equity)`).
-#   A process that survives an account reset carries the OLD account's peak.
-#   Restart-to-reseed is therefore load-bearing, and it is invisible — a
-#   connector that kept running looks completely healthy while computing a
-#   floor of 150,175 against a fresh 150,000 account. That is a -175 headroom
-#   on an untouched account, or, if the numbers happen to land the other way,
-#   a floor that is too LOW and permits a real breach.
+# THE FAILURE THIS CATCHES. The end-of-day mark is persisted to
+# `/state/rithmic.eod`, which lives in the named `rithmic_state` volume — so it
+# survives restarts AND `docker compose up --force-recreate`. After an account
+# reset that file still holds the PREVIOUS account's mark, and the connector
+# restores it on boot. A connector that looks entirely healthy will then compute
+# a floor from a mark the new account never earned.
 #
-# So this asserts the arithmetic rather than trusting the screen:
+#   ⚠ RESTARTING DOES NOT CLEAR IT — restarting RESTORES it. An earlier
+#     revision of this script said the opposite, from when the mark was
+#     in-memory only. To reseed you must remove the state file:
 #
-#   high_water           == starting equity      (nothing carried over)
+#       docker compose --profile rithmic stop rithmic-connector
+#       docker run --rm -v fks_rithmic_state:/state alpine rm -f /state/rithmic.eod
+#       docker compose --profile rithmic up -d rithmic-connector
+#
+# Asserted here:
+#
+#   high_water_eod       == starting equity      (nothing carried over)
 #   computed_min_balance == equity - trailing_dd (the floor is where it should be)
 #   headroom             == trailing_dd          (a full budget, untouched)
 #   account              == the CONFIGURED id    (not the previous account's)
@@ -118,18 +128,18 @@ else
     read -r seeded hw cmb head dd disagree < <(python3 -c "
 import json,sys
 r=json.loads(sys.argv[1])
-print(r['seeded'], r['high_water'], r['computed_min_balance'], r['headroom'], r['trailing_dd'], r['floor_disagreement'])
+print(r['seeded'], r['high_water_eod'], r['computed_min_balance'], r['headroom'], r['trailing_dd'], r['floor_disagreement'])
 " "$risk")
 
     [[ "$seeded" == "True" ]] && ok "risk state seeded" || bad "risk state NOT seeded — the floor is not yet authoritative and must not be traded against"
 
     # THE CHECK THIS SCRIPT EXISTS FOR. On a freshly reset account the
-    # high-water mark must equal the starting equity. Anything higher is the
-    # previous account's peak surviving in memory.
+    # end-of-day mark must equal the starting equity. Anything higher is the
+    # previous account's mark surviving in the persisted state file.
     if [[ -n "$WANT_EQ" ]] && python3 -c "import sys;sys.exit(0 if abs($hw-$WANT_EQ)<0.01 else 1)"; then
-        ok "high_water = $hw (equals starting equity — nothing carried over)"
+        ok "high_water_eod = $hw (equals starting equity — nothing carried over)"
     else
-        bad "high_water = $hw but starting equity is $WANT_EQ — THE PREVIOUS ACCOUNT'S PEAK SURVIVED THE RESET. Restart the connector: docker compose --profile rithmic restart rithmic-connector"
+        bad "high_water_eod = $hw but starting equity is $WANT_EQ — THE PREVIOUS ACCOUNT'S MARK SURVIVED THE RESET. A restart will NOT clear it (it is restored from /state/rithmic.eod); remove the state file: docker compose --profile rithmic stop rithmic-connector && docker run --rm -v fks_rithmic_state:/state alpine rm -f /state/rithmic.eod && docker compose --profile rithmic up -d rithmic-connector"
     fi
 
     if [[ -n "$WANT_EQ" && -n "$WANT_DD" ]] && python3 -c "import sys;sys.exit(0 if abs($cmb-($WANT_EQ-$WANT_DD))<0.01 else 1)"; then

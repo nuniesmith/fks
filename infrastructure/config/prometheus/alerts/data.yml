@@ -116,7 +116,23 @@ groups:
       # fire until 95% used. This is the one that fires first, so it carries the
       # remedy.
       - alert: DiskUsageHigh
-        expr: questdb_disk_usage_percent > 80
+        # SOURCE CHANGED 2026-09-03: was `questdb_disk_usage_percent`, a gauge
+        # janus recomputes roughly TWICE A DAY. Measured: 2 changes in 24h. With
+        # `for: 5m` on a twice-daily metric, this alert reports a disk state up
+        # to twelve hours old — and after an operator actually frees space it
+        # keeps firing on the cached number until janus happens to resample.
+        #
+        # Observed exactly that: 27GB of Docker build cache reclaimed took the
+        # host from 83% to 78%, and this stayed CRITICAL at a frozen 83.42%.
+        # An alert that cannot see a fix is one you learn to ignore.
+        #
+        # node-exporter publishes the same filesystem every 15s and agrees with
+        # `df` to two decimal places (78.10% vs 78%). It is also the source
+        # HostDiskSpaceCritical below already uses, so the two now agree by
+        # construction instead of by coincidence.
+        expr: |
+          100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+                     / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) > 80
         for: 5m
         labels:
           severity: critical
@@ -224,7 +240,12 @@ groups:
           dashboard_url: "https://grafana.fkstrading.xyz/d/fks-operations-overview"
 
       - alert: DiskUsageWarning
-        expr: questdb_disk_usage_percent > 70 and questdb_disk_usage_percent <= 80
+        expr: |
+          100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+                     / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) > 70
+          and
+          100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+                     / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) <= 80
         for: 10m
         labels:
           severity: warning

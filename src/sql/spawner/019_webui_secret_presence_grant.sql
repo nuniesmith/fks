@@ -27,6 +27,18 @@
 --
 -- Idempotent: re-running a GRANT that is already held is a no-op.
 
+-- Runs against fks_db. Every spawner migration from 001-015 carries this
+-- preamble; 016 shipped without it, so on a CLEAN bootstrap the objects below
+-- were created in POSTGRES_DB (janus_db) instead — where set_updated_at() does
+-- not exist, so initdb failed. The live database is correct only because these
+-- were applied by hand with `psql -d fks_db`. Found 2026-09-04 by actually
+-- building the image and booting an empty database, which is the only way this
+-- class of defect is visible.
+
+\getenv fks_db   RUBY_DB
+
+\connect :fks_db
+
 GRANT SELECT (exchange) ON exchange_secrets TO fks_webui;
 
 -- The spawner's role keeps full access — it is the component that encrypts,

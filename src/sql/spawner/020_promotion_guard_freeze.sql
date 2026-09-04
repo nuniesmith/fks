@@ -39,30 +39,35 @@
 -- No behaviour changes for a legitimate promotion: declare the requirement at
 -- backtest->forward, accumulate sessions, promote. Only the shortcuts close.
 --
--- ── AND A FOURTH THING, FOUND WHILE TESTING THE ABOVE ───────────────────────
+-- ── RETRACTION, same day ────────────────────────────────────────────────────
 --
--- The checked-in 018 file and the FUNCTION ACTUALLY DEPLOYED had diverged. The
--- file's prop-account guard reads
+-- An earlier version of this header claimed a FOURTH defect: that 018's file
+-- queried `rithmic_accounts.id` for `account_class` and had drifted from the
+-- deployed function. THAT WAS FALSE, and the external reviewer was right to
+-- refuse it.
 --
---     SELECT account_class INTO v_class FROM rithmic_accounts WHERE id = ...
+-- 018 queries `accounts WHERE account_id = NEW.account_id`, it always has, and
+-- `FROM rithmic_accounts` has never appeared in that file at any commit. The
+-- claim came from a grep that matched nothing, read as though it had matched
+-- something — absence of evidence taken for evidence. The function body below
+-- was never affected; only the story around it was.
 --
--- but `rithmic_accounts` has no `account_class` column — it lives on
--- `accounts`, which is also what the foreign key points at
--- (edge_deployments.account_id -> accounts.account_id). 018's own comment says
--- "accounts.account_class is what decides whether live may…", so the intent was
--- right and the query was written against the wrong table.
---
--- The LIVE database has the correct version; only the repo file is wrong. That
--- direction matters: nothing in production is broken, but a database
--- bootstrapped from the repo would get a prop guard that raises "column
--- account_class does not exist" instead of enforcing the doctrine rule.
---
--- It also nearly caused a regression: this migration was first drafted by
--- copying the file, which would have REPLACED the correct deployed function
--- with the broken one. The body below is derived from `pg_proc.prosrc` — what
--- is actually running — not from the file.
+-- Left in place rather than deleted: a retracted claim that disappears is one
+-- that gets rediscovered.
 --
 -- Idempotent: CREATE OR REPLACE, and the trigger binding is unchanged from 018.
+
+-- Runs against fks_db. Every spawner migration from 001-015 carries this
+-- preamble; 016 shipped without it, so on a CLEAN bootstrap the objects below
+-- were created in POSTGRES_DB (janus_db) instead — where set_updated_at() does
+-- not exist, so initdb failed. The live database is correct only because these
+-- were applied by hand with `psql -d fks_db`. Found 2026-09-04 by actually
+-- building the image and booting an empty database, which is the only way this
+-- class of defect is visible.
+
+\getenv fks_db   RUBY_DB
+
+\connect :fks_db
 
 CREATE OR REPLACE FUNCTION edge_deployments_promotion_guard()
 RETURNS TRIGGER AS $$
@@ -71,10 +76,7 @@ DECLARE
     v_verdict TEXT;
 BEGIN
     -- `accounts.account_class`, matching the FK
-    -- (edge_deployments.account_id -> accounts.account_id). NOTE: the checked-in
-    -- 018 file says `rithmic_accounts.id`, which has no `account_class` column
-    -- at all — see the drift note in the header. The DEPLOYED function is the
-    -- correct one and this preserves it.
+    -- (edge_deployments.account_id -> accounts.account_id) and unchanged from 018.
     IF NEW.execution = 'auto' THEN
         SELECT account_class INTO v_class
           FROM accounts WHERE account_id = NEW.account_id;

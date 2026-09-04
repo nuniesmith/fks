@@ -165,3 +165,30 @@ COPY src/sql/spawner/013_notification_log.sql             /docker-entrypoint-ini
 COPY src/sql/spawner/014_funding_state.sql                /docker-entrypoint-initdb.d/37-funding-state.sql
 COPY src/sql/spawner/015_net_worth_stale_provenance.sql   /docker-entrypoint-initdb.d/38-net-worth-stale-provenance.sql
 COPY src/sql/spawner/016_rithmic_accounts.sql             /docker-entrypoint-initdb.d/39-rithmic-accounts.sql
+
+# ---------------------------------------------------------------------------
+# Phase 16 — Edge factory evidence + the promotion ladder.
+#
+# WHY THESE ARE HERE. External review (Sol, 2026-09-04, R5) found the list
+# above ended at 016, so a database built from this image had NO
+# edge_experiments, NO edge_deployments, and none of the guards on them —
+# while the repo carried all four migrations and the LIVE database had them
+# applied by hand. Adding a migration to `src/sql/` is therefore not the same
+# act as making a clean rebuild reproduce it, and that gap is invisible until
+# someone actually rebuilds.
+#
+# Order is dependency order, not filename order by accident:
+#   017 creates edge_experiments (018's FK target)
+#   018 creates edge_deployments + the promotion guard
+#   019 grants the webui SELECT on exchange_secrets(exchange) ONLY
+#   020 REPLACES 018's guard function — it must run after 018 or the
+#       corrected body is overwritten by the defective one.
+#
+# The `*.validate.sql` files are deliberately NOT copied: they are adversarial
+# test fixtures that INSERT rows and ROLLBACK, not production schema. Copying
+# `*.sql` wholesale would run them at initdb.
+# ---------------------------------------------------------------------------
+COPY src/sql/spawner/017_edge_experiments.sql             /docker-entrypoint-initdb.d/40-edge-experiments.sql
+COPY src/sql/spawner/018_edge_deployments.sql             /docker-entrypoint-initdb.d/41-edge-deployments.sql
+COPY src/sql/spawner/019_webui_secret_presence_grant.sql  /docker-entrypoint-initdb.d/42-webui-secret-presence-grant.sql
+COPY src/sql/spawner/020_promotion_guard_freeze.sql       /docker-entrypoint-initdb.d/43-promotion-guard-freeze.sql

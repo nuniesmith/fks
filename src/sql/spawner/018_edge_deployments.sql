@@ -1,19 +1,22 @@
 -- ⚠ SUPERSEDED IN PART BY 020_promotion_guard_freeze.sql (2026-09-04).
--- Two things about `edge_deployments_promotion_guard()` below are WRONG here:
+-- `edge_deployments_promotion_guard()` below has two defects, both in the
+-- promotion path:
 --
---   1. The prop-account guard queries `rithmic_accounts.id` for `account_class`.
---      That column does not exist on that table — it lives on `accounts`, which
---      is also what the FK points at. The DEPLOYED function has always queried
---      `accounts` correctly; this FILE drifted from it. A database bootstrapped
---      from this file alone would get a guard that errors instead of enforcing
---      the doctrine rule.
---   2. The `forward_sessions_required` freeze is scoped to same-stage edits, so
+--   1. The `forward_sessions_required` freeze is scoped to same-stage edits, so
 --      a single UPDATE that changes the stage AND lowers the bar walks past it
---      (demonstrated: promoted to live on 5 of a declared 20 sessions), and a
---      NULL requirement bypasses the gate entirely.
+--      (demonstrated: promoted to live on 5 of a declared 20 sessions).
+--   2. A NULL requirement bypasses the gate entirely, because
+--      `observed < NULL` is NULL rather than TRUE.
 --
--- 020 replaces the function with a corrected body derived from what is actually
--- running. Apply 018 then 020; do not use this file's function on its own.
+-- 020 replaces the function with a corrected body. Apply 018 then 020.
+--
+-- RETRACTED 2026-09-04, same day: an earlier version of this note also claimed
+-- the prop-account guard here queries `rithmic_accounts.id` and had drifted
+-- from the deployed function. THAT WAS FALSE. This file queries
+-- `accounts WHERE account_id = NEW.account_id`, it always has, and
+-- `FROM rithmic_accounts` has never appeared in its history. The claim came
+-- from reading a grep that matched nothing and treating that as evidence of a
+-- mismatch. Recorded rather than deleted so the wrong story cannot come back.
 
 -- ============================================================================
 -- 018_edge_deployments.sql — binding an edge to an asset, on an account
@@ -59,6 +62,18 @@
 -- Idempotent — safe to re-run (CREATE TABLE IF NOT EXISTS, CREATE OR REPLACE
 -- FUNCTION, DROP TRIGGER IF EXISTS, CREATE INDEX IF NOT EXISTS).
 -- ============================================================================
+
+-- Runs against fks_db. Every spawner migration from 001-015 carries this
+-- preamble; 016 shipped without it, so on a CLEAN bootstrap the objects below
+-- were created in POSTGRES_DB (janus_db) instead — where set_updated_at() does
+-- not exist, so initdb failed. The live database is correct only because these
+-- were applied by hand with `psql -d fks_db`. Found 2026-09-04 by actually
+-- building the image and booting an empty database, which is the only way this
+-- class of defect is visible.
+
+\getenv fks_db   RUBY_DB
+
+\connect :fks_db
 
 CREATE TABLE IF NOT EXISTS edge_deployments (
     id                        BIGSERIAL PRIMARY KEY,

@@ -1912,16 +1912,38 @@ services:
             - RITHMIC_ACCOUNT_ID=${RITHMIC_ACCOUNT_ID:-}
             - RITHMIC_FCM_ID=${RITHMIC_FCM_ID:-}
             - RITHMIC_IB_ID=${RITHMIC_IB_ID:-}
-            # Trailing drawdown, computed HERE from a high-water mark rather
-            # than read from the broker. Rithmic's own min_account_balance
-            # reported the STATIC starting floor for the whole 2026-08-31
-            # session — implying ~$4,500 of headroom while roughly $170
-            # remained — and that is the day the evaluation was lost. Unset
-            # means no floor is claimed, which is safer than a wrong one.
+            # Trailing drawdown, computed HERE rather than read from the
+            # broker, because the connector needs the floor between account
+            # messages. Unset means no floor is claimed, which is safer than
+            # claiming a wrong one.
+            #
+            # The rule being modelled (TPT Test/evaluation, Rule 3): the
+            # minimum balance trails the highest END-OF-DAY balance and STOPS
+            # trailing once it reaches the original starting balance. It does
+            # not trail intraday highs. PRO accounts trail intraday and are NOT
+            # modelled here — see RITHMIC_STARTING_EQUITY below.
             - RITHMIC_TRAILING_DD=${RITHMIC_TRAILING_DD:-}
-            # Anchors the high-water mark so a restart mid-drawdown does not
-            # hand back headroom the account does not have. Set it to the
-            # account's peak equity, not to today's balance.
+            # The account's ORIGINAL STARTING BALANCE — the figure the account
+            # was opened at. NOT its peak equity, and not today's balance.
+            #
+            # This value is used TWICE: it seeds the end-of-day high-water mark
+            # on a cold start, and it is the CAP the trailing floor can never
+            # exceed (`min(high_water_eod - trailing_dd, starting_balance)`).
+            #
+            # Setting it to peak equity breaks the cap. On the 2026-08-31
+            # figures a $154,675 peak would yield
+            #   min(154675 - 4500, 154675) = 150,175
+            # a floor ABOVE the $150,000 the account started at, which the rule
+            # makes impossible. That errs conservative — it understates
+            # headroom and refuses trades early rather than permitting
+            # over-risk — but it is still wrong, and it will block trading on a
+            # healthy account.
+            #
+            # (An earlier revision of this comment instructed exactly that, and
+            # asserted that the broker's static min_account_balance on
+            # 2026-08-31 was a defect. Both were wrong: the broker's flat
+            # 145,500 was CORRECT for a Test account, and the 150,175 figure
+            # was an artefact of this very instruction. Retracted 2026-09-04.)
             - RITHMIC_STARTING_EQUITY=${RITHMIC_STARTING_EQUITY:-}
             # The single instrument this foundation subscribes to (read-only).
             - RITHMIC_INSTRUMENT=${RITHMIC_INSTRUMENT:-GC:COMEX,NQ:CME,ES:CME}

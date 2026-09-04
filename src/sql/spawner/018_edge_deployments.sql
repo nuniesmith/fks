@@ -1,3 +1,20 @@
+-- ⚠ SUPERSEDED IN PART BY 020_promotion_guard_freeze.sql (2026-09-04).
+-- Two things about `edge_deployments_promotion_guard()` below are WRONG here:
+--
+--   1. The prop-account guard queries `rithmic_accounts.id` for `account_class`.
+--      That column does not exist on that table — it lives on `accounts`, which
+--      is also what the FK points at. The DEPLOYED function has always queried
+--      `accounts` correctly; this FILE drifted from it. A database bootstrapped
+--      from this file alone would get a guard that errors instead of enforcing
+--      the doctrine rule.
+--   2. The `forward_sessions_required` freeze is scoped to same-stage edits, so
+--      a single UPDATE that changes the stage AND lowers the bar walks past it
+--      (demonstrated: promoted to live on 5 of a declared 20 sessions), and a
+--      NULL requirement bypasses the gate entirely.
+--
+-- 020 replaces the function with a corrected body derived from what is actually
+-- running. Apply 018 then 020; do not use this file's function on its own.
+
 -- ============================================================================
 -- 018_edge_deployments.sql — binding an edge to an asset, on an account
 -- ============================================================================

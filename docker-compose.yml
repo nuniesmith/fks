@@ -1886,7 +1886,10 @@ services:
             # here = connector idles.
             - RITHMIC_USER=${RITHMIC_USER:-}
             - RITHMIC_PASSWORD=${RITHMIC_PASSWORD:-}
-            - RITHMIC_APP_NAME=${RITHMIC_APP_NAME:-fks-rithmic-connector}
+            # The josm: prefix is Rithmic's identifier for this app, assigned
+            # 2026-09-07. Compose's default would otherwise override the
+            # crate's, so it has to be repeated here.
+            - RITHMIC_APP_NAME=${RITHMIC_APP_NAME:-josm:fks-rithmic-connector}
             - RITHMIC_APP_VERSION=${RITHMIC_APP_VERSION:-0.1.0}
             # The ACCOUNT TRIPLE. config.rs reads all three and `positions_ready()`
             # requires every one of them to be non-empty; without them the PnL

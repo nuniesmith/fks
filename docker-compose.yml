@@ -1858,11 +1858,16 @@ services:
     rithmic-connector:
         profiles: ["rithmic"]
         build:
-            # rithmic-connector moved to the PRIVATE fks-state repo (funded-side
-            # code: PnL plant, future ORB supervision / copy-trade). Building
-            # needs the sibling checkout at ../fks-state.
-            context: ../fks-state
-            dockerfile: crates/rithmic-connector/Dockerfile
+            # rithmic-connector lives in its own PUBLIC repo:
+            #   https://github.com/nuniesmith/rithmic-connector
+            #
+            # Extracted from the private fks-state so a broker or prop firm can
+            # read the code that touches their account and confirm it cannot
+            # place orders — tests/readonly_doctrine.rs there fails the build if
+            # any order-entry call appears in the source.
+            # Building needs the sibling checkout at ../rithmic-connector.
+            context: ../rithmic-connector
+            dockerfile: Dockerfile
             args:
                 RUST_VERSION: "1.94.1"
                 SERVICE_PORT: "9091"

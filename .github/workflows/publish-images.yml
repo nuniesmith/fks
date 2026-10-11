@@ -72,10 +72,10 @@ jobs:
             dockerfile: infrastructure/docker/services/spawner/Dockerfile
             args: |
               SERVICE_PORT=8090
+              REPO_URL=https://github.com/nuniesmith/fks-spawner
               REPO_REF=main
           - service: botsync
-            context: ./botsync
-            dockerfile: Dockerfile
+            dockerfile: ./botsync/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -98,6 +98,16 @@ jobs:
           tags: |
             type=raw,value=latest
             type=sha,prefix=sha-,format=short
+
+      - name: Render alertmanager.yml from template
+        if: matrix.service == 'alertmanager'
+        run: |
+          # The Dockerfile COPYs infrastructure/config/alertmanager/alertmanager.yml,
+          # which is generated from the .tmpl at deploy time. The template carries
+          # no secrets (webhook URLs live on the alertmanager-discord sidecar's env),
+          # so rendering it here is safe.
+          cp infrastructure/config/alertmanager/alertmanager.yml.tmpl \
+             infrastructure/config/alertmanager/alertmanager.yml
 
       - name: Build and push fks-${{ matrix.service }}
         uses: docker/build-push-action@v6

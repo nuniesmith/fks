@@ -5,6 +5,6 @@ FROM python:3.13-alpine
 RUN pip install --no-cache-dir pyyaml requests
 
 WORKDIR /app
-COPY sync.py /app/sync.py
+COPY botsync/sync.py /app/sync.py
 
 ENTRYPOINT ["python", "/app/sync.py"]

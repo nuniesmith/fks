@@ -1,0 +1,111 @@
+name: Build and push images
+
+# Prebuilds every FKS service image and pushes it to GHCR, so the oryx host
+# only ever *pulls* — no more compiling 20 images over SSH (the crypto-bot
+# pattern). The fks-deploy workflow pulls these tags on every deploy.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: postgres
+            dockerfile: infrastructure/docker/services/postgres/Dockerfile
+          - service: redis
+            dockerfile: infrastructure/docker/services/redis/Dockerfile
+            target: production
+          - service: questdb
+            dockerfile: infrastructure/docker/services/questdb/Dockerfile
+          - service: qdrant
+            dockerfile: infrastructure/docker/services/qdrant/Dockerfile
+          - service: janus
+            dockerfile: infrastructure/docker/base/rust/Dockerfile
+            target: workspace
+            args: |
+              SERVICE_NAME=janus
+              RUST_VERSION=1.94.1
+              REPO_URL=https://github.com/nuniesmith/janus
+              REPO_REF=main
+          - service: webui
+            dockerfile: infrastructure/docker/base/nodejs/Dockerfile
+            args: |
+              APP_SRC=src/web
+              REPO_URL=https://github.com/nuniesmith/fks-web
+              REPO_REF=main
+          - service: docs
+            dockerfile: infrastructure/docker/services/docs/Dockerfile
+          - service: nginx
+            dockerfile: infrastructure/docker/services/nginx/Dockerfile
+            target: production
+          - service: prometheus
+            dockerfile: infrastructure/docker/services/prometheus/Dockerfile
+          - service: grafana
+            dockerfile: infrastructure/docker/services/grafana/Dockerfile
+          - service: loki
+            dockerfile: infrastructure/docker/services/loki/Dockerfile
+          - service: promtail
+            dockerfile: infrastructure/docker/services/promtail/Dockerfile
+          - service: alertmanager
+            dockerfile: infrastructure/docker/services/alertmanager/Dockerfile
+          - service: alertmanager-discord
+            dockerfile: infrastructure/docker/services/alertmanager-discord/Dockerfile
+          - service: jaeger
+            dockerfile: infrastructure/docker/services/jaeger/Dockerfile
+          - service: postgres-exporter
+            dockerfile: infrastructure/docker/services/postgres-exporter/Dockerfile
+          - service: redis-exporter
+            dockerfile: infrastructure/docker/services/redis-exporter/Dockerfile
+          - service: questdb-exporter
+            dockerfile: infrastructure/docker/services/questdb-exporter/Dockerfile
+          - service: fks_bot_spawner
+            dockerfile: infrastructure/docker/services/spawner/Dockerfile
+            args: |
+              SERVICE_PORT=8090
+              REPO_REF=main
+          - service: botsync
+            context: ./botsync
+            dockerfile: Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/nuniesmith/fks-${{ matrix.service }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push fks-${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context || '.' }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target || '' }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.args || '' }}

@@ -31,7 +31,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/postgres/Dockerfile
-    image: nuniesmith/fks:postgres
+    image: ghcr.io/nuniesmith/fks-postgres:latest
     container_name: fks_postgres
     user: postgres
     security_opt:
@@ -91,7 +91,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/services/redis/Dockerfile
       target: production
-    image: nuniesmith/fks:redis
+    image: ghcr.io/nuniesmith/fks-redis:latest
     container_name: fks_redis
     user: 999:1000
     cap_drop:
@@ -158,7 +158,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/questdb/Dockerfile
-    image: nuniesmith/fks:questdb
+    image: ghcr.io/nuniesmith/fks-questdb:latest
     container_name: fks_questdb
     security_opt:
     - no-new-privileges:true
@@ -210,7 +210,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/qdrant/Dockerfile
-    image: nuniesmith/fks:qdrant
+    image: ghcr.io/nuniesmith/fks-qdrant:latest
     container_name: fks_qdrant
     security_opt:
     - no-new-privileges:true
@@ -257,7 +257,7 @@ services:
         REPO_URL: ${JANUS_REPO:-https://github.com/nuniesmith/janus}
         REPO_REF: ${JANUS_REF:-main}
         REPO_COMMIT: ${JANUS_COMMIT:-}
-    image: nuniesmith/fks:janus
+    image: ghcr.io/nuniesmith/fks-janus:latest
     container_name: fks_janus
     user: 1000:1000
     security_opt:
@@ -389,7 +389,7 @@ services:
         max-file: '5'
         labels: service=janus,environment=dev
   webui:
-    image: nuniesmith/fks:webui
+    image: ghcr.io/nuniesmith/fks-webui:latest
     build:
       context: .
       dockerfile: infrastructure/docker/base/nodejs/Dockerfile
@@ -441,7 +441,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/docs/Dockerfile
-    image: nuniesmith/fks:docs
+    image: ghcr.io/nuniesmith/fks-docs:latest
     container_name: fks_docs
     restart: unless-stopped
     security_opt:
@@ -460,7 +460,7 @@ services:
       context: .
       dockerfile: infrastructure/docker/services/nginx/Dockerfile
       target: production
-    image: nuniesmith/fks:nginx
+    image: ghcr.io/nuniesmith/fks-nginx:latest
     container_name: fks_nginx
     security_opt:
     - no-new-privileges:true
@@ -509,7 +509,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/prometheus/Dockerfile
-    image: nuniesmith/fks:prometheus
+    image: ghcr.io/nuniesmith/fks-prometheus:latest
     container_name: fks_prometheus
     user: nobody
     security_opt:
@@ -561,7 +561,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/grafana/Dockerfile
-    image: nuniesmith/fks:grafana
+    image: ghcr.io/nuniesmith/fks-grafana:latest
     container_name: fks_grafana
     user: '472'
     security_opt:
@@ -616,7 +616,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/loki/Dockerfile
-    image: nuniesmith/fks:loki
+    image: ghcr.io/nuniesmith/fks-loki:latest
     container_name: fks_loki
     security_opt:
     - no-new-privileges:true
@@ -650,7 +650,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/promtail/Dockerfile
-    image: nuniesmith/fks:promtail
+    image: ghcr.io/nuniesmith/fks-promtail:latest
     container_name: fks_promtail
     user: root
     security_opt:
@@ -687,7 +687,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/alertmanager/Dockerfile
-    image: nuniesmith/fks:alertmanager
+    image: ghcr.io/nuniesmith/fks-alertmanager:latest
     container_name: fks_alertmanager
     user: nobody
     security_opt:
@@ -731,7 +731,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/alertmanager-discord/Dockerfile
-    image: nuniesmith/fks:alertmanager-discord
+    image: ghcr.io/nuniesmith/fks-alertmanager-discord:latest
     container_name: fks_alertmanager_discord
     security_opt:
     - no-new-privileges:true
@@ -776,7 +776,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/jaeger/Dockerfile
-    image: nuniesmith/fks:jaeger
+    image: ghcr.io/nuniesmith/fks-jaeger:latest
     container_name: fks_jaeger
     security_opt:
     - no-new-privileges:true
@@ -821,7 +821,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/postgres-exporter/Dockerfile
-    image: nuniesmith/fks:postgres-exporter
+    image: ghcr.io/nuniesmith/fks-postgres-exporter:latest
     container_name: fks_postgres_exporter
     user: 65534:65534
     security_opt:
@@ -931,7 +931,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/redis-exporter/Dockerfile
-    image: nuniesmith/fks:redis-exporter
+    image: ghcr.io/nuniesmith/fks-redis-exporter:latest
     container_name: fks_redis_exporter
     user: 65534:65534
     security_opt:
@@ -971,7 +971,7 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/services/questdb-exporter/Dockerfile
-    image: nuniesmith/fks:questdb-exporter
+    image: ghcr.io/nuniesmith/fks-questdb-exporter:latest
     container_name: fks_questdb_exporter
     security_opt:
     - no-new-privileges:true
@@ -1023,7 +1023,7 @@ services:
         REPO_URL: ${SPAWNER_REPO:-}
         REPO_REF: ${SPAWNER_REF:-main}
         REPO_COMMIT: ${SPAWNER_COMMIT:-}
-    image: nuniesmith/fks:spawner
+    image: ghcr.io/nuniesmith/fks-fks_bot_spawner:latest
     container_name: fks_bot_spawner
     depends_on:
       postgres:
@@ -1101,7 +1101,7 @@ services:
     build:
       context: ./botsync
       dockerfile: Dockerfile
-    image: nuniesmith/fks:botsync
+    image: ghcr.io/nuniesmith/fks-botsync:latest
     container_name: fks_botsync
     depends_on:
       fks_bot_spawner:

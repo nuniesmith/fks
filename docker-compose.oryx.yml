@@ -1099,8 +1099,8 @@ services:
         labels: service=fks_bot_spawner,environment=dev
   botsync:
     build:
-      context: ./botsync
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./botsync/Dockerfile
     image: ghcr.io/nuniesmith/fks-botsync:latest
     container_name: fks_botsync
     depends_on:

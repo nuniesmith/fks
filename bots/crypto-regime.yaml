@@ -1,0 +1,29 @@
+# bots/crypto-regime.yaml
+# Kraken spot regime bot (200-day MA rule) — folded in from the standalone
+# crypto-bot-live container. Runs LIVE, mirroring the current Kraken setup.
+#
+# Synced into the spawner by botsync (POST /configs, upsert by `name`).
+# To add a bot: drop another YAML file here and `up -d` (or POST /configs).
+name: crypto-regime
+description: "Kraken spot regime bot (200-day MA rule) — folded in from standalone, LIVE"
+image: ghcr.io/nuniesmith/crypto:latest
+mode: live
+bot_id: crypto-regime
+cpu_limit: 1.0
+memory_mb: 512
+env:
+  # Bot state (state.json) + journal land in the spawner's per-bot volume.
+  CRYPTO_BOT_ROOT: /var/lib/fks-bot
+  # Templated by botsync from the deploy environment — never committed.
+  CRYPTO_DISCORD_WEBHOOK_URL: ""
+  TZ: America/Toronto
+# Injected at spawn from the spawner's encrypted secret store.
+# Spawn FAILS if `kraken` has no stored credentials (never a keyless live bot).
+secrets:
+  - kraken
+restart_policy:
+  enabled: true
+  max_restarts: 3
+  window_secs: 3600
+# botsync respawns it if not running after a sync.
+autostart: true

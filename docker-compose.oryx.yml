@@ -13,6 +13,9 @@
 #   docs, deadman                             — docs site + watchdog
 #   botsync                                   — one-shot: syncs bots/*.yaml into
 #                                             the spawner on every `up`
+#   janus-bridge                              — daily logged Janus<->crypto
+#                                             regime assessment (advisory,
+#                                             log-only; never touches the bot)
 #
 # Excluded: profile-gated services (crypto-demo, advisor, orb-briefing,
 # rithmic-connector — need the private fks-state sibling or are demo-only).
@@ -1115,7 +1118,45 @@ services:
     networks:
     - fks-network
     restart: 'no'
+  janus-bridge:
+    image: ghcr.io/nuniesmith/fks-janus-bridge:latest
+    build:
+      context: .
+      dockerfile: infrastructure/docker/services/janus-bridge/Dockerfile
+    container_name: fks_janus_bridge
+    environment:
+    - TZ=UTC
+    - JANUS_BRIDGE_GRPC=${JANUS_BRIDGE_GRPC:-fks_janus:50052}
+    - SAMPLE_INTERVAL_SECS=${JANUS_BRIDGE_SAMPLE_SECS:-300}
+    - CALL_THRESHOLD=${JANUS_BRIDGE_CALL_THRESHOLD:-0.60}
+    volumes:
+    - janus-bridge-data:/data
+    - fks-bot-state-crypto-regime:/bot-state:ro
+    networks:
+    - fks-network
+    depends_on:
+      janus:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+        reservations:
+          cpus: '0.05'
+          memory: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '5'
+        labels: service=janus-bridge,environment=dev
 volumes:
+  janus-bridge-data:
+    driver: local
+  fks-bot-state-crypto-regime:
+    external: true
   postgres_data:
     driver: local
   redis_data:

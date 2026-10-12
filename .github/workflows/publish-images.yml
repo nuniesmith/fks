@@ -76,6 +76,8 @@ jobs:
               REPO_REF=main
           - service: botsync
             dockerfile: ./botsync/Dockerfile
+          - service: janus-bridge
+            dockerfile: infrastructure/docker/services/janus-bridge/Dockerfile
     steps:
       - name: Checkout
         uses: actions/checkout@v4

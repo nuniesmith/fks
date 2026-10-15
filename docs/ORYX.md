@@ -64,6 +64,21 @@ spawner injects them from its encrypted store at spawn time.
 
 ## Crypto bot cutover (phase 2)
 
+> **PAUSED 2026-10-15 — `crypto-regime` is disabled (`autostart: false`).**
+> Step 2 below never happened: the spawner-managed bot and the standalone
+> `crypto-bot-live` both traded the same Kraken account from 10-11 to 10-15,
+> and both invested the 2026-10-14 USDC deposit (an extra ~$18 of BTC). The
+> standalone (oryx repo, `crypto.7gram.xyz`, Discord reports) is the live
+> trader. To disable the managed bot for good: Stop it in the FKS web UI
+> (Bots page), which closes its run so `boot_reconcile` won't bring it back
+> after a reboot; `autostart: false` keeps botsync from respawning it.
+>
+> Before resuming, the managed bot needs a Discord webhook: its
+> `CRYPTO_DISCORD_WEBHOOK_URL` is `""` and botsync passes no webhook into
+> its templating, so it reports to nobody. Then run the steps below IN
+> ORDER, and point janus-bridge's `CRYPTO_BOT_STATE_DIR` at the managed bot's
+> state.
+
 The spawner-managed `crypto-regime` bot runs **live**. Cutover rule: **never
 two live bots on one Kraken account.**
 

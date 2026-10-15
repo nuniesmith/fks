@@ -3,7 +3,8 @@
 
 Read-only/advisory by design:
   - polls Janus's RegimeBridgeService (GetCurrentRegime) every 5 minutes,
-  - reads the crypto-regime bot's daily regime flags from its state.json
+  - reads the live crypto bot's daily regime flags from its state.json
+    (JANUS_BRIDGE_BOT_STATE; see docker-compose.oryx.yml for the mount)
     (mounted read-only),
   - at the close of each 00:05 -> 00:05 UTC window appends one JSONL
     assessment line per pair plus a window summary.

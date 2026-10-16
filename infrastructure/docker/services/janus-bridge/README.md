@@ -10,8 +10,12 @@ anywhere.
    (`fks_janus:50052`) and appends a raw sample to
    `samples-<YYYY-MM-DD>.jsonl` in the `janus-bridge-data` volume. Each
    sample also records the bot's own `regime_bull` flags from
-   `state.json` (read-only mount of the spawner per-bot volume
-   `fks-bot-state-crypto-regime`).
+   `state.json` -- a read-only mount of the LIVE bot's data directory
+   (`CRYPTO_BOT_STATE_DIR`, default the standalone's
+   `/home/actions/oryx/data/crypto-bot`), read at
+   `JANUS_BRIDGE_BOT_STATE=/bot-state/paper/state.json`. Until 2026-10-15 it
+   mounted the spawner volume `fks-bot-state-crypto-regime` at a path where
+   no `state.json` existed, so no sample carried the bot's flags.
 2. At the close of each 00:05→00:05 UTC window (aligned to the bot's daily
    regime read), aggregates the window's samples and appends one JSONL
    assessment line per pair plus a window summary to `assessment.jsonl`.

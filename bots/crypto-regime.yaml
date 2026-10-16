@@ -2,6 +2,13 @@
 # Kraken spot regime bot (200-day MA rule) — folded in from the standalone
 # crypto-bot-live container. Runs LIVE, mirroring the current Kraken setup.
 #
+# DISABLED 2026-10-15 — `autostart: false` below. The cutover in
+# docs/ORYX.md never stopped the standalone, so this bot and crypto-bot-live
+# both traded the same Kraken account for four days: both invested the
+# 2026-10-14 USDC deposit (an extra ~$18 of BTC). The standalone on oryx is
+# the live trader until the cutover is done IN ORDER. While disabled, do not
+# respawn it from the UI: the image always trades live, whatever `mode` says.
+#
 # Synced into the spawner by botsync (POST /configs, upsert by `name`).
 # To add a bot: drop another YAML file here and `up -d` (or POST /configs).
 name: crypto-regime
@@ -25,5 +32,5 @@ restart_policy:
   enabled: true
   max_restarts: 3
   window_secs: 3600
-# botsync respawns it if not running after a sync.
-autostart: true
+# botsync respawns it if not running after a sync. Off: see the header.
+autostart: false

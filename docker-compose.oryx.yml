@@ -1129,9 +1129,15 @@ services:
     - JANUS_BRIDGE_GRPC=${JANUS_BRIDGE_GRPC:-fks_janus:50052}
     - SAMPLE_INTERVAL_SECS=${JANUS_BRIDGE_SAMPLE_SECS:-300}
     - CALL_THRESHOLD=${JANUS_BRIDGE_CALL_THRESHOLD:-0.60}
+    # The LIVE crypto bot's state.json. That is the standalone crypto-bot-live
+    # (oryx repo) while the spawner-managed crypto-regime bot is disabled; the
+    # bot writes it under paper/, not at the mount root -- the old mount of
+    # fks-bot-state-crypto-regime at /bot-state never matched the default
+    # /bot-state/state.json, so no sample ever carried the bot's flags.
+    - JANUS_BRIDGE_BOT_STATE=/bot-state/paper/state.json
     volumes:
     - janus-bridge-data:/data
-    - fks-bot-state-crypto-regime:/bot-state:ro
+    - ${CRYPTO_BOT_STATE_DIR:-/home/actions/oryx/data/crypto-bot}:/bot-state:ro
     networks:
     - fks-network
     depends_on:
@@ -1155,8 +1161,6 @@ services:
 volumes:
   janus-bridge-data:
     driver: local
-  fks-bot-state-crypto-regime:
-    external: true
   postgres_data:
     driver: local
   redis_data:

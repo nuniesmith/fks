@@ -121,3 +121,49 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: ${{ matrix.args || '' }}
+
+  # Merges reach oryx on their own. The FKS deploy (nuniesmith/oryx
+  # fks-deploy.yml) pulls these tags, runs botsync and restarts what changed,
+  # but it only ran when someone dispatched it, so a merged change sat
+  # unused until then. This starts it once EVERY image above built and
+  # pushed: a failed image skips the deploy rather than shipping a mix.
+  #
+  # A docs-only merge doesn't restart the trading stack.
+  #
+  # ORYX_DEPLOY_TOKEN is a fine-grained PAT with Actions: write on
+  # nuniesmith/oryx; GITHUB_TOKEN cannot start a workflow in another
+  # repository. A missing token FAILS this job rather than skipping it: a
+  # silent skip is a deploy that never happened, reported as green.
+  deploy:
+    name: Roll out on oryx
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip a docs-only change
+        id: changes
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            exit 0  # nothing to compare against: deploy
+          fi
+          files=$(gh api "repos/${{ github.repository }}/compare/$BEFORE...${{ github.sha }}" --jq '.files[].filename')
+          code=$(printf '%s\n' "$files" | grep -vE '^docs/|\.md$' || true)
+          if [ -n "$files" ] && [ -z "$code" ]; then
+            echo "only_docs=true" >> "$GITHUB_OUTPUT"
+            echo "Only docs changed: no deploy"
+          fi
+      - name: Roll the new images out on oryx
+        if: steps.changes.outputs.only_docs != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ORYX_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::ORYX_DEPLOY_TOKEN is not set, so oryx keeps running the previous FKS images"
+            exit 1
+          fi
+          gh workflow run fks-deploy.yml --repo nuniesmith/oryx
+          echo "Requested: ${{ github.server_url }}/nuniesmith/oryx/actions/workflows/fks-deploy.yml"

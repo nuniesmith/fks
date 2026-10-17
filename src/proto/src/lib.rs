@@ -48,6 +48,12 @@
 // don't author here. Allow it crate-wide so the generated modules below pass
 // the `-D warnings` clippy gate.
 #![allow(clippy::doc_lazy_continuation)]
+// tonic's generated server traits are `#[async_trait]`, which puts `#[must_use]`
+// on methods whose boxed-future return type is already `#[must_use]`. Since
+// Rust 1.99 (2026-10), clippy's `double_must_use` sees through that macro and
+// reports 94 errors in code we don't author, which failed every CI run on main
+// from 2026-10-11. Same treatment as above: allow it for the generated modules.
+#![allow(clippy::double_must_use)]
 
 // =============================================================================
 // Generated Proto Modules

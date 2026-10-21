@@ -135,6 +135,12 @@ generate_long_secret() {
         || python3 -c "import secrets; print(secrets.token_urlsafe(48)[:64])"
 }
 
+# 32 random bytes as 64 hex chars — the exact shape SPAWNER_SECRETS_KEY needs.
+generate_hex_key() {
+    openssl rand -hex 32 2>/dev/null \
+        || python3 -c "import secrets; print(secrets.token_hex(32))"
+}
+
 # ---------------------------------------------------------------------------
 # Interactive API key prompt
 # ---------------------------------------------------------------------------
@@ -392,6 +398,11 @@ API_KEY=$(generate_secret)
 # --- nginx internal token (nginx → backend trust header) ---
 NGINX_INTERNAL_TOKEN=$(generate_secret)
 
+# --- Spawner secret store: encrypts stored exchange keys + webhook URLs at rest.
+#     Empty = the spawner stores them PLAINTEXT. Back it up with this file; a
+#     different key cannot read what this one encrypted. ---
+SPAWNER_SECRETS_KEY=$(generate_hex_key)
+
 # --- Tailscale (all ports bind to this IP — never the public interface) ---
 TAILSCALE_IP=${ts_ip}
 
@@ -579,6 +590,18 @@ EOF
     _fill_fernet   API_KEY_ENCRYPTION_SECRET
     _fill_secret   NGINX_INTERNAL_TOKEN
 
+    # SPAWNER_SECRETS_KEY: generated only when missing or empty. An existing value
+    # is never replaced, not even a malformed one: rows encrypted under the real
+    # key would become unreadable, so fixing a bad value is the operator's call.
+    local spawner_key; spawner_key=$(_env_get SPAWNER_SECRETS_KEY)
+    if [ -z "$spawner_key" ]; then
+        _env_set SPAWNER_SECRETS_KEY "$(generate_hex_key)"
+        warn "Generated SPAWNER_SECRETS_KEY — if this database already holds encrypted secrets, restore their key instead"
+        needs_update=true
+    elif ! [[ "$spawner_key" =~ ^[0-9a-fA-F]{64}$ ]]; then
+        warn "SPAWNER_SECRETS_KEY is not 64 hex chars — the spawner will refuse its database. Left unchanged."
+    fi
+
     # --- Tailscale IP auto-detect ---
     local ts_val; ts_val=$(_env_get TAILSCALE_IP)
     if [ -z "$ts_val" ] || [ "$ts_val" = "100.x.x.x" ]; then
@@ -623,6 +646,7 @@ EOF
     # Secrets are single tokens (no spaces), so "whitespace then #" only ever matches
     # the comment convention — never a value.
     sed -i -E '/^[A-Za-z_][A-Za-z0-9_]*=/ s/[[:space:]]+#.*$//' "$env_file"
+    chmod 600 "$env_file" 2>/dev/null || warn "Could not chmod 600 $env_file — check its owner"
 
     # --- Render alertmanager.yml from template ---
     local tmpl="infrastructure/config/alertmanager/alertmanager.yml.tmpl"

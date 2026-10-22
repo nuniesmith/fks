@@ -192,3 +192,16 @@ COPY src/sql/spawner/017_edge_experiments.sql             /docker-entrypoint-ini
 COPY src/sql/spawner/018_edge_deployments.sql             /docker-entrypoint-initdb.d/41-edge-deployments.sql
 COPY src/sql/spawner/019_webui_secret_presence_grant.sql  /docker-entrypoint-initdb.d/42-webui-secret-presence-grant.sql
 COPY src/sql/spawner/020_promotion_guard_freeze.sql       /docker-entrypoint-initdb.d/43-promotion-guard-freeze.sql
+
+# ---------------------------------------------------------------------------
+# fks-migrate — every migration reaches a RUNNING database too
+# ---------------------------------------------------------------------------
+# initdb above runs only on an empty volume. The deploy runs
+# `docker exec fks_postgres fks-migrate` instead, which applies each file in
+# these two folders once and records it in fks_db.schema_migrations, so a new
+# file here reaches the live database with no hand-applied SQL (#278, #296).
+# The folders are copied whole: a new migration needs no line here, only the
+# initdb COPY above if a fresh volume should get it at first boot.
+COPY src/sql/janus/                                       /fks-sql/janus/
+COPY src/sql/spawner/                                     /fks-sql/spawner/
+COPY --chmod=0755 src/sql/fks-migrate.sh                  /usr/local/bin/fks-migrate

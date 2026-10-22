@@ -54,7 +54,7 @@ Auto-created named volumes: `postgres_data`, `redis_data`, `questdb_data`,
 
 ## Adding a bot
 
-1. Drop a YAML file in `bots/` (see `bots/crypto-regime.yaml` for the shape).
+1. Drop a YAML file in `bots/` (see `bots/crypto-regime.yaml.disabled` for the shape).
 2. `docker compose -f docker-compose.oryx.yml up -d` — botsync picks it up.
    (Or `POST /configs` on the spawner directly.)
 
@@ -72,6 +72,11 @@ spawner injects them from its encrypted store at spawn time.
 > trader. To disable the managed bot for good: Stop it in the FKS web UI
 > (Bots page), which closes its run so `boot_reconcile` won't bring it back
 > after a reboot; `autostart: false` keeps botsync from respawning it.
+>
+> Since 2026-10-22 the file is `bots/crypto-regime.yaml.disabled`, which
+> botsync doesn't read, so a deploy no longer creates the config at all.
+> A database that already has it also needs `DELETE /configs/crypto-regime`
+> on the spawner, so `boot_reconcile` skips it.
 >
 > Before resuming, the managed bot needs a Discord webhook: its
 > `CRYPTO_DISCORD_WEBHOOK_URL` is `""` and botsync passes no webhook into

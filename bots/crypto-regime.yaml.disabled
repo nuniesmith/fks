@@ -1,4 +1,4 @@
-# bots/crypto-regime.yaml
+# bots/crypto-regime.yaml.disabled
 # Kraken spot regime bot (200-day MA rule) — folded in from the standalone
 # crypto-bot-live container. Runs LIVE, mirroring the current Kraken setup.
 #
@@ -8,6 +8,12 @@
 # 2026-10-14 USDC deposit (an extra ~$18 of BTC). The standalone on oryx is
 # the live trader until the cutover is done IN ORDER. While disabled, do not
 # respawn it from the UI: the image always trades live, whatever `mode` says.
+#
+# RENAMED 2026-10-22 so botsync skips it. botsync globs *.yaml and *.yml,
+# and its upsert sets is_active, so under a .yaml name every deploy
+# re-created an active, startable config: `autostart: false` stops only
+# botsync itself from starting it. Give the file its .yaml name back only
+# at the cutover (EDGE_FACTORY_PLAN §6.4), once account leases exist.
 #
 # Synced into the spawner by botsync (POST /configs, upsert by `name`).
 # To add a bot: drop another YAML file here and `up -d` (or POST /configs).

@@ -1072,8 +1072,18 @@ services:
     - ESPLORA_API_BASE=${ESPLORA_API_BASE:-}
     - RITHMIC_SAMPLER_URL=${RITHMIC_SAMPLER_URL:-}
     - RITHMIC_SAMPLE_INTERVAL_SECS=${RITHMIC_SAMPLE_INTERVAL_SECS:-300}
+    # Templates and instances (fks-spawner src/instances.rs): recorders from a
+    # form. Each recorder writes only to its own folder under LAKE_ROOT.
+    - TEMPLATES_DIR=/templates
+    - LAKE_ROOT=${LAKE_ROOT:-/srv/fks-lake}
+    - LAKE_MIN_FREE_GB=${LAKE_MIN_FREE_GB:-120}
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
+    - ./templates:/templates:ro
+    # The lake at the SAME path as on the host: the spawner creates each
+    # recorder's folder here, and Docker resolves a bind's source on the host.
+    # The host folder must exist and belong to uid 1000 (docs/ORYX.md).
+    - ${LAKE_ROOT:-/srv/fks-lake}:${LAKE_ROOT:-/srv/fks-lake}
     - prometheus_sd:/prometheus-sd
     - ./.secrets:/secrets
     networks:

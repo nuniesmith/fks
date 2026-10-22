@@ -192,3 +192,4 @@ COPY src/sql/spawner/017_edge_experiments.sql             /docker-entrypoint-ini
 COPY src/sql/spawner/018_edge_deployments.sql             /docker-entrypoint-initdb.d/41-edge-deployments.sql
 COPY src/sql/spawner/019_webui_secret_presence_grant.sql  /docker-entrypoint-initdb.d/42-webui-secret-presence-grant.sql
 COPY src/sql/spawner/020_promotion_guard_freeze.sql       /docker-entrypoint-initdb.d/43-promotion-guard-freeze.sql
+COPY src/sql/spawner/021_record_mode.sql                  /docker-entrypoint-initdb.d/44-record-mode.sql

@@ -1,0 +1,71 @@
+{
+    "id": "recorder.binance-usdm",
+    "version": 1,
+    "kind": "recorder",
+    "display_name": "Binance USDⓈ-M futures recorder",
+    "description": "Raw public data from Binance's USDⓈ-M perpetual futures, append-only: liquidations, best bid/ask, mark price and funding, and open-interest snapshots. No keys. Files go to the lake under raw/binance/usdm/<instance>, one folder per symbol and stream, gzipped when the UTC day closes, with a ledger of every gap.",
+    "image": "ghcr.io/nuniesmith/fks-bot-recorder:latest",
+    "modes": ["record"],
+    "resources": { "cpu": 0.5, "memory_mb": 256 },
+    "restart_policy": { "enabled": true },
+    "data": { "venue": "binance", "market": "usdm" },
+    "fixed_env": { "RECORDER_VENUE": "binance-usdm" },
+    "env": {
+        "symbols": "RECORDER_SYMBOLS",
+        "streams": "RECORDER_STREAMS",
+        "rest": "RECORDER_REST",
+        "rest_seconds": "RECORDER_REST_SECONDS",
+        "backfill_oi": "RECORDER_BACKFILL_OI"
+    },
+    "params": {
+        "type": "object",
+        "required": ["symbols"],
+        "properties": {
+            "symbols": {
+                "type": "array",
+                "title": "Symbols",
+                "description": "Perpetual contracts, e.g. BTCUSDT.",
+                "items": { "type": "string", "x-format": "symbol" },
+                "minItems": 1,
+                "maxItems": 20,
+                "uniqueItems": true
+            },
+            "streams": {
+                "type": "array",
+                "title": "Streams",
+                "items": { "enum": ["forceOrder", "bookTicker", "markPrice@1s"] },
+                "default": ["forceOrder", "bookTicker", "markPrice@1s"],
+                "uniqueItems": true,
+                "x-labels": {
+                    "forceOrder": "Liquidations",
+                    "bookTicker": "Best bid/ask",
+                    "markPrice@1s": "Mark price and funding, every second"
+                },
+                "x-backfillable": { "forceOrder": "no", "bookTicker": "partly", "markPrice@1s": "no" },
+                "x-est-mb-per-day": { "forceOrder": 0.1, "bookTicker": 415, "markPrice@1s": 2 },
+                "x-note": "Sizes per symbol, gzipped, measured on BTCUSDT on 2026-10-21. bookTicker is about 9 GB uncompressed until its day closes."
+            },
+            "rest": {
+                "type": "array",
+                "title": "REST snapshots",
+                "items": { "enum": ["openInterest", "premiumIndex"] },
+                "default": ["openInterest", "premiumIndex"],
+                "uniqueItems": true,
+                "x-labels": { "openInterest": "Open interest", "premiumIndex": "Premium index" }
+            },
+            "rest_seconds": {
+                "type": "integer",
+                "title": "Seconds between REST snapshots",
+                "minimum": 60,
+                "maximum": 3600,
+                "default": 300
+            },
+            "backfill_oi": {
+                "type": "boolean",
+                "title": "Also backfill open interest from Binance Vision",
+                "description": "Daily metrics files, about a day late. Only needed where the REST snapshots are blocked.",
+                "default": false
+            }
+        }
+    }
+}

@@ -62,6 +62,43 @@ Bot definitions are the source of truth: versioned in git, easy to save and
 restore. Secrets are **never** in the YAML — declare `secrets: [name]` and the
 spawner injects them from its encrypted store at spawn time.
 
+## Recorders
+
+A recorder writes raw public market data, append-only, from a template's form
+(fks-spawner `bots/recorder`, `src/instances.rs`). Templates are the JSON files
+in `templates/`; `recorder.binance-usdm.json` records Binance USDⓈ-M futures.
+Each instance gets its own folder in the lake, `/srv/fks-lake/raw/<venue>/<market>/<instance>`,
+and the container sees only that folder, at `/data`.
+
+**Once, before the first deploy with this:** make the lake, owned by uid 1000
+(the spawner's and the recorder's uid; on oryx that is `jordan`). If the folder
+doesn't exist, Docker creates it owned by root and no recorder can start:
+
+```bash
+sudo install -d -o 1000 -g 1000 /srv/fks-lake
+```
+
+**Make one** in the web UI once its form exists, or straight on the spawner
+(internal token, as in §0.1 of the handoff):
+
+```bash
+curl -X POST http://127.0.0.1:8091/instances -H "X-Internal-Token: …" \
+  -H 'Content-Type: application/json' \
+  -d '{"template":"recorder.binance-usdm","name":"btc","params":{"symbols":["BTCUSDT"]}}'
+```
+
+`POST /instances/validate` with the same body shows what it would run (image,
+env, folder) without making anything. `DELETE /instances/btc` stops and removes
+it; **its data folder is kept**.
+
+- **Sizes:** BTCUSDT's `bookTicker` is about 415 MB a day gzipped, and about
+  9 GB uncompressed while its day is open. A new recorder is refused when the
+  lake's disk has less than `LAKE_MIN_FREE_GB` (default 120) free.
+- **Saving a recorder needs `021_record_mode.sql`** (mode `record`). A fresh
+  volume gets it from initdb; a running database gets it from `fks-migrate`.
+- **The image is pulled by the spawner** when an instance is created or
+  started; the GHCR package `fks-bot-recorder` must be public.
+
 ## Crypto bot cutover (phase 2)
 
 > **PAUSED 2026-10-15 — `crypto-regime` is disabled (`autostart: false`).**

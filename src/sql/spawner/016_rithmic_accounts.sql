@@ -119,6 +119,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS rithmic_accounts_one_enabled_main
 CREATE INDEX IF NOT EXISTS rithmic_accounts_kind_enabled
     ON rithmic_accounts (kind, enabled);
 
+-- DROP first, like every other trigger here: fks-migrate re-runs this file
+-- on a database initdb already built, and CREATE TRIGGER has no IF NOT EXISTS.
+DROP TRIGGER IF EXISTS trg_rithmic_accounts_updated_at ON rithmic_accounts;
 CREATE TRIGGER trg_rithmic_accounts_updated_at
     BEFORE UPDATE ON rithmic_accounts
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();

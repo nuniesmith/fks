@@ -62,6 +62,21 @@ Bot definitions are the source of truth: versioned in git, easy to save and
 restore. Secrets are **never** in the YAML — declare `secrets: [name]` and the
 spawner injects them from its encrypted store at spawn time.
 
+## Schema changes
+
+1. Add a NEW file, `src/sql/spawner/NNN_name.sql` (the next number), written
+   like the others: it `\connect`s to the database it needs, and it is
+   idempotent (`IF NOT EXISTS`; `DROP TRIGGER IF EXISTS` before
+   `CREATE TRIGGER`). Never edit a file that has been applied.
+2. Add its `COPY` to `infrastructure/docker/services/postgres/Dockerfile` so a
+   fresh volume gets it at first boot (initdb).
+3. Merge. The deploy's one-shot `migrate` service (`fks-migrate`, baked into
+   the postgres image) applies every file the cluster hasn't recorded in
+   `fks_db.schema_migrations`, and the spawner starts only after it exits 0.
+
+`docker logs fks_migrate` shows what it applied. It reports a file edited after
+it was applied, and doesn't re-run it.
+
 ## Crypto bot cutover (phase 2)
 
 > **PAUSED 2026-10-15 — `crypto-regime` is disabled (`autostart: false`).**

@@ -1017,6 +1017,39 @@ services:
         max-size: 10m
         max-file: '3'
         labels: service=questdb-exporter,environment=dev
+  # One-shot: applies every src/sql migration this cluster hasn't recorded yet
+  # (fks-migrate, baked into the postgres image; ledger fks_db.schema_migrations),
+  # so a new SQL file reaches the RUNNING database on the next deploy, not only
+  # a fresh volume through initdb (#278, #296). The spawner starts only after it
+  # exits 0. It runs the scripts as initdb does, with the same env, over the
+  # network as the superuser.
+  migrate:
+    image: ghcr.io/nuniesmith/fks-postgres:latest
+    container_name: fks_migrate
+    entrypoint:
+    - fks-migrate
+    user: postgres
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    environment:
+    - PGHOST=postgres
+    - PGPASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+    - POSTGRES_DB=${JANUS_DB:-janus_db}
+    - JANUS_DB=${JANUS_DB:-janus_db}
+    - POSTGRES_USER=${POSTGRES_USER:-fks_user}
+    - RUBY_DB=${RUBY_DB:-fks_db}
+    - BACKTEST_DB_PASSWORD=${BACKTEST_DB_PASSWORD:-}
+    - WEBUI_DB_PASSWORD=${WEBUI_DB_PASSWORD:-}
+    - FUNDING_DB_PASSWORD=${FUNDING_DB_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+    - fks-network
+    restart: "no"
+
   fks_bot_spawner:
     build:
       context: .
@@ -1031,6 +1064,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # The schema first: fks-migrate (above) must have applied every migration.
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     group_add:
     - ${DOCKER_GID:-987}

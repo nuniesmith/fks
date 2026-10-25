@@ -194,6 +194,9 @@ COPY src/sql/spawner/019_webui_secret_presence_grant.sql  /docker-entrypoint-ini
 COPY src/sql/spawner/020_promotion_guard_freeze.sql       /docker-entrypoint-initdb.d/43-promotion-guard-freeze.sql
 COPY src/sql/spawner/021_record_mode.sql                  /docker-entrypoint-initdb.d/44-record-mode.sql
 
+# --- Phase 18: account leases (one live bot per exchange account) ---
+COPY src/sql/spawner/022_account_leases.sql                  /docker-entrypoint-initdb.d/45-account-leases.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

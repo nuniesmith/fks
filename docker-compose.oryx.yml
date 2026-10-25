@@ -1159,6 +1159,7 @@ services:
     - SPAWNER_URL=http://fks_bot_spawner:8090
     - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN}
     - BOTS_DIR=/bots
+    - CRYPTO_DISCORD_WEBHOOK_URL=${CRYPTO_DISCORD_WEBHOOK_URL:-}
     volumes:
     - ./bots:/bots:ro
     networks:
@@ -1175,11 +1176,9 @@ services:
     - JANUS_BRIDGE_GRPC=${JANUS_BRIDGE_GRPC:-fks_janus:50052}
     - SAMPLE_INTERVAL_SECS=${JANUS_BRIDGE_SAMPLE_SECS:-300}
     - CALL_THRESHOLD=${JANUS_BRIDGE_CALL_THRESHOLD:-0.60}
-    # The LIVE crypto bot's state.json. That is the standalone crypto-bot-live
-    # (oryx repo) while the spawner-managed crypto-regime bot is disabled; the
-    # bot writes it under paper/, not at the mount root -- the old mount of
-    # fks-bot-state-crypto-regime at /bot-state never matched the default
-    # /bot-state/state.json, so no sample ever carried the bot's flags.
+    # The LIVE crypto bot's state.json: the spawner-managed crypto-regime
+    # bot (standalone retired at the 2026-10-25 cutover). The bot writes it
+    # under paper/, not at the mount root.
     - JANUS_BRIDGE_BOT_STATE=/bot-state/paper/state.json
     volumes:
     - janus-bridge-data:/data

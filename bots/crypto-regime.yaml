@@ -36,7 +36,7 @@ env:
   # Bot state (state.json) + journal land in the spawner's per-bot volume.
   CRYPTO_BOT_ROOT: /var/lib/fks-bot
   # Templated by botsync from the deploy environment — never committed.
-  CRYPTO_DISCORD_WEBHOOK_URL: ""
+  CRYPTO_DISCORD_WEBHOOK_URL: "${CRYPTO_DISCORD_WEBHOOK_URL:-}"
   TZ: America/Toronto
   # The FKS status contract (fks-web /exchanges reads it). The bot serves
   # /health, /status, /metrics on this port inside the fks network.

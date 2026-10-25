@@ -2,18 +2,19 @@
 # Kraken spot regime bot (200-day MA rule) — folded in from the standalone
 # crypto-bot-live container. Runs LIVE, mirroring the current Kraken setup.
 #
-# DISABLED 2026-10-15 — `autostart: false` below. The cutover in
-# docs/ORYX.md never stopped the standalone, so this bot and crypto-bot-live
-# both traded the same Kraken account for four days: both invested the
-# 2026-10-14 USDC deposit (an extra ~$18 of BTC). The standalone on oryx is
-# the live trader until the cutover is done IN ORDER. While disabled, do not
-# respawn it from the UI: the image always trades live, whatever `mode` says.
-#
-# RENAMED 2026-10-22 so botsync skips it. botsync globs *.yaml and *.yml,
-# and its upsert sets is_active, so under a .yaml name every deploy
-# re-created an active, startable config: `autostart: false` stops only
-# botsync itself from starting it. Give the file its .yaml name back only
-# at the cutover (EDGE_FACTORY_PLAN §6.4), once account leases exist.
+# CUTOVER 2026-10-25: this is now the live trader. It was DISABLED
+# 2026-10-15 and renamed to .yaml.disabled 2026-10-22 after the first
+# fold-in attempt left it and the standalone crypto-bot-live both trading
+# the same Kraken account for four days. The rename back happened only
+# once the §6.3 account lease existed (fks-spawner#62): this bot declares
+# `account: "kraken:spot:default"` below, and the spawner refuses any
+# second bot on that account while this one runs. The standalone was
+# stopped via oryx's stop-standalone-crypto workflow and its state
+# (data/paper — state.json with the deposit baseline, journal.jsonl)
+# copied into this bot's volume before the first managed spawn.
+# `autostart: false` stays: botsync never starts it on a deploy; starts
+# are deliberate respawns. The image always trades live, whatever
+# `mode` says.
 #
 # Synced into the spawner by botsync (POST /configs, upsert by `name`).
 # To add a bot: drop another YAML file here and `up -d` (or POST /configs).

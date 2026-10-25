@@ -1183,7 +1183,7 @@ services:
     - JANUS_BRIDGE_BOT_STATE=/bot-state/paper/state.json
     volumes:
     - janus-bridge-data:/data
-    - ${CRYPTO_BOT_STATE_DIR:-/home/actions/oryx/data/crypto-bot}:/bot-state:ro
+    - ${CRYPTO_BOT_STATE_DIR:-/var/lib/docker/volumes/fks-bot-state-crypto-regime/_data/data}:/bot-state:ro
     networks:
     - fks-network
     depends_on:

@@ -193,3 +193,20 @@ COPY src/sql/spawner/018_edge_deployments.sql             /docker-entrypoint-ini
 COPY src/sql/spawner/019_webui_secret_presence_grant.sql  /docker-entrypoint-initdb.d/42-webui-secret-presence-grant.sql
 COPY src/sql/spawner/020_promotion_guard_freeze.sql       /docker-entrypoint-initdb.d/43-promotion-guard-freeze.sql
 COPY src/sql/spawner/021_record_mode.sql                  /docker-entrypoint-initdb.d/44-record-mode.sql
+
+# ---------------------------------------------------------------------------
+# Phase 17 — fks-migrate, the deploy-time migration runner (#308).
+#
+# The compose `migrate` one-shot uses THIS image with entrypoint
+# `fks-migrate`: the script plus the full SQL tree it applies
+# (/fks-sql/{janus,spawner}); it records each applied file in
+# fks_db.schema_migrations and skips *.validate.sql itself. The spawner
+# starts only after it exits 0. #308 landed the script and the compose
+# wiring but never this bake, so the entrypoint did not exist in the
+# image and every deploy failed at the migrate gate (exit 127:
+# "fks-migrate: executable file not found in $PATH").
+# ---------------------------------------------------------------------------
+COPY src/sql/fks-migrate.sh                               /usr/local/bin/fks-migrate
+COPY src/sql/janus/                                       /fks-sql/janus/
+COPY src/sql/spawner/                                     /fks-sql/spawner/
+RUN chmod 0555 /usr/local/bin/fks-migrate

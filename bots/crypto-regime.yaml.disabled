@@ -22,6 +22,10 @@ description: "Kraken spot regime bot (200-day MA rule) — folded in from standa
 image: ghcr.io/nuniesmith/crypto:latest
 mode: live
 bot_id: crypto-regime
+# The lease identity (EDGE_FACTORY_PLAN S6.3): while this bot runs under
+# the spawner, no other managed bot may trade the same Kraken spot
+# account. Inert while the file keeps its .disabled name.
+account: "kraken:spot:default"
 cpu_limit: 1.0
 memory_mb: 512
 env:
@@ -30,6 +34,9 @@ env:
   # Templated by botsync from the deploy environment — never committed.
   CRYPTO_DISCORD_WEBHOOK_URL: ""
   TZ: America/Toronto
+  # The FKS status contract (fks-web /exchanges reads it). The bot serves
+  # /health, /status, /metrics on this port inside the fks network.
+  BOT_STATUS_PORT: "9091"
 # Injected at spawn from the spawner's encrypted secret store.
 # Spawn FAILS if `kraken` has no stored credentials (never a keyless live bot).
 secrets:

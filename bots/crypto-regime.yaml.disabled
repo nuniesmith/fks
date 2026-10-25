@@ -19,7 +19,10 @@
 # To add a bot: drop another YAML file here and `up -d` (or POST /configs).
 name: crypto-regime
 description: "Kraken spot regime bot (200-day MA rule) — folded in from standalone, LIVE"
-image: ghcr.io/nuniesmith/crypto:latest
+# The fks-bot-* alias of the crypto image (crypto#36): the spawner's
+# image allowlist admits only ghcr.io/nuniesmith/fks-bot-* (oryx#16).
+# Same image the standalone runs as ghcr.io/nuniesmith/crypto:latest.
+image: ghcr.io/nuniesmith/fks-bot-crypto:latest
 mode: live
 bot_id: crypto-regime
 # The lease identity (EDGE_FACTORY_PLAN S6.3): while this bot runs under

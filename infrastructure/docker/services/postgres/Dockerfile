@@ -196,6 +196,7 @@ COPY src/sql/spawner/021_record_mode.sql                  /docker-entrypoint-ini
 
 # --- Phase 18: account leases (one live bot per exchange account) ---
 COPY src/sql/spawner/022_account_leases.sql                  /docker-entrypoint-initdb.d/45-account-leases.sql
+COPY src/sql/spawner/023_account_leases_fks_db.sql        /docker-entrypoint-initdb.d/46-account-leases-fks-db.sql
 
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).

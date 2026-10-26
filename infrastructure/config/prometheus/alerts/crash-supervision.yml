@@ -114,9 +114,14 @@ groups:
           # header. dry-run is IN: it holds real balances. The alert name is
           # kept as-is on purpose; renaming it would orphan existing
           # Alertmanager silences and the cross-reference in bot-alerts.yml.
+          #
+          # mode!="record" too: a recorder (templates/recorder.*.json) holds no
+          # account and no balance, so a deny list written before recorders
+          # existed would page a CRITICAL "real-money bot" for one. A down
+          # recorder is BotStopped (warning) plus recorder-alerts.yml.
           # ------------------------------------------------------------------
           - alert: LiveBotMetricsDown
-            expr: up{job="fks-bots", mode!="paper", mode!="backtest"} == 0
+            expr: up{job="fks-bots", mode!="paper", mode!="backtest", mode!="record"} == 0
             for: 2m
             labels:
                 severity: critical

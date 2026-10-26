@@ -6,7 +6,7 @@
     "description": "Raw public data from Binance's USDⓈ-M perpetual futures, append-only: liquidations, best bid/ask, mark price and funding, and open-interest snapshots. No keys. Files go to the lake under raw/binance/usdm/<instance>, one folder per symbol and stream, gzipped when the UTC day closes, with a ledger of every gap.",
     "image": "ghcr.io/nuniesmith/fks-bot-recorder:latest",
     "modes": ["record"],
-    "resources": { "cpu": 0.5, "memory_mb": 256 },
+    "resources": { "cpu": 2, "memory_mb": 512 },
     "restart_policy": { "enabled": true },
     "data": { "venue": "binance", "market": "usdm" },
     "fixed_env": { "RECORDER_VENUE": "binance-usdm" },

@@ -1,0 +1,104 @@
+# =============================================================================
+# recorder-alerts.yml — the raw market-data recorders
+#
+# Recorders are spawned from a template (templates/recorder.*.json) with
+# mode="record" and scraped like any bot through the spawner's file-SD
+# (job="fks-bots"). They export fks_recorder_* (fks-spawner
+# bots/recorder/recorder/server.py), not fks_bot_*, and hold no exchange
+# account, so the money rules in bot-alerts.yml do not apply to them;
+# BotStopped still does (up == 0).
+#
+# What these rules protect is the dataset. A stretch a recorder missed can
+# never be fetched again for liquidations or 1 s mark price (EDGE_FACTORY_PLAN
+# §5.1). The recorder's gap ledger (_gaps/) records every gap; these rules make
+# sure someone hears about one while it is still short.
+#
+# No channel label: these route to discord-warnings by severity, not to the
+# money channel.
+# =============================================================================
+groups:
+  - name: recorders
+    rules:
+      - alert: RecorderStreamSilent
+        # Liquidations (forceOrder) are exempt: a quiet market can go an hour
+        # without one, and that silence is real data, not a fault. Every other
+        # stream ticks at least once a second (bookTicker on BTCUSDT runs at
+        # about 1,000 messages a second; markPrice@1s once a second), so two
+        # minutes of nothing is a dead connection or a stuck writer.
+        expr: fks_recorder_last_message_age_seconds{job="fks-bots",stream!="forceOrder"} > 120
+        for: 3m
+        labels:
+          severity: warning
+          component: recorder
+        annotations:
+          summary: "Recorder {{ $labels.bot_id }}: {{ $labels.symbol }} {{ $labels.stream }} silent"
+          description: >
+            {{ $labels.bot_id }} has received nothing on {{ $labels.symbol }}
+            {{ $labels.stream }} for {{ $value | humanizeDuration }}, on a
+            stream that normally ticks every second. When a whole connection
+            goes quiet for 5 minutes the recorder recycles it and writes a
+            stall to the gap ledger; one stream going quiet beside healthy
+            ones is only a log warning, and this alert is what catches it.
+          runbook: |
+            1) The instance's /status (Data page, or :9091/status) shows each connection's state and disconnect count.
+            2) docker logs fks-bot-{{ $labels.bot_id }}
+            3) Stop and start the instance. Deleting an instance never deletes its data.
+
+      - alert: RecorderGapRate
+        # The gap counter adds every second a connection recorded nothing
+        # (reconnects, stalls, startup). Five minutes in an hour is far past
+        # normal reconnect churn; a clean hour is ~0.
+        expr: increase(fks_recorder_gap_seconds_total{job="fks-bots"}[1h]) > 300
+        for: 0m
+        labels:
+          severity: warning
+          component: recorder
+        annotations:
+          summary: "Recorder {{ $labels.bot_id }}: the {{ $labels.group }} connection recorded nothing for {{ $value | humanizeDuration }} in the last hour"
+          description: >
+            The {{ $labels.group }} connection of {{ $labels.bot_id }} recorded
+            nothing for {{ $value | humanizeDuration }} over the last hour.
+            Each gap is in the instance's _gaps/ ledger, so research reads it
+            as missing data rather than a quiet market; this alert is about
+            the rate, which usually means the venue is throttling or the
+            network is flapping.
+
+      - alert: RecorderRestFailing
+        # REST snapshots (open interest, premium index) every rest_seconds.
+        # A few failures an hour are transient; more is a block (geo, rate
+        # limit) that silently thins the snapshot series.
+        expr: increase(fks_recorder_rest_errors_total{job="fks-bots"}[1h]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          component: recorder
+        annotations:
+          summary: "Recorder {{ $labels.bot_id }}: {{ $labels.symbol }} REST snapshots failing"
+          description: >
+            {{ $value | printf "%.0f" }} REST snapshot requests for
+            {{ $labels.symbol }} failed in the last hour. The websocket streams
+            are unaffected; the open-interest and premium-index series are
+            thinning. /status shows the last error.
+
+      - alert: LakeDiskProjection
+        # The lake lives on the root filesystem (/srv/fks-lake) and keeps
+        # everything, so free space only goes one way. Projected over a week
+        # of history, warn a month before free space would fall under 60 GB:
+        # the spawner refuses new recorders under LAKE_MIN_FREE_GB, but the
+        # running ones keep writing.
+        # clamp_min: a projection past zero means "full", and reads as 0 B
+        # rather than a negative size in the description.
+        expr: >
+          clamp_min(predict_linear(node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}[7d], 30 * 86400), 0)
+            < 60e9
+        for: 1h
+        labels:
+          severity: warning
+          component: recorder
+        annotations:
+          summary: "Disk projected under 60 GB free within 30 days"
+          description: >
+            At the last week's rate, free space on / reaches
+            {{ $value | humanize1024 }}B in 30 days (0 B means full). The data lake grows by
+            about 0.4 GB a day per BTC-sized bookTicker stream. Move closed
+            days off the box, stop a recorder, or add disk before the floor.

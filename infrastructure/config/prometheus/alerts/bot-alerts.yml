@@ -337,8 +337,14 @@ groups:
         # BotVenueStale both match ON the series, so no series means no alert.
         # A running bot exporting no venue freshness is a blind spot, not a
         # clean bill of health.
+        #
+        # Recorders (mode="record") are excluded: they hold no exchange
+        # account, so there is no venue to be fresh. Before this exclusion the
+        # first recorder instance (btc, 2026-10-26) went pending here within a
+        # minute of starting, headed for the money channel. Their own coverage
+        # is recorder-alerts.yml.
         expr: |
-          up{job="fks-bots"} == 1
+          up{job="fks-bots",mode!="record"} == 1
             unless on (bot_id)
           count by (bot_id) (fks_bot_venue_status_age_seconds)
         for: 15m

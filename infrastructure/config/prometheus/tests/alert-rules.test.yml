@@ -27,6 +27,7 @@ rule_files:
   - ../alerts/data.yml
   - ../alerts/rithmic-connector.yml
   - ../alerts/edge-factory.yml
+  - ../alerts/recorder-alerts.yml
 
 evaluation_interval: 1m
 
@@ -1206,4 +1207,163 @@ tests:
       # ...and its own rule is still quiet at 5h, which is a NORMAL age for it.
       - eval_time: 5h
         alertname: StateBackupTextfileStale
+        exp_alerts: []
+
+  # ===========================================================================
+  # Recorders (mode="record") — no account, so no money rules; their own
+  # coverage is recorder-alerts.yml. The first instance (btc, 2026-10-26) went
+  # pending on BotVenueFreshnessMissing within a minute of starting.
+  # ===========================================================================
+  - interval: 1m
+    name: BotVenueFreshnessMissing skips a recorder but still covers a trading bot
+    input_series:
+      - series: 'up{job="fks-bots",bot_id="btc",container_name="fks-bot-btc",mode="record"}'
+        values: "1x30"
+      - series: 'up{job="fks-bots",bot_id="crypto-regime",container_name="fks-bot-crypto-regime",mode="live"}'
+        values: "1x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: BotVenueFreshnessMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              channel: money
+              job: fks-bots
+              bot_id: crypto-regime
+              container_name: fks-bot-crypto-regime
+              mode: live
+            exp_annotations:
+              summary: "Bot crypto-regime is up but reports no venue freshness"
+              description: "crypto-regime answers /metrics but the spawner is exporting no fks_bot_venue_status_age_seconds series for it — its /status is unreachable, non-2xx, or no longer parseable. The freshness alerts match on that series, so while it is absent this bot has NO staleness coverage at all. This is the shape a /status schema change takes (an `updated` field renamed or dropped): everything looks green because nothing is being measured.\n"
+              runbook: "1) curl the bot's :9091/status and check exchanges[] still carries\n   `updated` per venue\n2) docker logs <bot> for probe failures 3) fks_spawner_net_worth_stale_skipped_total shows whether sampling\n   is also paused\n"
+
+  - interval: 1m
+    name: LiveBotMetricsDown does not page for a down recorder
+    input_series:
+      - series: 'up{job="fks-bots",bot_id="btc",container_name="fks-bot-btc",mode="record"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LiveBotMetricsDown
+        exp_alerts: []
+      # ...it is still a stopped bot, at warning.
+      - eval_time: 5m
+        alertname: BotStopped
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              team: trading
+              job: fks-bots
+              bot_id: btc
+              container_name: fks-bot-btc
+              mode: record
+            exp_annotations:
+              summary: "Bot container fks-bot-btc is down"
+              description: "Bot btc (fks-bot-btc) has not been reachable for 2 minutes. The container may have exited or crashed. Mode: record.\n"
+              runbook: "Check logs: curl http://spawner:8090/container/fks-bot-btc/logs"
+
+  - interval: 1m
+    name: RecorderStreamSilent fires on a dead bookTicker, never on quiet liquidations
+    input_series:
+      # Ticking, then nothing from minute 5: the age climbs a minute a minute.
+      - series: 'fks_recorder_last_message_age_seconds{job="fks-bots",bot_id="btc",symbol="BTCUSDT",stream="bookTicker"}'
+        values: "0.1x4 60 120 180 240 300 360 420 480"
+      # No liquidation for an hour and climbing: a quiet market, not a fault.
+      - series: 'fks_recorder_last_message_age_seconds{job="fks-bots",bot_id="btc",symbol="BTCUSDT",stream="forceOrder"}'
+        values: "3600+60x12"
+    alert_rule_test:
+      # Over 120 s from minute 7; `for: 3m` holds it pending through minute 9.
+      - eval_time: 9m
+        alertname: RecorderStreamSilent
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: RecorderStreamSilent
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: recorder
+              job: fks-bots
+              bot_id: btc
+              symbol: BTCUSDT
+              stream: bookTicker
+            exp_annotations:
+              summary: "Recorder btc: BTCUSDT bookTicker silent"
+              description: "btc has received nothing on BTCUSDT bookTicker for 6m 0s, on a stream that normally ticks every second. When a whole connection goes quiet for 5 minutes the recorder recycles it and writes a stall to the gap ledger; one stream going quiet beside healthy ones is only a log warning, and this alert is what catches it.\n"
+              runbook: "1) The instance's /status (Data page, or :9091/status) shows each connection's state and disconnect count.\n2) docker logs fks-bot-btc\n3) Stop and start the instance. Deleting an instance never deletes its data.\n"
+
+  - interval: 1m
+    name: RecorderGapRate fires at ten minutes of gaps an hour, not at one
+    input_series:
+      - series: 'fks_recorder_gap_seconds_total{job="fks-bots",bot_id="btc",group="public"}'
+        values: "0+10x60"
+      - series: 'fks_recorder_gap_seconds_total{job="fks-bots",bot_id="btc",group="market"}'
+        values: "0+1x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: RecorderGapRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: recorder
+              job: fks-bots
+              bot_id: btc
+              group: public
+            exp_annotations:
+              summary: "Recorder btc: the public connection recorded nothing for 10m 0s in the last hour"
+              description: "The public connection of btc recorded nothing for 10m 0s over the last hour. Each gap is in the instance's _gaps/ ledger, so research reads it as missing data rather than a quiet market; this alert is about the rate, which usually means the venue is throttling or the network is flapping.\n"
+
+  - interval: 1m
+    name: RecorderRestFailing fires on repeated snapshot errors, not on none
+    input_series:
+      - series: 'fks_recorder_rest_errors_total{job="fks-bots",bot_id="btc",symbol="BTCUSDT"}'
+        values: "0+1x60"
+      - series: 'fks_recorder_rest_errors_total{job="fks-bots",bot_id="btc",symbol="ETHUSDT"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: RecorderRestFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: recorder
+              job: fks-bots
+              bot_id: btc
+              symbol: BTCUSDT
+            exp_annotations:
+              summary: "Recorder btc: BTCUSDT REST snapshots failing"
+              description: "60 REST snapshot requests for BTCUSDT failed in the last hour. The websocket streams are unaffected; the open-interest and premium-index series are thinning. /status shows the last error.\n"
+
+  # 300 GB free. Losing 10 GB a day projects to past zero in 30 days; losing
+  # 1 GB a day leaves ~269 GB. predict_linear needs only two samples in its
+  # [7d] window, so three hours of history exercises it; a days-long eval_time
+  # would make promtool evaluate every rule once per simulated minute.
+  - interval: 1h
+    name: LakeDiskProjection fires on a fast-filling disk, not a slow one
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="node-exporter",instance="node-exporter:9100",mountpoint="/",fstype="ext4"}'
+        values: "300e9-416666666.67x6"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: LakeDiskProjection
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: recorder
+              job: node-exporter
+              instance: node-exporter:9100
+              mountpoint: /
+              fstype: ext4
+            exp_annotations:
+              summary: "Disk projected under 60 GB free within 30 days"
+              description: "At the last week's rate, free space on / reaches 0B in 30 days (0 B means full). The data lake grows by about 0.4 GB a day per BTC-sized bookTicker stream. Move closed days off the box, stop a recorder, or add disk before the floor.\n"
+
+  - interval: 1h
+    name: LakeDiskProjection stays quiet on a slow-filling disk
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="node-exporter",instance="node-exporter:9100",mountpoint="/",fstype="ext4"}'
+        values: "300e9-41666666.67x6"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: LakeDiskProjection
         exp_alerts: []

@@ -6,7 +6,7 @@
     "description": "Raw public data from Binance's USDⓈ-M perpetual futures, append-only: liquidations, best bid/ask, mark price and funding, and open-interest snapshots. No keys. Files go to the lake under raw/binance/usdm/<instance>, one folder per symbol and stream, gzipped when the UTC day closes, with a ledger of every gap.",
     "image": "ghcr.io/nuniesmith/fks-bot-recorder:latest",
     "modes": ["record"],
-    "resources": { "cpu": 0.5, "memory_mb": 256 },
+    "resources": { "cpu": 2, "memory_mb": 512 },
     "restart_policy": { "enabled": true },
     "data": { "venue": "binance", "market": "usdm" },
     "fixed_env": { "RECORDER_VENUE": "binance-usdm" },
@@ -22,6 +22,7 @@
         "required": ["symbols"],
         "properties": {
             "symbols": {
+                "x-order": 1,
                 "type": "array",
                 "title": "Symbols",
                 "description": "Perpetual contracts, e.g. BTCUSDT.",
@@ -31,6 +32,7 @@
                 "uniqueItems": true
             },
             "streams": {
+                "x-order": 2,
                 "type": "array",
                 "title": "Streams",
                 "items": { "enum": ["forceOrder", "bookTicker", "markPrice@1s"] },
@@ -46,6 +48,7 @@
                 "x-note": "Sizes per symbol, gzipped, measured on BTCUSDT on 2026-10-21. bookTicker is about 9 GB uncompressed until its day closes."
             },
             "rest": {
+                "x-order": 3,
                 "type": "array",
                 "title": "REST snapshots",
                 "items": { "enum": ["openInterest", "premiumIndex"] },
@@ -54,6 +57,7 @@
                 "x-labels": { "openInterest": "Open interest", "premiumIndex": "Premium index" }
             },
             "rest_seconds": {
+                "x-order": 4,
                 "type": "integer",
                 "title": "Seconds between REST snapshots",
                 "minimum": 60,
@@ -61,6 +65,7 @@
                 "default": 300
             },
             "backfill_oi": {
+                "x-order": 5,
                 "type": "boolean",
                 "title": "Also backfill open interest from Binance Vision",
                 "description": "Daily metrics files, about a day late. Only needed where the REST snapshots are blocked.",

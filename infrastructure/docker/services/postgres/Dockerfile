@@ -203,6 +203,10 @@ COPY src/sql/spawner/023_account_leases_fks_db.sql        /docker-entrypoint-ini
 # (edges) and 017 (edge_experiments). ---
 COPY src/sql/spawner/024_edge_hypotheses.sql              /docker-entrypoint-initdb.d/47-edge-hypotheses.sql
 
+# --- Phase 21: a bot's own notification channel (platform_events). Needs 004.
+# (025, the research grants, is on its own branch and lands as 48.) ---
+COPY src/sql/spawner/026_channel_platform_events.sql       /docker-entrypoint-initdb.d/49-channel-platform-events.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

@@ -1,0 +1,54 @@
+{
+    "id": "history.binance-spot",
+    "version": 1,
+    "kind": "recorder",
+    "display_name": "Binance spot history",
+    "description": "Binance's public archive (data.binance.vision) for spot pairs: candles back to the year you pick. Each file is checked against its published sha256 and logged in a manifest, then kept current every 6 hours. No keys. Files go to the lake under raw/binance/spot/<instance>, one folder per symbol and interval, as the archive's own zips. Spot times are in microseconds from 2025 on.",
+    "image": "ghcr.io/nuniesmith/fks-bot-history:latest",
+    "modes": ["record"],
+    "resources": { "cpu": 0.5, "memory_mb": 256 },
+    "restart_policy": { "enabled": true },
+    "data": { "venue": "binance", "market": "spot" },
+    "fixed_env": { "HISTORY_MARKET": "spot", "HISTORY_DATASETS": "klines" },
+    "env": {
+        "symbols": "HISTORY_SYMBOLS",
+        "intervals": "HISTORY_INTERVALS",
+        "start_year": "HISTORY_START"
+    },
+    "params": {
+        "type": "object",
+        "required": ["symbols"],
+        "properties": {
+            "symbols": {
+                "x-order": 1,
+                "type": "array",
+                "title": "Symbols",
+                "description": "Spot pairs, e.g. BTCUSDT.",
+                "items": { "type": "string", "x-format": "symbol" },
+                "minItems": 1,
+                "maxItems": 50,
+                "uniqueItems": true
+            },
+            "intervals": {
+                "x-order": 2,
+                "type": "array",
+                "title": "Candle intervals",
+                "description": "Every interval is its own set of files. 1m rebuilds any other.",
+                "items": { "enum": ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"] },
+                "default": ["1m", "1h", "1d"],
+                "minItems": 1,
+                "uniqueItems": true,
+                "x-note": "Per symbol, from the archive's sizes on 2026-10-27: about 2 MB a month at 1m and 43 KB at 1h."
+            },
+            "start_year": {
+                "x-order": 3,
+                "type": "integer",
+                "title": "From the start of",
+                "description": "The archive starts in 2017; months before a symbol listed are skipped.",
+                "minimum": 2017,
+                "maximum": 2026,
+                "default": 2020
+            }
+        }
+    }
+}

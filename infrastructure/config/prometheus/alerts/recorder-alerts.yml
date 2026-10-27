@@ -13,6 +13,10 @@
 # §5.1). The recorder's gap ledger (_gaps/) records every gap; these rules make
 # sure someone hears about one while it is still short.
 #
+# History recorders (templates/history.*.json, fks-spawner bots/history) run in
+# the same mode and export fks_history_*: they download Binance's public
+# archive, so a failure costs a retry, not data. Their rules are the last two.
+#
 # No channel label: these route to discord-warnings by severity, not to the
 # money channel.
 # =============================================================================
@@ -104,3 +108,45 @@ groups:
             {{ $value | humanize1024 }}B in 30 days (0 B means full). The data lake grows by
             about 0.4 GB a day per BTC-sized bookTicker stream. Move closed
             days off the box, stop a recorder, or add disk before the floor.
+
+      - alert: HistoryFilesFailing
+        # A history recorder checks the archive every 6 hours (HISTORY_POLL_HOURS)
+        # and retries a failed file at the next check, so one bad check heals
+        # itself. The counts hold the last FINISHED check's result until the
+        # next one finishes (they never dip to 0 mid-check), so 13 hours of
+        # errors at the default poll means three checks in a row failed the
+        # same series.
+        expr: fks_history_files{job="fks-bots",state="errors"} > 0
+        for: 13h
+        labels:
+          severity: warning
+          component: recorder
+        annotations:
+          summary: "History {{ $labels.bot_id }}: {{ $labels.symbol }} {{ $labels.dataset }} downloads failing"
+          description: >
+            {{ $value | printf "%.0f" }} {{ $labels.dataset }} files for
+            {{ $labels.symbol }}{{ if ne $labels.interval "-" }} at {{ $labels.interval }}{{ end }}
+            have failed in every check for 13 hours: the archive answered with
+            an error, or the data did not match its published sha256, and
+            nothing was written. Files that downloaded are unaffected.
+          runbook: |
+            1) The instance's /status (Data page, or :9091/status) lists recent_errors: each file and why.
+            2) docker logs fks-bot-{{ $labels.bot_id }}
+            3) A sha256 mismatch that persists is the archive's own: the file stays out of the lake until it matches.
+
+      - alert: HistoryCheckStuck
+        # A check of a few symbols takes about a minute (252 files in 52 s on
+        # 2026-10-27). A first backfill of many symbols at 1m with daily
+        # metrics can take hours; twelve is past any of that.
+        expr: fks_history_cycle_running{job="fks-bots"} == 1
+        for: 12h
+        labels:
+          severity: warning
+          component: recorder
+        annotations:
+          summary: "History {{ $labels.bot_id }}: one check has run for 12 hours"
+          description: >
+            {{ $labels.bot_id }} started a check of the archive 12 hours ago and
+            has not finished it. Its /status shows how far it got
+            (cycle.checked of cycle.planned). Stop and start the instance: files
+            already downloaded are kept, and the next check skips them.

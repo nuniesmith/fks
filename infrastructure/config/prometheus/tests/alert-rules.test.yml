@@ -1272,6 +1272,9 @@ tests:
       # No liquidation for an hour and climbing: a quiet market, not a fault.
       - series: 'fks_recorder_last_message_age_seconds{job="fks-bots",bot_id="btc",symbol="BTCUSDT",stream="forceOrder"}'
         values: "3600+60x12"
+      # The same for the whole exchange's liquidation feed (market-wide recorder).
+      - series: 'fks_recorder_last_message_age_seconds{job="fks-bots",bot_id="market",symbol="ALL",stream="forceOrder@arr"}'
+        values: "3600+60x12"
     alert_rule_test:
       # Over 120 s from minute 7; `for: 3m` holds it pending through minute 9.
       - eval_time: 9m

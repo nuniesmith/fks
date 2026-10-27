@@ -1,0 +1,38 @@
+{
+    "id": "recorder.binance-usdm-market",
+    "version": 1,
+    "kind": "recorder",
+    "display_name": "Binance USDⓈ-M market-wide recorder",
+    "description": "One feed for every symbol on Binance's USDⓈ-M perpetual futures: every liquidation on the exchange, and optionally every symbol's mark price and funding. No keys, no symbols to pick. Files go to the lake under raw/binance/usdm/<instance>/ALL/<stream>, gzipped when the UTC day closes, with a ledger of every gap.",
+    "image": "ghcr.io/nuniesmith/fks-bot-recorder:latest",
+    "modes": ["record"],
+    "resources": { "cpu": 1, "memory_mb": 512 },
+    "restart_policy": { "enabled": true },
+    "data": { "venue": "binance", "market": "usdm" },
+    "fixed_env": { "RECORDER_VENUE": "binance-usdm" },
+    "env": {
+        "streams": "RECORDER_MARKET_STREAMS"
+    },
+    "params": {
+        "type": "object",
+        "required": ["streams"],
+        "properties": {
+            "streams": {
+                "x-order": 1,
+                "type": "array",
+                "title": "Market-wide streams",
+                "items": { "enum": ["forceOrder@arr", "markPrice@arr"] },
+                "default": ["forceOrder@arr"],
+                "minItems": 1,
+                "uniqueItems": true,
+                "x-labels": {
+                    "forceOrder@arr": "Every liquidation on the exchange",
+                    "markPrice@arr": "Every symbol's mark price and funding"
+                },
+                "x-backfillable": { "forceOrder@arr": "no", "markPrice@arr": "no" },
+                "x-est-mb-per-day": { "forceOrder@arr": 3, "markPrice@arr": 820 },
+                "x-note": "Sizes gzipped, measured from oryx on 2026-10-27 over 60 s. Mark price for every symbol is about 5 GB a day uncompressed until its day closes."
+            }
+        }
+    }
+}

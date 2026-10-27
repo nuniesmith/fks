@@ -20,12 +20,14 @@ groups:
   - name: recorders
     rules:
       - alert: RecorderStreamSilent
-        # Liquidations (forceOrder) are exempt: a quiet market can go an hour
-        # without one, and that silence is real data, not a fault. Every other
-        # stream ticks at least once a second (bookTicker on BTCUSDT runs at
-        # about 1,000 messages a second; markPrice@1s once a second), so two
-        # minutes of nothing is a dead connection or a stuck writer.
-        expr: fks_recorder_last_message_age_seconds{job="fks-bots",stream!="forceOrder"} > 120
+        # Liquidations are exempt, per symbol (forceOrder) and for the whole
+        # exchange (forceOrder@arr, symbol ALL): a quiet market can go a long
+        # time without one, and that silence is real data, not a fault. Every
+        # other stream ticks at least once a second (bookTicker on BTCUSDT
+        # runs at about 1,000 messages a second; markPrice@1s once a second;
+        # markPrice@arr every ~1.5 s), so two minutes of nothing is a dead
+        # connection or a stuck writer.
+        expr: fks_recorder_last_message_age_seconds{job="fks-bots",stream!~"forceOrder(@arr)?"} > 120
         for: 3m
         labels:
           severity: warning

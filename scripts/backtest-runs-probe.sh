@@ -80,6 +80,12 @@ else
     [[ -n "$st" ]] || continue
     add "fks_backtest_runs_total{status=\"${st}\"} ${n}"
   done < <(q "SELECT status||'|'||count(*) FROM backtest_runs GROUP BY status")
+
+  # Edges the weekly re-validation is supposed to keep fresh: active, with a
+  # backtest image to run. With none, "no successful backtest" is not a stale
+  # verdict, there is simply nothing to verify (oryx, 2026-10-27).
+  active="$(q "SELECT count(*) FROM edges WHERE active AND backtest_image IS NOT NULL AND btrim(backtest_image) <> ''")"
+  [[ -n "$active" ]] && add "fks_backtest_active_edges ${active}"
 fi
 
 {
@@ -91,5 +97,7 @@ fi
   echo "# TYPE fks_backtest_consecutive_failures gauge"
   echo "# HELP fks_backtest_runs_total Runs by terminal status, for context when reading an alert."
   echo "# TYPE fks_backtest_runs_total gauge"
+  echo "# HELP fks_backtest_active_edges Active edges with a backtest image: what the weekly re-validation should cover."
+  echo "# TYPE fks_backtest_active_edges gauge"
   printf '%s' "$body"
 } > "$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"

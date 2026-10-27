@@ -8,9 +8,12 @@ watches disappears quietly and the gap looks identical to "all clear".
 
 | unit | what it does | if it stops |
 |---|---|---|
-| `fks-state-backup` | daily encrypted snapshot → age → push to the private repo | `StateBackupNotReachingRemote` fires (the metric is `absent()`-guarded) |
-| `fks-digest-deadman` | every 10 min, publishes next-due/last-send gauges for **orb-briefing and advisor** | `DiscordDigestProbeNotRunning` fires after 1h |
+| `fks-state-backup` | daily encrypted snapshot → age → push to the private repo (manifest: `~/.config/fks/state.manifest`, see docs/STATE_BACKUP.md) | `StateBackupNotReachingRemote` fires (the metric is `absent()`-guarded) |
+| `fks-backtest-probe` | backtest_runs freshness, failure streak, and how many active edges should be re-validated | `BacktestProbeNotRunning` fires after 2h |
 | `fks-questdb-integrity` | hourly, publishes candle-table DEDUP/WAL state | `QuestDbIntegrityProbeNotRunning` fires after 3h |
+
+The Rithmic probe and the Discord digest dead-man were retired on
+2026-10-27 with the futures stack (their alert rules went with them).
 
 Both alerts treat a **missing** metric as failing, so a stopped timer is loud
 rather than silent. That property is deliberate and load-bearing — do not
@@ -22,7 +25,8 @@ rather than silent. That property is deliberate and load-bearing — do not
 install -d ~/.config/systemd/user
 cp infrastructure/systemd/*.service infrastructure/systemd/*.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable --now fks-state-backup.timer fks-digest-deadman.timer fks-questdb-integrity.timer
+sudo chown "$USER" /var/lib/node_exporter/textfile   # where node-exporter reads (see below)
+systemctl --user enable --now fks-state-backup.timer fks-backtest-probe.timer fks-questdb-integrity.timer
 loginctl enable-linger "$USER"      # so user timers run without an active login
 systemctl --user list-timers --no-pager
 ```
@@ -32,9 +36,13 @@ which on a headless box means "after the next SSH disconnect".
 
 ## The textfile collector these depend on
 
-Both write Prometheus metrics into `$FKS_TEXTFILE_DIR`
-(`/home/jordan/.local/share/node_exporter/textfile`), read by node_exporter's
-textfile collector. **The collector flag is baked at container-create time** —
+They write Prometheus metrics into `$FKS_TEXTFILE_DIR`
+(`/var/lib/node_exporter/textfile`, the compose default), read by
+node_exporter's textfile collector. On oryx that folder is root-owned until
+the `chown` above; until then each script skips its metric (never fatal) and
+its `*NotRunning` alert stays up. Until 2026-10-27 the units pointed at
+`~/.local/share/node_exporter/textfile`, a folder the oryx node-exporter never
+mounted. **The collector flag is baked at container-create time** —
 `--collector.textfile.directory` plus the read-only mount, both in
 `docker-compose.yml`. Editing `.env` alone does nothing; the container must be
 recreated. Getting this half-done is exactly what left

@@ -106,6 +106,37 @@ the webui auth tables — rather than inventing a new one.
   ("did the crash-page send at 3am?"). Excluding them loses the audit trail for
   the very incident a restore is consulted about.
 
+## On oryx (2026-10-27)
+
+FKS runs from the deploy checkout `/home/actions/fks`, owned by `actions`; the
+backup runs as `jordan` from `~/github/fks`. Three consequences:
+
+- **The manifest lives outside both checkouts:** `~/.config/fks/state.manifest`,
+  passed as `FKS_STATE_MANIFEST` by `fks-state-backup.service`. It was rebuilt
+  from the live schema on 2026-10-27; the 2026-09 list still named the retired
+  spot bot's volume and had never covered the live trader's
+  (`fks-bot-state-crypto-regime`). Audit it whenever the schema or the bots
+  change: every table listed for a database goes into one `pg_dump`, so a
+  table that does not exist drops that database's whole dump.
+- **The DB dumps reach the live Postgres** because compose names the project
+  after the folder (`fks`), so `docker compose exec postgres` from
+  `~/github/fks` finds the live container. No access to the deploy's `.env` is
+  needed for that.
+- **The deploy's `.env` is not in the snapshot** (it is `actions`-only, mode
+  600). It holds `SPAWNER_SECRETS_KEY`, which decrypts `exchange_secrets` and
+  `notification_channels`. After a restore onto a fresh deploy, re-enter the
+  Kraken key and the webhooks in Settings; everything else the deploy
+  regenerates.
+
+The metric (`fks_state_backup_push_ok`, which `StateBackupNotReachingRemote`
+reads) is written to `/var/lib/node_exporter/textfile`, the folder the fks
+compose mounts into node-exporter. That folder is root-owned on a fresh box;
+until `sudo chown jordan /var/lib/node_exporter/textfile`, the backup still
+runs and pushes, but the metric is skipped and the alert stays up.
+
+Not covered by this snapshot: the recorded data lake (`/srv/fks-lake`, GBs a
+day), which needs its own offsite copy.
+
 ## First-time setup
 
 ```bash

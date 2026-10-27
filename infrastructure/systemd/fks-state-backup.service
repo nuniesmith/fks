@@ -6,5 +6,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=FKS_TEXTFILE_DIR=/home/jordan/.local/share/node_exporter/textfile
+# node-exporter (fks compose) mounts /var/lib/node_exporter/textfile. The
+# metric write is skipped, never fatal, until that folder is writable by
+# this user: sudo chown "$USER" /var/lib/node_exporter/textfile
+Environment=FKS_TEXTFILE_DIR=/var/lib/node_exporter/textfile
+# The live manifest is per host, outside the repo (docs/STATE_BACKUP.md).
+Environment=FKS_STATE_MANIFEST=%h/.config/fks/state.manifest
 ExecStart=/home/jordan/github/fks/scripts/fks-state.sh export scheduled

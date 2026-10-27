@@ -66,7 +66,8 @@ spawner injects them from its encrypted store at spawn time.
 
 A recorder writes raw public market data, append-only, from a template's form
 (fks-spawner `bots/recorder`, `src/instances.rs`). Templates are the JSON files
-in `templates/`; `recorder.binance-usdm.json` records Binance USDⓈ-M futures.
+in `templates/`; `recorder.binance-usdm.json` records Binance USDⓈ-M futures,
+and `recorder.binance-usdm-market.json` records every liquidation on the exchange.
 Each instance gets its own folder in the lake, `/srv/fks-lake/raw/<venue>/<market>/<instance>`,
 and the container sees only that folder, at `/data`.
 
@@ -98,6 +99,34 @@ it; **its data folder is kept**.
   volume gets it from initdb; a running database gets it from `fks-migrate`.
 - **The image is pulled by the spawner** when an instance is created or
   started; the GHCR package `fks-bot-recorder` must be public.
+
+### History from the archive
+
+`history.binance-usdm.json` and `history.binance-spot.json` make **history
+recorders** (fks-spawner `bots/history`). They download Binance's public archive
+(data.binance.vision) into the same lake folders, `raw/binance/<market>/<instance>`:
+candles at the intervals picked, and for futures also funding rates and
+open-interest metrics. They go back to a chosen year and check for new files
+every 6 hours. Each file is the archive's own zip, written only after its
+sha256 matches the published `.CHECKSUM`, and logged in `_manifest.jsonl`.
+The websocket recorders capture what the archive never keeps (liquidations,
+best bid/ask, 1 s mark price); these give research the years before them.
+
+```bash
+curl -X POST http://127.0.0.1:8091/instances -H "X-Internal-Token: …" \
+  -H 'Content-Type: application/json' \
+  -d '{"template":"history.binance-usdm","name":"majors-history","params":{"symbols":["BTCUSDT","ETHUSDT","SOLUSDT"]}}'
+```
+
+- **Sizes are small:** about 1.8 MB a month per symbol at 1m candles, 13 KB a
+  day of metrics. Three symbols at 1m, 1h and 1d plus funding and metrics
+  since 2020 come to about 0.5 GB.
+- **The image is `fks-bot-history`;** its GHCR package must be public too, like
+  the recorder's.
+- **Alerts:** `HistoryFilesFailing` (the same files failed in every check for
+  13 hours) and `HistoryCheckStuck` (one check running 12 hours), in
+  `recorder-alerts.yml`. A 404 is not an error: recent files are "not yet",
+  and files from before a symbol listed are "never" and retried weekly.
 
 ## Crypto bot cutover (phase 2)
 

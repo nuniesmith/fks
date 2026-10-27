@@ -987,6 +987,63 @@ tests:
               summary: "Recorder btc: BTCUSDT REST snapshots failing"
               description: "60 REST snapshot requests for BTCUSDT failed in the last hour. The websocket streams are unaffected; the open-interest and premium-index series are thinning. /status shows the last error.\n"
 
+  - interval: 5m
+    name: HistoryFilesFailing fires after 13 h of failed checks, not when a check in between succeeds
+    input_series:
+      # Two 1m files failing in every check for 14 hours.
+      - series: 'fks_history_files{job="fks-bots",bot_id="hist",dataset="klines",symbol="BTCUSDT",interval="1m",state="errors"}'
+        values: "2x168"
+      # Failing, one clean check at 6 h, then failing again: never 13 h in a row.
+      - series: 'fks_history_files{job="fks-bots",bot_id="hist",dataset="metrics",symbol="ETHUSDT",interval="-",state="errors"}'
+        values: "1x72 0 1x95"
+      # A series with nothing failing.
+      - series: 'fks_history_files{job="fks-bots",bot_id="hist",dataset="fundingRate",symbol="BTCUSDT",interval="-",state="errors"}'
+        values: "0x168"
+    alert_rule_test:
+      - eval_time: 12h55m
+        alertname: HistoryFilesFailing
+        exp_alerts: []
+      - eval_time: 13h5m
+        alertname: HistoryFilesFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: recorder
+              job: fks-bots
+              bot_id: hist
+              dataset: klines
+              symbol: BTCUSDT
+              interval: 1m
+              state: errors
+            exp_annotations:
+              summary: "History hist: BTCUSDT klines downloads failing"
+              description: "2 klines files for BTCUSDT at 1m have failed in every check for 13 hours: the archive answered with an error, or the data did not match its published sha256, and nothing was written. Files that downloaded are unaffected.\n"
+              runbook: "1) The instance's /status (Data page, or :9091/status) lists recent_errors: each file and why.\n2) docker logs fks-bot-hist\n3) A sha256 mismatch that persists is the archive's own: the file stays out of the lake until it matches.\n"
+
+  - interval: 5m
+    name: HistoryCheckStuck fires on a 12 h check, not on a normal one
+    input_series:
+      - series: 'fks_history_cycle_running{job="fks-bots",bot_id="hist"}'
+        values: "1x156"
+      # Checks of a few minutes every 6 hours.
+      - series: 'fks_history_cycle_running{job="fks-bots",bot_id="spot"}'
+        values: "1 0x71 1 0x71 1 0x10"
+    alert_rule_test:
+      - eval_time: 11h55m
+        alertname: HistoryCheckStuck
+        exp_alerts: []
+      - eval_time: 12h5m
+        alertname: HistoryCheckStuck
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              component: recorder
+              job: fks-bots
+              bot_id: hist
+            exp_annotations:
+              summary: "History hist: one check has run for 12 hours"
+              description: "hist started a check of the archive 12 hours ago and has not finished it. Its /status shows how far it got (cycle.checked of cycle.planned). Stop and start the instance: files already downloaded are kept, and the next check skips them.\n"
+
   # 300 GB free. Losing 10 GB a day projects to past zero in 30 days; losing
   # 1 GB a day leaves ~269 GB. predict_linear needs only two samples in its
   # [7d] window, so three hours of history exercises it; a days-long eval_time

@@ -21,11 +21,9 @@ rule_files:
   - ../alerts/crash-supervision.yml
   - ../alerts/armed-path.yml
   - ../alerts/gate-b-window.yml
-  - ../alerts/discord-digests.yml
   - ../alerts/questdb-integrity.yml
   - ../alerts/market-data-pipeline.yml
   - ../alerts/data.yml
-  - ../alerts/rithmic-connector.yml
   - ../alerts/edge-factory.yml
   - ../alerts/recorder-alerts.yml
 
@@ -488,232 +486,6 @@ tests:
         exp_alerts: []
 
   # ===========================================================================
-  # Discord digest dead-man (added 2026-08-22, generalised same day to cover
-  # advisor as well as orb-briefing — both log an identical scheduler line).
-  # ===========================================================================
-
-  # Verified non-vacuous by widening the grace to 48h, which stops it firing.
-  # NB eval_time MUST exceed the 30m grace plus the 5m `for`.
-  - interval: 5m
-    name: DiscordDigestOverdue fires once a service's own due time passes the grace
-    input_series:
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "0x24"
-    alert_rule_test:
-      - eval_time: 40m
-        alertname: DiscordDigestOverdue
-        exp_alerts:
-          - exp_labels:
-              severity: critical
-              team: trading
-              component: decision-input
-              digest_service: orb-briefing
-              kind: briefing
-            exp_annotations:
-              summary: "orb-briefing briefing is 40m 0s overdue — a scheduled digest did not arrive"
-              description: "orb-briefing said its next briefing was due 40m 0s ago and no send has been recorded since. For orb-briefing this is the input the operator trades one manual futures position against each morning, so a missing message means trading blind or not at all. The due time comes from the service's own calendar, so this is NOT a weekend or market holiday.\n"
-              runbook: "1. docker logs <container> --tail 50 — look for a panic, a wedged scheduler, or Discord send failures (HTTP 4xx/5xx). 2. Check the Discord webhook is alive; a revoked or rotated webhook fails silently from the service's point of view. 3. For orb-briefing the upstream data source is Yahoo Finance, which rate-limits and blocks non-browser user agents — a fetch failure renders INTO the message rather than blocking it, so a total absence points at the scheduler or Discord, not at data. 4. If the service is simply down, restart it; schedules are recomputed on boot and a missed slot is not retried.\n"
-
-  # Per-service isolation: advisor overdue must NOT implicate orb-briefing, and
-  # a healthy sibling must not suppress the alert. This is what the `service`
-  # label buys, so it is worth pinning.
-  - interval: 5m
-    name: DiscordDigestOverdue isolates the overdue service from a healthy sibling
-    input_series:
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="advisor",kind="daily"}'
-        values: "0x24"
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "86400x24"
-    alert_rule_test:
-      - eval_time: 40m
-        alertname: DiscordDigestOverdue
-        exp_alerts:
-          - exp_labels:
-              severity: critical
-              team: trading
-              component: decision-input
-              digest_service: advisor
-              kind: daily
-            exp_annotations:
-              summary: "advisor daily is 40m 0s overdue — a scheduled digest did not arrive"
-              description: "advisor said its next daily was due 40m 0s ago and no send has been recorded since. For orb-briefing this is the input the operator trades one manual futures position against each morning, so a missing message means trading blind or not at all. The due time comes from the service's own calendar, so this is NOT a weekend or market holiday.\n"
-              runbook: "1. docker logs <container> --tail 50 — look for a panic, a wedged scheduler, or Discord send failures (HTTP 4xx/5xx). 2. Check the Discord webhook is alive; a revoked or rotated webhook fails silently from the service's point of view. 3. For orb-briefing the upstream data source is Yahoo Finance, which rate-limits and blocks non-browser user agents — a fetch failure renders INTO the message rather than blocking it, so a total absence points at the scheduler or Discord, not at data. 4. If the service is simply down, restart it; schedules are recomputed on boot and a missed slot is not retried.\n"
-
-  # REGRESSION (2026-09-02). next_due is only advanced when the probe can PARSE
-  # the service's "next:" log line. Its pattern was `[a-z]+`, so when per-symbol
-  # sessions introduced `feed-check` (hyphen) and `plan [08:20 session]`
-  # (bracket), only "briefing" still matched. next_due then froze at each
-  # morning's briefing slot while every digest kept arriving on time, and this
-  # rule sat CRITICAL for ~23.5h a day.
-  #
-  # The parser is fixed, but the rule must not depend on the parser being right:
-  # a send recorded AT OR AFTER the due time means the digest arrived, full stop.
-  - interval: 5m
-    name: DiscordDigestOverdue stays silent when the send landed after a stale due time
-    input_series:
-      # Observed live: due 12:30:00Z, sent 12:30:03Z, next_due never advanced.
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "0x24"
-      - series: 'fks_digest_last_send_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "3x24"
-    alert_rule_test:
-      - eval_time: 40m
-        alertname: DiscordDigestOverdue
-        exp_alerts: []
-
-  # ...and the guard must not over-suppress: a send that predates the due slot
-  # (yesterday's digest) is NOT evidence that today's arrived.
-  - interval: 5m
-    name: DiscordDigestOverdue still fires when the only send predates the due time
-    input_series:
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "0x24"
-      - series: 'fks_digest_last_send_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "-60x24"
-    alert_rule_test:
-      - eval_time: 40m
-        alertname: DiscordDigestOverdue
-        exp_alerts:
-          - exp_labels:
-              severity: critical
-              team: trading
-              component: decision-input
-              digest_service: orb-briefing
-              kind: briefing
-            exp_annotations:
-              summary: "orb-briefing briefing is 40m 0s overdue — a scheduled digest did not arrive"
-              description: "orb-briefing said its next briefing was due 40m 0s ago and no send has been recorded since. For orb-briefing this is the input the operator trades one manual futures position against each morning, so a missing message means trading blind or not at all. The due time comes from the service's own calendar, so this is NOT a weekend or market holiday.\n"
-              runbook: "1. docker logs <container> --tail 50 — look for a panic, a wedged scheduler, or Discord send failures (HTTP 4xx/5xx). 2. Check the Discord webhook is alive; a revoked or rotated webhook fails silently from the service's point of view. 3. For orb-briefing the upstream data source is Yahoo Finance, which rate-limits and blocks non-browser user agents — a fetch failure renders INTO the message rather than blocking it, so a total absence points at the scheduler or Discord, not at data. 4. If the service is simply down, restart it; schedules are recomputed on boot and a missed slot is not retried.\n"
-
-  - interval: 5m
-    name: DiscordDigestOverdue stays silent inside the grace window
-    input_series:
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="advisor",kind="daily"}'
-        values: "0x24"
-    alert_rule_test:
-      - eval_time: 20m
-        alertname: DiscordDigestOverdue
-        exp_alerts: []
-
-  - interval: 5m
-    name: DiscordDigestOverdue stays silent when the next send is still ahead
-    input_series:
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "86400x24"
-    alert_rule_test:
-      - eval_time: 60m
-        alertname: DiscordDigestOverdue
-        exp_alerts: []
-
-  # Verified non-vacuous by replacing absent() with a never-matching comparison.
-  - interval: 5m
-    name: DiscordDigestProbeNotRunning fires when the probe metric is absent
-    input_series:
-      - series: 'up{job="prometheus"}'
-        values: "1x24"
-    alert_rule_test:
-      - eval_time: 70m
-        alertname: DiscordDigestProbeNotRunning
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              team: trading
-              component: decision-input
-            exp_annotations:
-              summary: "Discord digest dead-man is not reporting at all"
-              description: "fks_digest_probe_ok has been absent for an hour. The systemd timer that emits it is not running, or the node_exporter textfile collector is not reading its directory. Nothing is watching either scheduled digest.\n"
-              runbook: "systemctl --user status fks-digest-deadman.timer && systemctl --user start fks-digest-deadman.service. Then confirm the .prom file exists in $FKS_TEXTFILE_DIR and that node_exporter carries --collector.textfile.directory — that flag is baked at container-create time, so editing .env alone does nothing.\n"
-
-  - interval: 5m
-    name: DiscordDigestProbeNotRunning stays silent while the probe reports
-    input_series:
-      - series: 'fks_digest_probe_ok{digest_service="advisor"}'
-        values: "0x24"
-    alert_rule_test:
-      - eval_time: 70m
-        alertname: DiscordDigestProbeNotRunning
-        exp_alerts: []
-
-  # ---------------------------------------------------------------------------
-  # DiscordDigestSendFailed (added 2026-08-24)
-  #
-  # The THIRD case below is the one that matters: it reproduces the exact
-  # 2026-08-24 production state — scheduler already advanced, probe healthy,
-  # send failed — and asserts that all three pre-existing rules stay SILENT
-  # while this one fires. Without that case a future "simplification" could
-  # delete this rule and every other test in this file would still pass.
-  #
-  # Verified non-vacuous by inverting the comparison to `> 21600`, which makes
-  # cases 1 and 3 stop firing.
-  # ---------------------------------------------------------------------------
-  - interval: 5m
-    name: DiscordDigestSendFailed fires on a recent failed send
-    input_series:
-      - series: 'fks_digest_last_failure_timestamp_seconds{digest_service="orb-briefing"}'
-        values: "0x24"
-    alert_rule_test:
-      - eval_time: 30m
-        alertname: DiscordDigestSendFailed
-        exp_alerts:
-          - exp_labels:
-              severity: critical
-              team: trading
-              component: decision-input
-              digest_service: orb-briefing
-            exp_annotations:
-              summary: "orb-briefing FAILED to send — the message did not go out"
-              description: "orb-briefing logged a failed send 30m 0s ago. Unlike DiscordDigestOverdue this means the scheduler DID fire and the send itself broke, so the scheduler has already advanced and every other rule here reads green. For orb-briefing the missing message is the input the operator trades one manual futures position against, so treat a morning failure as \"no plan today\" rather than \"it will be along shortly\" — a missed slot is NOT retried.\n"
-              runbook: "1. docker logs <container> --tail 80 | grep -i failed — the log names the cause on the same line. 2. Most likely is egress, not the service: check DNS from INSIDE the container (docker exec <c> getent hosts discord.com), because a transient resolver failure takes out the data fetch and the webhook POST together and looks like a total outage. 3. If the webhook itself is rejected (HTTP 4xx), it was rotated or revoked — re-add it via the webui notification settings. 4. There is no catch-up. If the trading window has passed, the plan for that session is gone; do not trade a stale range.\n"
-
-  # Self-clearing: past the 6h window the operator can no longer act on it, so
-  # it must stop firing on its own rather than need an acknowledgement.
-  - interval: 5m
-    name: DiscordDigestSendFailed clears once the failure ages past the window
-    input_series:
-      - series: 'fks_digest_last_failure_timestamp_seconds{digest_service="orb-briefing"}'
-        values: "0x84"
-    alert_rule_test:
-      - eval_time: 7h
-        alertname: DiscordDigestSendFailed
-        exp_alerts: []
-
-  # THE REGRESSION TEST. Scheduler advanced (next_due tomorrow), probe reading
-  # fine (probe_ok 1), send failed. Pre-2026-08-24 this state was ENTIRELY
-  # SILENT.
-  - interval: 5m
-    name: DiscordDigestSendFailed catches the state every other digest rule reads as green
-    input_series:
-      - series: 'fks_digest_last_failure_timestamp_seconds{digest_service="orb-briefing"}'
-        values: "0x24"
-      - series: 'fks_digest_next_due_timestamp_seconds{digest_service="orb-briefing",kind="briefing"}'
-        values: "86400x24"
-      - series: 'fks_digest_probe_ok{digest_service="orb-briefing"}'
-        values: "1x24"
-    alert_rule_test:
-      - eval_time: 30m
-        alertname: DiscordDigestSendFailed
-        exp_alerts:
-          - exp_labels:
-              severity: critical
-              team: trading
-              component: decision-input
-              digest_service: orb-briefing
-            exp_annotations:
-              summary: "orb-briefing FAILED to send — the message did not go out"
-              description: "orb-briefing logged a failed send 30m 0s ago. Unlike DiscordDigestOverdue this means the scheduler DID fire and the send itself broke, so the scheduler has already advanced and every other rule here reads green. For orb-briefing the missing message is the input the operator trades one manual futures position against, so treat a morning failure as \"no plan today\" rather than \"it will be along shortly\" — a missed slot is NOT retried.\n"
-              runbook: "1. docker logs <container> --tail 80 | grep -i failed — the log names the cause on the same line. 2. Most likely is egress, not the service: check DNS from INSIDE the container (docker exec <c> getent hosts discord.com), because a transient resolver failure takes out the data fetch and the webhook POST together and looks like a total outage. 3. If the webhook itself is rejected (HTTP 4xx), it was rotated or revoked — re-add it via the webui notification settings. 4. There is no catch-up. If the trading window has passed, the plan for that session is gone; do not trade a stale range.\n"
-      # The three rules that existed before, all green on the same input.
-      - eval_time: 30m
-        alertname: DiscordDigestOverdue
-        exp_alerts: []
-      - eval_time: 30m
-        alertname: DiscordDigestProbeBlind
-        exp_alerts: []
-      - eval_time: 30m
-        alertname: DiscordDigestProbeNotRunning
-        exp_alerts: []
-
-  # ===========================================================================
   # QuestDB candle-table integrity (added 2026-08-22)
   #
   # The dangerous state is "table PRESENT with dedup OFF", not "table missing":
@@ -923,144 +695,6 @@ tests:
         exp_alerts: []
 
   # ===========================================================================
-  # Rithmic connector (added 2026-08-24)
-  #
-  # The SECOND case is the one that earns its place. With a single Rithmic
-  # credential the operator releases the session to R|Trader Pro to place every
-  # trade, so `connected == 0` is a normal daily event. A rule without the
-  # `killed == 0` clause would page on every trade and be muted inside a week —
-  # which is how a real outage later goes unnoticed.
-  #
-  # Verified non-vacuous by deleting `and fks_rithmic_killed == 0` from the
-  # expr, which makes case 2 fire.
-  # ===========================================================================
-  - interval: 1m
-    name: RithmicSessionLost fires on an unintended disconnect
-    input_series:
-      - series: 'fks_rithmic_connected'
-        values: "0x20"
-      - series: 'fks_rithmic_killed'
-        values: "0x20"
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: RithmicSessionLost
-        exp_alerts: []   # `for: 10m` not yet satisfied
-      - eval_time: 15m
-        alertname: RithmicSessionLost
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              team: trading
-              component: decision-input
-            exp_annotations:
-              summary: "Rithmic session is DOWN and was not released by the operator"
-              description: "The connector has been disconnected for over 10 minutes without the kill switch being set, so this is a fault rather than a handover to R|Trader Pro. Bars are NOT accumulating: every minute lost is a hole in the opening range the morning ORB plan is sized from, and a range missing its middle reads TOO NARROW — tighter stop, larger position.\n"
-              runbook: "1. curl -s http://127.0.0.1:9094/status — check `killed`; if it is true someone released the session and this alert is correct but benign, just resume it. 2. docker logs fks_rithmic_connector --tail 50 — the login-war guard stops the connector outright after 3 sessions under 90s, which means something else is holding the credential (usually the operator's own R|Trader Pro app). Only ONE session per credential exists. 3. If it stopped, close the other login first, then POST /resume — restarting into a contested credential just restarts the fight.\n"
-
-  # THE DAILY HANDOVER. Operator released the session to trade on their phone.
-  # This must stay SILENT or the rule is worse than useless.
-  - interval: 1m
-    name: RithmicSessionLost stays silent when the operator released the session
-    input_series:
-      - series: 'fks_rithmic_connected'
-        values: "0x20"
-      - series: 'fks_rithmic_killed'
-        values: "1x20"
-    alert_rule_test:
-      - eval_time: 15m
-        alertname: RithmicSessionLost
-        exp_alerts: []
-
-  # A RELEASE IS NOT A FAULT, BUT IT IS STILL EXPENSIVE. These two rules split
-  # that: SessionLost ignores `killed` so it never pages on the daily handover;
-  # ReleasedTooLong watches ONLY `killed`, on a much longer fuse, because a
-  # release forgotten past the next open costs that morning's opening range —
-  # which is exactly what happened on 2026-08-25.
-  - interval: 5m
-    name: RithmicReleasedTooLong ignores a normal morning handover
-    input_series:
-      - series: 'fks_rithmic_killed'
-        values: "1x24"          # 2 hours — a session's worth
-    alert_rule_test:
-      - eval_time: 2h
-        alertname: RithmicReleasedTooLong
-        exp_alerts: []
-
-  - interval: 5m
-    name: RithmicReleasedTooLong fires on a release left set past the window
-    input_series:
-      - series: 'fks_rithmic_killed'
-        values: "1x72"          # 6 hours
-    alert_rule_test:
-      - eval_time: 5h
-        alertname: RithmicReleasedTooLong
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              team: trading
-              component: decision-input
-            exp_annotations:
-              summary: "Rithmic session has been released for over 4 hours — no bars are being captured"
-              description: "The kill switch is still set. This is not a fault — someone released the credential deliberately — but nothing has streamed into candles_futures since, and the ORB day-plan builds its opening range from those bars. If this is still set at 09:30 ET the 09:47 plan will have no range and will say so, which is honest but leaves the morning without levels.\n"
-              runbook: "Close any other Rithmic login FIRST (R|Trader Pro holds the same single session), then resume: POST /api/rithmic/resume from the /futures Session control, or curl -X POST -H \"X-Internal-Token: $NGINX_INTERNAL_TOKEN\" http://127.0.0.1:9094/resume Resuming while another login holds the credential just restarts the contention the release existed to avoid.\n"
-
-  # And the two rules must not both fire on the same state, or the operator is
-  # paged twice for one situation and learns to ignore both.
-  - interval: 5m
-    name: a long release fires ReleasedTooLong but NOT SessionLost
-    input_series:
-      - series: 'fks_rithmic_killed'
-        values: "1x72"
-      - series: 'fks_rithmic_connected'
-        values: "0x72"
-    alert_rule_test:
-      - eval_time: 5h
-        alertname: RithmicSessionLost
-        exp_alerts: []
-
-  - interval: 1m
-    name: RithmicSessionLost stays silent while the session is up
-    input_series:
-      - series: 'fks_rithmic_connected'
-        values: "1x20"
-      - series: 'fks_rithmic_killed'
-        values: "0x20"
-    alert_rule_test:
-      - eval_time: 15m
-        alertname: RithmicSessionLost
-        exp_alerts: []
-
-  # A probe that STOPS must be loud; a probe reporting an unreachable connector
-  # must NOT be, because the connector is profile-gated and legitimately absent.
-  - interval: 5m
-    name: RithmicProbeNotRunning fires when the probe metric is absent
-    input_series:
-      - series: 'up{job="prometheus"}'
-        values: "1x24"
-    alert_rule_test:
-      - eval_time: 70m
-        alertname: RithmicProbeNotRunning
-        exp_alerts:
-          - exp_labels:
-              severity: warning
-              team: trading
-              component: decision-input
-            exp_annotations:
-              summary: "Rithmic connector probe is not reporting at all"
-              description: "fks_rithmic_probe_ok has been absent for an hour. The systemd timer that emits it is not running, or the node_exporter textfile collector is not reading its directory. Nothing is watching the futures feed.\n"
-              runbook: "systemctl --user status fks-rithmic-probe.timer && systemctl --user start fks-rithmic-probe.service. Then confirm fks_rithmic_connector.prom exists in $FKS_TEXTFILE_DIR and that node_exporter carries --collector.textfile.directory — that flag is baked at container-create time, so editing .env alone does nothing. NOTE probe_ok=0 (the connector is unreachable) is a DIFFERENT state and is deliberately not alerted on its own: the connector is profile-gated and is legitimately absent whenever RITHMIC_ENABLED is off.\n"
-
-  - interval: 5m
-    name: RithmicProbeNotRunning stays silent while the probe reports, even at probe_ok 0
-    input_series:
-      - series: 'fks_rithmic_probe_ok'
-        values: "0x24"
-    alert_rule_test:
-      - eval_time: 70m
-        alertname: RithmicProbeNotRunning
-        exp_alerts: []
-
-  # ===========================================================================
   # Edge factory (added 2026-08-25)
   #
   # The 2026-07-19 → 08-16 outage in miniature: ten consecutive failures, then
@@ -1118,6 +752,8 @@ tests:
         values: "0x40"
       - series: 'fks_backtest_consecutive_failures'
         values: "0x40"
+      - series: 'fks_backtest_active_edges'
+        values: "2x40"
     alert_rule_test:
       - eval_time: 90m
         alertname: BacktestVerdictsGoingStale
@@ -1134,6 +770,20 @@ tests:
       # rules cover different failures rather than duplicating one.
       - eval_time: 90m
         alertname: BacktestRunsFailing
+        exp_alerts: []
+
+  # Nothing registered, nothing to verify: no edges is not a stale verdict.
+  # (oryx 2026-10-21..: zero edges, and the old rule fired the whole time.)
+  - interval: 5m
+    name: BacktestVerdictsGoingStale stays silent while no active edge has a backtest image
+    input_series:
+      - series: 'fks_backtest_last_success_timestamp_seconds'
+        values: "0x40"
+      - series: 'fks_backtest_active_edges'
+        values: "0x40"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: BacktestVerdictsGoingStale
         exp_alerts: []
 
   - interval: 5m

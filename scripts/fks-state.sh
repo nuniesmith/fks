@@ -209,7 +209,7 @@ cmd_status() {
   else
     warn "postgres container not up — DB tables will be skipped on export (drift check skipped)"
   fi
-  [[ -d "$FKS_STATE_DIR/snapshots" ]] && log "snapshots: $(ls -1 "$FKS_STATE_DIR"/snapshots/*.tar.age 2>/dev/null | wc -l) in $FKS_STATE_DIR"
+  [[ -d "$FKS_STATE_DIR/snapshots" ]] && log "snapshots: $(ls -1 "$FKS_STATE_DIR"/snapshots/*.tar.gz.age 2>/dev/null | wc -l) in $FKS_STATE_DIR"
 }
 
 # ── export ───────────────────────────────────────────────────────────────────

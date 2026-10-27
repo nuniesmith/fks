@@ -68,9 +68,17 @@ groups:
             # plus a retry; three in a row is a pipeline that has stopped.
             # `== 0` covers "never succeeded", which time() arithmetic alone
             # would render as a 56-year-old success rather than as no data.
+            # Only while an active edge has a backtest image to run: with no
+            # edges registered (oryx from 2026-10-21) there is no verdict to
+            # go stale, and the old form fired forever. `and on()` against
+            # the probe's own count, so a missing count stays silent HERE and
+            # BacktestProbeNotRunning reports the missing probe instead.
             expr: |
-                fks_backtest_last_success_timestamp_seconds == 0
-                or (time() - fks_backtest_last_success_timestamp_seconds) > 1814400
+                (
+                  fks_backtest_last_success_timestamp_seconds == 0
+                  or (time() - fks_backtest_last_success_timestamp_seconds) > 1814400
+                )
+                and on() fks_backtest_active_edges > 0
             for: 1h
             labels:
                 severity: warning

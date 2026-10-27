@@ -45,6 +45,16 @@ models/*.onnx
 # ../fks-state/bots/crypto-futures/funding-state-*.json
 # ../fks-spawner/bots/spot-portfolio/spot-trades.jsonl
 
+# ── The live trader and the platform as of 2026-10-27 (oryx) ────────────────
+# The crypto bot's state (ledger, fills, pending orders) is its spawner volume,
+# fks-bot-state-<bot_id>, not a file in a checkout. Recorder instances keep
+# their data in the lake (/srv/fks-lake), which has its own offsite copy, so
+# their state volumes need no line.
+# vol:fks-bot-state-crypto-regime
+# db:fks_db:bot_configs,bot_runs,account_leases
+# db:fks_db:net_worth_snapshots,transfers,accounts
+# db:fks_db:edges,backtest_runs,edge_experiments,edge_deployments
+# db:fks_db:schema_migrations
 # ── Database tables — the runtime secret store + account/PnL/risk/auth state ─
 # Dumped data-only (schema lives in src/sql/, applied at container init). A
 # --data-only restore requires the table's CREATE to exist on the target, so

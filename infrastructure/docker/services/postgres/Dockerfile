@@ -198,6 +198,11 @@ COPY src/sql/spawner/021_record_mode.sql                  /docker-entrypoint-ini
 COPY src/sql/spawner/022_account_leases.sql                  /docker-entrypoint-initdb.d/45-account-leases.sql
 COPY src/sql/spawner/023_account_leases_fks_db.sql        /docker-entrypoint-initdb.d/46-account-leases-fks-db.sql
 
+# --- Phase 19: edge hypotheses (stage 2 of the edge process, frozen once
+# registered; experiments must finish after their hypothesis). Needs 008
+# (edges) and 017 (edge_experiments). ---
+COPY src/sql/spawner/024_edge_hypotheses.sql              /docker-entrypoint-initdb.d/47-edge-hypotheses.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

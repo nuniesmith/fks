@@ -150,6 +150,14 @@ curl -X POST http://127.0.0.1:8091/instances -H "X-Internal-Token: …" \
 > ORDER, and point janus-bridge's `CRYPTO_BOT_STATE_DIR` at the managed bot's
 > state.
 
+**Its Discord webhook (since 2026-10-27)** comes from **Settings →
+Notifications**, channel `crypto` with platform events off, not from GitHub
+or botsync's templating. `bots/crypto-regime.yaml` says
+`webhooks: {CRYPTO_DISCORD_WEBHOOK_URL: crypto}`, and the spawner sets the
+channel's URL at every spawn. To rotate it, edit the channel, then respawn the
+bot (Tasks → Advanced → Respawn). A missing channel doesn't stop the bot; it
+trades without reports, and `fks_spawner_webhook_unresolved_total` counts it.
+
 The spawner-managed `crypto-regime` bot runs **live**. Cutover rule: **never
 two live bots on one Kraken account.**
 

@@ -128,6 +128,35 @@ curl -X POST http://127.0.0.1:8091/instances -H "X-Internal-Token: …" \
   `recorder-alerts.yml`. A 404 is not an error: recent files are "not yet",
   and files from before a symbol listed are "never" and retried weekly.
 
+## Jobs: searching a hypothesis
+
+`job.edge-search.json` runs **one search of one registered hypothesis**
+(EDGE_PROCESS steps 3-4; fks-spawner `bots/edge-search`). It's a one-shot
+**job instance**: it runs once and is never restarted. Boot reconciliation
+never re-runs one, because a search run twice counts its trials twice in N.
+
+- It reads the lake **read-only** at `/lake`, and writes its artifacts to
+  `/srv/fks-lake/jobs/<instance>/<study>/` (`trials.csv`, `holdout.csv`,
+  `verdict.json`).
+- It writes **one** `edge_experiments` row as the scoped `fks_backtest` role.
+  The spawner passes `BACKTEST_DB_URL` as `FKS_DB_URL` at spawn; it's never
+  saved with the instance. 025 grants that role read on edges, hypotheses and
+  experiments, and insert on experiments; nothing else (025's validate
+  script lists what it can't do).
+- The hypothesis's dataset must read `<lake folder> <interval> <from>..<to>`,
+  e.g. `raw/binance/spot/spot-history 1d 2017-08-17..2026-10-25`, and its
+  parameters must be the family's (`trend-band`: `lookback`, `band`).
+
+```bash
+curl -X POST http://127.0.0.1:8091/instances -H "X-Internal-Token: …" \
+  -H 'Content-Type: application/json' \
+  -d '{"template":"job.edge-search","name":"search-h1","params":{"hypothesis_id":1}}'
+```
+
+The verdict lands on the Edges page (Searched). Deleting the instance keeps
+its folder. **To run it again**, start it again: that is a new study, and N
+grows.
+
 ## Crypto bot cutover (phase 2)
 
 > **PAUSED 2026-10-15 — `crypto-regime` is disabled (`autostart: false`).**
@@ -149,6 +178,14 @@ curl -X POST http://127.0.0.1:8091/instances -H "X-Internal-Token: …" \
 > its templating, so it reports to nobody. Then run the steps below IN
 > ORDER, and point janus-bridge's `CRYPTO_BOT_STATE_DIR` at the managed bot's
 > state.
+
+**Its Discord webhook (since 2026-10-27)** comes from **Settings →
+Notifications**, channel `crypto` with platform events off, not from GitHub
+or botsync's templating. `bots/crypto-regime.yaml` says
+`webhooks: {CRYPTO_DISCORD_WEBHOOK_URL: crypto}`, and the spawner sets the
+channel's URL at every spawn. To rotate it, edit the channel, then respawn the
+bot (Tasks → Advanced → Respawn). A missing channel doesn't stop the bot; it
+trades without reports, and `fks_spawner_webhook_unresolved_total` counts it.
 
 The spawner-managed `crypto-regime` bot runs **live**. Cutover rule: **never
 two live bots on one Kraken account.**

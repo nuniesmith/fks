@@ -1,0 +1,38 @@
+{
+    "id": "job.edge-search",
+    "version": 1,
+    "kind": "job",
+    "display_name": "Search and validate a hypothesis",
+    "description": "EDGE_PROCESS steps 3 and 4 for one registered hypothesis: every grid point scored on the training part's folds (each one a trial, counted in N), the best scored once on the holdout, the clauses U1-U9 judged, and one experiment written through the scoped research role. Reads the lake read-only; runs once and is never restarted. Artifacts (trials, holdout returns, the verdict) go to the lake under jobs/<instance>.",
+    "image": "ghcr.io/nuniesmith/fks-bot-edge-search:latest",
+    "modes": ["backtest"],
+    "resources": { "cpu": 2, "memory_mb": 1024 },
+    "lake": "read",
+    "database": "research",
+    "env": {
+        "hypothesis_id": "EDGE_HYPOTHESIS_ID",
+        "family": "EDGE_FAMILY"
+    },
+    "params": {
+        "type": "object",
+        "required": ["hypothesis_id", "family"],
+        "properties": {
+            "hypothesis_id": {
+                "x-order": 1,
+                "type": "integer",
+                "title": "Hypothesis",
+                "description": "The registered hypothesis's number (Edges). Its dataset must read '<lake folder> <interval> <from>..<to>'.",
+                "minimum": 1
+            },
+            "family": {
+                "x-order": 2,
+                "type": "string",
+                "title": "Strategy family",
+                "enum": ["trend-band"],
+                "default": "trend-band",
+                "x-labels": { "trend-band": "Trend band: an SMA lookback and a band (the live rule's family)" },
+                "x-note": "The hypothesis's parameters must be the family's: trend-band tunes lookback (bars) and band (a fraction)."
+            }
+        }
+    }
+}

@@ -35,8 +35,6 @@ memory_mb: 512
 env:
   # Bot state (state.json) + journal land in the spawner's per-bot volume.
   CRYPTO_BOT_ROOT: /var/lib/fks-bot
-  # Templated by botsync from the deploy environment — never committed.
-  CRYPTO_DISCORD_WEBHOOK_URL: "${CRYPTO_DISCORD_WEBHOOK_URL:-}"
   TZ: America/Toronto
   # The FKS status contract (fks-web /exchanges reads it). The bot serves
   # /health, /status, /metrics on this port inside the fks network.
@@ -45,6 +43,12 @@ env:
 # Spawn FAILS if `kraken` has no stored credentials (never a keyless live bot).
 secrets:
   - kraken
+# Its #crypto Discord reports: the webhook of the Settings -> Notifications
+# channel `crypto` (platform events off), set at every spawn. Never in GitHub,
+# .env or this file; rotate it in Settings, then respawn. Unlike the Kraken
+# key, a missing channel doesn't stop the bot: it trades without reports.
+webhooks:
+  CRYPTO_DISCORD_WEBHOOK_URL: crypto
 restart_policy:
   enabled: true
   max_restarts: 3

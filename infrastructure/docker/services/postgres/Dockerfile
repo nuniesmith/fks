@@ -203,6 +203,10 @@ COPY src/sql/spawner/023_account_leases_fks_db.sql        /docker-entrypoint-ini
 # (edges) and 017 (edge_experiments). ---
 COPY src/sql/spawner/024_edge_hypotheses.sql              /docker-entrypoint-initdb.d/47-edge-hypotheses.sql
 
+# --- Phase 20: what a search job (fks_backtest) may read and write. Needs 009
+# (the role), 017 and 024. ---
+COPY src/sql/spawner/025_research_role_grants.sql         /docker-entrypoint-initdb.d/48-research-role-grants.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

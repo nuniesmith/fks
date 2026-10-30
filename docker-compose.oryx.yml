@@ -1159,7 +1159,6 @@ services:
     - SPAWNER_URL=http://fks_bot_spawner:8090
     - NGINX_INTERNAL_TOKEN=${NGINX_INTERNAL_TOKEN}
     - BOTS_DIR=/bots
-    - CRYPTO_DISCORD_WEBHOOK_URL=${CRYPTO_DISCORD_WEBHOOK_URL:-}
     volumes:
     - ./bots:/bots:ro
     networks:

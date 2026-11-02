@@ -225,6 +225,9 @@ COPY src/sql/spawner/030_edge_monitor.sql                 /docker-entrypoint-ini
 # --- Phase 26: the signal ledger (what a signal runner said). Needs 018, 025, 029. ---
 COPY src/sql/spawner/031_edge_signals.sql                 /docker-entrypoint-initdb.d/54-edge-signals.sql
 
+# --- Phase 27: an open trade's exit is said after retirement. Needs 031. ---
+COPY src/sql/spawner/032_edge_signals_open_exit.sql       /docker-entrypoint-initdb.d/55-edge-signals-open-exit.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

@@ -9,13 +9,16 @@
 -- before 029), F1-F6, F8-F12 and F15-F19 print SUCCEEDED: on that schema a
 -- counter of 999 and a promotion to live pass in one statement. F7 (the
 -- unique key), F13 (a CHECK) and F14 (the grants) stay refused without them.
+--
+-- 030: the fixture experiment carries a holdout series (mean 0), which the
+-- monitor needs to admit forward; sessions of 0 sit on its mean.
 BEGIN;
 INSERT INTO accounts (account_id, tier, account_class, role) VALUES ('fwd-test', 1, 'prop', 'watch');
 INSERT INTO edge_experiments (id, study_name, config_fingerprint, symbol, bar_minutes,
-                              tuned_params, n_trials, verdict, verdict_reasons, outcome, selected_params, finished_at)
-VALUES (999701, 'fwd-test', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', '{"orb_minutes": 15}', now() - interval '40 days'),
-       (999704, 'fwd-test-legacy', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', NULL, now() - interval '40 days'),
-       (999705, 'fwd-test-running', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', '{"orb_minutes": 15}', NULL);
+                              tuned_params, n_trials, verdict, verdict_reasons, outcome, selected_params, finished_at, holdout_returns)
+VALUES (999701, 'fwd-test', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', '{"orb_minutes": 15}', now() - interval '40 days', '{0.001,-0.001}'),
+       (999704, 'fwd-test-legacy', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', NULL, now() - interval '40 days', NULL),
+       (999705, 'fwd-test-running', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', '{"orb_minutes": 15}', NULL, NULL);
 INSERT INTO edge_deployments (id, experiment_id, account_id, symbol, params_snapshot, forward_sessions_required)
 VALUES (999701, 999701, 'fwd-test', 'MES', '{"orb_minutes": 15}'::jsonb, 20),
        (999702, 999701, 'fwd-test', 'MES', '{"orb_minutes": 15}'::jsonb, 20),

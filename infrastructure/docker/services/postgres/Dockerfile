@@ -219,6 +219,9 @@ COPY src/sql/spawner/028_hypothesis_evidence.sql          /docker-entrypoint-ini
 # --- Phase 24: the forward ledger behind forward_sessions_observed. Needs 018, 020, 025. ---
 COPY src/sql/spawner/029_edge_forward_sessions.sql        /docker-entrypoint-initdb.d/52-edge-forward-sessions.sql
 
+# --- Phase 25: the edge monitor (forward band, CUSUM, auto-retire). Needs 024, 028, 029. ---
+COPY src/sql/spawner/030_edge_monitor.sql                 /docker-entrypoint-initdb.d/53-edge-monitor.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

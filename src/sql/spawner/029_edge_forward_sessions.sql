@@ -26,6 +26,18 @@
 -- update deployments). Set, not incremented: row triggers fire after the
 -- whole statement, so a two-row insert sees both rows.
 --
+-- WHAT IS DEPLOYED IS WHAT WAS SEARCHED. The selection lived only in the
+-- search job's verdict.json: a deployment's params_snapshot was typed by
+-- hand (fks-web's deploy form), so a deployment could trade parameters no
+-- search ever selected. Now:
+--   • edge_experiments.selected_params holds the winner, written by the job;
+--   • a deployment's params_snapshot must EQUAL its experiment's;
+--   • an experiment is frozen once it has FINISHED (finished_at set): only
+--     `outcome` may change, and it is never deleted (a deleted DO NOT PASTE
+--     would also drop its trials from N; an UPDATE of verdict to USABLE
+--     opened backtest->forward). A study still running (finished_at NULL)
+--     is still being written, and can't be deployed.
+--
 -- THE GUARD (re-created from 020, every earlier rule kept) also:
 --   • refuses a new deployment with observed <> 0;
 --   • refuses any change to observed that leaves it unequal to the ledger;
@@ -35,13 +47,49 @@
 --
 -- Grants: the research role (fks_backtest: the search job and the forward
 -- runner) reads deployments and writes the ledger. Idempotent.
--- Prerequisites: 018, 020, 025.
+-- Prerequisites: 017, 018, 020, 024, 025.
 -- =============================================================================
 
 \getenv fks_db RUBY_DB
 
 \connect :fks_db
 
+-- ── The search's selection, and experiments that stay as written ─────────────
+ALTER TABLE edge_experiments ADD COLUMN IF NOT EXISTS selected_params JSONB;
+COMMENT ON COLUMN edge_experiments.selected_params IS
+    'The selected parameter set (the search job writes it); a deployment of '
+    'this experiment trades exactly this, params_snapshot = selected_params.';
+
+CREATE OR REPLACE FUNCTION edge_experiments_frozen()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION
+            'experiment % is a result and is never deleted: a DO NOT PASTE '
+            'counts toward N like any other search', OLD.id
+            USING ERRCODE = 'check_violation';
+    END IF;
+    -- A study still running (no finished_at) is still being written.
+    IF OLD.finished_at IS NULL THEN
+        RETURN NEW;
+    END IF;
+    IF (to_jsonb(NEW) - 'outcome' - 'updated_at') IS DISTINCT FROM
+       (to_jsonb(OLD) - 'outcome' - 'updated_at') THEN
+        RAISE EXCEPTION
+            'experiment % finished at % and is frozen as the search wrote it: '
+            'only its outcome may change', OLD.id, OLD.finished_at
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_edge_experiments_frozen ON edge_experiments;
+CREATE TRIGGER trg_edge_experiments_frozen
+    BEFORE UPDATE OR DELETE ON edge_experiments
+    FOR EACH ROW EXECUTE FUNCTION edge_experiments_frozen();
+
+-- ── The forward ledger ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS edge_forward_sessions (
     id              BIGSERIAL   PRIMARY KEY,
     deployment_id   BIGINT      NOT NULL REFERENCES edge_deployments (id) ON DELETE RESTRICT,
@@ -152,8 +200,10 @@ CREATE TRIGGER trg_edge_forward_sessions_count
 CREATE OR REPLACE FUNCTION edge_deployments_promotion_guard()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_class   TEXT;
-    v_verdict TEXT;
+    v_class    TEXT;
+    v_verdict  TEXT;
+    v_selected JSONB;
+    v_finished TIMESTAMPTZ;
 BEGIN
     -- `accounts.account_class`, matching the FK
     -- (edge_deployments.account_id -> accounts.account_id) and unchanged from 018.
@@ -178,6 +228,30 @@ BEGIN
             RAISE EXCEPTION
                 'a new deployment must start at stage=backtest (got %); the '
                 'ladder is climbed, not entered partway up', NEW.stage
+                USING ERRCODE = 'check_violation';
+        END IF;
+        -- 029: it trades exactly what its search selected, once that search
+        -- has finished.
+        SELECT selected_params, finished_at INTO v_selected, v_finished
+          FROM edge_experiments WHERE id = NEW.experiment_id;
+        IF v_finished IS NULL THEN
+            RAISE EXCEPTION
+                'experiment % hasn''t finished: a running search has no verdict to deploy',
+                NEW.experiment_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+        IF v_selected IS NULL THEN
+            RAISE EXCEPTION
+                'experiment % has no selected parameters on record (searched '
+                'before 029, or written by hand): nothing to deploy',
+                NEW.experiment_id
+                USING ERRCODE = 'check_violation';
+        END IF;
+        IF NEW.params_snapshot IS DISTINCT FROM v_selected THEN
+            RAISE EXCEPTION
+                'params_snapshot % is not what experiment % selected (%): a '
+                'deployment trades exactly what was searched',
+                NEW.params_snapshot, NEW.experiment_id, v_selected
                 USING ERRCODE = 'check_violation';
         END IF;
         -- 029: no deployment is born with evidence.

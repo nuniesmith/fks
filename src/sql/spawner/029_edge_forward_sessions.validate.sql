@@ -5,15 +5,17 @@
 -- Each case starts from the same clean state (savepoints); nothing is kept.
 --
 -- Checked non-vacuous on 2026-11-02: with 020's guard restored and the
--- ledger's admit trigger dropped (the schema before 029), F1-F6 and F8-F12
--- print SUCCEEDED: on that schema a counter of 999 and a promotion to live
--- pass in one statement. F7 (the unique key), F13 (a CHECK) and F14 (the
--- grants) stay refused without them.
+-- ledger's admit trigger and the experiments' freeze dropped (the schema
+-- before 029), F1-F6, F8-F12 and F15-F19 print SUCCEEDED: on that schema a
+-- counter of 999 and a promotion to live pass in one statement. F7 (the
+-- unique key), F13 (a CHECK) and F14 (the grants) stay refused without them.
 BEGIN;
 INSERT INTO accounts (account_id, tier, account_class, role) VALUES ('fwd-test', 1, 'prop', 'watch');
 INSERT INTO edge_experiments (id, study_name, config_fingerprint, symbol, bar_minutes,
-                              tuned_params, n_trials, verdict, verdict_reasons, outcome)
-VALUES (999701, 'fwd-test', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending');
+                              tuned_params, n_trials, verdict, verdict_reasons, outcome, selected_params, finished_at)
+VALUES (999701, 'fwd-test', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', '{"orb_minutes": 15}', now() - interval '40 days'),
+       (999704, 'fwd-test-legacy', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', NULL, now() - interval '40 days'),
+       (999705, 'fwd-test-running', 'orb:test', 'MES', 1, '{}', 1, 'USABLE', '{}', 'pending', '{"orb_minutes": 15}', NULL);
 INSERT INTO edge_deployments (id, experiment_id, account_id, symbol, params_snapshot, forward_sessions_required)
 VALUES (999701, 999701, 'fwd-test', 'MES', '{"orb_minutes": 15}'::jsonb, 20),
        (999702, 999701, 'fwd-test', 'MES', '{"orb_minutes": 15}'::jsonb, 20),
@@ -147,7 +149,7 @@ ROLLBACK TO clean;
 -- F12: a deployment born with evidence.
 DO $$ BEGIN
   INSERT INTO edge_deployments (experiment_id, account_id, symbol, params_snapshot, forward_sessions_observed)
-  VALUES (999701, 'fwd-test', 'MES', '{}', 5);
+  VALUES (999701, 'fwd-test', 'MES', '{"orb_minutes": 15}', 5);
   RAISE NOTICE 'F12 born with evidence       : *** SUCCEEDED ***';
 EXCEPTION WHEN check_violation THEN RAISE NOTICE 'F12 born with evidence       : refused'; END $$;
 ROLLBACK TO clean;
@@ -158,6 +160,57 @@ DO $$ BEGIN
   VALUES (999701, current_date - 3, 'MES', FALSE, NULL, 0.01, '[{"path": "a", "sha256": "1"}]', 'fwd', 'abc');
   RAISE NOTICE 'F13 a flat day that earned   : *** SUCCEEDED ***';
 EXCEPTION WHEN check_violation THEN RAISE NOTICE 'F13 a flat day that earned   : refused'; END $$;
+ROLLBACK TO clean;
+
+-- F15: deploy parameters the search didn't select.
+DO $$ BEGIN
+  INSERT INTO edge_deployments (experiment_id, account_id, symbol, params_snapshot)
+  VALUES (999701, 'fwd-test', 'MES', '{"orb_minutes": 60}');
+  RAISE NOTICE 'F15 untested parameters      : *** SUCCEEDED ***';
+EXCEPTION WHEN check_violation THEN RAISE NOTICE 'F15 untested parameters      : refused'; END $$;
+ROLLBACK TO clean;
+
+-- F16: deploy an experiment with no selection on record.
+DO $$ BEGIN
+  INSERT INTO edge_deployments (experiment_id, account_id, symbol, params_snapshot)
+  VALUES (999704, 'fwd-test', 'MES', '{}');
+  RAISE NOTICE 'F16 no selection on record   : *** SUCCEEDED ***';
+EXCEPTION WHEN check_violation THEN RAISE NOTICE 'F16 no selection on record   : refused'; END $$;
+ROLLBACK TO clean;
+
+-- F17: turn a failed search into a pass; F18: delete a result.
+DO $$ BEGIN
+  UPDATE edge_experiments SET verdict = 'DO NOT PASTE' WHERE id = 999704;
+  UPDATE edge_experiments SET verdict = 'USABLE' WHERE id = 999704;
+  RAISE NOTICE 'F17 rewrite a verdict        : *** SUCCEEDED ***';
+EXCEPTION WHEN check_violation THEN RAISE NOTICE 'F17 rewrite a verdict        : refused'; END $$;
+ROLLBACK TO clean;
+DO $$ BEGIN
+  DELETE FROM edge_experiments WHERE id = 999704;
+  RAISE NOTICE 'F18 delete a result          : *** SUCCEEDED ***';
+EXCEPTION WHEN check_violation THEN RAISE NOTICE 'F18 delete a result          : refused'; END $$;
+ROLLBACK TO clean;
+
+-- F19: deploy a search that hasn't finished.
+DO $$ BEGIN
+  INSERT INTO edge_deployments (experiment_id, account_id, symbol, params_snapshot)
+  VALUES (999705, 'fwd-test', 'MES', '{"orb_minutes": 15}');
+  RAISE NOTICE 'F19 an unfinished search     : *** SUCCEEDED ***';
+EXCEPTION WHEN check_violation THEN RAISE NOTICE 'F19 an unfinished search     : refused'; END $$;
+ROLLBACK TO clean;
+
+-- C6: a running search is still written as it goes.
+DO $$ BEGIN
+  UPDATE edge_experiments SET n_trials = 40, finished_at = now() WHERE id = 999705;
+  RAISE NOTICE 'C6 a running search finishes : ok';
+EXCEPTION WHEN check_violation THEN RAISE NOTICE 'C6 a running search finishes : *** REFUSED ***'; END $$;
+ROLLBACK TO clean;
+
+-- C5: an experiment's outcome may still be set.
+DO $$ BEGIN
+  UPDATE edge_experiments SET outcome = 'adopted' WHERE id = 999701;
+  RAISE NOTICE 'C5 set an outcome            : ok';
+EXCEPTION WHEN check_violation THEN RAISE NOTICE 'C5 set an outcome            : *** REFUSED ***'; END $$;
 ROLLBACK TO clean;
 
 -- C3: three recorded sessions meet a requirement of three: live is allowed.

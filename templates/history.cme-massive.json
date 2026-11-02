@@ -1,0 +1,42 @@
+{
+    "id": "history.cme-massive",
+    "version": 1,
+    "kind": "recorder",
+    "display_name": "CME futures 1-minute bars (Massive)",
+    "description": "CME futures minute bars from Massive (massive.com), one UTC day at a time, stitched into one series per root by volume (the previous weekday's, so no look-ahead; never back to an earlier contract; one contract per day), kept current every 6 hours. Every candidate contract's own bars are kept for audit, and every roll is logged. Name the instance cme: its folder raw/cme/massive/cme is the one the Register-hypothesis form joins with the imported cache. Needs the Massive key stored in Settings as provider Other, slug massive (the secret field can be any placeholder).",
+    "image": "ghcr.io/nuniesmith/fks-bot-cme-history:latest",
+    "modes": ["record"],
+    "resources": { "cpu": 0.25, "memory_mb": 256 },
+    "restart_policy": { "enabled": true },
+    "data": { "venue": "cme", "market": "massive" },
+    "secrets_allowed": ["massive"],
+    "env": {
+        "roots": "CME_ROOTS",
+        "start": "CME_START"
+    },
+    "params": {
+        "type": "object",
+        "required": ["roots"],
+        "properties": {
+            "roots": {
+                "x-order": 1,
+                "type": "array",
+                "title": "Products",
+                "description": "Product roots. ES and NQ also serve MES and MNQ (the same prices); MGC is its own series.",
+                "items": { "enum": ["ES", "NQ", "GC", "MGC", "MES", "MNQ"] },
+                "default": ["ES", "NQ", "GC", "MGC"],
+                "minItems": 1,
+                "uniqueItems": true
+            },
+            "start": {
+                "x-order": 2,
+                "type": "string",
+                "title": "First day (UTC, YYYY-MM-DD)",
+                "description": "Default 2026-09-14, the Monday after the imported cache ends. Massive serves about two years back.",
+                "default": "2026-09-14",
+                "minLength": 10,
+                "maxLength": 10
+            }
+        }
+    }
+}

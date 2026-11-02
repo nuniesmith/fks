@@ -234,6 +234,9 @@ BEGIN
         -- has finished.
         SELECT selected_params, finished_at INTO v_selected, v_finished
           FROM edge_experiments WHERE id = NEW.experiment_id;
+        IF NOT FOUND THEN
+            RETURN NEW;  -- no such experiment: the foreign key says so
+        END IF;
         IF v_finished IS NULL THEN
             RAISE EXCEPTION
                 'experiment % hasn''t finished: a running search has no verdict to deploy',

@@ -1,0 +1,30 @@
+{
+    "id": "bot.edge-forward",
+    "version": 1,
+    "kind": "bot",
+    "display_name": "Forward runner (paper)",
+    "description": "EDGE_PROCESS step 5 for one deployment at stage forward: every new session, once the lake holds its day, replayed with the deployment's frozen parameters through the exact code that searched it (the search job's own image), and recorded in the forward ledger with the files read and the image revision. The database counts the sessions toward forward_sessions_observed and refuses one before the forward start, not over yet, or more than 10 days late. Paper only: it trades nothing.",
+    "image": "ghcr.io/nuniesmith/fks-bot-edge-search:latest",
+    "modes": ["paper"],
+    "resources": { "cpu": 0.5, "memory_mb": 512 },
+    "restart_policy": { "enabled": true },
+    "lake": "read",
+    "database": "research",
+    "fixed_env": { "EDGE_RUNNER": "forward" },
+    "env": {
+        "deployment_id": "EDGE_DEPLOYMENT_ID"
+    },
+    "params": {
+        "type": "object",
+        "required": ["deployment_id"],
+        "properties": {
+            "deployment_id": {
+                "x-order": 1,
+                "type": "integer",
+                "title": "Deployment",
+                "description": "The deployment's number (Edges): it must be at stage forward, from an orb search.",
+                "minimum": 1
+            }
+        }
+    }
+}

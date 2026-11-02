@@ -9,9 +9,10 @@
 -- (forward_required_positive) rejects independently of the guard — so a refusal
 -- proved nothing. The realistic attack lowers 20 -> 1.
 BEGIN;
+-- selected_params (029): a deployment trades exactly its search's selection.
 INSERT INTO edge_experiments (id, study_name, config_fingerprint, symbol, bar_minutes,
-                              tuned_params, n_trials, verdict, verdict_reasons, outcome)
-VALUES (999901, 'guard-test', 'fp-test', 'GC', 5, '{}', 1, 'USABLE', '{}', 'pending');
+                              tuned_params, n_trials, verdict, verdict_reasons, outcome, selected_params, finished_at)
+VALUES (999901, 'guard-test', 'fp-test', 'GC', 5, '{}', 1, 'USABLE', '{}', 'pending', '{}', now() - interval '1 day');
 
 INSERT INTO edge_deployments (id, experiment_id, account_id, symbol, stage, execution,
                               params_snapshot, forward_sessions_required, forward_sessions_observed)
@@ -56,10 +57,19 @@ EXCEPTION WHEN check_violation THEN RAISE NOTICE 'A4 two-step-lower  : refused';
 END $$;
 ROLLBACK TO clean;
 
--- C1 control: a LEGITIMATE promotion must still work.
+-- C1 control: a LEGITIMATE promotion must still work. Since 029 the
+-- legitimate path records the 20 sessions in the forward ledger (writing the
+-- counter directly is the forgery 029 refuses). The ledger's own admission
+-- rules (dates, lateness) are 029's suite; here they are lifted for the
+-- fixture, which was promoted moments ago.
 DO $$
 BEGIN
-  UPDATE edge_deployments SET forward_sessions_observed=20 WHERE id=999901;
+  ALTER TABLE edge_forward_sessions DISABLE TRIGGER trg_edge_forward_sessions_admit;
+  INSERT INTO edge_forward_sessions (deployment_id, session_date, symbol, traded, trade,
+                                     session_return, data_ref, runner, code_version)
+  SELECT 999901, current_date - g, 'GC', FALSE, NULL, 0, '[{"path": "x", "sha256": "0"}]', 'test', 'test'
+    FROM generate_series(1, 20) g;
+  ALTER TABLE edge_forward_sessions ENABLE TRIGGER trg_edge_forward_sessions_admit;
   UPDATE edge_deployments SET stage='live' WHERE id=999901;
   RAISE NOTICE 'C1 legit promote   : accepted (correct)';
 EXCEPTION WHEN check_violation THEN RAISE NOTICE 'C1 legit promote   : *** WRONGLY REFUSED *** %', SQLERRM;

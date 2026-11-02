@@ -213,6 +213,9 @@ COPY src/sql/spawner/026_channel_platform_events.sql       /docker-entrypoint-in
 # --- Phase 22: WebUI personal access tokens (API v1). Needs 010. ---
 COPY src/sql/spawner/027_webui_api_tokens.sql             /docker-entrypoint-initdb.d/50-webui-api-tokens.sql
 
+# --- Phase 23: a hypothesis declares its evidence path (frozen). Needs 024. ---
+COPY src/sql/spawner/028_hypothesis_evidence.sql          /docker-entrypoint-initdb.d/51-hypothesis-evidence.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

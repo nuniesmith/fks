@@ -210,6 +210,9 @@ COPY src/sql/spawner/025_research_role_grants.sql         /docker-entrypoint-ini
 # --- Phase 21: a bot's own notification channel (platform_events). Needs 004. ---
 COPY src/sql/spawner/026_channel_platform_events.sql       /docker-entrypoint-initdb.d/49-channel-platform-events.sql
 
+# --- Phase 22: WebUI personal access tokens (API v1). Needs 010. ---
+COPY src/sql/spawner/027_webui_api_tokens.sql             /docker-entrypoint-initdb.d/50-webui-api-tokens.sql
+
 # ---------------------------------------------------------------------------
 # Phase 17 — fks-migrate, the deploy-time migration runner (#308).
 #

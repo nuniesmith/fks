@@ -26,6 +26,7 @@ rule_files:
   - ../alerts/data.yml
   - ../alerts/edge-factory.yml
   - ../alerts/recorder-alerts.yml
+  - ../alerts/edge-ladder.yml
 
 evaluation_interval: 1m
 
@@ -1077,3 +1078,151 @@ tests:
       - eval_time: 3h
         alertname: LakeDiskProjection
         exp_alerts: []
+
+  # ===========================================================================
+  # edge-ladder.yml (2026-11-02): the forward and signal runners. Verified
+  # non-vacuous 2026-11-02 by moving each rule's threshold out of reach
+  # (== 2, == 9, > 99): every positive case below then fails. Each case also
+  # checks the rule is quiet before its `for:` runs out.
+  # ===========================================================================
+  - interval: 1m
+    name: SignalRunnerError fires after 5 minutes of an error, not before
+    input_series:
+      - series: 'fks_signal_error{job="fks-bots", bot_id="sig-1", instance="fks-bot-sig-1:9091"}'
+        values: "1x10"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: SignalRunnerError
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: SignalRunnerError
+        exp_alerts:
+          - exp_labels:
+              bot_id: sig-1
+              severity: critical
+              team: trading
+              component: edge-ladder
+            exp_annotations:
+              summary: "Signal runner sig-1 has an error: its signals may not reach you"
+              description: "The runner is up but reports a problem (its status says which). Until it clears, treat the runner as silent: no message is not the same as no trade.\n"
+              runbook: "Tasks -> the runner's logs. Massive refused the key: live signals need Futures Advanced (or stop the runner). A channel that didn't resolve: fix the name in Settings -> Notifications, then respawn. A step error: the log line says which.\n"
+
+  - interval: 1m
+    name: SignalRunnerError stays quiet while the runner is fine
+    input_series:
+      - series: 'fks_signal_error{job="fks-bots", bot_id="sig-1"}'
+        values: "0x10"
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: SignalRunnerError
+        exp_alerts: []
+
+  - interval: 1m
+    name: SignalRunnerFeedStale fires on a stale feed inside a session
+    input_series:
+      - series: 'fks_signal_feed_stale{job="fks-bots", bot_id="sig-1"}'
+        values: "0 0 1x8"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: SignalRunnerFeedStale
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SignalRunnerFeedStale
+        exp_alerts:
+          - exp_labels:
+              bot_id: sig-1
+              severity: critical
+              team: trading
+              component: edge-ladder
+            exp_annotations:
+              summary: "Signal runner sig-1 has had no bars for 3+ minutes in a session"
+              description: "Its entries and exits are blind until the feed returns. Watch the chart yourself for any open trade.\n"
+              runbook: "Check Massive's status page and the runner's logs (socket closed? reconnecting?). The runner reconnects by itself with backoff; restart it on Tasks if it doesn't.\n"
+
+  - interval: 1m
+    name: SignalRunnerDisconnected waits 15 minutes
+    input_series:
+      - series: 'fks_signal_connected{job="fks-bots", bot_id="sig-1"}'
+        values: "0x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: SignalRunnerDisconnected
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: SignalRunnerDisconnected
+        exp_alerts:
+          - exp_labels:
+              bot_id: sig-1
+              severity: warning
+              team: trading
+              component: edge-ladder
+            exp_annotations:
+              summary: "Signal runner sig-1 has been off Massive's socket for 15 minutes"
+              description: "Outside a session this costs nothing yet; inside one, SignalRunnerFeedStale fires too.\n"
+              runbook: "The runner's logs say why (auth, network, Massive). It retries with backoff up to 5 minutes, and every 30 minutes after a refused key.\n"
+
+  - interval: 1m
+    name: ForwardRunnerError fires after 2 hours of failed scans
+    input_series:
+      - series: 'fks_forward_error{job="fks-bots", bot_id="fwd-1"}'
+        values: "1x140"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: ForwardRunnerError
+        exp_alerts: []
+      - eval_time: 2h10m
+        alertname: ForwardRunnerError
+        exp_alerts:
+          - exp_labels:
+              bot_id: fwd-1
+              severity: warning
+              team: trading
+              component: edge-ladder
+            exp_annotations:
+              summary: "Forward runner fwd-1 has failed its scans for 2 hours"
+              description: "Sessions it misses for more than 10 days can never be recorded (fks 029): the forward test loses them for good.\n"
+              runbook: "Tasks -> the runner's logs: the database or the lake. A day whose files aren't in the lake yet is a wait, not an error; check the CME recorder (instance cme) is running.\n"
+
+  - interval: 1m
+    name: EdgeDeploymentRetired fires as soon as the runner reports it
+    input_series:
+      - series: 'fks_forward_retired{job="fks-bots", bot_id="fwd-1"}'
+        values: "0 0 1x5"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: EdgeDeploymentRetired
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: EdgeDeploymentRetired
+        exp_alerts:
+          - exp_labels:
+              bot_id: fwd-1
+              severity: warning
+              team: trading
+              component: edge-ladder
+            exp_annotations:
+              summary: "The deployment forward runner fwd-1 replays has been retired"
+              description: "Its reason is on the Edges board. The ladder never re-promotes: testing the edge again is a new deployment.\n"
+              runbook: "Read the reason on Edges, then stop this runner (and the deployment's signal runner) on Tasks.\n"
+
+  - interval: 1m
+    name: BotWebhookChannelMissing fires when a spawn couldn't resolve a channel
+    input_series:
+      - series: 'fks_spawner_webhook_unresolved_total{job="fks-spawner", channel="futures"}'
+        values: "0 0 1 1 1 1"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: BotWebhookChannelMissing
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: BotWebhookChannelMissing
+        exp_alerts:
+          - exp_labels:
+              channel: futures
+              severity: warning
+              team: trading
+              component: edge-ladder
+            exp_annotations:
+              summary: "A bot was spawned without its webhook: channel futures doesn't exist"
+              description: "The bot runs, but whatever it sends to that channel goes nowhere (for a signal runner: every signal).\n"
+              runbook: "Settings -> Notifications: add the channel (or fix the name in the bot's config), then respawn the bot.\n"

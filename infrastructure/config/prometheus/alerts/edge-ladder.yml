@@ -1,0 +1,104 @@
+# ============================================================================
+# edge-ladder.yml — the runners that carry an edge forward and live
+# (added 2026-11-02)
+# ============================================================================
+# WHAT IS AT STAKE. The signal runner (fks-spawner EDGE_RUNNER=signal) tells
+# the operator when to enter and exit an orb trade, by hand, on a prop
+# account. A runner that has lost its feed or its channel is SILENT, and a
+# silent runner looks exactly like a day without a breakout. The forward
+# runner records the sessions the edge monitor (fks 030) judges; when it
+# stops, nothing is judged, and when the monitor retires a deployment, its
+# runners keep running until someone stops them.
+#
+# These read the runners' own gauges (job="fks-bots", scraped via the
+# spawner's service discovery). The runner computes what needs a calendar
+# itself (fks_signal_feed_stale knows sessions, holidays, roll days and
+# early closes), so no rule here does time-of-day arithmetic.
+#
+# The spawner's own platform events (edge_decay on a retirement) need a
+# notification channel with platform events on; these rules reach Discord
+# through Alertmanager whether or not one exists.
+# ============================================================================
+
+groups:
+    - name: edge-ladder
+      rules:
+          - alert: SignalRunnerError
+            # A failing step, Massive refusing the key (no real-time plan),
+            # or a channel that was named but didn't resolve: signals are
+            # recorded but may not reach the operator.
+            expr: max by (bot_id) (fks_signal_error{job="fks-bots"}) == 1
+            for: 5m
+            labels:
+                severity: critical
+                team: trading
+                component: edge-ladder
+            annotations:
+                summary: "Signal runner {{ $labels.bot_id }} has an error: its signals may not reach you"
+                description: "The runner is up but reports a problem (its status says which). Until it clears, treat the runner as silent: no message is not the same as no trade.\n"
+                runbook: "Tasks -> the runner's logs. Massive refused the key: live signals need Futures Advanced (or stop the runner). A channel that didn't resolve: fix the name in Settings -> Notifications, then respawn. A step error: the log line says which.\n"
+
+          - alert: SignalRunnerFeedStale
+            # Inside a session the runner is trading, no bar for 3 minutes.
+            expr: max by (bot_id) (fks_signal_feed_stale{job="fks-bots"}) == 1
+            for: 2m
+            labels:
+                severity: critical
+                team: trading
+                component: edge-ladder
+            annotations:
+                summary: "Signal runner {{ $labels.bot_id }} has had no bars for 3+ minutes in a session"
+                description: "Its entries and exits are blind until the feed returns. Watch the chart yourself for any open trade.\n"
+                runbook: "Check Massive's status page and the runner's logs (socket closed? reconnecting?). The runner reconnects by itself with backoff; restart it on Tasks if it doesn't.\n"
+
+          - alert: SignalRunnerDisconnected
+            expr: max by (bot_id) (fks_signal_connected{job="fks-bots"}) == 0
+            for: 15m
+            labels:
+                severity: warning
+                team: trading
+                component: edge-ladder
+            annotations:
+                summary: "Signal runner {{ $labels.bot_id }} has been off Massive's socket for 15 minutes"
+                description: "Outside a session this costs nothing yet; inside one, SignalRunnerFeedStale fires too.\n"
+                runbook: "The runner's logs say why (auth, network, Massive). It retries with backoff up to 5 minutes, and every 30 minutes after a refused key.\n"
+
+          - alert: ForwardRunnerError
+            expr: max by (bot_id) (fks_forward_error{job="fks-bots"}) == 1
+            for: 2h
+            labels:
+                severity: warning
+                team: trading
+                component: edge-ladder
+            annotations:
+                summary: "Forward runner {{ $labels.bot_id }} has failed its scans for 2 hours"
+                description: "Sessions it misses for more than 10 days can never be recorded (fks 029): the forward test loses them for good.\n"
+                runbook: "Tasks -> the runner's logs: the database or the lake. A day whose files aren't in the lake yet is a wait, not an error; check the CME recorder (instance cme) is running.\n"
+
+          - alert: EdgeDeploymentRetired
+            # Retired by the monitor (fks 030) or by hand; the runner is
+            # idle but still running, so this stays on until it is stopped.
+            expr: max by (bot_id) (fks_forward_retired{job="fks-bots"}) == 1
+            for: 0m
+            labels:
+                severity: warning
+                team: trading
+                component: edge-ladder
+            annotations:
+                summary: "The deployment forward runner {{ $labels.bot_id }} replays has been retired"
+                description: "Its reason is on the Edges board. The ladder never re-promotes: testing the edge again is a new deployment.\n"
+                runbook: "Read the reason on Edges, then stop this runner (and the deployment's signal runner) on Tasks.\n"
+
+          - alert: BotWebhookChannelMissing
+            # A bot's saved config names a Settings channel that doesn't
+            # exist: it runs without that webhook (crate::webhooks).
+            expr: sum by (channel) (increase(fks_spawner_webhook_unresolved_total[1h])) > 0
+            for: 0m
+            labels:
+                severity: warning
+                team: trading
+                component: edge-ladder
+            annotations:
+                summary: "A bot was spawned without its webhook: channel {{ $labels.channel }} doesn't exist"
+                description: "The bot runs, but whatever it sends to that channel goes nowhere (for a signal runner: every signal).\n"
+                runbook: "Settings -> Notifications: add the channel (or fix the name in the bot's config), then respawn the bot.\n"

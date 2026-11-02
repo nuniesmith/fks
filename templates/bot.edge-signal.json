@@ -1,9 +1,9 @@
 {
     "id": "bot.edge-signal",
-    "version": 1,
+    "version": 2,
     "kind": "bot",
     "display_name": "Signal runner (manual execution)",
-    "description": "EDGE_PROCESS step 6 for an orb deployment at forward or live: on Massive's real-time futures feed, every minute bar re-runs the exact code that searched it on the session so far, and tells you when the opening range is set, when to enter (side, price, stop, target) and when to get out. Each signal is written to the signal ledger before it is sent, once (a restart never repeats one), then posted to the channel named below. Forward deployments say PAPER, live ones LIVE. It places no order: on a prop account you do. Needs a Massive plan with real-time futures (Futures Advanced) stored in Settings as provider Other, slug massive, and a Discord channel in Settings -> Notifications (turn its platform events off). One runner at a time: Massive allows one futures socket per key.",
+    "description": "EDGE_PROCESS step 6 for an orb deployment at forward or live: on Massive's real-time futures feed, every minute bar re-runs the exact code that searched it on the session so far, and tells you when the opening range is set, when to enter (side, price, stop, target) and when to get out. Each signal is written to the signal ledger before it is sent, once (a restart never repeats one), then posted to the channel named below. Forward deployments say PAPER, live ones LIVE; a signal said more than 2 minutes after its bar says LATE and not to chase it. Roll days, holidays and early closes aren't traded, like the search. If the deployment is retired with a trade open, its exit is still said. A channel that doesn't resolve is reported as an error (and alerted), not silently skipped. It places no order: on a prop account you do. Needs a Massive plan with real-time futures (Futures Advanced) stored in Settings as provider Other, slug massive, and a Discord channel in Settings -> Notifications (turn its platform events off). One runner at a time: Massive allows one futures socket per key.",
     "image": "ghcr.io/nuniesmith/fks-bot-edge-search:latest",
     "modes": ["paper"],
     "resources": { "cpu": 0.5, "memory_mb": 512 },
@@ -12,7 +12,8 @@
     "secrets_allowed": ["massive"],
     "fixed_env": { "EDGE_RUNNER": "signal" },
     "env": {
-        "deployment_id": "EDGE_DEPLOYMENT_ID"
+        "deployment_id": "EDGE_DEPLOYMENT_ID",
+        "channel": "SIGNAL_CHANNEL"
     },
     "webhooks": {
         "SIGNAL_DISCORD_WEBHOOK_URL": "channel"

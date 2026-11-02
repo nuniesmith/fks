@@ -235,7 +235,11 @@ BEGIN
         SELECT selected_params, finished_at INTO v_selected, v_finished
           FROM edge_experiments WHERE id = NEW.experiment_id;
         IF NOT FOUND THEN
-            RETURN NEW;  -- no such experiment: the foreign key says so
+            -- Said here, before NOT NULL or the foreign key word it worse.
+            RAISE EXCEPTION
+                'experiment % is not present: a deployment deploys a search',
+                NEW.experiment_id
+                USING ERRCODE = 'check_violation';
         END IF;
         IF v_finished IS NULL THEN
             RAISE EXCEPTION

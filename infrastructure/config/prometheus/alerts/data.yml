@@ -460,12 +460,13 @@ groups:
             which is worthless, because local snapshots live on the same
             filesystem they exist to protect.
           runbook: >
-            1) journalctl -u fks-state-snapshot --since '2 days ago'   (the push
-               error is now logged verbatim; it was previously discarded)
-            2) git -C ~/.local/share/fks-state rev-list --count @{u}..HEAD
-            3) If blobs exceed 100 MiB, the artifact has outgrown git transport.
-               fks_qdrant_data (419 MB raw, derived vectors) is the driver; the
-               irreplaceable ledger is only ~6 MB. See docs/STATE_BACKUP.md.
+            1) journalctl --user -u fks-state-backup --since '2 days ago'
+               (gh's error is logged verbatim)
+            2) gh release list -R nuniesmith/fks-state --limit 5 — the newest
+               snapshot-<stamp> release is the last one that reached GitHub
+            3) gh auth status — the upload uses the GitHub CLI's login.
+               Snapshots go to releases since 2026-11-05 (limit 2 GiB per
+               file); see docs/STATE_BACKUP.md.
 
       # Off-host copy of the recorder tapes (scripts/fks-tapes-sync.sh, daily
       # 09:00). The liquidation streams cannot be re-recorded, and the lake

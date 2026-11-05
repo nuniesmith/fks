@@ -9,9 +9,20 @@
 #
 #   ./scripts/fks-state.sh init      one-time: make an age key + clone fks-state
 #   ./scripts/fks-state.sh status    what would be backed up (no secret values)
-#   ./scripts/fks-state.sh export    snapshot -> age-encrypt -> commit+push
-#   ./scripts/fks-state.sh import    pull latest -> decrypt -> restore in place
-#   ./scripts/fks-state.sh list      list snapshots in the private repo
+#   ./scripts/fks-state.sh export    snapshot -> age-encrypt -> upload (see STORE)
+#   ./scripts/fks-state.sh import    fetch latest -> decrypt -> restore in place
+#   ./scripts/fks-state.sh list      list snapshots (releases and git)
+#
+# STORE (2026-11-05). New snapshots go to a private GitHub RELEASE in the
+# fks-state repo, one release per snapshot, the encrypted tarball as its only
+# asset. Until then each one was committed under snapshots/, a full copy every
+# night that git keeps forever: 1.57 GB on GitHub by 2026-11 (+~10 MB/day),
+# with single files near git's 100 MiB hard limit (the 2026-08-07 push broke
+# on it). Releases take files up to 2 GiB and can be deleted one by one, so
+# retention is possible without rewriting history. The git snapshots stay
+# where they are and import still reads them: they are the only copy of the
+# platform before the 2026-10-17 volume wipe. FKS_STATE_STORE=git restores the
+# old behaviour.
 #
 # SECURITY MODEL
 #   • One age keypair is the root secret. The PRIVATE key (~/.config/fks/age.key)
@@ -33,6 +44,15 @@ FKS_STATE_DIR="${FKS_STATE_DIR:-$HOME/.local/share/fks-state}"        # local cl
 FKS_AGE_KEY="${FKS_AGE_KEY:-$HOME/.config/fks/age.key}"               # your PRIVATE age identity
 FKS_AGE_RECIPIENTS="${FKS_AGE_RECIPIENTS:-$HOME/.config/fks/recipients.txt}"  # public recipients (1+/line)
 FKS_COMPOSE="${FKS_COMPOSE:-docker compose}"
+FKS_STATE_STORE="${FKS_STATE_STORE:-release}"                          # release | git (see STORE above)
+FKS_STATE_GH_REPO="${FKS_STATE_GH_REPO:-nuniesmith/fks-state}"         # owner/name for the releases
+# Retention for RELEASE snapshots only (git history is never pruned): keep the
+# newest N, plus the newest of every calendar month for good.
+FKS_STATE_KEEP_DAILY="${FKS_STATE_KEEP_DAILY:-30}"
+# Recent release snapshots also kept on this disk, for a restore without the
+# network. Not a backup: it is the disk the backup protects.
+FKS_STATE_CACHE="${FKS_STATE_CACHE:-$HOME/.local/share/fks-state-releases}"
+FKS_STATE_CACHE_KEEP="${FKS_STATE_CACHE_KEEP:-3}"
 POSTGRES_SERVICE="${POSTGRES_SERVICE:-postgres}"
 POSTGRES_USER="${POSTGRES_USER:-fks_user}"
 
@@ -209,7 +229,8 @@ cmd_status() {
   else
     warn "postgres container not up — DB tables will be skipped on export (drift check skipped)"
   fi
-  [[ -d "$FKS_STATE_DIR/snapshots" ]] && log "snapshots: $(ls -1 "$FKS_STATE_DIR"/snapshots/*.tar.gz.age 2>/dev/null | wc -l) in $FKS_STATE_DIR"
+  log "store: $FKS_STATE_STORE$([[ $FKS_STATE_STORE == release ]] && echo " ($FKS_STATE_GH_REPO releases, keep newest $FKS_STATE_KEEP_DAILY + one per month)")"
+  [[ -d "$FKS_STATE_DIR/snapshots" ]] && log "git snapshots: $(ls -1 "$FKS_STATE_DIR"/snapshots/*.tar.gz.age 2>/dev/null | wc -l) in $FKS_STATE_DIR"
 }
 
 # ── export ───────────────────────────────────────────────────────────────────
@@ -232,8 +253,79 @@ _emit_backup_metric() {
   } > "$f.tmp" && mv -f "$f.tmp" "$f"
 }
 
+# ── release store ────────────────────────────────────────────────────────────
+# Tags are snapshot-<UTC stamp>, so a plain sort is a time sort.
+_ts_of() { local t="${1##*/}"; t="${t%.tar.gz.age}"; t="${t#snapshot-}"; t="${t#fks-state-}"; printf '%s' "$t"; }
+
+# Empty (never an error) when gh can't reach GitHub: under `set -e -o pipefail`
+# a failing gh would otherwise end the whole script inside a $(...).
+_release_tags() {
+  { gh release list --repo "$FKS_STATE_GH_REPO" --limit 1000 --json tagName --jq '.[].tagName' \
+      | grep -E '^snapshot-[0-9]{8}T[0-9]{6}Z$'; } 2>/dev/null || true
+}
+
+# stdin: release tags, any order. stdout: the tags retention deletes. Keeps the
+# newest $1, plus the newest tag of each calendar month. Anything that is not
+# a snapshot tag is never printed, so never deleted. Pure, for the tests.
+_prune_plan() {
+  LC_ALL=C sort -r | awk -v keep="$1" '
+    !/^snapshot-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z$/ { next }
+    { n++; m = substr($0, 10, 6) }
+    n <= keep      { seen[m] = 1; next }
+    !(m in seen)   { seen[m] = 1; next }
+                   { print }'
+}
+
+# Upload one snapshot as release snapshot-<ts> and check GitHub holds the same
+# number of bytes. A release left without its asset is deleted again, so
+# retention never counts an empty one as a kept snapshot.
+_release_upload() {
+  local file="$1" ts="$2" why="$3" notes="$4" tag="snapshot-$2" size err rc=0 remote
+  size=$(stat -c %s "$file")
+  if (( size >= 2147483648 )); then warn "snapshot is $size bytes, over GitHub's 2 GiB release-asset limit"; return 1; fi
+  err="$(gh release create "$tag" "$file" --repo "$FKS_STATE_GH_REPO" --title "snapshot $ts ($why)" \
+          --notes-file "$notes" --latest=false 2>&1)" || rc=$?
+  if (( rc != 0 )); then
+    printf '%s\n' "$err" | sed 's/^/    gh: /' >&2
+    gh release delete "$tag" --repo "$FKS_STATE_GH_REPO" --cleanup-tag -y >/dev/null 2>&1 || true
+    return 1
+  fi
+  remote="$(gh release view "$tag" --repo "$FKS_STATE_GH_REPO" --json assets \
+            --jq ".assets[] | select(.name==\"$(basename "$file")\") | .size" 2>/dev/null || true)"
+  if [[ "$remote" != "$size" ]]; then
+    warn "release $tag holds ${remote:-no asset}, expected $size bytes; deleting it"
+    gh release delete "$tag" --repo "$FKS_STATE_GH_REPO" --cleanup-tag -y >/dev/null 2>&1 || true
+    return 1
+  fi
+  log "uploaded release $tag ($size bytes, verified)"
+}
+
+# Retention, run only after a verified upload. A failure here is reported but
+# does not fail the backup: the new snapshot is already off-host.
+_release_prune() {
+  local tags doomed t
+  tags="$(_release_tags)" || return 0
+  doomed="$(printf '%s\n' "$tags" | awk 'NF' | _prune_plan "$FKS_STATE_KEEP_DAILY")"
+  [[ -z "$doomed" ]] && return 0
+  while IFS= read -r t; do
+    gh release delete "$t" --repo "$FKS_STATE_GH_REPO" --cleanup-tag -y >/dev/null 2>&1 \
+      && log "retention: deleted $t" || warn "retention: could not delete $t"
+  done <<<"$doomed"
+}
+
+# Download a release snapshot into $2, print its path. Uses the local cache
+# when it already holds that snapshot.
+_release_fetch() {
+  local tag="$1" dir="$2" ts name
+  ts="$(_ts_of "$tag")"; name="fks-state-$ts.tar.gz.age"
+  if [[ -f "$FKS_STATE_CACHE/$name" ]]; then printf '%s' "$FKS_STATE_CACHE/$name"; return 0; fi
+  gh release download "snapshot-$ts" --repo "$FKS_STATE_GH_REPO" --pattern "$name" --dir "$dir" >&2 || return 1
+  [[ -f "$dir/$name" ]] && printf '%s' "$dir/$name"
+}
+
 cmd_export() {
   need_age; need git; need tar
+  [[ "$FKS_STATE_STORE" == release ]] && need gh "the release store uploads with the GitHub CLI"
   [[ -f "$MANIFEST" ]] || die "no manifest at $MANIFEST (run: $0 init)"
   [[ -s "$FKS_AGE_RECIPIENTS" ]] || die "no recipients in $FKS_AGE_RECIPIENTS (run: $0 init)"
   [[ -d "$FKS_STATE_DIR" ]] || die "no state repo at $FKS_STATE_DIR (run: $0 init)"
@@ -326,13 +418,36 @@ cmd_export() {
     echo "files=$(find "$payload/files" -type f | wc -l)"; echo "dbs=$(ls -1 "$payload/db" 2>/dev/null | wc -l)";
     echo "vols=$(ls -1 "$payload/vol" 2>/dev/null | wc -l)"; } > "$payload/MANIFEST.txt"
 
-  # Tar + age-encrypt to every recipient.
-  local out="$FKS_STATE_DIR/snapshots/fks-state-$ts.tar.gz.age"
-  mkdir -p "$FKS_STATE_DIR/snapshots"
+  # Tar + age-encrypt to every recipient. The release store encrypts into the
+  # stage (nothing new lands in the git clone); the git store into snapshots/.
+  local out
+  if [[ "$FKS_STATE_STORE" == release ]]; then
+    out="$stage/fks-state-$ts.tar.gz.age"
+  else
+    out="$FKS_STATE_DIR/snapshots/fks-state-$ts.tar.gz.age"
+    mkdir -p "$FKS_STATE_DIR/snapshots"
+  fi
   local rargs=(); while IFS= read -r r; do [[ -n "$r" && "${r:0:1}" != "#" ]] && rargs+=(-r "$r"); done < "$FKS_AGE_RECIPIENTS"
   tar -C "$payload" -czf - . | age "${rargs[@]}" -o "$out"
+  log "encrypted snapshot → $(basename "$out") ($(du -sh "$out" | cut -f1))"
+
+  if [[ "$FKS_STATE_STORE" == release ]]; then
+    if _release_upload "$out" "$ts" "${1:-manual}" "$payload/MANIFEST.txt"; then
+      _emit_backup_metric 1
+    else
+      _emit_backup_metric 0
+      warn "UPLOAD FAILED — this snapshot is NOT off-host (and not kept anywhere)."
+      trap - EXIT; rm -rf "$stage"
+      return 1
+    fi
+    mkdir -p "$FKS_STATE_CACHE"
+    cp "$out" "$FKS_STATE_CACHE/"
+    ls -1t "$FKS_STATE_CACHE"/fks-state-*.tar.gz.age 2>/dev/null | tail -n "+$((FKS_STATE_CACHE_KEEP + 1))" | xargs -r rm -f
+    _release_prune
+    trap - EXIT; rm -rf "$stage"
+    return 0
+  fi
   ln -sf "$(basename "$out")" "$FKS_STATE_DIR/snapshots/latest.tar.gz.age"
-  log "encrypted snapshot → $out ($(du -sh "$out" | cut -f1))"
 
   # The snapshot repo shares a branch with the code repo (both push to
   # fks-state), so a code merge between snapshots leaves this clone behind and
@@ -374,12 +489,31 @@ cmd_import() {
   need_age; need git; need tar
   [[ -f "$FKS_AGE_KEY" ]] || die "no age identity at $FKS_AGE_KEY (run: $0 init, or restore your key)"
   [[ -d "$FKS_STATE_DIR/.git" ]] && ( cd "$FKS_STATE_DIR" && git pull -q --ff-only 2>/dev/null || warn "pull skipped (offline / no upstream)" )
-  local snap="${1:-latest}"
-  [[ "$snap" == "latest" ]] && snap="$FKS_STATE_DIR/snapshots/latest.tar.gz.age"
-  [[ -f "$snap" ]] || snap="$FKS_STATE_DIR/snapshots/$snap"
-  [[ -f "$snap" ]] || die "snapshot not found: $snap (try: $0 list)"
-
   local stage; stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
+  # Which snapshot: `latest` is the newest release (the release store), then
+  # the newest cached copy if GitHub can't be reached, then git's latest.
+  # A name (snapshot-<ts>, fks-state-<ts>.tar.gz.age, a bare <ts>, or a path)
+  # is looked up as a file, in git's snapshots/, then as a release.
+  local want="${1:-latest}" snap=""
+  if [[ "$want" == "latest" ]]; then
+    if [[ "$FKS_STATE_STORE" == release ]] && command -v gh >/dev/null 2>&1; then
+      local tag; tag="$(_release_tags | LC_ALL=C sort | tail -1)"
+      [[ -n "$tag" ]] && snap="$(_release_fetch "$tag" "$stage" || true)"
+      [[ -z "$snap" ]] && snap="$(ls -1 "$FKS_STATE_CACHE"/fks-state-*.tar.gz.age 2>/dev/null | LC_ALL=C sort | tail -1 || true)"
+      [[ -n "$snap" && -z "$tag" ]] && warn "GitHub releases unreachable; using the newest cached copy"
+    fi
+    [[ -n "$snap" ]] || snap="$FKS_STATE_DIR/snapshots/latest.tar.gz.age"
+  elif [[ -f "$want" ]]; then
+    snap="$want"
+  elif [[ -f "$FKS_STATE_DIR/snapshots/$want" ]]; then
+    snap="$FKS_STATE_DIR/snapshots/$want"
+  elif [[ -f "$FKS_STATE_DIR/snapshots/fks-state-$(_ts_of "$want").tar.gz.age" ]]; then
+    snap="$FKS_STATE_DIR/snapshots/fks-state-$(_ts_of "$want").tar.gz.age"
+  else
+    need gh "release snapshots download with the GitHub CLI"
+    snap="$(_release_fetch "snapshot-$(_ts_of "$want")" "$stage" || true)"
+  fi
+  [[ -n "$snap" && -f "$snap" ]] || die "snapshot not found: $want (try: $0 list)"
   # export archives the payload CONTENTS at the root (`tar -C "$payload" .`),
   # so the snapshot holds ./MANIFEST.txt, ./files/, ./db/ — there is no
   # `payload/` prefix. (This path referenced one, so restore never found a
@@ -400,7 +534,17 @@ cmd_import() {
   if compgen -G "$stage/db/*.sql" >/dev/null && $FKS_COMPOSE ps "$POSTGRES_SERVICE" >/dev/null 2>&1; then
     for f in "$stage"/db/*.sql; do
       local db; db="$(basename "$f" .sql)"
-      log "restoring db rows → $db (psql)"; $FKS_COMPOSE exec -T "$POSTGRES_SERVICE" psql -q -U "$POSTGRES_USER" -d "$db" < "$f" || warn "psql restore had errors for $db (often duplicate rows — review)"
+      # User triggers OFF for the replay (session_replication_role = replica,
+      # superuser only, this session only). The dumps are data-only and the
+      # rows were already validated when first written; replaying them through
+      # the guards fails. Found 2026-11-05: pg_dump clears search_path, and
+      # edge_experiments' trigger names edge_hypotheses unqualified, so every
+      # ladder verdict was dropped from a restore (2 of 2). Applies to
+      # snapshots taken before this fix too.
+      log "restoring db rows → $db (psql, triggers off)"
+      { echo "SET session_replication_role = replica;"; cat "$f"; } \
+        | $FKS_COMPOSE exec -T "$POSTGRES_SERVICE" psql -q -U "$POSTGRES_USER" -d "$db" \
+        || warn "psql restore had errors for $db (often duplicate rows — review)"
     done
   else
     warn "DB dumps present but postgres not up — start the stack and re-run, or load $stage manually"
@@ -428,7 +572,14 @@ cmd_import() {
   log "import complete."
 }
 
-cmd_list() { ls -1t "$FKS_STATE_DIR"/snapshots/*.tar.gz.age 2>/dev/null | sed 's|.*/||' || warn "no snapshots in $FKS_STATE_DIR"; }
+cmd_list() {
+  if command -v gh >/dev/null 2>&1; then
+    log "releases ($FKS_STATE_GH_REPO), newest first:"
+    _release_tags | LC_ALL=C sort -r | sed 's/^/    /'
+  fi
+  log "git snapshots ($FKS_STATE_DIR/snapshots), newest first:"
+  ls -1t "$FKS_STATE_DIR"/snapshots/*.tar.gz.age 2>/dev/null | sed 's|.*/|    |' || warn "no git snapshots in $FKS_STATE_DIR"
+}
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
 case "${1:-}" in
@@ -437,17 +588,20 @@ case "${1:-}" in
   export) shift; cmd_export "${1:-manual}" ;;
   import) shift; [[ "${1:-}" == "--dry-run" ]] && { DRY_RUN=1; shift; }; cmd_import "${1:-latest}" ;;
   list)   cmd_list ;;
+  _prune-plan) shift; _prune_plan "${1:-$FKS_STATE_KEEP_DAILY}" ;;   # test hook: tags on stdin
   *) cat >&2 <<EOF
 fks-state — encrypted backup/restore of the FKS private state.
 
   $0 init               one-time: create an age key + clone the private state repo
   $0 status             show what the manifest will back up (no secret values)
-  $0 export [message]   snapshot -> age-encrypt -> commit+push to the private repo
-  $0 import [--dry-run] [snapshot|latest]   pull -> decrypt -> restore in place
-  $0 list               list available snapshots
+  $0 export [message]   snapshot -> age-encrypt -> release asset (or git: FKS_STATE_STORE=git)
+  $0 import [--dry-run] [snapshot|latest]   fetch -> decrypt -> restore in place
+  $0 list               list available snapshots (releases and git)
 
 Config via env: FKS_STATE_REPO, FKS_STATE_DIR, FKS_AGE_KEY, FKS_AGE_RECIPIENTS,
-                FKS_COMPOSE, POSTGRES_SERVICE, POSTGRES_USER, FKS_STATE_MANIFEST.
+                FKS_COMPOSE, POSTGRES_SERVICE, POSTGRES_USER, FKS_STATE_MANIFEST,
+                FKS_STATE_STORE, FKS_STATE_GH_REPO, FKS_STATE_KEEP_DAILY,
+                FKS_STATE_CACHE, FKS_STATE_CACHE_KEEP.
 See docs/STATE_BACKUP.md.
 EOF
     exit 1 ;;

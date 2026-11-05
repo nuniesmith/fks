@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily off-host copy of the FKS recorder tapes
+
+[Timer]
+# After 00:00 UTC closes the day and the recorders gzip it, and after the
+# 08:00 state backup so the two never push at once.
+OnCalendar=*-*-* 09:00:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

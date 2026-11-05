@@ -1,0 +1,11 @@
+[Unit]
+Description=FKS recorder tapes -> private repo (liquidations + gap ledgers, finished days)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Same textfile folder as the other units (see README.md).
+Environment=FKS_TEXTFILE_DIR=/var/lib/node_exporter/textfile
+ExecStart=/home/jordan/github/fks/scripts/fks-tapes-sync.sh

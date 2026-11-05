@@ -467,6 +467,36 @@ groups:
                fks_qdrant_data (419 MB raw, derived vectors) is the driver; the
                irreplaceable ledger is only ~6 MB. See docs/STATE_BACKUP.md.
 
+      # Off-host copy of the recorder tapes (scripts/fks-tapes-sync.sh, daily
+      # 09:00). The liquidation streams cannot be re-recorded, and the lake
+      # is one disk. Daily, so it is excluded from TextfileProbeStale's 3h
+      # rule; the timestamp here is the freshness check, and absent() covers
+      # a file or collector that went away.
+      - alert: FksTapesSyncStale
+        expr: |
+          fks_tapes_sync_ok == 0
+          or (time() - fks_tapes_sync_last_success_timestamp_seconds) > 129600
+          or absent(fks_tapes_sync_ok)
+        for: 30m
+        labels:
+          severity: warning
+          component: backup
+          team: data
+        annotations:
+          summary: "Recorder tapes are NOT reaching the off-host repo"
+          description: >
+            The daily copy of the recorders' liquidation tapes and gap ledgers
+            to the private fks-tapes repo failed, has not succeeded in 36h, or
+            stopped writing its metric. Those streams exist only on oryx's
+            disk until it succeeds, and a lost day cannot be recorded again.
+          runbook: >
+            1) journalctl --user -u fks-tapes-sync --since '2 days ago'
+            2) "CHANGED after it was copied" means a finished day differs from
+            its copy: compare the two before deciding which is right; the
+            script never overwrites one.
+            3) git -C ~/.local/share/fks-tapes rev-list --count @{u}..HEAD for
+            commits that never pushed.
+
       - alert: IngestionThroughputLow
         expr: sum(rate(trades_ingested_total[5m])) < clamp_min(0.20 * avg_over_time(sum(rate(trades_ingested_total[5m]))[6h:5m]), 5)
         for: 15m

@@ -11,6 +11,7 @@ watches disappears quietly and the gap looks identical to "all clear".
 | `fks-state-backup` | daily encrypted snapshot → age → push to the private repo (manifest: `~/.config/fks/state.manifest`, see docs/STATE_BACKUP.md) | `StateBackupNotReachingRemote` fires (the metric is `absent()`-guarded) |
 | `fks-backtest-probe` | backtest_runs freshness, failure streak, and how many active edges should be re-validated | `BacktestProbeNotRunning` fires after 2h |
 | `fks-questdb-integrity` | hourly, publishes candle-table DEDUP/WAL state | `QuestDbIntegrityProbeNotRunning` fires after 3h |
+| `fks-tapes-sync` | daily 09:00, copies finished days of the recorders' liquidation tapes (`forceOrder`) and `_gaps` ledgers to the private `nuniesmith/fks-tapes` repo (clone: `~/.local/share/fks-tapes`); never overwrites a copied day | `FksTapesSyncStale` fires after 36h (also `absent()`-guarded) |
 
 The Rithmic probe and the Discord digest dead-man were retired on
 2026-10-27 with the futures stack (their alert rules went with them).
@@ -26,7 +27,7 @@ install -d ~/.config/systemd/user
 cp infrastructure/systemd/*.service infrastructure/systemd/*.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
 sudo chown "$USER" /var/lib/node_exporter/textfile   # where node-exporter reads (see below)
-systemctl --user enable --now fks-state-backup.timer fks-backtest-probe.timer fks-questdb-integrity.timer
+systemctl --user enable --now fks-state-backup.timer fks-backtest-probe.timer fks-questdb-integrity.timer fks-tapes-sync.timer
 loginctl enable-linger "$USER"      # so user timers run without an active login
 systemctl --user list-timers --no-pager
 ```

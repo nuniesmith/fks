@@ -47,7 +47,7 @@ groups:
             # state_backup is excluded because it is deliberately DAILY; it
             # gets its own rule below rather than being quietly exempted.
             expr: >
-                time() - node_textfile_mtime_seconds{file!~".*fks_state_backup.prom"} > 10800
+                time() - node_textfile_mtime_seconds{file!~".*(fks_state_backup|fks_tapes_sync).prom"} > 10800
             for: 10m
             labels:
                 severity: warning

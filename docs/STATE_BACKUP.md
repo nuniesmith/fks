@@ -11,10 +11,36 @@ templates (`.env.example`, `state.manifest.example`) and the tool below.
 ```
 ./scripts/fks-state.sh init      one-time: make an age key + clone fks-state
 ./scripts/fks-state.sh status    show what will be backed up (no secret values)
-./scripts/fks-state.sh export    snapshot → age-encrypt → commit+push
-./scripts/fks-state.sh import    pull latest → decrypt → restore in place
-./scripts/fks-state.sh list      list snapshots
+./scripts/fks-state.sh export    snapshot → age-encrypt → upload as a release
+./scripts/fks-state.sh import    fetch latest → decrypt → restore in place
+./scripts/fks-state.sh list      list snapshots (releases and git)
 ```
+
+## Where snapshots live (since 2026-11-05)
+
+Each new snapshot is a **private GitHub release** in `nuniesmith/fks-state`,
+tagged `snapshot-<UTC stamp>`, with the encrypted tarball as its one asset.
+`export` checks that GitHub holds the same number of bytes it sent, and
+deletes the release again if not, so no empty release ever counts as a kept
+snapshot. The newest 3 are also cached in `~/.local/share/fks-state-releases`
+for a restore without the network (same disk, so not a backup).
+
+Until then every snapshot was **committed** under `snapshots/`. Git keeps
+every version forever, so the repo reached 1.57 GB on GitHub (+~10 MB a
+night), and single snapshots came within a few MB of git's hard 100 MiB
+per-file limit, which already broke the push once (2026-08-07). A release
+asset may be 2 GiB, and releases can be deleted one at a time.
+
+**Retention (releases only):** after each verified upload, keep the newest
+`FKS_STATE_KEEP_DAILY` (30) plus the newest snapshot of every calendar month,
+forever; delete the rest. Tags that aren't `snapshot-<stamp>` are never
+touched. The rule is pinned by `scripts/testing/fks-state-prune-plan.test.sh`.
+
+**The git snapshots are never pruned or rewritten.** They are the only copy of
+the platform before the 2026-10-17 volume wipe (July–September: the Gate-A
+evidence, the funding bot, Janus). `import` still reads them by name, e.g.
+`import --dry-run 20260920T120128Z`. `FKS_STATE_STORE=git` brings back the
+old export.
 
 ## How it works
 
@@ -25,20 +51,28 @@ templates (`.env.example`, `state.manifest.example`) and the tool below.
   hardware). It is the one thing not recoverable from a backup.
 - **`export`** reads `state.manifest`, copies the listed files, dumps the listed
   database tables (`pg_dump --data-only` *inside* the postgres container — no host
-  `pg_dump` needed), tars it, **age-encrypts** to your recipient(s), and commits
-  the result to `fks-state/snapshots/fks-state-<UTC>.tar.gz.age`. The push
-  **rebases on the remote first**, so a code merge landing on `fks-state` between
-  snapshots can't break the backup. The private repo is just encrypted
-  transport — if it leaked, the contents stay sealed to your key.
+  `pg_dump` needed), tars it, **age-encrypts** to your recipient(s), and uploads
+  it as a release (above). The private repo is just encrypted transport — if
+  it leaked, the contents stay sealed to your key.
 - **Sibling repos are first-class.** Manifest paths may reach *above* the fks
   checkout (`../fks-state/...`, `../fks-spawner/...`); the snapshot is anchored
   at the **parent directory** of the checkout, so sibling files round-trip
   instead of silently escaping the archive. File lines also accept an optional
   `file:` prefix (symmetric with `db:`).
-- **`import`** pulls the latest snapshot, decrypts it with your key, and restores
-  the files **under that same parent directory** (fks paths and `../` siblings
-  land back where they came from) + replays the DB dumps via `psql`. It prompts
-  before overwriting; `--dry-run` previews without touching anything.
+- **`import`** fetches the latest snapshot (the newest release, else the
+  newest cached copy, else git's latest), decrypts it with your key, and
+  restores the files **under that same parent directory** (fks paths and `../`
+  siblings land back where they came from) + replays the DB dumps via `psql`
+  **with user triggers off** (`session_replication_role = replica`). Before
+  2026-11-05 the replay ran through the ladder's guards, and one of them
+  (`edge_experiments_after_hypothesis`) names `edge_hypotheses` without a
+  schema while `pg_dump` clears `search_path`, so every ladder verdict was
+  silently dropped from a restore. It prompts before overwriting; `--dry-run`
+  previews without touching anything.
+- **A DB restore needs the schema first.** The dumps are data-only: restore
+  onto a database the `fks-postgres` image's initdb (or `fks-migrate`) has
+  built. Janus creates its own tables when it starts, so start Janus before
+  importing `janus_db`, or its rows have nowhere to go.
 - The tool **never prints secret values** — only paths, sizes, and counts.
 
 > **DB rename (2026-07-21):** the spawner database was renamed `ruby_db` → `fks_db`
@@ -156,7 +190,7 @@ is ready to bring up.
 
 - `state.manifest`, `*.age`, and the age key paths are gitignored — only the
   `.example` template and the tool are tracked.
-- Snapshots are append-only history in `fks-state`; prune old ones there if size
-  grows. Rotating exchange keys? Re-`export` after rotation.
+- Release snapshots are pruned by the retention rule above; git snapshots are
+  history and stay. Rotating exchange keys? Re-`export` after rotation.
 - The age key is your single point of failure **and** the single thing that keeps
   the whole platform private. Treat it like a seed phrase.

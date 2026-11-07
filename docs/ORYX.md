@@ -128,6 +128,20 @@ curl -X POST http://127.0.0.1:8091/instances -H "X-Internal-Token: …" \
   `recorder-alerts.yml`. A 404 is not an error: recent files are "not yet",
   and files from before a symbol listed are "never" and retried weekly.
 
+
+### History from KuCoin's API
+
+`history.kucoin-futures.json` and `history.kucoin-spot.json` run the same
+image in its KuCoin modes (2026-11-06). KuCoin has no archive, so the recorder
+pages its public API (no key) and writes each closed month and day once, as a
+gzipped CSV, under `raw/kucoin/futures/<instance>` (candles and every funding
+settlement) and `raw/kucoin/spot/<instance>` (candles; the spot leg of a
+carry study). Contracts go by KuCoin's names (`XBTUSDTM` is BTC); spot pairs
+are entered as `BTCUSDT`. **Research for a KuCoin position must read KuCoin's
+funding, not Binance's:** compared by day, KuCoin's was often far higher (SOL
+91% a year against 45% in 2024-03), and it settled at 04/12/20 UTC until
+mid-2025. The API's paging traps are in fks-spawner `bots/history/README.md`.
+
 ## Jobs: searching a hypothesis
 
 `job.edge-search.json` runs **one search of one registered hypothesis**

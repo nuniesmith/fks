@@ -1,0 +1,52 @@
+{
+    "id": "history.kucoin-spot",
+    "version": 1,
+    "kind": "recorder",
+    "display_name": "KuCoin spot history",
+    "description": "KuCoin's public API for spot pairs: daily (or 1h/4h) candles back to the year you pick, then kept current every 6 hours. No keys. Each closed month and day is paged from the API and written once as a gzipped CSV, with what it covered in a manifest. Files go to the lake under raw/kucoin/spot/<instance>. The spot leg for a spot-versus-perpetual (carry) study on KuCoin.",
+    "image": "ghcr.io/nuniesmith/fks-bot-history:latest",
+    "modes": ["record"],
+    "resources": { "cpu": 0.5, "memory_mb": 256 },
+    "restart_policy": { "enabled": true },
+    "data": { "venue": "kucoin", "market": "spot" },
+    "fixed_env": { "HISTORY_MARKET": "kucoin-spot", "HISTORY_DATASETS": "klines" },
+    "env": {
+        "symbols": "HISTORY_SYMBOLS",
+        "intervals": "HISTORY_INTERVALS",
+        "start_year": "HISTORY_START"
+    },
+    "params": {
+        "type": "object",
+        "required": ["symbols"],
+        "properties": {
+            "symbols": {
+                "x-order": 1,
+                "type": "array",
+                "title": "Pairs",
+                "description": "USDT or USDC pairs without the dash, e.g. BTCUSDT (sent to KuCoin as BTC-USDT).",
+                "items": { "type": "string", "x-format": "symbol" },
+                "minItems": 1,
+                "maxItems": 50,
+                "uniqueItems": true
+            },
+            "intervals": {
+                "x-order": 2,
+                "type": "array",
+                "title": "Candle intervals",
+                "items": { "enum": ["1h", "4h", "1d"] },
+                "default": ["1d"],
+                "minItems": 1,
+                "uniqueItems": true
+            },
+            "start_year": {
+                "x-order": 3,
+                "type": "integer",
+                "title": "From the start of",
+                "description": "KuCoin's BTC-USDT daily candles start in October 2017; months before a pair listed are skipped.",
+                "minimum": 2017,
+                "maximum": 2026,
+                "default": 2020
+            }
+        }
+    }
+}

@@ -28,13 +28,14 @@
                 "x-order": 2,
                 "type": "string",
                 "title": "Strategy family",
-                "enum": ["trend-band", "orb"],
+                "enum": ["trend-band", "orb", "carry"],
                 "default": "trend-band",
                 "x-labels": {
                     "trend-band": "Trend band: an SMA lookback and a band (the live rule's family)",
-                    "orb": "Opening-range breakout: CME futures, one trade per session"
+                    "orb": "Opening-range breakout: CME futures, one trade per session",
+                    "carry": "Carry: long spot, short the perpetual, entered when funding runs high"
                 },
-                "x-note": "The hypothesis's parameters must be the family's: trend-band tunes lookback (bars) and band (a fraction); orb tunes orb_minutes, target_r and exit (target or trail), on a raw/cme/... dataset with per-contract costs and the session-hold baseline."
+                "x-note": "The hypothesis's parameters must be the family's: trend-band tunes lookback (bars) and band (a fraction); orb tunes orb_minutes, target_r and exit (target or trail), on a raw/cme/... dataset with per-contract costs and the session-hold baseline; carry tunes lookback (bars), enter_apr and exit_apr (a year's funding, as a fraction) and declares leverage (one choice), on a 'raw/kucoin/futures/<instance>+raw/kucoin/spot/<instance>' dataset (perpetual first, one venue) with the always-carry baseline and fees per leg."
             }
         }
     }

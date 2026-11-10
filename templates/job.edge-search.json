@@ -28,14 +28,15 @@
                 "x-order": 2,
                 "type": "string",
                 "title": "Strategy family",
-                "enum": ["trend-band", "orb", "carry"],
+                "enum": ["trend-band", "orb", "carry", "trend-vol"],
                 "default": "trend-band",
                 "x-labels": {
                     "trend-band": "Trend band: an SMA lookback and a band (the live rule's family)",
                     "orb": "Opening-range breakout: CME futures, one trade per session",
-                    "carry": "Carry: long spot, short the perpetual, entered when funding runs high"
+                    "carry": "Carry: long spot, short the perpetual, entered when funding runs high",
+                    "trend-vol": "Trend, volatility-managed: the live rule's signal, sized down when volatility runs high"
                 },
-                "x-note": "The hypothesis's parameters must be the family's: trend-band tunes lookback (bars) and band (a fraction); orb tunes orb_minutes, target_r and exit (target or trail), on a raw/cme/... dataset with per-contract costs and the session-hold baseline; carry tunes lookback (bars), enter_apr and exit_apr (a year's funding, as a fraction) and declares leverage (one choice), on a 'raw/kucoin/futures/<instance>+raw/kucoin/spot/<instance>' dataset (perpetual first, one venue) with the always-carry baseline and fees per leg."
+                "x-note": "The hypothesis's parameters must be the family's: trend-band tunes lookback (bars) and band (a fraction); orb tunes orb_minutes, target_r and exit (target or trail), on a raw/cme/... dataset with per-contract costs and the session-hold baseline; carry tunes lookback (bars), enter_apr and exit_apr (a year's funding, as a fraction) and declares leverage (one choice), on a 'raw/kucoin/futures/<instance>+raw/kucoin/spot/<instance>' dataset (perpetual first, one venue) with the always-carry baseline and fees per leg; trend-vol tunes trend-band's lookback and band plus vol_lookback (bars), target_vol (a year's volatility) and rebalance (a fraction of full size), against buy-and-hold or trend-200d-5pct. Its dataset is trend-band's, so pick it here: nothing infers it."
             }
         }
     }

@@ -21,26 +21,7 @@
 #         not raw text float parsing. Risk is low in our usage pattern.
 # Tracking: Monitor polars releases for fast-float bump or replacement.
 # No fix available upstream as of 2025-07.
-ignore = [
-    # fast-float segfault — transitive via polars, no fix available
-    "RUSTSEC-2025-0003",
-
-    # pyo3 0.21.2 buffer overflow in PyString::from_object
-    # Transitive via: polars 0.44 → polars-utils → pyo3
-    # Impact: Only affects Python interop (PyString). JANUS is pure Rust;
-    #         we never call PyString::from_object. Zero runtime exposure.
-    # Fix: pyo3 >= 0.24.1, but polars 0.44 pins pyo3 0.21.x.
-    # Tracking: Upgrade polars to >= 0.46 when API migration is feasible.
-    "RUSTSEC-2025-0020",
-
-    # rsa 0.9.10 — Marvin Attack (timing side-channel for key recovery)
-    # Transitive via: sqlx 0.8 → sqlx-mysql → rsa
-    # Impact: Only relevant for RSA PKCS#1 v1.5 decryption. JANUS uses
-    #         sqlx for PostgreSQL/QuestDB, not MySQL with RSA auth.
-    #         The vulnerable code path is never exercised.
-    # No fix available upstream as of 2025-07.
-    "RUSTSEC-2023-0071",
-]
+ignore = []
 
 # -------------------------------------------------------------------------
 # WARNINGS (unmaintained / yanked — all transitive)
